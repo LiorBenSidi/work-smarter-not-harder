@@ -31,5 +31,22 @@ This is a starting scaffold — the team fills it in via pull requests (see belo
 `main` is protected: **no direct pushes.** All changes land via a pull request from a branch. See
 [`CONTRIBUTING.md`](CONTRIBUTING.md).
 
+## For AI agents (any tool)
+The workflow is **enforced for every tool and human**: `main` is branch-protected, so direct pushes are
+rejected and changes land only via a PR that passes CI — no agent can bypass it, whatever it reads. For
+*awareness*, each tool reads its own file; all point to [`CLAUDE.md`](CLAUDE.md) + [`CONTRIBUTING.md`](CONTRIBUTING.md)
+as the source of truth:
+
+| Tool | File it reads |
+|---|---|
+| Claude Code | [`CLAUDE.md`](CLAUDE.md) |
+| Codex (+ others via the cross-tool standard) | [`AGENTS.md`](AGENTS.md) |
+| GitHub Copilot | [`.github/copilot-instructions.md`](.github/copilot-instructions.md) |
+| Cursor | [`.cursor/rules/work-smarter.mdc`](.cursor/rules/work-smarter.mdc) (also reads `AGENTS.md`) |
+
+**Using a tool not listed?** Read `CLAUDE.md` + `CONTRIBUTING.md` — the rules apply regardless, and branch
+protection enforces them either way. (We intentionally don't add a separate config file per niche tool — it
+clutters the repo and drifts; the README + `AGENTS.md` are the catch-all.)
+
 ## Status
 Proposal submitted; build in progress. Final project due **23 Aug 2026** (demo Week 12, present 16 July).
