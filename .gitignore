@@ -1,0 +1,44 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Virtual envs
+.venv/
+venv/
+env/
+ENV/
+
+# Secrets / local config — commit .env.example, never .env
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+
+# Large data + trained artifacts (bake the model into the image; keep big data out of git)
+data/
+datasets/
+*.csv
+*.parquet
+*.h5
+# If the trained Random Forest must ship in the image, force-add it: git add -f ai/model.pkl
+*.pkl
+*.joblib
+
+# Frontend (if any)
+node_modules/
+dist/
+build/
+
+# OS / editor junk
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
