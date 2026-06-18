@@ -15,5 +15,5 @@ Local AI model only (no external API); bake the trained model into the image (no
 
 ## Performance & style
 - **Never `print()`** in committed code — use `logging` (enforced by ruff `T20`; a one-off needs `# noqa: T201`).
-- **Hot paths:** vectorize (NumPy), then a compiled extension (Cython / C) for a *measured* bottleneck — course L6 native-vs-Python; keep a pure-Python fallback and build it into the image.
+- **Hot paths:** vectorize (NumPy), then a compiled extension (Cython / C / `cffi`) for a *measured* bottleneck — course L6 native-vs-Python; measure first (L8), keep a pure-Python fallback, build it into the image.
 - Local hooks mirror CI: `sh scripts/setup-hooks.sh` + `pip install -r requirements-dev.txt` → ruff + bandit on commit, pytest on push.

@@ -6,11 +6,13 @@
 target-version = "py312"          # the project's Python (matches CI's setup-python)
 
 [tool.ruff.lint]
-# ruff's defaults (pyflakes `F`, core pycodestyle `E`) PLUS:
-#   T20  flake8-print  -> reject `print()` / `pprint()` in committed code.
-#        Course L3 ("print is slow -> use logging") and L8.1 ("raise errors, not print").
-#        Need a deliberate one-off? put `# noqa: T201` on that line -- explicit and reviewable,
-#        far better than turning the whole rule off.
+# An explicit `select` REPLACES ruff's defaults (it does not extend them), so this IS the full set:
+#   F             pyflakes
+#   E4 / E7 / E9  core pycodestyle
+#   T20           flake8-print -> reject `print()` (T201) and `pprint()` (T203) in committed code.
+#                 Course L3 ("print is slow -> use logging") and L8.1 ("raise errors, not print").
+#                 Deliberate one-off? add `# noqa: T201` (or `# noqa: T203` for pprint) on that line
+#                 -- explicit and reviewable, far better than turning the whole rule off.
 select = ["E4", "E7", "E9", "F", "T20"]
 
 [tool.pytest.ini_options]

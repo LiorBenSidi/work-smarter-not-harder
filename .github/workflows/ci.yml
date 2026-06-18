@@ -31,7 +31,7 @@ jobs:
         run: ruff check .
 
       - name: Security scan (bandit)
-        run: bandit -r . -q -x ./tests   # scan app code; exclude tests. Tune severity with -ll if it gets noisy.
+        run: bandit -r . -q -x ./tests,./.venv,./venv,./env   # exclude tests + any local venv (matches the hook). Tune with -ll if noisy.
 
       - name: Tests (pytest) — Unit/Integration/System/Security under tests/
         run: python -m pytest tests/ -q   # must pass; a suite that collects 0 tests now FAILS (no false-green)
