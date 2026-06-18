@@ -1,0 +1,30 @@
+#!/usr/bin/env sh
+# Local pre-commit gate -- runs BEFORE the commit is created, so problems are caught on your
+# own machine (before any push, before any PR). Mirrors the GitHub-Actions CI.
+#   ruff   : lint + the T20 no-print rule (config: pyproject.toml)
+#   bandit : security scan of app code (tests + any local venv excluded)
+# Tests run on `git push` (see pre-push) so a growing suite doesn't slow every commit.
+#
+# Safety net, not the authority: CI re-runs everything and `main` is PR-only.
+# Emergency bypass:  git commit --no-verify   (CI still gates the PR).
+set -e
+
+missing=""
+for tool in ruff bandit; do
+  command -v "$tool" >/dev/null 2>&1 || missing="$missing $tool"
+done
+if [ -n "$missing" ]; then
+  echo "pre-commit FAILED: missing tool(s):$missing"
+  echo "  Activate your project venv, then run once:"
+  echo "    sh scripts/setup-hooks.sh && pip install -r requirements-dev.txt"
+  echo "  Emergency bypass: git commit --no-verify   (CI still gates the PR)"
+  exit 1
+fi
+
+echo "[pre-commit 1/2] ruff (lint + no-print)..."
+ruff check .
+
+echo "[pre-commit 2/2] bandit (security)..."
+bandit -r . -q -x ./tests,./.venv,./venv,./env   # exclude tests + any in-repo venv (bandit ignores .gitignore; keeps local == CI)
+
+echo "[pre-commit] OK"

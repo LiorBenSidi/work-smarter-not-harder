@@ -1,0 +1,19 @@
+# Tool configuration for "Work Smarter, Not Harder".
+# NOT a packaged distribution (there is no [build-system]); this file only centralizes tool
+# config so the LOCAL git hooks (.githooks/) and the GitHub-Actions CI run the EXACT same rules.
+
+[tool.ruff]
+target-version = "py312"          # the project's Python (matches CI's setup-python)
+
+[tool.ruff.lint]
+# An explicit `select` REPLACES ruff's defaults (it does not extend them), so this IS the full set:
+#   F             pyflakes
+#   E4 / E7 / E9  core pycodestyle
+#   T20           flake8-print -> reject `print()` (T201) and `pprint()` (T203) in committed code.
+#                 Course L3 ("print is slow -> use logging") and L8.1 ("raise errors, not print").
+#                 Deliberate one-off? add `# noqa: T201` (or `# noqa: T203` for pprint) on that line
+#                 -- explicit and reviewable, far better than turning the whole rule off.
+select = ["E4", "E7", "E9", "F", "T20"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]             # `pytest` with no args runs the suite (pre-push hook + CI)
