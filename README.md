@@ -27,6 +27,14 @@ docs/    PROPOSAL.md (the submitted spec)
 ```
 This is a starting scaffold — the team fills it in via pull requests (see below).
 
+## Getting started (first-time, every clone)
+After cloning, enable the local quality gate so the course's checks run **before** you commit (it mirrors CI):
+```sh
+sh scripts/setup-hooks.sh                 # enable the shared git hooks (.githooks/)
+pip install -r requirements-dev.txt        # in your venv: pinned ruff + bandit + pytest
+```
+`git commit` then runs ruff (incl. **no `print()`** — use `logging`) + bandit; `git push` runs the tests. Full detail: [`CONTRIBUTING.md`](CONTRIBUTING.md).
+
 ## Workflow — PRs only
 `main` is protected: **no direct pushes.** All changes land via a pull request from a branch. See
 [`CONTRIBUTING.md`](CONTRIBUTING.md).
