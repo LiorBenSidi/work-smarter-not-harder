@@ -8,3 +8,6 @@ AI-powered sports-coaching platform (WSML 00950219). Canonical guidance: `CLAUDE
 - **Never push to `main`** — it's branch-protected. Branch (`feat|fix|test|docs|chore/…`) → PR → CI green (ruff · bandit · pytest) + a teammate's approval → merge.
 - **Architecture (3 containers, only `web` exposed):** `web/` (Flask + auth/werkzeug hashing + API + frontend), `db` (MongoDB, internal), `ai/` (Random Forest + recommendation engine, internal `POST /predict`).
 - **Constraints:** local AI model only (no external API); bake the trained model into the image (no runtime download), pin `scikit-learn`; hash passwords; validate input / guard NoSQL injection; only `web` is published; never commit `.env`; tests under `tests/{Unit,Integration,System,Stress,Security}_Tests/`.
+- **No `print()`** in committed code → use `logging` (course L3/L8.1); enforced by ruff `T20` (one-off: `# noqa: T201`).
+- **Hot paths → native code when measured (L6, native-vs-Python):** NumPy-vectorize first, then a Cython / C extension for a proven bottleneck; keep a pure-Python fallback, build it into the image.
+- **Local gate** (mirrors CI): `sh scripts/setup-hooks.sh` + `pip install -r requirements-dev.txt` → ruff + bandit on `git commit`, pytest on `git push`.

@@ -22,7 +22,7 @@ jobs:
       - name: Install tooling + project deps (if present)
         run: |
           python -m pip install --upgrade pip
-          pip install ruff bandit pytest
+          pip install -r requirements-dev.txt   # pinned ruff/bandit/pytest — identical versions to the local hooks
           # install project requirements as they appear (root + per-container)
           [ -f requirements.txt ] && pip install -r requirements.txt || true
           for d in web ai; do [ -f "$d/requirements.txt" ] && pip install -r "$d/requirements.txt" || true; done

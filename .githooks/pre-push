@@ -1,0 +1,18 @@
+#!/usr/bin/env sh
+# Local pre-push gate -- runs the test suite BEFORE anything leaves your machine for GitHub.
+# Kept at push-time (not per-commit) so a growing suite doesn't slow down every commit.
+# CI re-runs this on the PR; `git push --no-verify` bypasses locally but CI still gates.
+set -e
+
+if ! command -v pytest >/dev/null 2>&1; then
+  echo "pre-push FAILED: pytest not found."
+  echo "  Activate your project venv, then run once:"
+  echo "    sh scripts/setup-hooks.sh && pip install -r requirements-dev.txt"
+  echo "  Emergency bypass: git push --no-verify   (CI still gates the PR)"
+  exit 1
+fi
+
+echo "[pre-push] pytest tests/ ..."
+pytest tests/ -q
+
+echo "[pre-push] OK"

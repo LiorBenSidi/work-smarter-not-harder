@@ -1,0 +1,6 @@
+# Dev + CI tooling, pinned for reproducibility (course L6: pin your dependencies).
+# Used by BOTH the GitHub-Actions CI and the local git hooks, so "passes locally" == "passes CI".
+# One-time local setup:  sh scripts/setup-hooks.sh   then   pip install -r requirements-dev.txt
+ruff==0.15.17     # linter + the T20 no-print rule (config lives in pyproject.toml)
+bandit==1.9.4     # security scanner (invoked as: bandit -r . -q -x ./tests)
+pytest==8.4.2     # test runner (local pre-push gate + CI)
