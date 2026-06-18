@@ -12,6 +12,7 @@ requirements: [`docs/Proj_Guidelines.pdf`](docs/Proj_Guidelines.pdf) + [`docs/TA
 - Every change: **branch → commit → push → open a PR → a teammate approves → merge.**
 - Branch names: `feat/…` · `fix/…` · `test/…` · `docs/…` · `chore/…`.
 - Full flow + commands: [`CONTRIBUTING.md`](CONTRIBUTING.md).
+- **Local gate before you commit** (same checks as CI): `git commit` runs ruff (incl. the no-`print()` rule) + bandit; `git push` runs pytest. Enable once: `sh scripts/setup-hooks.sh` + `pip install -r requirements-dev.txt`.
 
 ## Architecture (3 containers — only `web` is exposed)
 - **`web/`** — Flask: auth (password hashing via `werkzeug.security`), API endpoints, frontend. The ONLY user-facing container.
@@ -25,10 +26,14 @@ requirements: [`docs/Proj_Guidelines.pdf`](docs/Proj_Guidelines.pdf) + [`docs/TA
 - **Tests:** all 5 types live under `tests/` — `Unit_Tests`, `Integration_Tests`, `System_Tests`, `Stress_Tests`, `Security_Tests`. Add tests alongside the code.
 - **Fault tolerance:** handle AI / DB / wearable-API failures gracefully (try/except + sensible fallbacks).
 - **Parallel/scaling:** CPU-bound inference → `multiprocessing`; `ai` replicas for the multi-machine story.
+- **Performance / native code (course L6, native-vs-Python):** Python is PVM-interpreted and slow for tight loops, so for a **measured** hot path — e.g. numeric loops in the `ai` feature/inference pipeline — don't hand-roll pure-Python loops. First **vectorize with NumPy**; where that's still the bottleneck, drop to a **compiled extension (Cython / a C extension / `cffi`)**. Always **measure first** (L8: "don't guess, profile"), optimize only the proven hot spot, keep a pure-Python fallback, and **build any native module into the image** (never compile at container runtime).
+- **No `print()` in committed code** — use `logging` (course L3: print is slow; L8.1: raise errors, not print). Enforced by ruff `T20` in CI **and** the local hooks; a deliberate one-off needs `# noqa: T201`.
 - **Secrets:** never commit `.env` (commit `.env.example`). No real student IDs in committed filenames.
 
 ## Commands (fill in as the stack lands)
 ```bash
+sh scripts/setup-hooks.sh       # one-time: enable the local pre-commit / pre-push hooks
+pip install -r requirements-dev.txt  # one-time: pinned dev tools (ruff, bandit, pytest)
 docker compose up --build       # run the full stack (web/db/ai)
 python -m pytest tests/         # run the test suite
 ```

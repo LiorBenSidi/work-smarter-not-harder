@@ -1,0 +1,25 @@
+#!/usr/bin/env sh
+# Local pre-push gate -- runs the test suite BEFORE anything leaves your machine for GitHub.
+# Kept at push-time (not per-commit) so a growing suite doesn't slow down every commit.
+# CI re-runs this on the PR; `git push --no-verify` bypasses locally but CI still gates.
+set -e
+
+# Use `python -m pytest` (not bare `pytest`) to match CI byte-for-byte: `-m` prepends the CWD
+# to sys.path, so import resolution is identical to ci.yml once tests import from web/ai.
+PY=python
+command -v python >/dev/null 2>&1 || PY=python3
+
+if ! "$PY" -m pytest --version >/dev/null 2>&1; then
+  echo "pre-push FAILED: pytest not available via '$PY -m pytest'."
+  echo "  Activate your project venv, then run once:"
+  echo "    sh scripts/setup-hooks.sh && pip install -r requirements-dev.txt"
+  echo "  Emergency bypass: git push --no-verify   (CI still gates the PR)"
+  exit 1
+fi
+
+echo "[pre-push] $PY -m pytest tests/ ..."
+# pytest exits 5 when it collects 0 tests; with `set -e` that aborts the push (no false-green,
+# same contract as CI). Do not wrap/relax this call in a way that swallows a non-zero exit.
+"$PY" -m pytest tests/ -q
+
+echo "[pre-push] OK"

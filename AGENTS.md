@@ -20,3 +20,8 @@ must approve before merge. GitHub enforces this server-side, so direct pushes ar
 Local AI model only (no external API); **bake the trained model into the image** (no runtime download), pin
 `scikit-learn`; hash passwords; validate input + guard NoSQL injection; only `web` is published; tests live in
 `tests/{Unit,Integration,System,Stress,Security}_Tests/`; never commit `.env` (commit `.env.example`).
+
+## Performance & style (course-taught)
+- **No `print()`** in committed code — use `logging` (L3: print is slow; L8.1: raise errors, not print). Enforced by ruff `T20` in CI + the local hooks; a deliberate one-off needs `# noqa: T201`.
+- **Hot paths → native code when it pays off (L6, native-vs-Python):** vectorize with NumPy first, then a compiled extension (Cython / a C extension / `cffi`) for a *measured* bottleneck. Measure first (L8), keep a pure-Python fallback, and build the module into the image.
+- **Local gate** (mirrors CI): `sh scripts/setup-hooks.sh` + `pip install -r requirements-dev.txt` → ruff + bandit on `git commit`, pytest on `git push`. Use `--no-verify` only in emergencies (CI still gates).

@@ -12,3 +12,8 @@ AI-powered sports-coaching platform (WSML 00950219). Canonical guidance: [`CLAUD
 
 ## Constraints
 Local AI model only (no external API); bake the trained model into the image (no runtime download), pin `scikit-learn`; hash passwords; validate input / guard NoSQL injection; only `web` is published; never commit `.env`; tests live in `tests/{Unit,Integration,System,Stress,Security}_Tests/`.
+
+## Performance & style
+- **Never `print()`** in committed code — use `logging` (enforced by ruff `T20`; a one-off needs `# noqa: T201`).
+- **Hot paths:** vectorize (NumPy), then a compiled extension (Cython / C / `cffi`) for a *measured* bottleneck — course L6 native-vs-Python; measure first (L8), keep a pure-Python fallback, build it into the image.
+- Local hooks mirror CI: `sh scripts/setup-hooks.sh` + `pip install -r requirements-dev.txt` → ruff + bandit on commit, pytest on push.
