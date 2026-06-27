@@ -22,9 +22,9 @@ harness, and the cross-container test harness immediately — none of it waits o
 ## Roadmap (build these — your way)
 - [ ] **Azure deploy + CI/CD** — extend the live pipeline to deploy on green `main`; scale via `ai` replicas + gunicorn workers. Start early.
 - [ ] **`docker-compose.test.yml`** + the cross-container test harness.
-- [ ] **Fault tolerance + scaling** — graceful degradation (AI / DB down); the replica/worker scaling story.
+- [ ] **Fault tolerance + scaling** — graceful degradation (AI / DB down); horizontal scaling (replicas + gunicorn workers) + the **multi-machine path** (Docker Swarm overlay, or `ai` replicas on the Azure VM; **queue-free**) + a locust before/after.
 - [ ] **Rate limiting** — flask-limiter on the public routes.
-- [ ] **Cross-container tests** — integration (web→ai→db) + system (register→profile→readiness) + stress (locust).
+- [ ] **Cross-container tests** — integration (web→ai→db) + system (register→profile→readiness) + **fault-isolation (stop `ai` / stop `db` → web survives)** + stress (locust).
 - [ ] **Forum:** the real-time layer (SSE/WebSocket) + notifications + DM transport + media/file storage + the seeding store.
 - [ ] **Risk assessment** — anchor the report's "what can go wrong" section (with the team's input).
 

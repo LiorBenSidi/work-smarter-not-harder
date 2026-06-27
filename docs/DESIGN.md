@@ -38,7 +38,11 @@ One pipeline, two capabilities:
 2. **Recommendation generation** — combines the assessment + goals + program + recovery → action plan / workout / program adjustments / calories.
 
 - **Baked into the `ai` image** (`joblib.dump` → `COPY` → `joblib.load`; **pin sklearn** so the pickle loads). Never train/download at runtime.
-- **Scaling = horizontal: gunicorn `--workers` + `ai` replicas** (`docker compose up --scale ai=N`; `web`→`ai` round-robins by Docker service DNS — already wired via `AI_URL`). Reserve `multiprocessing` for genuinely CPU-heavy, *measured* work (batch scoring, offline training/augmentation, an L6 hot loop) — a single-row RF `.predict()` is sub-ms, so don't pool it per request (L8: "measure, don't guess").
+- **Parallelism & scaling (L7 — required; *not* a queue):**
+  - *Parallel programming in the code:* a **measured `multiprocessing`** path for a genuinely CPU-bound batch in `ai` — candidates: the recommendation engine searching many candidate plans, batch scoring, or collaborative-filtering similarity over many athletes. Processes, not threads (the GIL); plus NumPy **vectorization** in the feature pipeline. A single-row `.predict()` is sub-ms — don't pool *that*; pick a real CPU-bound task and measure before/after (MiniHW4).
+  - *Horizontal scaling:* stateless containers → `docker compose up --scale ai=N` + gunicorn `--workers`; `web`→`ai` round-robins by service DNS (`AI_URL`).
+  - *Multiple machines:* containers hold no in-process state, so they scale across hosts via a **Docker Swarm overlay** (`docker stack deploy`) **or** `ai` replicas on the **Azure VM** reached over the network — **no task queue** (the TA explicitly bans Q-based scaling).
+  - *Proof:* a **locust** run before/after `--scale ai=2` shows throughput rising.
 - Trained on wellness + program-catalog data; any synthetic augmentation (bootstrapping / class-balancing) documented.
 - **Dataset · model · binning · augmentation are the AI owner's call** (behind the `/predict` contract). Current starting point: **PMData** (Simula) + Random Forest. Details + open decisions live in [`../ai/README.md`](../ai/README.md).
 
@@ -46,6 +50,7 @@ One pipeline, two capabilities:
 - Hash passwords (werkzeug); auth-gate protected endpoints; rate-limit; validate input; defend NoSQL injection; only `web` exposed.
 - **Auth stays stateless / shared-store** (signed token, or a DB/Redis-backed session — not in-process), so `web` can scale to N replicas for the deploy +10 (the big-HW used Bearer tokens). *(web owner's implementation; the scale constraint is shared.)*
 - `ai` down → `web` returns "assessment unavailable" (no crash); `db` down → reduced functionality; wearable data missing → manual entry.
+- **Fault isolation is *tested*** — system tests **stop the `ai` container** (web still serves, degraded) and **stop `db`** (web still serves, no crash), proving one container going down doesn't take the system down (TA requirement). External calls are wrapped in try/except.
 
 ## 6. Testing (the requirement persists — kept out of the spec doc per Noam, tracked here)
 All **5 course test types** live in `tests/{Unit,Integration,System,Stress,Security}_Tests/` + a **feature×test matrix** maintained in the repo/report (not in the proposal, per Noam's "this doc is no place for tests"). `TESTING`/`debug` env flags; tests run on any machine (no local paths). CI runs them on every commit; a 0-test run fails.
