@@ -1,30 +1,30 @@
-# PERSON 2 — Shiri — the web app (the user-facing service)
+# PERSON 2 — Lior — the web app + its data
 
-> Your **area + mandatory course items + a roadmap**. *Not* a step-by-step script — how you build the pages
-> and structure the code is yours. Your container: `web/` (the ONLY container users reach).
+> Your **area + the mandatory course items + a roadmap** — *not* a step-by-step script. How you build the pages,
+> structure the code, and model the data is yours. Your container: `web/` (the ONLY container users reach).
 
-## Your area, plainly
-You own everything the **user sees and touches**: signing up, logging in, entering their profile, and the
-dashboard that shows their readiness, plan, calories, and history. Your code is in `web/` (`app.py`, `routes/`,
-`services/`, `templates/`). The route stubs already exist (returning **501**) — you replace each one with the real thing.
+## Why you
+You're the strongest at building apps — so the whole user-facing service is yours, end-to-end: the pages, the auth,
+the dashboard, **and** its data layer, so there's no hand-off in the middle of a feature.
 
 ## Your contracts (fixed)
-- You **call the AI** through `services/ai_client.py` → the ai container's `POST /predict` (don't talk to it directly elsewhere).
-- You **read/write data** through `services/db.py` (Elad owns the DB internals; you call his functions).
+- You **call the AI** through `services/ai_client.py` → `POST /predict` (don't talk to `ai` elsewhere).
+- You **connect to the Mongo container Elad runs** (`mongodb://db:27017`) — but the data code (`services/db.py`) is **yours**.
 - `web` is the only exposed container (host 8000 → 5000).
 
 ## Mandatory (course — graded)
-- **Password hashing with werkzeug** (`generate_password_hash` / `check_password_hash`) — never store plain passwords.
-- **Auth-gate** protected endpoints (profile, dashboard) — a logged-out user gets 401.
-- **Validate input** (reject bad types; NoSQL-injection-safe) before anything reaches the DB.
-- **Tests**: security (wrong password → 401, gated-without-login → 401, injection rejected) + integration (register → login → dashboard).
+- **Password hashing with werkzeug** — never store plain passwords.
+- **Auth-gate** protected endpoints (profile, dashboard) — logged-out → 401.
+- **Validate input + NoSQL-injection-safe queries** before anything hits Mongo.
+- **Tests**: security (wrong pw → 401, gated-without-login → 401, injection rejected) + integration (register → login → dashboard).
 
 ## Roadmap (build these — your way)
-- [ ] **Auth (F1)** — implement `/register` `/login` `/logout` (replace the stubs); hash passwords; sessions/tokens.
-- [ ] **Profile (F2)** — the `/profile` route/page (age/gender/height/weight/goal); save via `services/db`.
-- [ ] **Dashboard (F7) + History (F8)** — show the user's current state (call the AI via `ai_client`), plan, calories, past analyses.
-- [ ] **Frontend** — the pages in `templates/` (or a JS frontend — your choice) and the styling.
+- [ ] **Auth (F1)** — `/register` `/login` `/logout` (replace stubs); hash; sessions/tokens; an auth-gate decorator.
+- [ ] **Data layer** — `services/db.py`: connection + CRUD for `users / profiles / programs / analysis_history`; injection-safe.
+- [ ] **Profile (F2)** — `/profile` route + page; save via `db`.
+- [ ] **Dashboard (F7) + History (F8)** — show current state (via `ai_client`), plan, calories, past analyses.
+- [ ] **Frontend** — the `templates/` pages (or a JS frontend — your call) + styling.
+- [ ] **Forum slice** — the UI/screens + post/comment/vote CRUD.
 
 ## You own the decisions
-Page structure, server-rendered templates vs. a JS frontend, session vs. token auth, how you lay out `web/` — your
-call. Just keep the contracts above and the mandatory items.
+Page structure, server-rendered vs JS frontend, session vs token, the Mongo schema details inside `db.py` — your call. Keep the contracts + mandatory items.
