@@ -37,6 +37,17 @@ pip install -r requirements-dev.txt        # in your venv: pinned ruff + bandit 
 ```
 `git commit` then runs ruff (incl. **no `print()`** — use `logging`) + bandit; `git push` runs the tests. Full detail: [`CONTRIBUTING.md`](CONTRIBUTING.md).
 
+## Run it
+```sh
+cp .env.example .env            # sets SECRET_KEY (never commit .env)
+docker compose up --build       # 3 containers → open http://localhost:8000/health
+```
+
+## Run the tests
+```sh
+python -m pytest tests/         # full suite — runs on any machine (no local paths)
+```
+
 ## Workflow — PRs only
 `main` is protected: **no direct pushes.** All changes land via a pull request from a branch. See
 [`CONTRIBUTING.md`](CONTRIBUTING.md).
