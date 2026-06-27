@@ -1,9 +1,9 @@
 # Work Smarter, Not Harder
 
 An **AI-powered sports-coaching platform** — WSML final project (Technion 00950219).
-Athletes enter profile + recovery metrics; a **local Random Forest classifier** predicts training-readiness
-(Ready / Moderate / Recovery-Needed / Deload / Injury-Risk); a recommendation engine turns that into action
-plans, workouts, program-balance analysis, and calorie targets.
+Athletes enter profile + recovery metrics; a **local Random Forest classifier** predicts a training-readiness
+state (a small set of states — e.g. Ready / Moderate / Recovery-Needed — finalized during data exploration); a
+recommendation engine turns that into action plans, workouts, program-balance analysis, and calorie targets.
 
 **Team (Git Push & Pray):** Lior Ben Sidi · Shiri Haboob · Elad Nachalieli
 **Full spec:** [`docs/PROPOSAL.md`](docs/PROPOSAL.md) (the submitted proposal).
@@ -15,15 +15,15 @@ plans, workouts, program-balance analysis, and calorie targets.
 | `db`   | MongoDB — users, profiles, programs, analysis history. Internal only. |
 | `ai/`  | Random Forest inference + recommendation engine. Internal REST (`POST /predict`). |
 
-Course rules this satisfies: ≥3 communicating containers, only `web` exposed, local AI model (no external API),
-all 5 test types, fault tolerance, parallel scaling, password hashing + injection defense.
+Course rules the architecture is built to satisfy: ≥3 communicating containers, only `web` exposed, local AI model
+(no external API), all 5 test types, fault tolerance, parallel scaling, password hashing + injection defense.
 
 ## Repo layout
 ```
 web/     Flask web container (to build)
 ai/      Random Forest + recommendation engine (to build)
 tests/   Unit_Tests · Integration_Tests · System_Tests · Stress_Tests · Security_Tests
-docs/    PROPOSAL.md (the submitted spec)
+docs/    PROPOSAL.md (spec) · DESIGN · ROADMAP · FEEDBACK (rubric) · meeting-notes
 ```
 This is a starting scaffold — the team fills it in via pull requests (see below).
 
