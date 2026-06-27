@@ -5,10 +5,11 @@ Project documents for **Work Smarter, Not Harder** (WSML 00950219 final project)
 | File | What it is |
 |---|---|
 | [`PROPOSAL.md`](PROPOSAL.md) | The **submitted** project proposal (מסמך אפיון) — the graded spec. |
+| [`PROPOSAL-v2.md`](PROPOSAL-v2.md) | **Revised** spec (cleaner rewrite; F6+F7 merged → 8 features) — current intent, **pending Noam's OK** on the merge. `PROPOSAL.md` stays the graded contract. |
 | [`FEEDBACK.md`](FEEDBACK.md) | **Noam's feedback** on the proposal (Moodle, 25 Jun) — the **grading rubric**: 80 build + 10 Forum + 10 Deploy/CI-CD. |
 | [`Proj_Guidelines.pdf`](Proj_Guidelines.pdf) | The **official** course project guidelines (course-provided reference). |
 | [`TA-Notes.txt`](TA-Notes.txt) | The TA's clarifications/notes on the project (course-provided reference). |
-| [`DESIGN.md`](DESIGN.md) | Living **design document** — architecture, data model, API contracts, decisions. Fill in as we build. |
+| [`DESIGN.md`](DESIGN.md) | Living **design document** — architecture, data model, API contracts, decisions (distilled from the revised spec; open items flagged). |
 | [`ROADMAP.md`](ROADMAP.md) | **Phased build plan** — Phase 0 MVP → the 80 → Forum / Deploy (+10 / +10), each shippable. The plan we build by. |
 | [`meeting-notes/`](meeting-notes/) | Per-meeting notes — copy [`meeting-notes/TEMPLATE.md`](meeting-notes/TEMPLATE.md). |
 
