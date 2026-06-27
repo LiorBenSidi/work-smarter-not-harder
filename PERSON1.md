@@ -13,7 +13,7 @@ Changing the shape is a **sync point** — update DESIGN + tell the team.
 
 ## Mandatory (course — graded)
 - **Local model, baked into the image** (`joblib` → `COPY` → load; no runtime download/train). **Pin scikit-learn**.
-- **Scaling:** serve behind gunicorn workers + `ai` replicas; reach for `multiprocessing` only for a *measured* heavy step (training/batch).
+- **Parallel programming (L7):** include a *measured* `multiprocessing` path for a CPU-bound batch (recommendation search / batch scoring / similarity) + NumPy vectorization in the feature pipeline — not the single-row predict. Serve behind gunicorn workers + `ai` replicas.
 - **Fault tolerance:** keep `/predict` well-behaved so a failure degrades (web handles it), never crashes the app.
 - **Tests run on any machine** (no local paths) — unit (predict + binning) + the recommendation logic. A `TESTING` flag can expose internals for testing.
 

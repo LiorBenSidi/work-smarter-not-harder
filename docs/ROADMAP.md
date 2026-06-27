@@ -85,8 +85,8 @@ The only coordination points are the seams (`/predict` shape, `db.py`'s function
 | Password hashing (werkzeug) | ⬜ | Lior |
 | Input validation + injection defense | ⬜ | Lior |
 | Rate-limit / anti-spam (flask-limiter) | ⬜ | Elad |
-| Fault tolerance (AI/DB/ext down → no crash) | 🟡 `ai_client` degrades | Elad + all |
-| Scale via parallel programming (replicas, multi-machine) | 🟡 designed | Elad |
+| Fault tolerance + **isolation tested** (stop ai/db → web survives) | 🟡 `ai_client` degrades; kill-container tests TODO | Elad + all |
+| Parallel programming + scaling — multiprocessing batch · replicas/workers · multi-machine (Swarm / Azure VM) · **queue-free** | 🟡 concrete plan | Shiri (parallel code) · Elad (scaling) |
 | Stress tests (decide what can crash) | ⬜ | Elad |
 | GitHub: regular commits from **all 3**, meaningful messages | 🟡 in progress | all |
 | Report (app + features×tests + **risk assessment**) | ⬜ | all (Elad: risk) |
