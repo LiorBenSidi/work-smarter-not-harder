@@ -31,7 +31,7 @@ start until Phase 0 exists** — you can't auto-deploy nothing.
 ### Deploy + CI/CD (+10) — *recommended next*
 **Goal:** every green commit auto-deploys to the supplied Azure VM, publicly.
 **Scope:** extend the existing CI (ruff → bandit → pytest) with a deploy job that, on green `main`, redeploys on
-Azure; public domain; scale via the multiprocessing / `ai`-replica design.
+Azure; public domain; scale horizontally via gunicorn workers + `ai` replicas (`--scale ai=N`).
 **Done when:** a push to `main` → tests pass → the Azure URL serves the update.
 *Banks the full +10. The CI-only half (5 pts) is already secured by the existing gate.*
 
@@ -59,7 +59,7 @@ audit-then-`!`-install when you reach it). All 8 sub-features are needed for the
 - **TDD-first**; all 5 test types + a feature×test matrix; a broken test is **deleted, not commented out**; tests
   run on any machine (env vars, no local paths).
 - **Docker:** ≥3 containers, only `web` exposed (host 8000, never 5000 — macOS AirPlay); RF **baked into the image**
-  (joblib, pinned sklearn); **CPU-bound inference → multiprocessing** (the scaling story).
+  (joblib, pinned sklearn); **scaling = `ai` replicas + gunicorn workers** (multiprocessing only for measured CPU-heavy work).
 - **Security:** hash passwords (werkzeug); auth-gate endpoints; rate-limit; validate input; defend NoSQL injection.
 - **Fault tolerance:** an AI / Mongo / wearable failure must degrade, not crash the app.
 - **Process:** regular, informative commits from **all 3** members (history is graded); never commit `.env`; repo

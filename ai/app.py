@@ -1,10 +1,10 @@
 """AI decision engine (internal container). OWNER: Lior.
 
 CONTRACT (don't change without updating docs/DESIGN.md + telling the team):
-    POST /predict  {features: {...}} -> {state: <category>, proba: {...}, recommendations: {...}}
+    POST /predict  {features: {...}} -> {state: <category>, proba: {...}, recommendations: [...]}
 
-The trained model is baked into the image (see Dockerfile); this stub returns a 501 placeholder
-that already honours the response shape. Implement the model + recommendation engine behind it.
+The trained model is baked into the image (see Dockerfile); this stub returns a 200 placeholder
+that already honours the response shape (so web can integrate today). Implement the model behind it.
 PMData notes + the open decisions (binning, augmentation, ...) live in ai/README.md.
 """
 import logging

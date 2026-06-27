@@ -5,6 +5,8 @@
 **Validated against:** [`PROPOSAL.md`](PROPOSAL.md) (graded 100/100 — the contract) · [`PROPOSAL-v2.md`](PROPOSAL-v2.md) (intent) ·
 Noam's rubric [`FEEDBACK.md`](FEEDBACK.md) (80 + 10 + 10) · the WSML course rules · the live skeleton (`docker-compose.yml`, `web/`, `ai/`, `tests/`).
 
+**Resolution (2026-06-27):** findings **3, 4, 5, 6** are fixed in the follow-up PR — scaling story corrected to replicas + workers; auth-scale note added; the `/predict` shape pinned (`recommendations` is a list, key is `state`); the contract test made behavioural. **1, 2** remain open *decisions* (Forum transport/storage ADR; Injury-Risk pending the Noam email). **7, 8** are later phases (deploy job; `/predict` 400-vs-5xx when the model lands).
+
 ## Verdict
 The 3-container design is **sound for the 80-point app and the CI half of the deploy +10** — the seams are real,
 enforced by tests, and AirPlay-safe. **The team can start building.** But two architecture decisions are still

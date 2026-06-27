@@ -5,10 +5,10 @@ The **AI owner owns everything in here.** The only fixed thing is the **contract
 augmentation are the owner's call** — swap any of them freely as long as `/predict` keeps its shape.
 
 ## Contract (fixed — what the rest of the system depends on)
-`POST /predict` (internal): `{ features: {…} }` → `{ state: <category>, proba: {…}, recommendations: {…} }`.
+`POST /predict` (internal): `{ features: {…} }` → `{ state: <category>, proba: {…}, recommendations: [ … ] }` (`recommendations` is a **list**).
 Course/architecture constraints (these come with the project, not negotiable per owner): internal-only container;
-the trained model is **baked into the image** (`joblib` → `COPY` → load; **pin sklearn**); CPU-bound inference uses
-**`multiprocessing`** (the parallel/scaling story).
+the trained model is **baked into the image** (`joblib` → `COPY` → load; **pin sklearn**); the scaling story is
+**horizontal — `ai` replicas + gunicorn workers** (use `multiprocessing` only for *measured* CPU-heavy work — batch scoring, training/augmentation — not a per-request single-row predict).
 
 ## Starting dataset — PMData (Simula)
 **Current choice; the owner may swap it.** A sports-logging dataset — **16 participants, ~5 months**, **Fitbit
