@@ -5,7 +5,7 @@ alwaysApply: true
 
 AI-powered sports-coaching platform (WSML 00950219). Canonical guidance: `CLAUDE.md`; PR workflow: `CONTRIBUTING.md`.
 
-- **Never push to `main`** — it's branch-protected. Branch (`feat|fix|test|docs|chore/…`) → PR → CI green (ruff · bandit · pytest) + a teammate's approval → merge.
+- **Never push to `main`** — it's branch-protected. Branch (`feat|fix|test|docs|chore/…`) → PR → CI green (ruff · bandit · pytest) → **self-merge** (no peer approval required — own your scope + tests; CI is the gate).
 - **Architecture (3 containers, only `web` exposed):** `web/` (Flask + auth/werkzeug hashing + API + frontend), `db` (MongoDB, internal), `ai/` (Random Forest + recommendation engine, internal `POST /predict`).
 - **Constraints:** local AI model only (no external API); bake the trained model into the image (no runtime download), pin `scikit-learn`; hash passwords; validate input / guard NoSQL injection; only `web` is published; never commit `.env`; tests under `tests/{Unit,Integration,System,Stress,Security}_Tests/`.
 - **No `print()`** in committed code → use `logging` (course L3/L8.1); enforced by ruff `T20` (one-off: `# noqa: T201`).

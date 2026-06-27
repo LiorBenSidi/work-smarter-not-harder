@@ -1,4 +1,4 @@
-<!-- Fill this in — detailed PRs are required. Keep main green: CI (lint · security · tests) must pass, and a teammate must approve, before merge. -->
+<!-- Fill this in — detailed PRs are required. Keep main green: CI (lint · security · tests) must pass before merge. No peer approval required — merge your own PR once CI is green. -->
 
 ## What & why
 <!-- What does this PR change, and why? Link the related issue/feature. -->
