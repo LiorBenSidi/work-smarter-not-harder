@@ -11,6 +11,7 @@ Project documents for **Work Smarter, Not Harder** (WSML 00950219 final project)
 | [`TA-Notes.txt`](TA-Notes.txt) | The TA's clarifications/notes on the project (course-provided reference). |
 | [`DESIGN.md`](DESIGN.md) | Living **design document** — architecture, data model, API contracts, decisions (distilled from the revised spec; open items flagged). |
 | [`ROADMAP.md`](ROADMAP.md) | **Phased build plan** — Phase 0 MVP → the 80 → Forum / Deploy (+10 / +10), each shippable. The plan we build by. |
+| [`ARCHITECTURE-REVIEW.md`](ARCHITECTURE-REVIEW.md) | **Pre-build architecture validation** (advisory) — what's sound, severity-tagged findings, rubric coverage, and the decisions needing a team / Noam call. Read before building your part. |
 | [`meeting-notes/`](meeting-notes/) | Per-meeting notes — copy [`meeting-notes/TEMPLATE.md`](meeting-notes/TEMPLATE.md). |
 
 ## To add later
