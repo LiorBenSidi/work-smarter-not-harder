@@ -42,12 +42,18 @@ defense across all endpoints.
 **Done when:** the whole proposal (minus stretch) runs on Docker; the feature×test matrix is complete; the risk
 report is concrete. **= the 80.**
 
-### Forum (+10) — *recommended last (biggest lift, most cuttable)*
-**Scope:** posts (title / body / image / video) · anonymity toggle · comments · up/down-votes + an engagement
-dashboard · secure P2P DM · **real-time** notifications · anti-spam rate-limit + file-size caps · cold-seeding.
-Real-time via WebSocket / SSE (no manual refresh).
-**Done when:** the real-time forum is integrated, tested, deployed. If it overruns, the app is already a viable
-80+10 product without it (the swap-a-feature email option applies here too).
+### Forum (+10) — *built last, in 3 cuttable slices; partial credit accrues per slice*
+Same stack as the app (Flask + Mongo + Docker) **plus a real-time layer** — SSE needs no new dependency and
+covers one-way feeds/notifications; Flask-SocketIO adds true bidirectional sockets for DM (a dependency →
+audit-then-`!`-install when you reach it). All 8 sub-features are needed for the full +10, but Noam gives
+**partial credit per feature**, so build hardest-last:
+
+- **3a — Forum content** (backbone): posts (title/body + **image/video** upload) · comments · **anonymity toggle** · **cold-seeding** (seed script: fake accounts/posts/threads) · **rate-limit + file-size caps** (Flask-Limiter + upload validation). Mostly CRUD + uploads + a fixture. → ships a working, seeded forum.
+- **3b — Engagement + live feed**: **up/down-votes** on posts+comments · per-user **engagement dashboard** · make the feed **real-time** (introduce the SSE/WebSocket layer here). → ships a live, votable forum.
+- **3c — Messaging** (hardest, most cuttable): secure **P2P DM** (text/image/video) · **live notifications** for new DMs + votes (reuses 3b's real-time layer). → ships real-time DM + notifications.
+
+**Tests (each slice):** unit (vote tally · anonymity · size-limit) · integration (post→comment→notify) · security (rate-limit blocks a flood · oversized upload rejected · DM auth-gated + private) · stress (post/vote flood → 429, not a crash).
+**Done when:** the slices you ship are integrated, tested, auto-deployed. **Cut line:** if time runs short, 3a (+3b) alone still banks most of the +10 — the app stays a viable 80+10 product without 3c.
 
 ## Engineering standards (every phase)
 - **TDD-first**; all 5 test types + a feature×test matrix; a broken test is **deleted, not commented out**; tests
