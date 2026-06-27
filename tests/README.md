@@ -10,10 +10,16 @@ local **pre-push hook** runs it too — so these are enforced before anything re
 - **Tests must run on any machine** — env vars, no local/absolute paths.
 - You **own your tests** — write them your way; the matrix below is the *what*, not the *how*.
 
-## Already enforced (real contract tests — keep them green)
-- `Unit_Tests/test_scaffold.py` — repo structure + `.env` never committed.
+## Already enforced (real tests, run on every PR — keep them green)
+These are the **universal guardrails** every owner's work must pass before it can merge — wired now, not waiting on anyone:
+- `Unit_Tests/test_scaffold.py` — repo structure (containers + the 5 test-type dirs + the proposal) + `.env` never committed.
 - `Integration_Tests/test_skeleton_contract.py` — **only `web` exposed**, host-8000-not-5000, all 3 healthchecks,
-  the **`/predict` contract keys**, gunicorn. These guard the seams everyone depends on.
+  the **`/predict` contract shape** (behavioural — boots the ai app, asserts `state`/`proba`/`recommendations` types), gunicorn.
+- `Integration_Tests/test_web_smoke.py` — the **web app boots + serves `/health`** (the healthcheck contract). With the
+  ai `/predict` test, **both app containers are behaviourally smoke-tested** from day one.
+
+> **Keep the apps bootable for tests** without Docker or the baked model — load heavy resources (the model, Mongo) **lazily**,
+> keep `/health` trivial — so these smoke tests run on any machine (course rule).
 
 ## Mandatory tests per feature (the matrix — fill the scaffolds)
 | Feature | Unit | Integration | System | Stress | Security | Owner | Scaffold |
