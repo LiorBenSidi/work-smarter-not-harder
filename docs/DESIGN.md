@@ -49,6 +49,9 @@ One pipeline, two capabilities:
 
 ## 5. Security & fault tolerance
 - Hash passwords (werkzeug); auth-gate protected endpoints; rate-limit; validate input; defend NoSQL injection; only `web` exposed.
+- **Security ownership** (cross-cutting — each layer secures itself, there is no single "security owner"):
+  **Lior (web backend)** — password hashing (werkzeug), auth-gate, input validation, the auth/login **Security_Tests**.
+  **Elad (data + infra)** — NoSQL-**injection-safe queries** in `db.py`, **rate-limiting** / anti-spam (flask-limiter), stress / abuse defense.
 - **Auth stays stateless / shared-store** (signed token, or a DB/Redis-backed session — not in-process), so `web` can scale to N replicas for the deploy +10 (the big-HW used Bearer tokens). *(web owner's implementation; the scale constraint is shared.)*
 - `ai` down → `web` returns "assessment unavailable" (no crash); `db` down → reduced functionality; wearable data missing → manual entry.
 - **Fault isolation is *tested*** — system tests **stop the `ai` container** (web still serves, degraded) and **stop `db`** (web still serves, no crash), proving one container going down doesn't take the system down (TA requirement). External calls are wrapped in try/except.
