@@ -31,9 +31,9 @@ before anything reaches GitHub.
 ## 4. Find your part
 | You | Your file | Your area |
 |---|---|---|
-| **Lior** | [`PERSON1.md`](PERSON1.md) | the **AI** — model, `/predict`, recommendations |
-| **Shiri** | [`PERSON2.md`](PERSON2.md) | the **web app** — auth, profile, dashboard, frontend |
-| **Elad** | [`PERSON3.md`](PERSON3.md) | **infra + data + deploy** — docker, Mongo, Azure CI/CD |
+| **Shiri** | [`PERSON1.md`](PERSON1.md) | the **AI** — model, `/predict`, recommendation engine, dataset |
+| **Lior** | [`PERSON2.md`](PERSON2.md) | the **web app + its data** — auth, profile, dashboard, history, frontend, `db.py` |
+| **Elad** | [`PERSON3.md`](PERSON3.md) | **infra + deploy** — docker, Mongo container, Azure + CI/CD, Forum real-time |
 
 Your file = your area + the must-do (course) items + a roadmap. **How** you build it is your choice.
 
