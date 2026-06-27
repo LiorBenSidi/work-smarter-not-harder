@@ -1,7 +1,7 @@
 """Calorie recommendation (F4) — Mifflin-St Jeor BMR -> TDEE -> goal-adjusted target.
 
 Pure, dependency-free, deterministic (no model, no I/O), so it's trivially testable and runs on
-any machine. OWNER: Lior (AI / recommendations). Wire it into the recommendation output (/predict)
+any machine. OWNER: Shiri (AI / recommendations). Wire it into the recommendation output (/predict)
 or expose it however the AI container prefers — the contract is the two function signatures below.
 """
 

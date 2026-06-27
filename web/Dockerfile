@@ -1,4 +1,4 @@
-# Web container — the ONLY user-facing service. OWNER: Shiri.
+# Web container — the ONLY user-facing service. OWNER: Lior.
 FROM python:3.12-slim
 WORKDIR /app
 

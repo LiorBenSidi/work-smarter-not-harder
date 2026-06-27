@@ -1,4 +1,4 @@
-"""AI decision engine (internal container). OWNER: Lior.
+"""AI decision engine (internal container). OWNER: Shiri.
 
 CONTRACT (don't change without updating docs/DESIGN.md + telling the team):
     POST /predict  {features: {...}} -> {state: <category>, proba: {...}, recommendations: [...]}
@@ -25,7 +25,7 @@ def create_app():
     def predict():
         features = (request.get_json(silent=True) or {}).get("features", {})
         logger.info("predict called with %d feature(s) (placeholder)", len(features))
-        # OWNER (Lior): replace this placeholder with the baked Random Forest + recommendation engine.
+        # OWNER (Shiri): replace this placeholder with the baked Random Forest + recommendation engine.
         # KEEP the response shape (the web->ai contract). PMData notes + decisions: ai/README.md.
         return jsonify(
             state="Moderate",

@@ -21,7 +21,7 @@ services:
       timeout: 5s
       retries: 5
 
-  ai:                               # internal only — no host port (OWNER: Lior)
+  ai:                               # internal only — no host port (OWNER: Shiri)
     build: ./ai
     expose:
       - "5000"

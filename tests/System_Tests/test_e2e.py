@@ -1,4 +1,4 @@
-"""MANDATORY system (end-to-end) test. OWNER: Shiri + Elad.
+"""MANDATORY system (end-to-end) test. OWNER: Elad (anchors web->ai->db) + Lior + Shiri.
 
 TDD: fill + un-skip when auth + profile + dashboard exist.
 """
