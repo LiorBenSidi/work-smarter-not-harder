@@ -65,6 +65,39 @@ audit-then-`!`-install when you reach it). All 8 sub-features are needed for the
 - **Process:** regular, informative commits from **all 3** members (history is graded); never commit `.env`; repo
   stays outside OneDrive.
 
+## Parallel execution (everyone starts day 1)
+The contracts are fixed and stubbed, so the three planes build independently from the first commit — nobody waits:
+- **Shiri (`ai/`)** — standalone; builds + tests the model and `/predict` via the test client.
+- **Lior (`web/`)** — builds against the `/predict` stub (already returns the contract) + the Mongo container.
+- **Elad (infra)** — the skeleton runs, so Azure setup, `docker-compose.test.yml`, and the stress + cross-container test harness all start now.
+
+The only coordination points are the seams (`/predict` shape, `db.py`'s function API, only-`web`-exposed) — changing one is a **sync point** (flag it in the PR + the group chat).
+
+## Requirements coverage (TA notes + guidelines + Noam's rubric)
+| Requirement | Status | Owner |
+|---|---|---|
+| Docker, runs first-try anywhere | ✅ skeleton | Elad |
+| ≥3 communicating containers, only `web` exposed | ✅ | Elad |
+| Local AI model, baked into image, pinned sklearn | ⬜ | Shiri |
+| All 5 test types — per-feature, run-anywhere, no-cheating | 🟡 scaffolds + matrix | all |
+| `docker-compose.yml` **and** `docker-compose.test.yml` | 🟡 main done; **test compose TODO** | Elad |
+| `debug` flag toggles debug mode | 🟡 env wired; confirm it toggles | Lior |
+| Password hashing (werkzeug) | ⬜ | Lior |
+| Input validation + injection defense | ⬜ | Lior |
+| Rate-limit / anti-spam (flask-limiter) | ⬜ | Elad |
+| Fault tolerance (AI/DB/ext down → no crash) | 🟡 `ai_client` degrades | Elad + all |
+| Scale via parallel programming (replicas, multi-machine) | 🟡 designed | Elad |
+| Stress tests (decide what can crash) | ⬜ | Elad |
+| GitHub: regular commits from **all 3**, meaningful messages | 🟡 in progress | all |
+| Report (app + features×tests + **risk assessment**) | ⬜ | all (Elad: risk) |
+| Demo video of using the app | ⬜ | all |
+| Azure VM deploy + CI/CD auto-deploy (+10; base deploy optional) | 🟡 CI live (+5); Azure TODO | Elad |
+| Online Forum — real-time, 8 sub-features (+10) | ⬜ built last | Lior + Elad + Shiri |
+| Present 16 Jul (6 min) · demo by Wk 12 · final 23 Aug | ⬜ | all |
+| No shipped API keys | ✅ local model | Shiri |
+
+Legend: ✅ done · 🟡 partial / in-progress · ⬜ not started.
+
 ## Status (2026-06-25)
 Scaffold + branch-protected PR-only `main` + CI gate (ruff → bandit → pytest, no-false-green) + a local pre-commit
 gate are live — that CI already earns the **5-pt CI-only** partial of the deploy +10. Still to build: the `web` /
