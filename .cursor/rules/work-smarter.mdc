@@ -11,3 +11,4 @@ AI-powered sports-coaching platform (WSML 00950219). Canonical guidance: `CLAUDE
 - **No `print()`** in committed code → use `logging` (course L3/L8.1); enforced by ruff `T20` (one-off: `# noqa: T201`).
 - **Hot paths → native code when measured (L6, native-vs-Python):** NumPy-vectorize first, then a Cython / C extension for a proven bottleneck; keep a pure-Python fallback, build it into the image.
 - **Local gate** (mirrors CI): `sh scripts/setup-hooks.sh` + `pip install -r requirements-dev.txt` → ruff + bandit on `git commit`, pytest on `git push`.
+- **TDD (course):** write tests **before/with** code; all 5 types in `tests/` — fill the scaffolds + remove the `skip` (`tests/README.md`). Test **behaviour, not mechanism** (no `assert True`); a broken test is **fixed or deleted, never commented out**; tests run anywhere. Don't change a shared contract (`/predict`, DB collections, only-`web`-exposed) without telling the team.
