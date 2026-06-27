@@ -30,6 +30,14 @@ requirements: [`docs/Proj_Guidelines.pdf`](docs/Proj_Guidelines.pdf) + [`docs/TA
 - **No `print()` in committed code** — use `logging` (course L3: print is slow; L8.1: raise errors, not print). Enforced by ruff `T20` in CI **and** the local hooks; a deliberate one-off needs `# noqa: T201`.
 - **Secrets:** never commit `.env` (commit `.env.example`). No real student IDs in committed filenames.
 
+## Testing & TDD (course-graded — this is how we test)
+- **TDD-first.** Write the test before/with the code (Red → Green → Refactor). The required tests per feature are **scaffolded** in `tests/` (see [`tests/README.md`](tests/README.md) — the feature×test matrix); **fill them + remove the `skip`** as you implement.
+- **All 5 test types** live in `tests/{Unit,Integration,System,Stress,Security}_Tests/`. CI runs the whole suite on every PR; the pre-push hook runs it locally.
+- **No AI-slop tests** (course L3): test *behaviour*, not the implementation. Never write a test that passes trivially (`assert True`) or just mirrors the code — a test must be able to fail for a real reason.
+- **A broken test gets fixed or deleted — never commented out** (L8.1; the TA reads test code).
+- **Tests run on any machine** — env vars, no local/absolute paths; honour the `TESTING` flag.
+- **Stay in your contract.** Don't change a shared seam (the `/predict` shape, the Mongo collections, only-`web`-exposed) without telling the team; and **don't polish teammates' working code** (L8.1) — implementation behind your own contract is yours.
+
 ## Commands (fill in as the stack lands)
 ```bash
 sh scripts/setup-hooks.sh       # one-time: enable the local pre-commit / pre-push hooks
