@@ -9,7 +9,7 @@ Changing the shape is a **sync point** — update DESIGN + tell the team.
 
 ## Mandatory (course — graded)
 - **Local model, baked into the image** (`joblib` → `COPY` → load; no runtime download/train). **Pin scikit-learn** to your training version so the pickle loads.
-- **CPU-bound inference → parallelism** (gunicorn workers and/or a `multiprocessing` pool) — this *is* the project's "parallel programming / scaling" section.
+- **Parallel programming / scaling** (this is the project's required section): the headline is **gunicorn `--workers` + `ai` replicas** (horizontal, measurable with locust). Reach for a `multiprocessing` pool only for *measured* CPU-heavy work (batch scoring, training/augmentation) — not a single-row RF `.predict()` (sub-ms; L8 "measure, don't guess").
 - **Fault tolerance** — your container may fail without crashing the app (web degrades). Keep `/predict` well-behaved.
 - **Tests** in the 5-type tree for your code (unit: predict + the binning function; integration: `web → ai`).
 

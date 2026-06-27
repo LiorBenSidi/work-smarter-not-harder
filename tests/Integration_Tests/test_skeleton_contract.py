@@ -3,7 +3,10 @@
 These pass on the skeleton and keep passing as the app is built. Owners add the real feature
 integration tests (register -> login -> dashboard, web -> ai roundtrip) alongside their code.
 """
+import importlib.util
 from pathlib import Path
+
+import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -26,11 +29,21 @@ def test_all_three_services_have_healthchecks():
     assert compose.count("healthcheck:") == 3, "web, ai and db must each define a healthcheck"
 
 
-def test_ai_predict_returns_the_contract_keys():
-    # the web -> ai contract (docs/DESIGN.md §3): /predict must return state + proba + recommendations.
-    ai_app = (ROOT / "ai" / "app.py").read_text()
-    for key in ("state", "proba", "recommendations"):
-        assert f"{key}=" in ai_app, f"ai /predict must return '{key}' (the web->ai contract)"
+def test_ai_predict_returns_the_contract_shape():
+    # the web -> ai contract (docs/DESIGN.md §3): /predict returns state (str) + proba (dict)
+    # + recommendations (list). Behavioural — exercise the real app, don't grep source text.
+    pytest.importorskip("flask")
+    spec = importlib.util.spec_from_file_location("ai_app_under_test", str(ROOT / "ai" / "app.py"))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    client = module.create_app().test_client()
+    resp = client.post("/predict", json={"features": {"sleep_hours": 7}})
+    assert resp.status_code == 200
+    body = resp.get_json()
+    assert isinstance(body["state"], str), "state must be a category string"
+    assert isinstance(body["proba"], dict), "proba must be a {category: float} object"
+    assert isinstance(body["recommendations"], list), "recommendations must be a list of items"
 
 
 def test_app_containers_run_via_gunicorn():
