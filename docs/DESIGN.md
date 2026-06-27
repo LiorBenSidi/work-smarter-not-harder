@@ -30,7 +30,7 @@ User → web ──┬──► ai   (POST /predict, internal)
 | `/profile` | GET/POST | web | reads/writes `profiles`; validate input (NoSQL-injection guard) |
 | `/predict` | POST | ai (internal) | state assessment + recommendations |
 
-**`web → ai` `POST /predict`** (internal): request `{ features: { sleep_hours, resting_hr, hr_change, fatigue, soreness, weekly_freq, training_load, calorie_balance, bodyweight_trend } }` → response `{ state: <category>, proba: {…}, recommendations: {…} }`. *(Feature set + category list are a candidate set — finalized during data exploration.)*
+**`web → ai` `POST /predict`** (internal): request `{ features: { sleep_hours, resting_hr, hr_change, fatigue, soreness, weekly_freq, training_load, calorie_balance, bodyweight_trend } }` → response `{ state: <category>, proba: { <category>: <float> }, recommendations: [ … ] }`. *(`recommendations` is a **list** of prioritized action items — each item's content is the AI owner's call. Feature set + category set are candidates, finalized during data exploration.)*
 
 ## 4. AI decision engine (the heart)
 One pipeline, two capabilities:
@@ -38,12 +38,13 @@ One pipeline, two capabilities:
 2. **Recommendation generation** — combines the assessment + goals + program + recovery → action plan / workout / program adjustments / calories.
 
 - **Baked into the `ai` image** (`joblib.dump` → `COPY` → `joblib.load`; **pin sklearn** so the pickle loads). Never train/download at runtime.
-- **CPU-bound inference → `multiprocessing`** (the parallel/scaling story; `ai` replicas for multi-machine).
+- **Scaling = horizontal: gunicorn `--workers` + `ai` replicas** (`docker compose up --scale ai=N`; `web`→`ai` round-robins by Docker service DNS — already wired via `AI_URL`). Reserve `multiprocessing` for genuinely CPU-heavy, *measured* work (batch scoring, offline training/augmentation, an L6 hot loop) — a single-row RF `.predict()` is sub-ms, so don't pool it per request (L8: "measure, don't guess").
 - Trained on wellness + program-catalog data; any synthetic augmentation (bootstrapping / class-balancing) documented.
 - **Dataset · model · binning · augmentation are the AI owner's call** (behind the `/predict` contract). Current starting point: **PMData** (Simula) + Random Forest. Details + open decisions live in [`../ai/README.md`](../ai/README.md).
 
 ## 5. Security & fault tolerance
 - Hash passwords (werkzeug); auth-gate protected endpoints; rate-limit; validate input; defend NoSQL injection; only `web` exposed.
+- **Auth stays stateless / shared-store** (signed token, or a DB/Redis-backed session — not in-process), so `web` can scale to N replicas for the deploy +10 (the big-HW used Bearer tokens). *(web owner's implementation; the scale constraint is shared.)*
 - `ai` down → `web` returns "assessment unavailable" (no crash); `db` down → reduced functionality; wearable data missing → manual entry.
 
 ## 6. Testing (the requirement persists — kept out of the spec doc per Noam, tracked here)
@@ -53,7 +54,7 @@ All **5 course test types** live in `tests/{Unit,Integration,System,Stress,Secur
 - **3 containers, only `web` exposed** — course rule; only `web` gets host ports.
 - **Local RF, baked into the image** — no runtime train/download; pin sklearn; RF swappable behind `/predict`.
 - **F6 + F7 merged** → one "Program Balance & Action Plan" pipeline (analysis feeds prioritization; two capabilities from the user's view). ⚠️ **Pending Noam's email OK** — merging a feature needs his sign-off; the submitted **9-feature** scope is the graded contract until he confirms.
-- **`multiprocessing` for inference** — the parallel/scaling section.
+- **Scaling = `ai` replicas + gunicorn workers** (horizontal, measurable with locust); `multiprocessing` only for *measured* CPU-heavy work, not per-request RF inference.
 
 ## 8. Open / to confirm
 - **F6+F7 merge** — awaiting Noam's reply.
