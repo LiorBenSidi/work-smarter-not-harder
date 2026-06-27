@@ -3,7 +3,7 @@
 App-factory that registers the route blueprints. `/health` is live; the feature routes are 501
 stubs behind their final URLs for their owners to implement.
 """
-from flask import Flask, jsonify
+from flask import Flask, jsonify, render_template
 
 from config import Config
 from routes.auth import auth_bp
@@ -18,6 +18,10 @@ def create_app(config=Config):
     app.register_blueprint(auth_bp)
     app.register_blueprint(profile_bp)
     app.register_blueprint(dashboard_bp)
+
+    @app.get("/")
+    def index():
+        return render_template("index.html")
 
     @app.get("/health")
     def health():

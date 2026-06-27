@@ -23,15 +23,15 @@ def create_app():
 
     @app.post("/predict")
     def predict():
-        # OWNER (Lior): load the baked Random Forest, map `features` -> a training-state class,
-        # then generate recommendations. Free to choose dataset/model/binning — see ai/README.md.
         features = (request.get_json(silent=True) or {}).get("features", {})
-        logger.info("predict called with %d feature(s) (stub)", len(features))
+        logger.info("predict called with %d feature(s) (placeholder)", len(features))
+        # OWNER (Lior): replace this placeholder with the baked Random Forest + recommendation engine.
+        # KEEP the response shape (the web->ai contract). PMData notes + decisions: ai/README.md.
         return jsonify(
-            state=None,
-            proba={},
-            recommendations={},
-            detail="ai /predict not implemented yet",
-        ), 501
+            state="Moderate",
+            proba={"Moderate": 1.0},
+            recommendations=[],
+            placeholder=True,
+        )
 
     return app
