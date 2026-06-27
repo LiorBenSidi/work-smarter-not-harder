@@ -6,16 +6,17 @@
 ## Team
 | Person | GitHub | Owns | Roadmap |
 |---|---|---|---|
-| **Lior** | `LiorBenSidi` | **AI** — model, `/predict`, recommendation engine, data pipeline | [PERSON1.md](PERSON1.md) |
-| **Shiri** | `shiriHaboob` | **Web app** — auth, profile, dashboard, history, frontend | [PERSON2.md](PERSON2.md) |
-| **Elad** | `EladNa1` | **Infra + data + deploy** — docker-compose, MongoDB, rate-limit, Azure + CI/CD | [PERSON3.md](PERSON3.md) |
+| **Shiri** | `shiriHaboob` | **AI brain** — model, `/predict`, recommendation engine, the dataset | [PERSON1.md](PERSON1.md) |
+| **Lior** | `LiorBenSidi` | **Web app + its data** — auth, profile, dashboard, history, frontend, `services/db.py` | [PERSON2.md](PERSON2.md) |
+| **Elad** | `EladNa1` | **Infra + deploy + real-time** — compose, Mongo container, rate-limit, Azure deploy + CD, Forum real-time, stress | [PERSON3.md](PERSON3.md) |
+| **Shared** | all three | **Tests** — each owns their plane's unit tests; all run in the one CI; Elad anchors integration/system/stress | — |
 
 Roles are **containers/aspects**, not a rigid feature list — see "Freedom" below.
 
 ## How it fits together — the contracts (the ONLY fixed shared things)
 These are the seams between owners. Change one → update `docs/DESIGN.md` **and tell the team** (a "sync point").
 - **`web → ai`** — `POST /predict {features} -> {state, proba, recommendations}` (DESIGN §3).
-- **`web → db`** — the Mongo collections `users / profiles / programs / analysis_history` (DESIGN §2).
+- **`web → db`** — the Mongo collections `users / profiles / programs / analysis_history` (DESIGN §2); **Lior owns `services/db.py`**, Elad runs the Mongo container.
 - **Container boundaries** — only `web` is exposed (host 8000 → container 5000); `ai` + `db` internal.
 
 Behind these, implement however you like.
