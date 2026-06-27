@@ -1,7 +1,7 @@
 # Contributing
 
 `main` is **protected** — no one (including the owner) pushes to it directly. Every change lands through a
-**pull request** from a feature branch, reviewed by a teammate. This keeps `main` always-green and gives the
+**pull request** from a feature branch that must pass CI. This keeps `main` always-green and gives the
 3-person team a clear integration point.
 
 ## Workflow
@@ -22,7 +22,7 @@ git commit -m "ai: train + serve the Random Forest readiness classifier"
 git push -u origin feat/readiness-classifier
 gh pr create --fill            # or open the PR on github.com
 
-# 5. a teammate reviews + approves, then merge via the PR
+# 5. CI runs on the PR; once it's green, merge it yourself (no peer approval required)
 ```
 
 ## Local checks — run before you commit
@@ -46,7 +46,7 @@ pip install -r requirements-dev.txt        # pinned ruff + bandit + pytest
 
 ## Rules
 - **Never** `git push origin main` — it's blocked by branch protection; open a PR instead.
-- One teammate **approves** each PR before merge (you can't approve your own).
+- **No peer approval required** — once CI is green, merge your own PR (you own your scope + its tests). Reviews are welcome but optional.
 - Keep PRs focused (one feature/fix). Prefer **Squash and merge** for a clean history.
 - All members commit regularly (course requirement — contribution is graded).
 - Delete the branch after merge.

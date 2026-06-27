@@ -8,8 +8,8 @@ Full guidance:
 
 ## The rule that always applies
 **`main` is branch-protected and PR-only — never push directly to `main`.** Work on a branch
-(`feat|fix|test|docs|chore/…`) and open a pull request; CI (ruff · bandit · pytest) must pass and a teammate
-must approve before merge. GitHub enforces this server-side, so direct pushes are rejected anyway.
+(`feat|fix|test|docs|chore/…`) and open a pull request; CI (ruff · bandit · pytest) must pass, then the author
+**merges their own PR — no peer approval required** (own your scope + tests; CI is the gate). GitHub enforces the PR + CI rules server-side, so direct pushes are rejected anyway.
 
 ## Architecture (3 containers — only `web` is exposed)
 - `web/` — Flask: auth (password hashing via `werkzeug.security`) + API + frontend. The only user-facing container.

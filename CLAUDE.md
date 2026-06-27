@@ -9,7 +9,7 @@ requirements: [`docs/Proj_Guidelines.pdf`](docs/Proj_Guidelines.pdf) + [`docs/TA
 
 ## ⛔ Workflow — `main` is PR-only (enforced server-side)
 - **Never push to `main`.** It's branch-protected — direct pushes are rejected for everyone, including admins.
-- Every change: **branch → commit → push → open a PR → a teammate approves → merge.**
+- Every change: **branch → commit → push → open a PR → CI green → self-merge.** No peer approval required — own your scope + tests; CI is the gate.
 - Branch names: `feat/…` · `fix/…` · `test/…` · `docs/…` · `chore/…`.
 - Full flow + commands: [`CONTRIBUTING.md`](CONTRIBUTING.md).
 - **Local gate before you commit** (same checks as CI): `git commit` runs ruff (incl. the no-`print()` rule) + bandit; `git push` runs pytest. Enable once: `sh scripts/setup-hooks.sh` + `pip install -r requirements-dev.txt`.
