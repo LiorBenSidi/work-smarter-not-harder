@@ -5,6 +5,7 @@ Project documents for **Work Smarter, Not Harder** (WSML 00950219 final project)
 | File | What it is |
 |---|---|
 | [`PROPOSAL.md`](PROPOSAL.md) | The **submitted** project proposal (מסמך אפיון) — the graded spec. |
+| [`FEEDBACK.md`](FEEDBACK.md) | **Noam's feedback** on the proposal (Moodle, 25 Jun) — the **grading rubric**: 80 build + 10 Forum + 10 Deploy/CI-CD. |
 | [`Proj_Guidelines.pdf`](Proj_Guidelines.pdf) | The **official** course project guidelines (course-provided reference). |
 | [`TA-Notes.txt`](TA-Notes.txt) | The TA's clarifications/notes on the project (course-provided reference). |
 | [`DESIGN.md`](DESIGN.md) | Living **design document** — architecture, data model, API contracts, decisions. Fill in as we build. |
