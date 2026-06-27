@@ -24,12 +24,12 @@ These are the **universal guardrails** every owner's work must pass before it ca
 ## Mandatory tests per feature (the matrix — fill the scaffolds)
 | Feature | Unit | Integration | System | Stress | Security | Owner | Scaffold |
 |---|:-:|:-:|:-:|:-:|:-:|---|---|
-| Auth (F1) | ✓ | ✓ | ✓ | – | ✓ | Shiri | `Security_Tests/test_auth.py` |
-| Profile (F2) | ✓ | ✓ | ✓ | – | ✓ inj. | Shiri/Elad | (add) |
-| Readiness (F3) | ✓ | ✓ | ✓ | ✓ | – | Lior | `Unit_Tests/test_ai.py`, `Integration_Tests/test_web_ai.py` |
-| Calorie (F4) | ✓ | ✓ | ✓ | – | – | Lior | `Unit_Tests/test_calories.py` (unit ✓) |
-| Workout (F5) | ✓ | ✓ | ✓ | – | – | Lior | (add) |
-| Dashboard / History (F7/F8) | ✓ | ✓ | ✓ | – | – | Shiri | `System_Tests/test_e2e.py` |
+| Auth (F1) | ✓ | ✓ | ✓ | – | ✓ | Lior | `Security_Tests/test_auth.py` |
+| Profile (F2) | ✓ | ✓ | ✓ | – | ✓ inj. | Lior (route) / Elad (db) | (add) |
+| Readiness (F3) | ✓ | ✓ | ✓ | ✓ | – | Shiri | `Unit_Tests/test_ai.py`, `Integration_Tests/test_web_ai.py` |
+| Calorie (F4) | ✓ | ✓ | ✓ | – | – | Shiri | `Unit_Tests/test_calories.py` (unit ✓) |
+| Workout (F5) | ✓ | ✓ | ✓ | – | – | Shiri | (add) |
+| Dashboard / History (F7/F8) | ✓ | ✓ | ✓ | – | – | Lior | `System_Tests/test_e2e.py` |
 | Deploy + CI/CD | – | – | ✓ | ✓ | – | Elad | `Stress_Tests/test_load.py` |
 
 (✓ = required; – = N/A for that feature. Refine against the proposal's own feature×test matrix as you build.)

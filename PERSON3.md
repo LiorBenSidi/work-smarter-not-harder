@@ -1,7 +1,8 @@
-# PERSON 3 — Elad — infra, deploy & the real-time backend
+# PERSON 3 — Elad — infra, deploy, data & the real-time backend
 
 > Your area, the mandatory course items, and a roadmap. How you build it is your call. You own the plumbing that
-> runs and ships the app, plus the Forum's real-time backend. `docker-compose.yml` is your starting point.
+> runs and ships the app, the **data layer** (`services/db.py` + the Mongo container), plus the Forum's real-time
+> backend. `docker-compose.yml` is your starting point.
 
 ## Start now — unblocked on day 1
 The 3-container skeleton already runs, so you can start the Azure setup, the second compose file, the stress
