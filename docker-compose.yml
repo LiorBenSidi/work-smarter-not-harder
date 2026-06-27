@@ -1,0 +1,47 @@
+# Work Smarter, Not Harder — 3 containers. ONLY `web` is exposed (host 8000 -> container 5000;
+# never publish 5000 — macOS AirPlay grabs it). `ai` + `db` are internal-only.
+# Run:  cp .env.example .env  &&  docker compose up --build   ->  http://localhost:8000/health
+services:
+  web:
+    build: ./web
+    ports:
+      - "8000:5000"                 # the ONLY published port
+    environment:
+      SECRET_KEY: ${SECRET_KEY:?set SECRET_KEY in .env}
+      MONGO_URI: mongodb://db:27017/worksmarter
+      AI_URL: http://ai:5000
+      FLASK_DEBUG: ${FLASK_DEBUG:-0}
+      TESTING: ${TESTING:-0}
+    depends_on:
+      ai: { condition: service_healthy }
+      db: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:5000/health').status==200 else 1)"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  ai:                               # internal only — no host port (OWNER: Lior)
+    build: ./ai
+    expose:
+      - "5000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:5000/health').status==200 else 1)"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  db:                               # MongoDB — internal only (OWNER: Elad)
+    image: mongo:7
+    expose:
+      - "27017"
+    volumes:
+      - mongo-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  mongo-data:
