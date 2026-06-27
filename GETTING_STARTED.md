@@ -32,8 +32,8 @@ before anything reaches GitHub.
 | You | Your file | Your area |
 |---|---|---|
 | **Shiri** | [`PERSON1.md`](PERSON1.md) | the **AI** — model, `/predict`, recommendation engine, dataset |
-| **Lior** | [`PERSON2.md`](PERSON2.md) | the **web app + its data** — auth, profile, dashboard, history, frontend, `db.py` |
-| **Elad** | [`PERSON3.md`](PERSON3.md) | **infra + deploy** — docker, Mongo container, Azure + CI/CD, Forum real-time |
+| **Lior** | [`PERSON2.md`](PERSON2.md) | the **web app** — auth, profile, dashboard, history, frontend |
+| **Elad** | [`PERSON3.md`](PERSON3.md) | **infra + deploy + data** — docker, Mongo container + `db.py`, Azure + CI/CD, Forum real-time |
 
 Your file = your area + the must-do (course) items + a roadmap. **How** you build it is your choice.
 
