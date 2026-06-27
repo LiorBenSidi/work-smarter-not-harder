@@ -7,7 +7,7 @@
 | Person | GitHub | Owns | Roadmap |
 |---|---|---|---|
 | **Shiri** | `shiriHaboob` | **AI brain** — model, `/predict`, recommendation engine, the dataset | [PERSON1.md](PERSON1.md) |
-| **Lior** | `LiorBenSidi` | **Web app** — auth, profile, dashboard, history, frontend | [PERSON2.md](PERSON2.md) |
+| **Lior** | `LiorBenSidi` | **Web application** — the Flask **backend** (API · auth/sessions · validation · orchestration of ai+db) + the frontend | [PERSON2.md](PERSON2.md) |
 | **Elad** | `EladNa1` | **Infra + deploy + data + real-time** — compose, Mongo container + `services/db.py`, rate-limit, Azure deploy + CD, Forum real-time, stress | [PERSON3.md](PERSON3.md) |
 | **Shared** | all three | **Tests** — each owns their plane's unit tests; all run in the one CI; Elad anchors integration/system/stress | — |
 
