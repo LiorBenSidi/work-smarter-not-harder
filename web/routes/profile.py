@@ -1,4 +1,4 @@
-"""Profile route — GET/POST the athlete profile. OWNER: Shiri (route) + Elad (data layer).
+"""Profile route — GET/POST the athlete profile. OWNER: Lior (route) + Elad (data layer).
 
 The route lives in `web`; the data access is Elad's `services/db.py`. Mandatory: validate input
 before any Mongo query (NoSQL-injection defense). Implement behind this URL.

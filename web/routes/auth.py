@@ -1,4 +1,4 @@
-"""Auth routes — register / login / logout. OWNER: Shiri.
+"""Auth routes — register / login / logout. OWNER: Lior.
 
 Mandatory (course): hash passwords with werkzeug; auth-gate protected endpoints; validate input
 (NoSQL-injection-safe). How you structure it is up to you — implement behind these URLs.

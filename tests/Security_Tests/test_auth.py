@@ -1,4 +1,4 @@
-"""MANDATORY auth/security tests — OWNER: Shiri (F1). Required by the rubric (docs/FEEDBACK.md) + DESIGN §5.
+"""MANDATORY auth/security tests — OWNER: Lior (F1). Required by the rubric (docs/FEEDBACK.md) + DESIGN §5.
 
 TDD: write these before/with the implementation. Remove the module `skip` + fill each body as you go.
 Never comment out a broken test — fix it or delete it (course rule).

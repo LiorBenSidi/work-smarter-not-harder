@@ -1,7 +1,7 @@
 # AI container — runtime deps for the skeleton (enough to serve /health + the stub).
 flask==3.1.0
 gunicorn==23.0.0
-# OWNER (Lior) adds + PINS the ML stack when implementing the model, e.g.:
+# OWNER (Shiri) adds + PINS the ML stack when implementing the model, e.g.:
 #   scikit-learn==<the version you train with>   # pin so the baked pickle loads
 #   joblib==1.4.2
 #   numpy==2.1.3

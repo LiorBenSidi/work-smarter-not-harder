@@ -1,4 +1,4 @@
-"""Web container — the ONLY user-facing service. OWNER: Shiri (auth + dashboard + frontend).
+"""Web container — the ONLY user-facing service. OWNER: Lior (auth + dashboard + frontend).
 
 App-factory that registers the route blueprints. `/health` is live; the feature routes are 501
 stubs behind their final URLs for their owners to implement.

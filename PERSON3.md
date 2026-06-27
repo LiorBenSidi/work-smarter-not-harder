@@ -12,7 +12,7 @@ harness, and the cross-container test harness immediately — none of it waits o
 - Only `web` is exposed (host 8000 → 5000); `ai` + `db` internal.
 
 ## Mandatory (course — graded)
-- **docker-compose** — 3 containers, healthchecks, only `web` published (host 8000, never 5000).
+- **docker-compose** (the base 3-container file already exists — extend it) — healthchecks, only `web` published (host 8000, never 5000).
 - **`docker-compose.test.yml`** — a second compose for the test run (`TESTING=1`).
 - **Never commit `.env`** (commit `.env.example`).
 - **Rate limiting** (flask-limiter) on the public endpoints; defend against spammers.
@@ -20,7 +20,7 @@ harness, and the cross-container test harness immediately — none of it waits o
 - **The deploy +10** — Azure deploy + CI auto-deploy on green (the CI gate already runs).
 
 ## Roadmap (build these — your way)
-- [ ] **Data layer (`web/services/db.py`)** — connection + CRUD for `users / profiles / programs / analysis_history`; injection-safe queries; schema/indexes. Stub the function signatures early (web calls them).
+- [ ] **Data layer (`web/services/db.py`)** — CRUD for `users / profiles / programs / analysis_history` (a `get_db()` connection helper already exists); injection-safe queries; schema/indexes. Stub the function signatures early (web calls them).
 - [ ] **Azure deploy + CI/CD** — extend the live pipeline to deploy on green `main`; scale via `ai` replicas + gunicorn workers. Start early.
 - [ ] **`docker-compose.test.yml`** + the cross-container test harness.
 - [ ] **Fault tolerance + scaling** — graceful degradation (AI / DB down); horizontal scaling (replicas + gunicorn workers) + the **multi-machine path** (Docker Swarm overlay, or `ai` replicas on the Azure VM; **queue-free**) + a locust before/after.
