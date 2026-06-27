@@ -3,7 +3,7 @@
 Phased so we always have a viable product (per Noam's feedback). **Every phase is independently shippable:**
 tested, Dockerized, and — once the deploy milestone lands — auto-deployed to Azure on green CI.
 
-**Driving spec:** the submitted [`PROPOSAL.md`](PROPOSAL.md) + Noam's rubric (`feedback.md`):
+**Driving spec:** the submitted [`PROPOSAL.md`](PROPOSAL.md) + Noam's rubric ([`FEEDBACK.md`](FEEDBACK.md)):
 **80** = the whole app (F1–F9, no stretch goals) on Docker · **+10** real-time Forum · **+10** Azure deploy + CI/CD.
 Penalties: −5 / bug, −5 / week late. Partial credit per feature; you needn't do it all (this is the bar for a perfect 100).
 
@@ -17,10 +17,12 @@ replies, build F6 as a rule inside F7.
 ## Phase 0 — MVP (must come first)
 **Goal:** prove the architecture + the AI heart, end-to-end on Docker.
 **Scope:** F1 auth (register / login / logout, werkzeug hashing) · F2 profile · **F3 readiness** (Random Forest
-baked into the `ai` image; `web` → `ai` `POST /predict`) · minimal F8 dashboard · MongoDB persistence ·
+baked into the `ai` image; `web` → `ai` `POST /predict`) · **F4 calorie** (Mifflin-St Jeor, closed-form) · minimal F8 dashboard (readiness + calories) · MongoDB persistence ·
 `docker-compose` with 3 containers (only `web` exposed — host **8000** → container 5000).
-**Done when:** `docker compose up --build` → register → enter profile → see a readiness class on the dashboard;
+**Done when:** `docker compose up --build` → register → enter profile → see a readiness class **and a calorie target** on the dashboard;
 CI green; first real tests in all five dirs; the feature×test matrix is started; the `debug` flag is wired.
+
+> **Phase 0 vs the proposal's §15 MVP:** Phase 0 is a thin architecture-proving slice. With F4 added it now covers the proposal's §15 "Minimum Working Version" **except the heavier Workout-generator (F5)**, which lands first in *Complete the 80* below — so the full §15 MVP is done by the end of that workstream. **Nothing in the proposal is dropped.**
 
 ## After Phase 0 — three workstreams
 Order is **open** (recommended as written below; final sequencing TBD). The only hard constraint: **Deploy can't
@@ -34,8 +36,8 @@ Azure; public domain; scale via the multiprocessing / `ai`-replica design.
 *Banks the full +10. The CI-only half (5 pts) is already secured by the existing gate.*
 
 ### Complete the 80 — rest of F1–F9
-**Scope:** F4 calorie (Mifflin-St Jeor + goal) · F5 workout generator · **F7 action plan (with F6's balance rule
-folded in)** · F9 history · F8 fleshed out. Fault tolerance + rate-limiting + input validation + NoSQL-injection
+**Scope:** F5 workout generator · **F7 action plan (with F6's balance rule
+folded in)** · F9 history · F8 fleshed out (full dashboard + history). Fault tolerance + rate-limiting + input validation + NoSQL-injection
 defense across all endpoints.
 **Done when:** the whole proposal (minus stretch) runs on Docker; the feature×test matrix is complete; the risk
 report is concrete. **= the 80.**
