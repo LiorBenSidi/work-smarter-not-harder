@@ -1,4 +1,4 @@
-"""MANDATORY integration test — web -> ai. OWNER: Shiri + Lior.
+"""MANDATORY integration test — web -> ai. OWNER: Lior (web) + Shiri (ai).
 
 TDD: fill + un-skip when the web routes and ai `/predict` are implemented.
 """

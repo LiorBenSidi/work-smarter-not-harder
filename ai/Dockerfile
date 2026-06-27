@@ -1,4 +1,4 @@
-# AI container (internal). OWNER: Lior.
+# AI container (internal). OWNER: Shiri.
 FROM python:3.12-slim
 WORKDIR /app
 

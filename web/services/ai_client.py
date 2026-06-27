@@ -1,4 +1,4 @@
-"""Client for the internal AI container (`POST {AI_URL}/predict`). OWNER: web side (Shiri/Elad).
+"""Client for the internal AI container (`POST {AI_URL}/predict`). OWNER: Lior (web).
 
 Baseline glue so routes can call the AI today. Fault tolerance (mandatory — docs/DESIGN.md §5):
 on AI failure this returns ``None`` and the caller degrades gracefully — the app must NOT crash.

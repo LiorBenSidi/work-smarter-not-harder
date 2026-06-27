@@ -1,4 +1,4 @@
-"""Dashboard route — current state + plan + calories + history. OWNER: Shiri.
+"""Dashboard route — current state + plan + calories + history. OWNER: Lior.
 
 Pulls the assessment via `services/ai_client` and history via `services/db`. Implement behind this URL.
 """

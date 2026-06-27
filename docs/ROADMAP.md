@@ -98,7 +98,12 @@ The only coordination points are the seams (`/predict` shape, `db.py`'s function
 
 Legend: ✅ done · 🟡 partial / in-progress · ⬜ not started.
 
-## Status (2026-06-25)
+## Status (2026-06-28)
 Scaffold + branch-protected PR-only `main` + CI gate (ruff → bandit → pytest, no-false-green) + a local pre-commit
-gate are live — that CI already earns the **5-pt CI-only** partial of the deploy +10. Still to build: the `web` /
-`ai` containers, the Random Forest model + `/predict`, `docker-compose`, and the features. Due **23 Aug 2026**.
+gate are live — that CI already earns the **5-pt CI-only** partial of the deploy +10.
+
+**Live now:** the runnable 3-container skeleton (`docker-compose` + healthchecks + gunicorn, only `web` exposed),
+the `web↔ai` glue (`ai_client`) + a `db` connection helper, the **F4 calorie** function (`ai/calories.py`), and the
+ratified split. **Still to build:** the RF model + real `/predict`, the recommendation engine, the web features
+(auth/profile/dashboard/history/frontend), the `db.py` CRUD, `docker-compose.test.yml`, Azure deploy, and the Forum.
+Due **23 Aug 2026**.
