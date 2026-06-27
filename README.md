@@ -28,6 +28,8 @@ docs/    PROPOSAL.md (the submitted spec)
 This is a starting scaffold — the team fills it in via pull requests (see below).
 
 ## Getting started (first-time, every clone)
+**New here? → [`GETTING_STARTED.md`](GETTING_STARTED.md)** — clone · run the stack · find your part · the loop (≈5 min). It also covers the gate setup below.
+
 After cloning, enable the local quality gate so the course's checks run **before** you commit (it mirrors CI):
 ```sh
 sh scripts/setup-hooks.sh                 # enable the shared git hooks (.githooks/)
