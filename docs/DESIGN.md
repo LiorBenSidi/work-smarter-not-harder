@@ -4,6 +4,9 @@ Living technical design. **Spec sources:** the submitted [`PROPOSAL.md`](PROPOSA
 + the revised [`PROPOSAL-v2.md`](PROPOSAL-v2.md) (current intent). **Driving rubric:** [`FEEDBACK.md`](FEEDBACK.md).
 Items marked *proposed* are confirmed at the kickoff; open decisions are at the bottom; reference the PR that changes a decision.
 
+## Ownership & freedom (how the split works)
+The split is **contract-based**: the only fixed, shared things are the **interfaces between containers** — the `/predict` request/response, the Mongo collections (§2), and the `web` ↔ `ai` ↔ `db` boundaries. **Behind its contract, each owner implements their aspect however they want** — the AI owner picks the dataset, model, class binning, and augmentation ([`../ai/README.md`](../ai/README.md)); the web owner picks the auth/session approach + frontend; the DB owner picks schema details + indexes. Constrain a teammate's **contract**, never their **implementation**. (Pairs with the CI-gated self-merge policy — own your scope + its tests — and with course L5.1 modules/interfaces + L8.1 "don't polish teammates' code".)
+
 ## 1. Architecture — 3 containers (only `web` exposed)
 - **web** — Flask: frontend + auth (werkzeug hashing) + API. Host **8000** → container 5000 (never publish 5000 — macOS AirPlay). The only user-facing container.
 - **db** — MongoDB. Internal only; named volume for persistence; healthcheck + `depends_on`.
@@ -37,6 +40,7 @@ One pipeline, two capabilities:
 - **Baked into the `ai` image** (`joblib.dump` → `COPY` → `joblib.load`; **pin sklearn** so the pickle loads). Never train/download at runtime.
 - **CPU-bound inference → `multiprocessing`** (the parallel/scaling story; `ai` replicas for multi-machine).
 - Trained on wellness + program-catalog data; any synthetic augmentation (bootstrapping / class-balancing) documented.
+- **Dataset · model · binning · augmentation are the AI owner's call** (behind the `/predict` contract). Current starting point: **PMData** (Simula) + Random Forest. Details + open decisions live in [`../ai/README.md`](../ai/README.md).
 
 ## 5. Security & fault tolerance
 - Hash passwords (werkzeug); auth-gate protected endpoints; rate-limit; validate input; defend NoSQL injection; only `web` exposed.
