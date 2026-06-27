@@ -83,7 +83,7 @@ The only coordination points are the seams (`/predict` shape, `db.py`'s function
 | `docker-compose.yml` **and** `docker-compose.test.yml` | 🟡 main done; **test compose TODO** | Elad |
 | `debug` flag toggles debug mode | 🟡 env wired; confirm it toggles | Lior |
 | Password hashing (werkzeug) | ⬜ | Lior |
-| Input validation + injection defense | ⬜ | Lior |
+| Input validation (routes) + injection-safe queries (`db.py`) | ⬜ | Lior · Elad |
 | Rate-limit / anti-spam (flask-limiter) | ⬜ | Elad |
 | Fault tolerance + **isolation tested** (stop ai/db → web survives) | 🟡 `ai_client` degrades; kill-container tests TODO | Elad + all |
 | Parallel programming + scaling — multiprocessing batch · replicas/workers · multi-machine (Swarm / Azure VM) · **queue-free** | 🟡 concrete plan | Shiri (parallel code) · Elad (scaling) |

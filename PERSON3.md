@@ -8,7 +8,7 @@ The 3-container skeleton already runs, so you can start the Azure setup, the sec
 harness, and the cross-container test harness immediately — none of it waits on the features.
 
 ## Your contracts (fixed)
-- You run the **Mongo container** (`db` service); `web` connects via `mongodb://db:27017`.
+- You own the **DB end-to-end**: the **Mongo container** (`db` service) **and** `web/services/db.py` (the data-access layer). `web` calls your `db.py` functions — that function API is the seam, so **stub the signatures early** so web isn't blocked.
 - Only `web` is exposed (host 8000 → 5000); `ai` + `db` internal.
 
 ## Mandatory (course — graded)
@@ -20,6 +20,7 @@ harness, and the cross-container test harness immediately — none of it waits o
 - **The deploy +10** — Azure deploy + CI auto-deploy on green (the CI gate already runs).
 
 ## Roadmap (build these — your way)
+- [ ] **Data layer (`web/services/db.py`)** — connection + CRUD for `users / profiles / programs / analysis_history`; injection-safe queries; schema/indexes. Stub the function signatures early (web calls them).
 - [ ] **Azure deploy + CI/CD** — extend the live pipeline to deploy on green `main`; scale via `ai` replicas + gunicorn workers. Start early.
 - [ ] **`docker-compose.test.yml`** + the cross-container test harness.
 - [ ] **Fault tolerance + scaling** — graceful degradation (AI / DB down); horizontal scaling (replicas + gunicorn workers) + the **multi-machine path** (Docker Swarm overlay, or `ai` replicas on the Azure VM; **queue-free**) + a locust before/after.
