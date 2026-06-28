@@ -28,6 +28,10 @@ class _FakeColl:
 
     def __init__(self):
         self.docs = []
+        self.indexes = []
+
+    def create_index(self, key, unique=False):
+        self.indexes.append((key, unique))
 
     def _match(self, doc, filt):
         return all(doc.get(k) == v for k, v in filt.items())
@@ -70,6 +74,13 @@ class _FakeDB:
 @pytest.fixture
 def db():
     return _FakeDB()
+
+
+# ---- indexes ----
+def test_ensure_indexes_creates_unique_constraints(db_mod, db):
+    db_mod.ensure_indexes(db)
+    assert ("username", True) in db.users.indexes        # unique username
+    assert ("id", True) in db.forum_posts.indexes        # unique forum post id
 
 
 # ---- users ----
