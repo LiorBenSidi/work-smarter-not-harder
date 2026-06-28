@@ -51,3 +51,39 @@ def test_nosql_injection_cannot_register(client):
 def test_non_json_body_returns_400(client):
     resp = client.post("/login", data="not json", content_type="text/plain")
     assert resp.status_code == 400
+
+
+class _BrokenUsers:
+    """A user store that fails on every call — exercises the graceful-degradation (503) path."""
+
+    def get(self, username):
+        raise RuntimeError("store down")
+
+    def add(self, username, password_hash):
+        raise RuntimeError("store down")
+
+
+def test_register_degrades_to_503_when_store_fails(make_client):
+    resp = make_client(_BrokenUsers()).post("/register", json={"username": "alice", "password": "s3cretpw!"})
+    assert resp.status_code == 503
+
+
+def test_login_degrades_to_503_when_store_fails(make_client):
+    resp = make_client(_BrokenUsers()).post("/login", json={"username": "alice", "password": "s3cretpw!"})
+    assert resp.status_code == 503
+
+
+def test_same_password_yields_different_hashes(client, fake_users):
+    # werkzeug salts each hash -> two users with the same password must not share a hash
+    _register(client, "alice", "samePassw0rd")
+    _register(client, "bob", "samePassw0rd")
+    assert fake_users.get("alice")["password_hash"] != fake_users.get("bob")["password_hash"]
+
+
+def test_login_with_unknown_user_still_verifies_a_hash(client, auth_module, monkeypatch):
+    # constant-time defense: the missing-user path must still run a password check (no timing oracle)
+    seen = []
+    real = auth_module.check_password_hash
+    monkeypatch.setattr(auth_module, "check_password_hash", lambda h, p: seen.append(h) or real(h, p))
+    client.post("/login", json={"username": "ghost", "password": "whatever12"})
+    assert seen, "expected a hash verification even when the user does not exist"
