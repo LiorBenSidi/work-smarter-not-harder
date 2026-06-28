@@ -21,7 +21,7 @@ harness, and the cross-container test harness immediately — none of it waits o
 - **The deploy +10** — Azure deploy + CI auto-deploy on green (the CI gate already runs).
 
 ## Roadmap (build these — your way)
-- [ ] **Mongo container + schema/indexes** — stand up the `db` service with a persistent volume; add indexes (e.g. unique `users.username`, `forum_posts.id`) + any schema tuning. (The thin CRUD in `services/db.py` is **Lior's** — already implemented + tested against a fake; it just needs a live Mongo at `MONGO_URI`.)
+- [ ] **Mongo container** — stand up the `db` service with a persistent volume reachable at `MONGO_URI`. The CRUD's **unique indexes** (`users.username`, `forum_posts.id`) already ship in `services/db.py` `ensure_indexes()` (Lior, best-effort on first connect); you add any further **performance/schema indexes** + tuning. (The thin CRUD itself is **Lior's** — implemented + tested against a fake.)
 - [ ] **Azure deploy + CI/CD** — extend the live pipeline to deploy on green `main`; scale via `ai` replicas + gunicorn workers. Start early.
 - [ ] **`docker-compose.test.yml`** + the cross-container test harness.
 - [ ] **Fault tolerance + scaling** — graceful degradation (AI / DB down); horizontal scaling (replicas + gunicorn workers) + the **multi-machine path** (Docker Swarm overlay, or `ai` replicas on the Azure VM; **queue-free**) + a locust before/after.
