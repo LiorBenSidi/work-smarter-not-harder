@@ -66,3 +66,21 @@ def test_rejects_too_short_password(validate, password):
 def test_rejects_overlong_password(validate):
     with pytest.raises(ValueError):
         validate({"username": "alice", "password": "a" * 257})
+
+
+@pytest.mark.parametrize("username", ["abc", "a" * 64])  # exact min / max are ACCEPTED (pins the <= bounds)
+def test_accepts_username_length_boundaries(validate, username):
+    accepted, _ = validate({"username": username, "password": "s3cretpw!"})
+    assert accepted == username
+
+
+@pytest.mark.parametrize("password", ["a" * 8, "a" * 256])  # exact min / max are ACCEPTED
+def test_accepts_password_length_boundaries(validate, password):
+    _, accepted = validate({"username": "alice", "password": password})
+    assert accepted == password
+
+
+def test_rejects_null_password(validate):
+    # JSON null -> Python None -> not a str -> rejected before any query
+    with pytest.raises(ValueError):
+        validate({"username": "alice", "password": None})

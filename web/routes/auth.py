@@ -21,6 +21,10 @@ PASSWORD_MIN, PASSWORD_MAX = 8, 256
 # Identical body for both login-failure modes -> no user-enumeration (DESIGN §5).
 _INVALID_LOGIN = {"error": "invalid username or password"}
 
+# Verified on the user-missing login path so a miss costs the same as a real check -> no timing
+# oracle for user-enumeration (DESIGN §5). Computed once at import; not a real credential.
+_DECOY_HASH = generate_password_hash("not-a-real-secret-timing-decoy")
+
 
 def validate_credentials(data):
     """Return ``(username, password)`` for a well-formed credential payload, else raise ``ValueError``.
@@ -87,7 +91,10 @@ def login():
         logger.exception("user store unavailable during login")
         return jsonify(error="user store unavailable"), 503
     stored_hash = user.get("password_hash") if isinstance(user, dict) else None
-    if not isinstance(stored_hash, str) or not check_password_hash(stored_hash, password):
+    if not isinstance(stored_hash, str):
+        check_password_hash(_DECOY_HASH, password)  # equalize work with the found-user path
+        return jsonify(_INVALID_LOGIN), 401
+    if not check_password_hash(stored_hash, password):
         return jsonify(_INVALID_LOGIN), 401
     session.clear()
     session["username"] = username

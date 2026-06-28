@@ -65,7 +65,17 @@ def fake_users():
 
 
 @pytest.fixture
-def client(web_app_module, fake_users):
-    app = web_app_module.create_app(users=fake_users)
-    app.config.update(SECRET_KEY="test-secret-key", TESTING=True)
-    return app.test_client()
+def make_client(web_app_module):
+    """Factory: build a web test client with a given user store (None -> the production default)."""
+
+    def _make(users=None):
+        app = web_app_module.create_app(users=users)
+        app.config.update(SECRET_KEY="test-secret-key", TESTING=True)
+        return app.test_client()
+
+    return _make
+
+
+@pytest.fixture
+def client(make_client, fake_users):
+    return make_client(fake_users)
