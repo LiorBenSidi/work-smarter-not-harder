@@ -47,3 +47,12 @@ def test_dashboard_degrades_when_ai_unavailable(profile_client, monkeypatch):
     body = resp.get_json()
     assert body["readiness"] is None
     assert body["ai_status"] == "unavailable"
+
+
+def test_dashboard_degrades_when_ai_returns_non_object(profile_client, monkeypatch):
+    _set_predict(monkeypatch, ["not", "a", "dict"])  # malformed AI response must not crash the page
+    _login(profile_client)
+    profile_client.post("/profile", json=_profile())
+    resp = profile_client.get("/dashboard")
+    assert resp.status_code == 200
+    assert resp.get_json()["ai_status"] == "unavailable"

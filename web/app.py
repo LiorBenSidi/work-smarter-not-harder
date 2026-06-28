@@ -22,12 +22,10 @@ logger = logging.getLogger(__name__)
 _TEMPLATES = os.path.join(os.path.dirname(os.path.abspath(__file__)), "templates")
 
 
-class _DbUsers:
-    """Default user store — delegates to the data layer (services/db.py, owned by Elad).
-
-    The web->db seam Elad implements: ``get_user(db, username) -> record | None`` and
-    ``create_user(db, username, password_hash) -> bool``. Resolved lazily so the web app boots and
-    ``/health`` works before the DB layer lands; unit tests inject an in-memory store instead.
+class _DbStore:
+    """Base for the db.py-backed stores (owned by Elad). Lazily resolves ``(db module, handle)`` from
+    the app's MONGO_URI, so the web app boots and ``/health`` works before the DB layer lands; unit
+    tests inject in-memory fakes instead. Subclasses just call the seam functions on the handle.
     """
 
     def __init__(self, app):
@@ -36,6 +34,10 @@ class _DbUsers:
     def _resolve(self):
         from services import db as db_module
         return db_module, db_module.get_db(self._app.config["MONGO_URI"])
+
+
+class _DbUsers(_DbStore):
+    """Seam Elad implements: ``get_user(db, username)`` / ``create_user(db, username, password_hash)``."""
 
     def get(self, username):
         db_module, handle = self._resolve()
@@ -46,19 +48,8 @@ class _DbUsers:
         return db_module.create_user(handle, username, password_hash)
 
 
-class _DbProfiles:
-    """Default profile store — delegates to the data layer (services/db.py, owned by Elad).
-
-    The web->db seam Elad implements: ``get_profile(db, username) -> record | None`` and
-    ``save_profile(db, username, profile)``. Resolved lazily (same rationale as _DbUsers).
-    """
-
-    def __init__(self, app):
-        self._app = app
-
-    def _resolve(self):
-        from services import db as db_module
-        return db_module, db_module.get_db(self._app.config["MONGO_URI"])
+class _DbProfiles(_DbStore):
+    """Seam Elad implements: ``get_profile(db, username)`` / ``save_profile(db, username, profile)``."""
 
     def get(self, username):
         db_module, handle = self._resolve()
@@ -69,40 +60,18 @@ class _DbProfiles:
         return db_module.save_profile(handle, username, profile)
 
 
-class _DbHistory:
-    """Default analysis-history store — delegates to the data layer (services/db.py, owned by Elad).
-
-    The web->db seam Elad implements: ``list_history(db, username) -> list``. Resolved lazily
-    (same rationale as _DbUsers).
-    """
-
-    def __init__(self, app):
-        self._app = app
-
-    def _resolve(self):
-        from services import db as db_module
-        return db_module, db_module.get_db(self._app.config["MONGO_URI"])
+class _DbHistory(_DbStore):
+    """Seam Elad implements: ``list_history(db, username) -> list``."""
 
     def list(self, username):
         db_module, handle = self._resolve()
         return db_module.list_history(handle, username)
 
 
-class _DbForum:
-    """Default forum store — delegates to the data layer (services/db.py, owned by Elad).
-
-    The web->db seam Elad implements: ``forum_create_post(db, author, title, body, anonymous)``,
+class _DbForum(_DbStore):
+    """Seam Elad implements: ``forum_create_post(db, author, title, body, anonymous)``,
     ``forum_list_posts(db)``, ``forum_get_post(db, post_id)``,
-    ``forum_add_comment(db, post_id, author, body)`` and ``forum_vote(db, post_id, username, value)``.
-    Resolved lazily (same rationale as _DbUsers).
-    """
-
-    def __init__(self, app):
-        self._app = app
-
-    def _resolve(self):
-        from services import db as db_module
-        return db_module, db_module.get_db(self._app.config["MONGO_URI"])
+    ``forum_add_comment(db, post_id, author, body)``, ``forum_vote(db, post_id, username, value)``."""
 
     def create_post(self, author, title, body, anonymous):
         db_module, handle = self._resolve()

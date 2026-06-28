@@ -16,6 +16,7 @@ def predict(ai_url, features, timeout=5):
         resp = requests.post(f"{ai_url}/predict", json={"features": features}, timeout=timeout)
         resp.raise_for_status()
         return resp.json()
-    except requests.RequestException:
-        logger.warning("ai /predict unavailable — degrading gracefully", exc_info=True)
+    except (requests.RequestException, ValueError):
+        # network/HTTP failure OR a 200 with a non-JSON body -> degrade gracefully (DESIGN §5)
+        logger.warning("ai /predict unavailable or returned bad JSON — degrading gracefully", exc_info=True)
         return None
