@@ -13,11 +13,11 @@ def test_index_serves_html(client):
 
 def test_index_has_the_main_sections(client):
     html = client.get("/").get_data(as_text=True).lower()
-    for hook in ["login", "register", "profile", "dashboard", "history", "logout"]:
+    for hook in ["login", "register", "profile", "dashboard", "history", "logout", "forum"]:
         assert hook in html
 
 
 def test_index_references_every_api_endpoint(client):
     html = client.get("/").get_data(as_text=True)
-    for endpoint in ["/register", "/login", "/logout", "/me", "/profile", "/dashboard", "/history"]:
+    for endpoint in ["/register", "/login", "/logout", "/me", "/profile", "/dashboard", "/history", "/forum/posts"]:
         assert endpoint in html

@@ -14,7 +14,7 @@
     .card { background: var(--card); border:1px solid var(--line); border-radius: 12px; padding: 20px; margin-bottom: 18px; }
     .card h2 { margin: 0 0 14px; font-size: 15px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
     label { display:block; font-size: 13px; color: var(--muted); margin: 10px 0 4px; }
-    input, select { width:100%; padding: 9px 11px; background:#11152a; border:1px solid var(--line); border-radius: 8px; color: var(--ink); font-size: 14px; }
+    input, select, textarea { width:100%; padding: 9px 11px; background:#11152a; border:1px solid var(--line); border-radius: 8px; color: var(--ink); font-size: 14px; font-family: inherit; }
     button { background: var(--accent); color:#0b0e1c; border:0; border-radius: 8px; padding: 10px 16px; font-weight: 600; cursor: pointer; font-size: 14px; }
     button.ghost { background: transparent; color: var(--accent); border:1px solid var(--line); }
     .row { display:grid; grid-template-columns: 1fr 1fr; gap: 12px; }
@@ -93,6 +93,19 @@
       <div class="card">
         <h2>History <button id="history-refresh" class="ghost" style="float:right;padding:5px 10px">Refresh</button></h2>
         <div id="history"><p class="muted">Loading…</p></div>
+      </div>
+
+      <div class="card">
+        <h2>Forum <button id="forum-refresh" class="ghost" style="float:right;padding:5px 10px">Refresh</button></h2>
+        <form id="forum-form" style="margin-bottom:14px">
+          <input name="title" placeholder="Post title" maxlength="140" required>
+          <textarea name="body" placeholder="Share something…" rows="2" required style="margin-top:8px;resize:vertical"></textarea>
+          <label style="display:flex;align-items:center;gap:6px;margin-top:8px"><input type="checkbox" name="anonymous" style="width:auto"> Post anonymously</label>
+          <div style="margin-top:8px"><button type="submit">Post</button></div>
+          <div id="forum-flash" class="flash"></div>
+        </form>
+        <div id="forum-list"><p class="muted">Loading…</p></div>
+        <div id="forum-detail" hidden></div>
       </div>
     </section>
   </main>
@@ -208,10 +221,79 @@
       ).join("") + "</ul>";
     }
 
+    // ---- Forum ----
+    function escapeHtml(s) {
+      return String(s).replace(/[&<>"']/g, (c) =>
+        ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+    }
+
+    let currentPostId = null;
+
+    async function loadForum() {
+      const el = $("forum-list"); el.innerHTML = '<p class="muted">Loading…</p>';
+      const r = await api("/forum/posts");
+      if (!r.ok) { el.innerHTML = '<p class="flash error">Could not load the forum.</p>'; return; }
+      const posts = (r.data && r.data.posts) || [];
+      if (!posts.length) { el.innerHTML = '<p class="muted">No posts yet — start one above.</p>'; return; }
+      el.innerHTML = posts.map((p) =>
+        '<div class="post" data-id="' + p.id + '" style="padding:8px 0;border-top:1px solid var(--line);cursor:pointer">'
+        + '<strong>' + escapeHtml(p.title) + '</strong> <span class="pill">score ' + p.score + '</span><br>'
+        + '<span class="muted">by ' + escapeHtml(p.author) + ' · ' + p.comments + ' comment' + (p.comments === 1 ? '' : 's') + '</span></div>'
+      ).join("");
+      el.querySelectorAll(".post").forEach((d) => d.addEventListener("click", () => openPost(d.dataset.id)));
+    }
+
+    async function openPost(id) {
+      currentPostId = id;
+      const r = await api("/forum/posts/" + id);
+      const box = $("forum-detail");
+      if (!r.ok || !r.data || !r.data.post) { box.hidden = true; return; }
+      const p = r.data.post;
+      box.hidden = false;
+      box.innerHTML =
+        '<div class="card" style="background:#11152a;margin-top:12px">'
+        + '<button class="ghost" style="float:right;padding:4px 9px" onclick="closePost()">Close</button>'
+        + '<h3 style="margin:0 0 4px">' + escapeHtml(p.title) + '</h3>'
+        + '<p class="muted" style="margin:0 0 8px">by ' + escapeHtml(p.author) + '</p>'
+        + '<p>' + escapeHtml(p.body) + '</p>'
+        + '<p><button class="ghost" onclick="vote(1)">▲ up</button> <span class="pill">score ' + p.score
+        + '</span> <button class="ghost" onclick="vote(-1)">▼ down</button></p>'
+        + '<h4 style="margin:12px 0 6px">Comments</h4>'
+        + (p.comments.length
+            ? '<ul>' + p.comments.map((c) => '<li><strong>' + escapeHtml(c.author) + ':</strong> ' + escapeHtml(c.body) + '</li>').join("") + '</ul>'
+            : '<p class="muted">No comments yet.</p>')
+        + '<form id="comment-form" style="margin-top:8px"><input name="body" placeholder="Add a comment" maxlength="2000" required>'
+        + '<div style="margin-top:6px"><button type="submit">Comment</button></div></form></div>';
+      $("comment-form").addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const cr = await api("/forum/posts/" + id + "/comments", { method: "POST", body: { body: e.target.body.value } });
+        if (cr.ok) openPost(id);
+      });
+    }
+
+    function closePost() { $("forum-detail").hidden = true; currentPostId = null; }
+
+    async function vote(value) {
+      if (!currentPostId) return;
+      const r = await api("/forum/posts/" + currentPostId + "/vote", { method: "POST", body: { value } });
+      if (r.ok) { openPost(currentPostId); loadForum(); }
+    }
+
+    $("forum-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const f = e.target;
+      const r = await api("/forum/posts", { method: "POST", body: { title: f.title.value, body: f.body.value, anonymous: f.anonymous.checked } });
+      if (r.ok) { f.reset(); flash("forum-flash", "Posted.", "ok"); loadForum(); }
+      else { flash("forum-flash", (r.data && r.data.error) || "Could not post"); }
+    });
+    $("forum-refresh").addEventListener("click", loadForum);
+    $("dashboard-refresh").addEventListener("click", loadDashboard);
+    $("history-refresh").addEventListener("click", loadHistory);
+
     function enterApp(username) {
       $("who-name").textContent = "Hi, " + username;
       showView("app");
-      loadProfile(); loadDashboard(); loadHistory();
+      loadProfile(); loadDashboard(); loadHistory(); loadForum();
     }
 
     // ---- Boot: am I already logged in? (GET /me) ----
