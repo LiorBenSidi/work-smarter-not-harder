@@ -3,12 +3,17 @@
 App-factory that registers the route blueprints. `/health` is live and auth (F1) is implemented;
 the remaining feature routes are 501 stubs behind their final URLs for their owners to fill in.
 """
+import logging
+import secrets
+
 from flask import Flask, jsonify, render_template
 
 from config import Config
 from routes.auth import auth_bp
 from routes.dashboard import dashboard_bp
 from routes.profile import profile_bp
+
+logger = logging.getLogger(__name__)
 
 
 class _DbUsers:
@@ -38,6 +43,13 @@ class _DbUsers:
 def create_app(config=Config, *, users=None):
     app = Flask(__name__)
     app.config.from_object(config)
+
+    if not app.config.get("SECRET_KEY"):
+        # Dev/test fallback so the app boots without a configured secret. Production sets a real
+        # SECRET_KEY (compose enforces it via ${SECRET_KEY:?}); never run multi-worker prod on an
+        # ephemeral key — sessions wouldn't validate across workers.
+        app.config["SECRET_KEY"] = secrets.token_hex(32)
+        logger.warning("SECRET_KEY not set — using an ephemeral key (set SECRET_KEY in production)")
 
     # Injectable user store (the web->db seam: .get / .add). Tests inject an in-memory fake;
     # production falls back to the db.py-backed store.
