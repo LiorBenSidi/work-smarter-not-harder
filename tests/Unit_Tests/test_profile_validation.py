@@ -91,3 +91,16 @@ def test_rejects_out_of_range_training_frequency(validate, tf):
     p["training_frequency"] = tf
     with pytest.raises(ValueError):
         validate(p)
+
+
+@pytest.mark.parametrize("field,lo,hi", [("age", 10, 120), ("training_frequency", 0, 14)])
+def test_accepts_int_field_at_its_boundaries(validate, field, lo, hi):
+    # the exact min/max are ACCEPTED (pins the <= bounds — a `<` off-by-one would reject lo)
+    for value in (lo, hi):
+        assert validate({**_ok(), field: value})[field] == value
+
+
+@pytest.mark.parametrize("field,lo,hi", [("height", 50, 300), ("weight", 20, 500)])
+def test_accepts_number_field_at_its_boundaries(validate, field, lo, hi):
+    for value in (lo, hi):
+        assert validate({**_ok(), field: value})[field] == value

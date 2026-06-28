@@ -52,3 +52,13 @@ def test_comment_on_missing_post_is_404(forum_client):
 def test_get_missing_post_is_404(forum_client):
     _login(forum_client)
     assert forum_client.get("/forum/posts/999").status_code == 404
+
+
+def test_votes_aggregate_across_users(forum_client):
+    # one vote per user, but DISTINCT users' votes sum into the score (not last-write-wins)
+    _login(forum_client, "alice")
+    pid = _new_post(forum_client).get_json()["post"]["id"]
+    assert forum_client.post(f"/forum/posts/{pid}/vote", json={"value": 1}).get_json()["score"] == 1
+    forum_client.post("/logout")
+    _login(forum_client, "bob")
+    assert forum_client.post(f"/forum/posts/{pid}/vote", json={"value": 1}).get_json()["score"] == 2
