@@ -12,6 +12,21 @@ def _login(client, username="alice", password="s3cretpw!"):
     return client.post("/login", json={"username": username, "password": password})
 
 
+def test_auth_config_exposes_validator_bounds(client, auth_module):
+    # public endpoint the UI reads for the credential hints — values come from the validator constants.
+    data = client.get("/auth/config").get_json()
+    assert data["username_min"] == auth_module.USERNAME_MIN
+    assert data["username_max"] == auth_module.USERNAME_MAX
+    assert data["password_min"] == auth_module.PASSWORD_MIN
+    assert data["password_max"] == auth_module.PASSWORD_MAX
+
+
+def test_auth_config_follows_a_bound_change(client, auth_module, monkeypatch):
+    # change the validator -> the endpoint follows (proves single source of truth, not a hardcoded copy).
+    monkeypatch.setattr(auth_module, "PASSWORD_MAX", 999)
+    assert client.get("/auth/config").get_json()["password_max"] == 999
+
+
 def test_register_returns_201(client):
     resp = _register(client)
     assert resp.status_code == 201
