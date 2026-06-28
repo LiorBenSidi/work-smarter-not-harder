@@ -145,14 +145,18 @@ def create_app(config=Config, *, users=None, profiles=None, history=None, forum=
 
     @app.after_request
     def _access_log(response):
-        # Per-request access log with timing (Week-9 / Lab-9.1: "logging has a cost"). Emits only when
-        # a handler is configured (the container, via wsgi.py); a no-op in the test suite.
+        # Per-request access log with timing (Week-9 / Lab-9.1: "logging has a cost"). Emits only when a
+        # handler is configured (the container, via wsgi.py); a no-op in the test suite. NOTE: the time is
+        # measured to response-object return, so it EXCLUDES a streamed body (fine here — the API returns
+        # small JSON; revisit with response.call_on_close if SSE/large downloads are ever added).
         start = getattr(g, "_start", None)
         if start is not None:
-            # method + path are attacker-controlled; strip CR/LF and cap length so a crafted request
-            # can't forge log lines (CWE-117) downstream in the file log / ELK.
+            # method + path are attacker-controlled; strip CR/LF so a crafted request can't forge log
+            # lines (CWE-117) in the file log / ELK, and mark truncation so a cut path isn't ambiguous.
             safe_method = request.method.replace("\r", "").replace("\n", "")[:16]
-            safe_path = request.path.replace("\r", "\\r").replace("\n", "\\n")[:200]
+            safe_path = request.path.replace("\r", "\\r").replace("\n", "\\n")
+            if len(safe_path) > 200:
+                safe_path = safe_path[:200] + "…"
             logger.info("%s %s -> %s (%.1f ms)", safe_method, safe_path,
                         response.status_code, (time.perf_counter() - start) * 1000)
         return response
