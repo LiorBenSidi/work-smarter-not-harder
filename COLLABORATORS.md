@@ -7,16 +7,16 @@
 | Person | GitHub | Owns | Roadmap |
 |---|---|---|---|
 | **Shiri** | `shiriHaboob` | **AI brain** — model, `/predict`, recommendation engine, the dataset, the Forum cold-seed generator | [PERSON1.md](PERSON1.md) |
-| **Lior** | `LiorBenSidi` | **Web app + observability + data/container/CI plumbing** — the Flask **backend** (API · auth/sessions · validation · orchestration of ai+db) + the frontend + the **data layer & Mongo internals** (`services/db.py` thin CRUD, indexes, `$jsonSchema` validators, env-gated auth wiring, `db/seed.py`) + **Week-9 logging/observability** + the **`web`/`ai` container build & compose fault-tolerance** + the **CI gate** (the banked +5 of CI/CD) | [PERSON2.md](PERSON2.md) |
-| **Elad** | `EladNa1` | **Deploy + real-time + prod ops** — **Azure deploy** (the deploy +5 of CI/CD) + the test-runner service, **operating Mongo in prod** (least-privilege app user, backups / retention), rate-limit (flask-limiter), the **Forum real-time layer** (notifications / DM / media) + stress / cross-container tests | [PERSON3.md](PERSON3.md) |
-| **Shared** | all three | **Tests** — each owns their plane's unit tests; all run in the one CI; Elad anchors integration/system/stress | — |
+| **Lior** | `LiorBenSidi` | **Web app + observability + data/container/CI plumbing** — the Flask **backend** (API · auth/sessions · validation · orchestration of ai+db) + the frontend + the **data layer & Mongo internals** (`services/db.py` thin CRUD, indexes, `$jsonSchema` validators, env-gated auth wiring, `db/seed.py`) + **Week-9 logging/observability** + the **`web`/`ai` container build & compose fault-tolerance** + the **CI gate** (ruff → bandit → pytest, on every PR) | [PERSON2.md](PERSON2.md) |
+| **Elad** | `EladNa1` | **Deploy + real-time + prod ops** — **Azure deploy + auto-deploy** (the CI/CD deployment half) + the test-runner service, **operating Mongo in prod** (least-privilege app user, backups / retention), rate-limit (flask-limiter), the **Forum real-time layer** (notifications / DM / media) + stress / cross-container tests | [PERSON3.md](PERSON3.md) |
+| **Shared** | all three | **Tests** — **Lior wrote the web + data integration / system / security tests** (auth · profile · check-in · dashboard · history · forum flows · the real-Mongo IT · the web→ai→db e2e) **and the CI gate**; each owner adds their plane's unit tests (Shiri = AI). **Elad owns the live cross-container test-runner + stress (locust).** | — |
 
 Roles are **containers/aspects**, not a rigid feature list — see "Freedom" below.
 
 ## How it fits together — the contracts (the ONLY fixed shared things)
 These are the seams between owners. Change one → update `docs/DESIGN.md` **and tell the team** (a "sync point").
 - **`web → ai`** — `POST /predict {features} -> {state, proba, recommendations}` (DESIGN §3).
-- **`web → db`** — `web` calls the **`services/db.py` functions** (the data API). The **thin core CRUD** (users/profiles/history/forum) is **Lior's**; the **Mongo container** + schema/indexes (collections `users / profiles / analysis_history / forum_posts`, DESIGN §2) are **Elad's**.
+- **`web → db`** — `web` calls the **`services/db.py` functions** (the data API). The **thin core CRUD + the Mongo internals** — indexes, `$jsonSchema` validators, env-gated auth wiring, `db/seed.py` (collections `users / profiles / analysis_history / forum_posts`, DESIGN §2) — are **Lior's**; **operating Mongo in prod** (least-privilege user, backups) is **Elad's**.
 - **Container boundaries** — only `web` is exposed (host 8000 → container 5000); `ai` + `db` internal.
 
 Behind these, implement however you like.
@@ -38,7 +38,7 @@ step-by-step script.**
 cp .env.example .env
 docker compose up --build        # 3 containers; then open http://localhost:8000/health
 ```
-**Status:** the **web tier is feature-complete** — auth, profile, **daily check-in**, dashboard, history, the Forum (CRUD + **edit/delete your own post**), the frontend (CSRF + a distinct visual identity), **Week-9 logging**, and the concurrency-hardened thin `db.py` CRUD. The 3 containers build and run (`docker compose up --build`) with **fault tolerance** (restart policies + healthcheck `start_period`; `web` boots and degrades even if `ai` is down). The `ai` `/predict` is a contract-shaped placeholder until Shiri's model lands; `db` is a stock `mongo:7` whose schema / indexes / auth / seeding are Elad's.
+**Status:** the **web tier is feature-complete** — auth, profile, **daily check-in**, dashboard, history, the Forum (CRUD + **edit/delete your own post**), the frontend (CSRF + a distinct visual identity), **Week-9 logging**, and the concurrency-hardened thin `db.py` CRUD. The 3 containers build and run (`docker compose up --build`) with **fault tolerance** (restart policies + healthcheck `start_period`; `web` boots and degrades even if `ai` is down). The whole stack is **proven live end-to-end** (a real web→ai→db request path 12/12, the real-Mongo IT 6/6, Week-9 logging emitting in-container). The `ai` `/predict` is a contract-shaped placeholder until Shiri's model lands; `db` is a stock `mongo:7` whose **indexes / `$jsonSchema` validators / auth wiring / seed mechanism are Lior's** — Elad operates it in prod.
 
 ## Sync points (when to coordinate)
 1. **Kickoff** — confirm the split, run the stack, claim your PERSON file.

@@ -51,7 +51,8 @@ One pipeline, two capabilities:
 - Hash passwords (werkzeug); auth-gate protected endpoints; rate-limit; validate input; defend NoSQL injection; only `web` exposed.
 - **Security ownership** (cross-cutting — each layer secures itself, there is no single "security owner"):
   **Lior (web backend + thin data CRUD)** — password hashing (werkzeug), auth-gate, input validation, NoSQL-**injection-safe queries** in the thin `db.py` CRUD (inputs type-validated at the route layer), the auth/login **Security_Tests**.
-  **Elad (data store + infra)** — the **Mongo container** + schema/indexes, **rate-limiting** / anti-spam (flask-limiter), stress / abuse defense.
+  **Lior (data layer)** — the Mongo **indexes + `$jsonSchema` validators + seed** (`ensure_indexes`/`ensure_schema`/`db/seed.py`).
+  **Elad (prod ops + abuse defense)** — operating the Mongo container in prod (auth / backups), **rate-limiting** / anti-spam (flask-limiter), stress / abuse defense.
 - **Auth stays stateless / shared-store** (signed token, or a DB/Redis-backed session — not in-process), so `web` can scale to N replicas for the deploy +10 (the big-HW used Bearer tokens). *(web owner's implementation; the scale constraint is shared.)*
 - `ai` down → `web` returns "assessment unavailable" (no crash); `db` down → reduced functionality; wearable data missing → manual entry.
 - **Fault isolation is *tested*** — system tests **stop the `ai` container** (web still serves, degraded) and **stop `db`** (web still serves, no crash), proving one container going down doesn't take the system down (TA requirement). External calls are wrapped in try/except.
