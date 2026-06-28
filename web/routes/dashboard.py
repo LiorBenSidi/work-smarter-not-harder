@@ -35,6 +35,7 @@ def dashboard():
         # ai unreachable (None) or a malformed non-object response -> degrade gracefully, never crash
         return jsonify(profile=profile, readiness=None, calories=None, ai_status="unavailable"), 200
 
-    readiness = {"state": prediction.get("state"), "recommendations": prediction.get("recommendations", [])}
+    recs = prediction.get("recommendations")
+    readiness = {"state": prediction.get("state"), "recommendations": recs if isinstance(recs, list) else []}
     return jsonify(profile=profile, readiness=readiness,
                    calories=prediction.get("calories"), ai_status="ok"), 200
