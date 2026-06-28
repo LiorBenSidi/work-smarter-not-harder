@@ -52,3 +52,12 @@ def test_ui_polish_present(client):
     assert "@media (max-width:" in html            # profile grid collapses on mobile
     assert "btn.disabled = true" in html           # submit disabled while a request is in flight
     assert 'aria-live="polite"' in html            # flash messages announced to assistive tech
+
+
+def test_dark_mode_and_a11y_present(client):
+    # dark mode done right (declared scheme + light-mode adaptation) + keyboard/label a11y.
+    html = client.get("/").get_data(as_text=True)
+    assert "color-scheme" in html                       # native controls/scrollbars match the theme
+    assert "prefers-color-scheme: light" in html        # respects an OS light preference
+    assert ":focus-visible" in html                     # visible focus ring for keyboard users
+    assert 'for="age"' in html and 'id="age"' in html   # labels associated with their inputs
