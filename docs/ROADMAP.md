@@ -68,19 +68,19 @@ audit-then-`!`-install when you reach it). All 8 sub-features are needed for the
 ## Parallel execution (everyone starts day 1)
 The contracts are fixed and stubbed, so the three planes build independently from the first commit — nobody waits:
 - **Shiri (`ai/`)** — standalone; builds + tests the model and `/predict` via the test client.
-- **Lior (`web/`)** — builds against the `/predict` stub (already returns the contract) + the Mongo container.
-- **Elad (infra)** — the skeleton runs, so Azure setup, `docker-compose.test.yml`, and the stress + cross-container test harness all start now.
+- **Lior (`web/`)** — the web app (against the `/predict` stub) + the `db.py` CRUD & Mongo internals + the container build + the CI gate.
+- **Elad (deploy/ops)** — Azure setup, the test-runner service (in `docker-compose.test.yml`), operating Mongo in prod, the Forum real-time layer, and the stress + cross-container harness.
 
 The only coordination points are the seams (`/predict` shape, `db.py`'s function API, only-`web`-exposed) — changing one is a **sync point** (flag it in the PR + the group chat).
 
 ## Requirements coverage (TA notes + guidelines + Noam's rubric)
 | Requirement | Status | Owner |
 |---|---|---|
-| Docker, runs first-try anywhere | ✅ skeleton | Elad |
-| ≥3 communicating containers, only `web` exposed | ✅ | Elad |
+| Docker, runs first-try anywhere | ✅ (web/ai Dockerfiles + compose + fault-tolerance) | Lior |
+| ≥3 communicating containers, only `web` exposed | ✅ | Lior |
 | Local AI model, baked into image, pinned sklearn | ⬜ | Shiri |
 | All 5 test types — per-feature, run-anywhere, no-cheating | 🟡 scaffolds + matrix | all |
-| `docker-compose.yml` **and** `docker-compose.test.yml` | 🟡 both **scaffolded** (test = env override → `worksmarter_test`); test-runner service TODO | Lior (scaffold) · Elad (runner) |
+| `docker-compose.yml` **and** `docker-compose.test.yml` | 🟢 compose + fault-tolerance done (test = env override → `worksmarter_test`); test-runner service TODO | Lior (compose) · Elad (runner) |
 | `debug` flag toggles debug mode | 🟡 env wired; confirm it toggles | Lior |
 | Password hashing (werkzeug) | ✅ | Lior |
 | Input validation (routes) + injection-safe queries (thin `db.py` CRUD) | ✅ | Lior |
@@ -92,7 +92,7 @@ The only coordination points are the seams (`/predict` shape, `db.py`'s function
 | GitHub: regular commits from **all 3**, meaningful messages | 🟡 in progress | all |
 | Report (app + features×tests + **risk assessment**) | ⬜ | all (Elad: risk) |
 | Demo video of using the app | ⬜ | all |
-| Azure VM deploy + CI/CD auto-deploy (+10; base deploy optional) | 🟡 CI live (+5); Azure TODO | Elad |
+| Azure VM deploy + CI/CD auto-deploy (+10; base deploy optional) | 🟡 CI gate live; Azure auto-deploy TODO | Lior (CI) · Elad (Azure) |
 | Online Forum — real-time, 8 sub-features (+10) | 🟡 Lior's CRUD+UI (posts/comments/votes, anonymity, **edit/delete own**) done; real-time + seeding + DM TODO | Lior (CRUD/UI ✅) · Elad (real-time) · Shiri (seeding) |
 | Present 16 Jul (6 min) · demo by Wk 12 · final 23 Aug | ⬜ | all |
 | No shipped API keys | ✅ local model | Shiri |

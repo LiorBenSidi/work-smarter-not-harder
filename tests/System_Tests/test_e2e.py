@@ -1,4 +1,5 @@
-"""MANDATORY system (end-to-end) test. OWNER: Elad (anchors web->ai->db) + Lior + Shiri.
+"""MANDATORY system (end-to-end) test. OWNER: Lior (the web->ai->db system flow) + Shiri (ai).
+Elad runs it against the live stack via the containerized test-runner.
 
 TDD: fill + un-skip when auth + profile + dashboard exist.
 """
