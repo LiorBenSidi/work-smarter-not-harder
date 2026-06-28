@@ -11,6 +11,7 @@ from flask import Flask, jsonify, render_template
 
 from config import Config
 from csrf import init_csrf
+from routes import auth as _auth          # read credential bounds live (single source of truth)
 from routes.auth import auth_bp
 from routes.dashboard import dashboard_bp
 from routes.forum import forum_bp
@@ -123,7 +124,13 @@ def create_app(config=Config, *, users=None, profiles=None, history=None, forum=
 
     @app.get("/")
     def index():
-        return render_template("index.html")
+        # Inject the validator's actual bounds so the register-form hints (tooltip / aria-label /
+        # min-max / "min N chars") track auth.py, never a hardcoded duplicate.
+        return render_template(
+            "index.html",
+            username_min=_auth.USERNAME_MIN, username_max=_auth.USERNAME_MAX,
+            password_min=_auth.PASSWORD_MIN, password_max=_auth.PASSWORD_MAX,
+        )
 
     @app.get("/health")
     def health():

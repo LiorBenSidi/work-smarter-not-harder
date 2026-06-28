@@ -68,8 +68,8 @@
         </form>
 
         <form id="register-form" hidden>
-          <label for="reg-username">Username<span class="info" tabindex="0" role="note" aria-label="Username must be 3 to 64 characters">i<span class="tip" aria-hidden="true">3–64 characters</span></span></label><input id="reg-username" name="username" autocomplete="username" minlength="3" maxlength="64" required>
-          <label for="reg-password">Password (min 8 chars)<span class="info" tabindex="0" role="note" aria-label="Password must be 8 to 256 characters">i<span class="tip" aria-hidden="true">8–256 characters</span></span></label><input id="reg-password" name="password" type="password" autocomplete="new-password" minlength="8" maxlength="256" required>
+          <label for="reg-username">Username<span class="info" tabindex="0" role="note" aria-label="Username must be {{ username_min }} to {{ username_max }} characters">i<span class="tip" aria-hidden="true">{{ username_min }}–{{ username_max }} characters</span></span></label><input id="reg-username" name="username" autocomplete="username" minlength="{{ username_min }}" maxlength="{{ username_max }}" required>
+          <label for="reg-password">Password (min {{ password_min }} chars)<span class="info" tabindex="0" role="note" aria-label="Password must be {{ password_min }} to {{ password_max }} characters">i<span class="tip" aria-hidden="true">{{ password_min }}–{{ password_max }} characters</span></span></label><input id="reg-password" name="password" type="password" autocomplete="new-password" minlength="{{ password_min }}" maxlength="{{ password_max }}" required>
           <div style="margin-top:14px"><button type="submit">Create account</button></div>
           <div id="register-flash" class="flash" aria-live="polite"></div>
         </form>

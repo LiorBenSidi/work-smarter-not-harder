@@ -54,13 +54,21 @@ def test_ui_polish_present(client):
     assert 'aria-live="polite"' in html            # flash messages announced to assistive tech
 
 
-def test_register_has_credential_requirement_tooltips(client):
-    # hover/focus info icons show the real validator bounds (auth.py: 3-64 / 8-256).
+def test_register_tooltips_reflect_validator_bounds(client, auth_module):
+    # the info-icon tooltips render the validator's ACTUAL constants (not a hardcoded duplicate).
     html = client.get("/").get_data(as_text=True)
     assert 'class="info"' in html
-    assert "3–64 characters" in html
-    assert "8–256 characters" in html
-    assert 'aria-label="Username must be 3 to 64 characters"' in html  # screen-reader text
+    assert f"{auth_module.USERNAME_MIN}–{auth_module.USERNAME_MAX} characters" in html
+    assert f"{auth_module.PASSWORD_MIN}–{auth_module.PASSWORD_MAX} characters" in html
+    assert f'minlength="{auth_module.PASSWORD_MIN}"' in html  # native enforcement tracks it too
+
+
+def test_tooltips_follow_a_change_to_the_validator_bounds(client, auth_module, monkeypatch):
+    # change the validator -> the rendered tooltip + native maxlength must follow (proves it's dynamic).
+    monkeypatch.setattr(auth_module, "PASSWORD_MAX", 999)
+    html = client.get("/").get_data(as_text=True)
+    assert f"{auth_module.PASSWORD_MIN}–999 characters" in html
+    assert 'maxlength="999"' in html
 
 
 def test_dark_mode_and_a11y_present(client):
