@@ -12,6 +12,7 @@ services:
       AI_URL: http://ai:5000
       FLASK_DEBUG: ${FLASK_DEBUG:-0}
       TESTING: ${TESTING:-0}
+      SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-0}   # set to 1 in production (HTTPS)
     depends_on:
       ai: { condition: service_healthy }
       db: { condition: service_healthy }
