@@ -22,9 +22,13 @@ def test_session_cookie_secure_attribute_follows_config(web_app_module, fake_use
     app = web_app_module.create_app(users=fake_users)
     app.config.update(SECRET_KEY="x-test", TESTING=True, SESSION_COOKIE_SECURE=True)
     c = app.test_client()
-    c.post("/register", json={"username": "alice", "password": "s3cretpw!"})
-    cookie = c.post("/login", json={"username": "alice", "password": "s3cretpw!"}).headers.get("Set-Cookie", "")
-    assert "Secure" in cookie
+    c.get("/health")  # issue the csrf cookie (double-submit)
+    cc = c.get_cookie("csrf_token")
+    headers = {"X-CSRF-Token": cc.value if cc else ""}
+    c.post("/register", json={"username": "alice", "password": "s3cretpw!"}, headers=headers)
+    login = c.post("/login", json={"username": "alice", "password": "s3cretpw!"}, headers=headers)
+    session_cookie = next((ck for ck in login.headers.getlist("Set-Cookie") if ck.startswith("session=")), "")
+    assert "Secure" in session_cookie
 
 
 def test_oversized_request_body_is_rejected_413(client):
