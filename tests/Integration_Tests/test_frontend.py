@@ -21,3 +21,20 @@ def test_index_references_every_api_endpoint(client):
     html = client.get("/").get_data(as_text=True)
     for endpoint in ["/register", "/login", "/logout", "/me", "/profile", "/dashboard", "/history", "/forum/posts"]:
         assert endpoint in html
+
+
+def test_dashboard_escapes_ai_provided_fields(client):
+    # The AI container's `state` + each recommendation are attacker-influenced (a compromised/buggy
+    # ai service could return HTML). They must be escaped before innerHTML, like the forum already is.
+    html = client.get("/").get_data(as_text=True)
+    assert "escapeHtml(d.readiness.state" in html
+    assert "escapeHtml(x)" in html  # each recommendation in the recs.map
+    assert "escapeHtml(d.calories" in html
+
+
+def test_history_escapes_entry_fields(client):
+    # History rows carry AI-generated assessment text + a timestamp -> escape before innerHTML.
+    html = client.get("/").get_data(as_text=True)
+    assert "escapeHtml(it.assessment" in html
+    assert "escapeHtml(it.timestamp" in html
+    assert "escapeHtml(it.calories" in html
