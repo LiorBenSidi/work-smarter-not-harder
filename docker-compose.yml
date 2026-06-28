@@ -18,24 +18,28 @@ services:
       LOG_FILE: ${LOG_FILE:-/app/logs/web.log}             # RotatingFileHandler target (persisted below)
     volumes:
       - web-logs:/app/logs                                 # keep the rotating log for inspection / ELK
+    restart: unless-stopped           # self-heal: the only user-facing service must come back on a crash
     depends_on:
-      ai: { condition: service_healthy }
-      db: { condition: service_healthy }
+      ai: { condition: service_started }   # AI is non-critical: web boots and degrades per-request if it's down
+      db: { condition: service_healthy }   # DB is core; wait for it (it self-heals via its own restart policy)
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:5000/health').status==200 else 1)"]
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:5000/health', timeout=3).status==200 else 1)"]
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 30s              # don't count probe failures while the worker is still booting
 
   ai:                               # internal only — no host port (OWNER: Shiri)
     build: ./ai
+    restart: unless-stopped         # self-heal so a one-off crash doesn't strand web (which calls it)
     expose:
       - "5000"
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:5000/health').status==200 else 1)"]
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:5000/health', timeout=3).status==200 else 1)"]
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 30s
 
   db:                               # MongoDB — internal only. Container infra ready (see db/README.md);
     image: mongo:7                  # schema / perf indexes / auth / seeding WITHIN the DB = Elad.
@@ -49,6 +53,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 40s              # mongo's first-run init on a cold volume can exceed a few probes
 
 volumes:
   mongo-data:
