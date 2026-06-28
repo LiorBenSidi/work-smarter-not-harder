@@ -5,7 +5,9 @@ Every module already uses ``logging.getLogger(__name__)`` (named-logger-per-modu
 file handler, attached once to the root logger. Level and on/off come from the environment, so prod,
 dev and tests differ by configuration — not by code:
 
-    ENABLE_LOGGING=0   -> logging suppressed entirely (the Lab-9.1 "cost" toggle)
+    ENABLE_LOGGING=0   -> logging suppressed entirely — a dev/benchmark "cost" toggle (Lab-9.1). NOTE:
+                          this calls logging.disable(CRITICAL), which silences EVERY logger in the
+                          process (incl. library/gunicorn CRITICALs) — diagnostics-blind; never prod.
     LOG_LEVEL=DEBUG    -> verbose; default INFO
     LOG_FILE=/path     -> also write a RotatingFileHandler there; empty (default) = console only
 
@@ -32,6 +34,21 @@ def _resolve_level(level):
     if isinstance(level, int):
         return level
     return getattr(logging, str(level).upper(), logging.INFO)
+
+
+def worker_log_file(log_file, pid):
+    """Return a per-worker log path: insert `pid` before the extension.
+
+    gunicorn runs several workers and ``RotatingFileHandler`` is not multi-process safe, so each worker
+    must own its own file. A missing extension defaults to ``.log`` (so ELK ``*.log`` globs still match),
+    and a directory target is refused (raise) rather than silently writing a hidden dotfile or a sibling.
+    """
+    if not log_file:
+        return log_file
+    if log_file.endswith(("/", os.sep)) or os.path.isdir(log_file):
+        raise ValueError(f"LOG_FILE must be a file path, not a directory: {log_file!r}")
+    base, ext = os.path.splitext(log_file)
+    return f"{base}.{pid}{ext or '.log'}"
 
 
 def configure_logging(*, level=None, enable=None, log_file=None, force=False):
@@ -81,7 +98,8 @@ def configure_logging(*, level=None, enable=None, log_file=None, force=False):
             setattr(file_handler, _MANAGED, True)
             root.addHandler(file_handler)
         except OSError:
-            # A missing/read-only log dir must never crash the app — console logging still works.
-            root.warning("file logging disabled — cannot open %s", log_file, exc_info=True)
+            # A missing/read-only log dir must never crash the app — console logging still works. Logged
+            # at ERROR (not warning) so an operator who configured LOG_FILE notices the audit log is gone.
+            root.error("file logging disabled — cannot open %s", log_file, exc_info=True)
 
     return root
