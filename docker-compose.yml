@@ -32,8 +32,9 @@ services:
       timeout: 5s
       retries: 5
 
-  db:                               # MongoDB — internal only (OWNER: Elad)
-    image: mongo:7
+  db:                               # MongoDB — internal only. Container infra ready (see db/README.md);
+    image: mongo:7                  # schema / perf indexes / auth / seeding WITHIN the DB = Elad.
+    restart: unless-stopped         # recover from a crash on its own (the data lives in the volume)
     expose:
       - "27017"
     volumes:
