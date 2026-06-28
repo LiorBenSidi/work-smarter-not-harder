@@ -10,6 +10,7 @@ import secrets
 from flask import Flask, jsonify, render_template
 
 from config import Config
+from csrf import init_csrf
 from routes.auth import auth_bp
 from routes.dashboard import dashboard_bp
 from routes.history import history_bp
@@ -108,6 +109,8 @@ def create_app(config=Config, *, users=None, profiles=None, history=None):
     app.register_blueprint(profile_bp)
     app.register_blueprint(dashboard_bp)
     app.register_blueprint(history_bp)
+
+    init_csrf(app)  # double-submit CSRF on all state-changing requests
 
     @app.get("/")
     def index():

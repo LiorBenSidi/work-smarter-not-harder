@@ -73,6 +73,37 @@ class FakeHistory:
         self._by_user.setdefault(username, []).append(entry)
 
 
+class _CsrfClient:
+    """Wraps the Flask test client: seeds the double-submit CSRF cookie (one GET) and auto-sends the
+    matching X-CSRF-Token header on unsafe requests, so feature tests don't repeat CSRF plumbing.
+    `.raw` exposes the unwrapped client (used by the CSRF-negative tests).
+    """
+
+    def __init__(self, flask_client):
+        self.raw = flask_client
+        self.raw.get("/health")  # issue the csrf cookie
+
+    def _with_token(self, kwargs):
+        headers = dict(kwargs.pop("headers", None) or {})
+        if "X-CSRF-Token" not in headers:
+            cookie = self.raw.get_cookie("csrf_token")
+            headers["X-CSRF-Token"] = cookie.value if cookie else ""
+        kwargs["headers"] = headers
+        return kwargs
+
+    def get(self, *args, **kwargs):
+        return self.raw.get(*args, **kwargs)
+
+    def post(self, *args, **kwargs):
+        return self.raw.post(*args, **self._with_token(kwargs))
+
+    def put(self, *args, **kwargs):
+        return self.raw.put(*args, **self._with_token(kwargs))
+
+    def delete(self, *args, **kwargs):
+        return self.raw.delete(*args, **self._with_token(kwargs))
+
+
 @pytest.fixture
 def web_app_module():
     pytest.importorskip("flask")
@@ -112,7 +143,7 @@ def make_client(web_app_module):
             extra["history"] = history
         app = web_app_module.create_app(users=users, **extra)
         app.config.update(SECRET_KEY="test-secret-key", TESTING=True)
-        return app.test_client()
+        return _CsrfClient(app.test_client())
 
     return _make
 

@@ -100,8 +100,14 @@
   <script>
     const $ = (id) => document.getElementById(id);
 
+    function getCookie(name) {
+      const m = document.cookie.split("; ").find((c) => c.startsWith(name + "="));
+      return m ? decodeURIComponent(m.split("=").slice(1).join("=")) : "";
+    }
+
     async function api(path, { method = "GET", body = null } = {}) {
       const opts = { method, headers: {}, credentials: "same-origin" };
+      if (!["GET", "HEAD", "OPTIONS"].includes(method)) opts.headers["X-CSRF-Token"] = getCookie("csrf_token");
       if (body !== null) { opts.headers["Content-Type"] = "application/json"; opts.body = JSON.stringify(body); }
       const res = await fetch(path, opts);
       let data = null;
