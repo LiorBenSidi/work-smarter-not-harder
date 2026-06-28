@@ -101,7 +101,7 @@ Legend: ✅ done · 🟡 partial / in-progress · ⬜ not started.
 
 ## Status (2026-06-28)
 Scaffold + branch-protected PR-only `main` + CI gate (ruff → bandit → pytest, no-false-green) + a local pre-commit
-gate are live — that CI already earns the **5-pt CI-only** partial of the deploy +10.
+gate are live — that CI already covers the **CI portion** of the deploy requirement.
 
 **Live now:** the runnable 3-container stack (`docker-compose` + healthchecks + gunicorn, only `web` exposed)
 with **fault-tolerance hardening** (restart policies, healthcheck `start_period`, `web` boots even if `ai` is
