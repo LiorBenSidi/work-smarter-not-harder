@@ -73,6 +73,44 @@ class FakeHistory:
         self._by_user.setdefault(username, []).append(entry)
 
 
+class FakeForum:
+    """In-memory forum store — the `web -> db` seam Elad implements in db.py
+    (create_post / list_posts / get_post / add_comment / vote)."""
+
+    def __init__(self):
+        self._posts = {}
+        self._seq = 0
+
+    def create_post(self, author, title, body, anonymous=False):
+        self._seq += 1
+        pid = str(self._seq)
+        self._posts[pid] = {"id": pid, "author": author, "anonymous": anonymous,
+                            "title": title, "body": body, "score": 0, "comments": [], "votes": {}}
+        return self._posts[pid]
+
+    def list_posts(self):
+        return list(self._posts.values())
+
+    def get_post(self, post_id):
+        return self._posts.get(post_id)
+
+    def add_comment(self, post_id, author, body):
+        post = self._posts.get(post_id)
+        if post is None:
+            return None
+        comment = {"author": author, "body": body}
+        post["comments"].append(comment)
+        return comment
+
+    def vote(self, post_id, username, value):
+        post = self._posts.get(post_id)
+        if post is None:
+            return None
+        post["votes"][username] = value  # one vote per user; re-voting replaces
+        post["score"] = sum(post["votes"].values())
+        return post["score"]
+
+
 class _CsrfClient:
     """Wraps the Flask test client: seeds the double-submit CSRF cookie (one GET) and auto-sends the
     matching X-CSRF-Token header on unsafe requests, so feature tests don't repeat CSRF plumbing.
@@ -135,12 +173,14 @@ def fake_history():
 def make_client(web_app_module):
     """Factory: build a web test client with given user/profile/history stores (None -> prod default)."""
 
-    def _make(users=None, profiles=None, history=None):
+    def _make(users=None, profiles=None, history=None, forum=None):
         extra = {}
         if profiles is not None:
             extra["profiles"] = profiles
         if history is not None:
             extra["history"] = history
+        if forum is not None:
+            extra["forum"] = forum
         app = web_app_module.create_app(users=users, **extra)
         app.config.update(SECRET_KEY="test-secret-key", TESTING=True)
         return _CsrfClient(app.test_client())
@@ -161,3 +201,13 @@ def profile_client(make_client, fake_users, fake_profiles):
 @pytest.fixture
 def history_client(make_client, fake_users, fake_history):
     return make_client(fake_users, history=fake_history)
+
+
+@pytest.fixture
+def fake_forum():
+    return FakeForum()
+
+
+@pytest.fixture
+def forum_client(make_client, fake_users, fake_forum):
+    return make_client(fake_users, forum=fake_forum)
