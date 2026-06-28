@@ -235,3 +235,72 @@ def test_forum_vote_handles_dotted_or_dollar_usernames(db_mod, db):
     assert db_mod.forum_vote(db, pid, "bob.smith", 1) == 1
     assert db_mod.forum_vote(db, pid, "$admin", 1) == 2        # distinct users sum
     assert db_mod.forum_vote(db, pid, "bob.smith", -1) == 0    # same user replaces (1 -> -1)
+
+
+# ---- robustness fixes (from the adversarial review) ----
+def test_create_user_returns_false_on_duplicate_key_race(db_mod, db):
+    # two registrations of the same username race; the loser's upsert hits the unique index and the
+    # driver raises DuplicateKeyError — create_user must report that as False, not blow up.
+    from pymongo.errors import DuplicateKeyError
+
+    def _raise(*a, **k):
+        raise DuplicateKeyError("E11000 duplicate key error: username")
+
+    db.users.update_one = _raise
+    assert db_mod.create_user(db, "alice", "h") is False
+
+
+def test_get_user_missing_password_hash_is_treated_as_no_user(db_mod, db):
+    db.users.docs.append({"username": "corrupt"})             # no password_hash (partial/corrupt write)
+    assert db_mod.get_user(db, "corrupt") is None             # fails closed, no KeyError
+
+
+def test_get_profile_with_no_profile_field_is_none(db_mod, db):
+    db.profiles.docs.append({"username": "amy"})              # row exists but has no profile blob
+    assert db_mod.get_profile(db, "amy") is None
+
+
+def test_list_history_skips_rows_without_entry(db_mod, db):
+    db.analysis_history.docs.append({"username": "alice", "entry": {"assessment": "Ready"}})
+    db.analysis_history.docs.append({"username": "alice"})    # malformed: no entry -> skipped, not raised
+    assert db_mod.list_history(db, "alice") == [{"assessment": "Ready"}]
+
+
+def test_forum_vote_write_is_guarded_by_the_votes_cas_filter(db_mod, db):
+    pid = db_mod.forum_create_post(db, "alice", "T", "b", False)["id"]
+    captured = {}
+    real_update = db.forum_posts.update_one
+
+    def _spy(filt, update, **k):
+        captured["filt"] = filt
+        return real_update(filt, update, **k)
+
+    db.forum_posts.update_one = _spy
+    db_mod.forum_vote(db, pid, "bob", 1)
+    assert captured["filt"]["votes"] == []                    # first vote is conditional on the prior (empty) array
+
+
+def test_forum_vote_returns_none_if_post_deleted_during_cas(db_mod, db):
+    pid = db_mod.forum_create_post(db, "alice", "T", "b", False)["id"]
+    real_find, calls = db.forum_posts.find_one, {"n": 0}
+
+    def _flaky_find(filt):
+        calls["n"] += 1
+        return real_find(filt) if calls["n"] == 1 else None   # "deleted" right after the first read
+
+    db.forum_posts.find_one = _flaky_find
+    db.forum_posts.update_one = lambda *a, **k: SimpleNamespace(matched_count=0)  # CAS miss
+    assert db_mod.forum_vote(db, pid, "alice", 1) is None
+
+
+def test_forum_vote_raises_after_exhausting_retries(db_mod, db):
+    pid = db_mod.forum_create_post(db, "alice", "T", "b", False)["id"]
+    db.forum_posts.update_one = lambda *a, **k: SimpleNamespace(matched_count=0)  # write never lands
+    with pytest.raises(RuntimeError):
+        db_mod.forum_vote(db, pid, "alice", 1)
+
+
+def test_forum_update_post_returns_none_if_deleted_during_write(db_mod, db):
+    pid = db_mod.forum_create_post(db, "alice", "T", "b", False)["id"]
+    db.forum_posts.update_one = lambda *a, **k: SimpleNamespace(matched_count=0)  # post gone before write
+    assert db_mod.forum_update_post(db, pid, "alice", "X", "y") is None
