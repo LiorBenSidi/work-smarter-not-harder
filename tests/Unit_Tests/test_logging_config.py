@@ -137,3 +137,45 @@ def test_disabled_then_enabled_without_force_recovers(logmod, isolated_root_logg
     logmod.configure_logging(enable=True, log_file="")      # no force
     assert logging.root.manager.disable == logging.NOTSET   # recovered, not stuck-muted
     assert _managed(logging.getLogger())                    # console handler attached
+
+
+# ---- worker_log_file (per-worker path) — adversarial round 2 (F3) ----
+def test_worker_log_file_inserts_pid_before_extension(logmod):
+    assert logmod.worker_log_file("/app/logs/web.log", 123) == "/app/logs/web.123.log"
+
+
+def test_worker_log_file_defaults_missing_extension_to_log(logmod):
+    # extension-less path -> .log so ELK *.log globs still match
+    assert logmod.worker_log_file("/app/logs/web", 123) == "/app/logs/web.123.log"
+
+
+def test_worker_log_file_empty_is_passthrough(logmod):
+    assert logmod.worker_log_file("", 123) == ""
+
+
+def test_worker_log_file_rejects_trailing_slash_dir(logmod):
+    with pytest.raises(ValueError):
+        logmod.worker_log_file("/app/logs/", 123)
+
+
+def test_worker_log_file_rejects_existing_directory(logmod, tmp_path):
+    with pytest.raises(ValueError):
+        logmod.worker_log_file(str(tmp_path), 123)          # a real directory -> refuse, don't write a sibling
+
+
+def test_bad_log_path_logs_at_error_level(logmod, isolated_root_logger, caplog):
+    bad = os.path.join("/dev/null", "cannot", "web.log")
+    with caplog.at_level(logging.ERROR):
+        logmod.configure_logging(enable=True, log_file=bad, force=True)
+    assert any(r.levelno == logging.ERROR and "file logging disabled" in r.getMessage()
+               for r in caplog.records)
+
+
+def test_access_log_marks_a_truncated_long_path(make_client, fake_users, caplog):
+    client = make_client(fake_users)
+    with caplog.at_level(logging.INFO):
+        client.get("/" + "a" * 300)                         # path longer than the 200-char cap
+    line = next((r.getMessage() for r in caplog.records if "aaaa" in r.getMessage()), "")
+    assert line, "expected an access-log line"
+    assert "…" in line                                      # truncation is marked, not silent
+    assert line.count("a") < 300                            # the path body was actually capped
