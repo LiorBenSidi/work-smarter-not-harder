@@ -134,11 +134,14 @@ def create_app(config=Config, *, users=None, profiles=None, history=None, forum=
     app.register_blueprint(checkin_bp)
     app.register_blueprint(forum_bp)
 
-    init_csrf(app)  # double-submit CSRF on all state-changing requests
-
+    # Register the timer FIRST — before CSRF — so a request short-circuited by the CSRF check (403)
+    # still gets a start stamp and therefore an access-log line (before_request runs in registration
+    # order and stops at the first one that returns a response).
     @app.before_request
     def _start_timer():
         g._start = time.perf_counter()
+
+    init_csrf(app)  # double-submit CSRF on all state-changing requests
 
     @app.after_request
     def _access_log(response):
@@ -146,7 +149,11 @@ def create_app(config=Config, *, users=None, profiles=None, history=None, forum=
         # a handler is configured (the container, via wsgi.py); a no-op in the test suite.
         start = getattr(g, "_start", None)
         if start is not None:
-            logger.info("%s %s -> %s (%.1f ms)", request.method, request.path,
+            # method + path are attacker-controlled; strip CR/LF and cap length so a crafted request
+            # can't forge log lines (CWE-117) downstream in the file log / ELK.
+            safe_method = request.method.replace("\r", "").replace("\n", "")[:16]
+            safe_path = request.path.replace("\r", "\\r").replace("\n", "\\n")[:200]
+            logger.info("%s %s -> %s (%.1f ms)", safe_method, safe_path,
                         response.status_code, (time.perf_counter() - start) * 1000)
         return response
 
