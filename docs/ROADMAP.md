@@ -82,7 +82,7 @@ The only coordination points are the seams (`/predict` shape, `db.py`'s function
 | All 5 test types — per-feature, run-anywhere, no-cheating | 🟡 scaffolds + matrix | all |
 | `docker-compose.yml` **and** `docker-compose.test.yml` | 🟡 main done; **test compose TODO** | Elad |
 | `debug` flag toggles debug mode | 🟡 env wired; confirm it toggles | Lior |
-| Password hashing (werkzeug) | ⬜ | Lior |
+| Password hashing (werkzeug) | ✅ | Lior |
 | Input validation (routes) + injection-safe queries (thin `db.py` CRUD) | ✅ | Lior |
 | Rate-limit / anti-spam (flask-limiter) | ⬜ | Elad |
 | Fault tolerance + **isolation tested** (stop ai/db → web survives) | 🟡 `ai_client` degrades; kill-container tests TODO | Elad + all |
@@ -92,7 +92,7 @@ The only coordination points are the seams (`/predict` shape, `db.py`'s function
 | Report (app + features×tests + **risk assessment**) | ⬜ | all (Elad: risk) |
 | Demo video of using the app | ⬜ | all |
 | Azure VM deploy + CI/CD auto-deploy (+10; base deploy optional) | 🟡 CI live (+5); Azure TODO | Elad |
-| Online Forum — real-time, 8 sub-features (+10) | ⬜ built last | Lior + Elad + Shiri |
+| Online Forum — real-time, 8 sub-features (+10) | 🟡 Lior's CRUD+UI (posts/comments/votes, anonymity) done; real-time + seeding TODO | Lior (CRUD/UI ✅) · Elad (real-time) · Shiri (seeding) |
 | Present 16 Jul (6 min) · demo by Wk 12 · final 23 Aug | ⬜ | all |
 | No shipped API keys | ✅ local model | Shiri |
 
@@ -103,8 +103,10 @@ Scaffold + branch-protected PR-only `main` + CI gate (ruff → bandit → pytest
 gate are live — that CI already earns the **5-pt CI-only** partial of the deploy +10.
 
 **Live now:** the runnable 3-container skeleton (`docker-compose` + healthchecks + gunicorn, only `web` exposed),
-the `web↔ai` glue (`ai_client`) + a `db` connection helper, the **F4 calorie** function (`ai/calories.py`), and the
-ratified split. The **web tier is built** (auth/profile/dashboard/history/frontend + CSRF + Forum CRUD/UI) and the
-**thin `db.py` CRUD** is implemented + tested. **Still to build:** the RF model + real `/predict`, the recommendation
-engine, the Mongo container + indexes, `docker-compose.test.yml`, rate-limiting, Azure deploy, and the Forum real-time
-layer. Due **23 Aug 2026**.
+the `web↔ai` glue (`ai_client`), the **F4 calorie** function (`ai/calories.py`), and the ratified split. The
+**web tier is complete + polished**: auth / profile / dashboard / history / frontend + CSRF + responsive dark-light
+theming + a11y + credential-hint tooltips (`/auth/config`), Forum CRUD/UI. The **thin `db.py` CRUD** is implemented
++ tested (incl. `ensure_indexes`, votes stored as a list, and a real-Mongo integration suite that skips until a DB
+is up). **Still to build:** the RF model + real `/predict` + recommendation engine (Shiri); running the Mongo
+container + perf indexes + auth, `docker-compose.test.yml`, rate-limiting, Azure deploy, the Forum real-time layer +
+stress/cross-container tests (Elad); the daily check-in flow (Lior — blocked on the AI input contract). Due **23 Aug 2026**.
