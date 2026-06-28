@@ -6,8 +6,10 @@ of the readable ``csrf_token`` cookie. A cross-site attacker can neither read th
 matching pair -> 403. Pairs with SameSite=Lax + the JSON-content-type requirement (defence in depth).
 
 The token is not a secret credential (the session cookie is the credential, and stays HttpOnly +
-Secure), so the csrf cookie is intentionally readable by JS and not marked Secure — that keeps it
-working over the local HTTP dev server while the real protection comes from same-origin + the header.
+Secure), so the csrf cookie is intentionally readable by JS. Its ``Secure`` flag mirrors
+``SESSION_COOKIE_SECURE`` (env-gated): off over the local HTTP dev server, on in production HTTPS so
+the token can't leak over an accidental downgrade. The real protection still comes from same-origin
++ the matching header.
 """
 import secrets
 
@@ -33,5 +35,6 @@ def init_csrf(app):
     def _issue(response):
         # Issue a token on first contact; keep it stable across the visit.
         if not request.cookies.get(COOKIE_NAME):
-            response.set_cookie(COOKIE_NAME, secrets.token_urlsafe(32), samesite="Lax", httponly=False)
+            response.set_cookie(COOKIE_NAME, secrets.token_urlsafe(32), samesite="Lax",
+                                httponly=False, secure=bool(app.config.get("SESSION_COOKIE_SECURE")))
         return response

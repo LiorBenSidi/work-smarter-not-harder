@@ -23,6 +23,13 @@ class _BrokenForum:
         raise RuntimeError("down")
 
 
+class _PartialForum:
+    """Returns a row missing `score` and `comments` — a partial/seed row from a real store."""
+
+    def list_posts(self):
+        return [{"id": "1", "title": "T", "author": "alice"}]  # no score, no comments
+
+
 def test_forum_list_requires_login(forum_client):
     assert forum_client.get("/forum/posts").status_code == 401
 
@@ -41,6 +48,20 @@ def test_invalid_vote_value_is_rejected_400(forum_client):
     pid = forum_client.post("/forum/posts", json={"title": "T", "body": "b"}).get_json()["post"]["id"]
     assert forum_client.post(f"/forum/posts/{pid}/vote", json={"value": 5}).status_code == 400
     assert forum_client.post(f"/forum/posts/{pid}/vote", json={"value": True}).status_code == 400
+    # a float 1.0 must NOT slip through as "1" — the contract is exactly the ints +1 / -1
+    assert forum_client.post(f"/forum/posts/{pid}/vote", json={"value": 1.0}).status_code == 400
+
+
+def test_partial_store_row_does_not_crash_the_list(make_client, fake_users):
+    # one malformed/partial row from the store must degrade per-row (defaults), not 500 the whole list
+    c = make_client(fake_users, forum=_PartialForum())
+    c.post("/register", json={"username": "alice", "password": "s3cretpw!"})
+    c.post("/login", json={"username": "alice", "password": "s3cretpw!"})
+    resp = c.get("/forum/posts")
+    assert resp.status_code == 200
+    post = resp.get_json()["posts"][0]
+    assert post["score"] == 0
+    assert post["comments"] == 0
 
 
 def test_forum_degrades_to_503_when_store_fails(make_client, fake_users):

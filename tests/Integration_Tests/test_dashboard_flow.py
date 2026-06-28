@@ -56,3 +56,13 @@ def test_dashboard_degrades_when_ai_returns_non_object(profile_client, monkeypat
     resp = profile_client.get("/dashboard")
     assert resp.status_code == 200
     assert resp.get_json()["ai_status"] == "unavailable"
+
+
+def test_dashboard_coerces_non_list_recommendations(profile_client, monkeypatch):
+    # a buggy AI returning recommendations as a string must not leak a non-list to the client
+    _set_predict(monkeypatch, {"state": "Ready", "recommendations": "go run", "calories": 2000})
+    _login(profile_client)
+    profile_client.post("/profile", json=_profile())
+    data = profile_client.get("/dashboard").get_json()
+    assert data["ai_status"] == "ok"
+    assert data["readiness"]["recommendations"] == []

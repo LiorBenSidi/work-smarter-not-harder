@@ -50,13 +50,16 @@ def _author(post):
 
 
 def _summary(post):
-    return {"id": post["id"], "title": post["title"], "author": _author(post),
-            "score": post["score"], "comments": len(post["comments"])}
+    # tolerate partial/seed rows from the store: a missing score/comments degrades this row to a
+    # default rather than 500-ing the whole list.
+    return {"id": post.get("id"), "title": post.get("title"), "author": _author(post),
+            "score": post.get("score", 0), "comments": len(post.get("comments") or [])}
 
 
 def _detail(post):
-    return {"id": post["id"], "title": post["title"], "body": post["body"], "author": _author(post),
-            "score": post["score"], "comments": post["comments"]}
+    return {"id": post.get("id"), "title": post.get("title"), "body": post.get("body"),
+            "author": _author(post), "score": post.get("score", 0),
+            "comments": post.get("comments") or []}
 
 
 def _forum():
@@ -124,7 +127,7 @@ def add_comment(post_id):
 def vote(post_id):
     data = request.get_json(silent=True)
     value = data.get("value") if isinstance(data, dict) else None
-    if isinstance(value, bool) or value not in (1, -1):  # exactly +1 or -1 (bool excluded)
+    if type(value) is not int or value not in (1, -1):  # exactly the ints +1 / -1 (no bool, no float)
         return jsonify(error="value must be 1 or -1"), 400
     try:
         score = _forum().vote(post_id, session["username"], value)
