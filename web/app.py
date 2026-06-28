@@ -4,6 +4,7 @@ App-factory that registers the route blueprints. `/health` is live; auth (F1), p
 the dashboard (F7) and history (F8) are implemented.
 """
 import logging
+import os
 import secrets
 
 from flask import Flask, jsonify, render_template
@@ -15,6 +16,8 @@ from routes.history import history_bp
 from routes.profile import profile_bp
 
 logger = logging.getLogger(__name__)
+
+_TEMPLATES = os.path.join(os.path.dirname(os.path.abspath(__file__)), "templates")
 
 
 class _DbUsers:
@@ -84,7 +87,8 @@ class _DbHistory:
 
 
 def create_app(config=Config, *, users=None, profiles=None, history=None):
-    app = Flask(__name__)
+    # Absolute template_folder so the app renders regardless of how it's launched / imported.
+    app = Flask(__name__, template_folder=_TEMPLATES)
     app.config.from_object(config)
 
     if not app.config.get("SECRET_KEY"):
