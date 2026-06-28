@@ -68,8 +68,8 @@
         </form>
 
         <form id="register-form" hidden>
-          <label for="reg-username">Username<span class="info" tabindex="0" role="note" aria-label="Username must be {{ username_min }} to {{ username_max }} characters">i<span class="tip" aria-hidden="true">{{ username_min }}–{{ username_max }} characters</span></span></label><input id="reg-username" name="username" autocomplete="username" minlength="{{ username_min }}" maxlength="{{ username_max }}" required>
-          <label for="reg-password">Password (min {{ password_min }} chars)<span class="info" tabindex="0" role="note" aria-label="Password must be {{ password_min }} to {{ password_max }} characters">i<span class="tip" aria-hidden="true">{{ password_min }}–{{ password_max }} characters</span></span></label><input id="reg-password" name="password" type="password" autocomplete="new-password" minlength="{{ password_min }}" maxlength="{{ password_max }}" required>
+          <label for="reg-username">Username<span class="info" id="reg-username-info" tabindex="0" role="note" aria-label="Username requirements">i<span class="tip" aria-hidden="true" id="reg-username-tip"></span></span></label><input id="reg-username" name="username" autocomplete="username" required>
+          <label for="reg-password">Password<span id="reg-pw-minhint"></span><span class="info" id="reg-password-info" tabindex="0" role="note" aria-label="Password requirements">i<span class="tip" aria-hidden="true" id="reg-password-tip"></span></span></label><input id="reg-password" name="password" type="password" autocomplete="new-password" required>
           <div style="margin-top:14px"><button type="submit">Create account</button></div>
           <div id="register-flash" class="flash" aria-live="polite"></div>
         </form>
@@ -310,8 +310,27 @@
       loadProfile(); loadDashboard(); loadHistory(); loadForum();
     }
 
+    // Populate the register-form requirement hints from the server's validator bounds (one source of
+    // truth: /auth/config). If unreachable (e.g. the file opened statically), leave them blank — never
+    // show a stale/hardcoded value or a raw placeholder.
+    async function applyCredentialHints() {
+      const r = await api("/auth/config");
+      if (!r.ok || !r.data) return;
+      const c = r.data;
+      const set = (infoId, tipId, lo, hi, noun) => {
+        $(tipId).textContent = lo + "–" + hi + " characters";
+        $(infoId).setAttribute("aria-label", noun + " must be " + lo + " to " + hi + " characters");
+      };
+      set("reg-username-info", "reg-username-tip", c.username_min, c.username_max, "Username");
+      set("reg-password-info", "reg-password-tip", c.password_min, c.password_max, "Password");
+      $("reg-pw-minhint").textContent = " (min " + c.password_min + " chars)";
+      $("reg-username").minLength = c.username_min; $("reg-username").maxLength = c.username_max;
+      $("reg-password").minLength = c.password_min; $("reg-password").maxLength = c.password_max;
+    }
+
     // ---- Boot: am I already logged in? (GET /me) ----
     (async function init() {
+      applyCredentialHints();
       const r = await api("/me");
       if (r.ok && r.data && r.data.username) { enterApp(r.data.username); } else { showView("auth"); }
     })();
