@@ -69,3 +69,34 @@ def test_forum_degrades_to_503_when_store_fails(make_client, fake_users):
     c.post("/register", json={"username": "alice", "password": "s3cretpw!"})
     c.post("/login", json={"username": "alice", "password": "s3cretpw!"})
     assert c.post("/forum/posts", json={"title": "T", "body": "b"}).status_code == 503
+
+
+def _as(c, username):
+    c.post("/register", json={"username": username, "password": "s3cretpw!"})
+    c.post("/login", json={"username": username, "password": "s3cretpw!"})
+
+
+def test_cannot_edit_someone_elses_post(forum_client):
+    _as(forum_client, "alice")
+    pid = forum_client.post("/forum/posts", json={"title": "T", "body": "b"}).get_json()["post"]["id"]
+    forum_client.post("/logout")
+    _as(forum_client, "mallory")
+    resp = forum_client.patch(f"/forum/posts/{pid}", json={"title": "hacked", "body": "hacked"})
+    assert resp.status_code == 403
+    forum_client.post("/logout")
+    _as(forum_client, "alice")
+    assert forum_client.get(f"/forum/posts/{pid}").get_json()["post"]["title"] == "T"  # untouched
+
+
+def test_cannot_delete_someone_elses_post(forum_client):
+    _as(forum_client, "alice")
+    pid = forum_client.post("/forum/posts", json={"title": "T", "body": "b"}).get_json()["post"]["id"]
+    forum_client.post("/logout")
+    _as(forum_client, "mallory")
+    assert forum_client.delete(f"/forum/posts/{pid}").status_code == 403
+    assert forum_client.get(f"/forum/posts/{pid}").status_code == 200  # still there
+
+
+def test_edit_and_delete_require_login(forum_client):
+    assert forum_client.patch("/forum/posts/1", json={"title": "x", "body": "y"}).status_code == 401
+    assert forum_client.delete("/forum/posts/1").status_code == 401

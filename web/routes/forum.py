@@ -105,6 +105,40 @@ def get_post(post_id):
     return jsonify(post=_detail(post)), 200
 
 
+@forum_bp.patch("/forum/posts/<post_id>")
+@login_required
+def edit_post(post_id):
+    try:
+        title, body, _ = validate_post(request.get_json(silent=True))
+    except ValueError as exc:
+        return jsonify(error=str(exc)), 400
+    try:
+        result = _forum().update_post(post_id, session["username"], title, body)
+    except Exception:
+        logger.exception("forum store unavailable")
+        return jsonify(error="forum store unavailable"), 503
+    if result is None:
+        return jsonify(error="post not found"), 404
+    if result == "forbidden":
+        return jsonify(error="you can only edit your own post"), 403
+    return jsonify(post=_detail(result)), 200
+
+
+@forum_bp.delete("/forum/posts/<post_id>")
+@login_required
+def delete_post(post_id):
+    try:
+        result = _forum().delete_post(post_id, session["username"])
+    except Exception:
+        logger.exception("forum store unavailable")
+        return jsonify(error="forum store unavailable"), 503
+    if result is None:
+        return jsonify(error="post not found"), 404
+    if result == "forbidden":
+        return jsonify(error="you can only delete your own post"), 403
+    return jsonify(status="deleted"), 200
+
+
 @forum_bp.post("/forum/posts/<post_id>/comments")
 @login_required
 def add_comment(post_id):

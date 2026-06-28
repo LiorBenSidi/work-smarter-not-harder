@@ -47,6 +47,13 @@ class _FakeColl:
         self.docs.append(dict(doc))
         return SimpleNamespace(inserted_id="fake")
 
+    def delete_one(self, filt):
+        for i, d in enumerate(self.docs):
+            if self._match(d, filt):
+                del self.docs[i]
+                return SimpleNamespace(deleted_count=1)
+        return SimpleNamespace(deleted_count=0)
+
     def update_one(self, filt, update, upsert=False):
         for d in self.docs:
             if self._match(d, filt):
@@ -178,6 +185,39 @@ def test_forum_votes_aggregate_across_users(db_mod, db):
 
 def test_forum_vote_on_missing_post_is_none(db_mod, db):
     assert db_mod.forum_vote(db, "nope", "alice", 1) is None
+
+
+def test_forum_update_post_by_author(db_mod, db):
+    pid = db_mod.forum_create_post(db, "alice", "Old", "old body", False)["id"]
+    out = db_mod.forum_update_post(db, pid, "alice", "New", "new body")
+    assert out["title"] == "New" and out["body"] == "new body"
+    assert db_mod.forum_get_post(db, pid)["title"] == "New"
+
+
+def test_forum_update_post_by_non_author_is_forbidden(db_mod, db):
+    pid = db_mod.forum_create_post(db, "alice", "T", "b", False)["id"]
+    assert db_mod.forum_update_post(db, pid, "bob", "X", "y") == db_mod.FORBIDDEN
+    assert db_mod.forum_get_post(db, pid)["title"] == "T"  # unchanged
+
+
+def test_forum_update_missing_post_is_none(db_mod, db):
+    assert db_mod.forum_update_post(db, "nope", "alice", "X", "y") is None
+
+
+def test_forum_delete_post_by_author(db_mod, db):
+    pid = db_mod.forum_create_post(db, "alice", "T", "b", False)["id"]
+    assert db_mod.forum_delete_post(db, pid, "alice") is True
+    assert db_mod.forum_get_post(db, pid) is None  # gone
+
+
+def test_forum_delete_post_by_non_author_is_forbidden(db_mod, db):
+    pid = db_mod.forum_create_post(db, "alice", "T", "b", False)["id"]
+    assert db_mod.forum_delete_post(db, pid, "bob") == db_mod.FORBIDDEN
+    assert db_mod.forum_get_post(db, pid) is not None  # still there
+
+
+def test_forum_delete_missing_post_is_none(db_mod, db):
+    assert db_mod.forum_delete_post(db, "nope", "alice") is None
 
 
 def test_votes_are_stored_as_a_list_not_keyed_by_username(db_mod, db):
