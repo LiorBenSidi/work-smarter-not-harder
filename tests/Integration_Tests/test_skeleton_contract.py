@@ -29,6 +29,27 @@ def test_all_three_services_have_healthchecks():
     assert compose.count("healthcheck:") == 3, "web, ai and db must each define a healthcheck"
 
 
+def test_all_services_have_a_restart_policy():
+    # fault tolerance: every service must self-heal on a crash, not just the DB. (text-based to avoid a
+    # yaml dependency, consistent with the other contract checks.)
+    compose = (ROOT / "docker-compose.yml").read_text()
+    assert compose.count("restart:") == 3, "web, ai and db must each define a restart policy"
+
+
+def test_all_healthchecks_define_a_start_period():
+    # a cold first boot (fresh Azure VM) must not exhaust the healthcheck retries before the app/db is up.
+    compose = (ROOT / "docker-compose.yml").read_text()
+    assert compose.count("start_period:") == 3, "each healthcheck needs a start_period for a slow cold boot"
+
+
+def test_web_does_not_hard_depend_on_ai_health():
+    # fault tolerance: if AI is down, web must still BOOT and degrade per-request — so the dependency on
+    # ai is service_started, NOT service_healthy (else an AI outage takes the whole system down).
+    compose = (ROOT / "docker-compose.yml").read_text()
+    assert "ai: { condition: service_started }" in compose, \
+        "web must not hard-wait on ai health — an AI outage must not block web from booting"
+
+
 def test_ai_predict_returns_the_contract_shape():
     # the web -> ai contract (docs/DESIGN.md §3): /predict returns state (str) + proba (dict)
     # + recommendations (list). Behavioural — exercise the real app, don't grep source text.
