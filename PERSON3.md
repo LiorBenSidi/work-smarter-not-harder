@@ -23,7 +23,7 @@ harness, and the cross-container test harness immediately — none of it waits o
 ## Roadmap (build these — your way)
 - [ ] **Mongo container** — stand up the `db` service with a persistent volume reachable at `MONGO_URI`. The CRUD's **unique indexes** (`users.username`, `forum_posts.id`) already ship in `services/db.py` `ensure_indexes()` (Lior, best-effort on first connect); you add any further **performance/schema indexes** + tuning, plus **container auth** for prod. (The thin CRUD itself is **Lior's** — implemented + tested against a fake.) Once it's up, validate the CRUD against real Mongo: `TEST_MONGO_URI="mongodb://localhost:27017/worksmarter_test" pytest tests/Integration_Tests/test_db_mongo.py` (skips without a DB).
 - [ ] **Azure deploy + CI/CD** — extend the live pipeline to deploy on green `main`; scale via `ai` replicas + gunicorn workers. Start early.
-- [ ] **`docker-compose.test.yml`** + the cross-container test harness.
+- [ ] **Cross-container test harness** — `docker-compose.test.yml` is **scaffolded** (TESTING=1 + a throwaway `worksmarter_test` DB); add the **test-runner service** that runs `pytest` against the live stack (your Dockerfile / how the tests mount into an image).
 - [ ] **Fault tolerance + scaling** — graceful degradation (AI / DB down); horizontal scaling (replicas + gunicorn workers) + the **multi-machine path** (Docker Swarm overlay, or `ai` replicas on the Azure VM; **queue-free**) + a locust before/after.
 - [ ] **Rate limiting** — flask-limiter on the public routes.
 - [ ] **Cross-container tests** — integration (web→ai→db) + system (register→profile→readiness) + **fault-isolation (stop `ai` / stop `db` → web survives)** + stress (locust).

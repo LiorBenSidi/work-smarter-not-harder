@@ -80,7 +80,7 @@ The only coordination points are the seams (`/predict` shape, `db.py`'s function
 | ≥3 communicating containers, only `web` exposed | ✅ | Elad |
 | Local AI model, baked into image, pinned sklearn | ⬜ | Shiri |
 | All 5 test types — per-feature, run-anywhere, no-cheating | 🟡 scaffolds + matrix | all |
-| `docker-compose.yml` **and** `docker-compose.test.yml` | 🟡 main done; **test compose TODO** | Elad |
+| `docker-compose.yml` **and** `docker-compose.test.yml` | 🟡 both **scaffolded** (test = env override → `worksmarter_test`); test-runner service TODO | Lior (scaffold) · Elad (runner) |
 | `debug` flag toggles debug mode | 🟡 env wired; confirm it toggles | Lior |
 | Password hashing (werkzeug) | ✅ | Lior |
 | Input validation (routes) + injection-safe queries (thin `db.py` CRUD) | ✅ | Lior |
