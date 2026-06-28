@@ -98,6 +98,14 @@ class _DbForum(_DbStore):
         db_module, handle = self._resolve()
         return db_module.forum_vote(handle, post_id, username, value)
 
+    def update_post(self, post_id, username, title, body):
+        db_module, handle = self._resolve()
+        return db_module.forum_update_post(handle, post_id, username, title, body)
+
+    def delete_post(self, post_id, username):
+        db_module, handle = self._resolve()
+        return db_module.forum_delete_post(handle, post_id, username)
+
 
 def create_app(config=Config, *, users=None, profiles=None, history=None, forum=None):
     # Absolute template_folder so the app renders regardless of how it's launched / imported.

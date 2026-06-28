@@ -274,6 +274,8 @@
     }
 
     let currentPostId = null;
+    let currentPost = null;
+    let currentUser = null;
 
     async function loadForum() {
       const el = $("forum-list"); el.innerHTML = '<p class="muted">Loading…</p>';
@@ -295,15 +297,19 @@
       const box = $("forum-detail");
       if (!r.ok || !r.data || !r.data.post) { box.hidden = true; return; }
       const p = r.data.post;
+      currentPost = p;
       box.hidden = false;
       box.innerHTML =
-        '<div class="card" style="background:#11152a;margin-top:12px">'
+        '<div class="card" style="background:var(--field);margin-top:12px">'
         + '<button class="ghost" style="float:right;padding:4px 9px" onclick="closePost()">Close</button>'
         + '<h3 style="margin:0 0 4px">' + escapeHtml(p.title) + '</h3>'
         + '<p class="muted" style="margin:0 0 8px">by ' + escapeHtml(p.author) + '</p>'
         + '<p>' + escapeHtml(p.body) + '</p>'
         + '<p><button class="ghost" onclick="vote(1)">▲ up</button> <span class="pill">score ' + escapeHtml(p.score)
         + '</span> <button class="ghost" onclick="vote(-1)">▼ down</button></p>'
+        + (p.author === currentUser
+            ? '<p><button class="ghost" onclick="editPost()">Edit</button> <button class="ghost" onclick="deletePost()">Delete</button></p>'
+            : '')
         + '<h4 style="margin:12px 0 6px">Comments</h4>'
         + (p.comments.length
             ? '<ul>' + p.comments.map((c) => '<li><strong>' + escapeHtml(c.author) + ':</strong> ' + escapeHtml(c.body) + '</li>').join("") + '</ul>'
@@ -316,7 +322,33 @@
       });
     }
 
-    function closePost() { $("forum-detail").hidden = true; currentPostId = null; }
+    function closePost() { $("forum-detail").hidden = true; currentPostId = null; currentPost = null; }
+
+    async function deletePost() {
+      if (!currentPost) return;
+      const r = await api("/forum/posts/" + currentPost.id, { method: "DELETE" });
+      if (r.ok) { closePost(); loadForum(); }
+    }
+
+    function editPost() {
+      if (!currentPost) return;
+      $("forum-detail").innerHTML =
+        '<div class="card" style="background:var(--field);margin-top:12px">'
+        + '<h3 style="margin:0 0 8px">Edit post</h3>'
+        + '<form id="edit-form"><input name="title" maxlength="140" aria-label="Title" required>'
+        + '<textarea name="body" rows="3" maxlength="5000" aria-label="Body" style="margin-top:8px;resize:vertical" required></textarea>'
+        + '<div style="margin-top:8px"><button type="submit">Save</button> '
+        + '<button type="button" class="ghost" onclick="cancelEdit()">Cancel</button></div></form></div>';
+      $("edit-form").elements.title.value = currentPost.title;   // set via .value -> no HTML-injection
+      $("edit-form").elements.body.value = currentPost.body;
+      onSubmit("edit-form", async (f) => {
+        const r = await api("/forum/posts/" + currentPost.id,
+          { method: "PATCH", body: { title: f.elements.title.value, body: f.elements.body.value } });
+        if (r.ok) openPost(currentPost.id);
+      });
+    }
+
+    function cancelEdit() { if (currentPost) openPost(currentPost.id); }
 
     async function vote(value) {
       if (!currentPostId) return;
@@ -334,6 +366,7 @@
     $("history-refresh").addEventListener("click", loadHistory);
 
     function enterApp(username) {
+      currentUser = username;
       $("who-name").textContent = "Hi, " + username;
       showView("app");
       loadProfile(); loadDashboard(); loadHistory(); loadForum();

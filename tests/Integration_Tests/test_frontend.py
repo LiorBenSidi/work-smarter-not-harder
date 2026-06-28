@@ -60,6 +60,14 @@ def test_served_html_has_no_unrendered_template_placeholders(client):
     assert "{{" not in html and "}}" not in html
 
 
+def test_forum_owner_edit_delete_wired(client):
+    # the detail view exposes edit/delete for the author's own posts, hitting PATCH/DELETE.
+    html = client.get("/").get_data(as_text=True)
+    assert "editPost()" in html and "deletePost()" in html
+    assert 'method: "PATCH"' in html and 'method: "DELETE"' in html
+    assert "p.author === currentUser" in html  # buttons only on own posts
+
+
 def test_daily_checkin_section_present_and_wired(client):
     # the check-in form posts today's readiness metrics to /checkin.
     html = client.get("/").get_data(as_text=True)

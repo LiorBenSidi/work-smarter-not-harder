@@ -143,3 +143,31 @@ def forum_vote(db, post_id, username, value):
     score = sum(v["value"] for v in votes)
     db.forum_posts.update_one({"id": post_id}, {"$set": {"votes": votes, "score": score}})
     return score
+
+
+# A post may only be edited/deleted by its real author (even for anonymous posts, where the displayed
+# author is hidden). These return None if the post is unknown, FORBIDDEN if the caller isn't the author.
+FORBIDDEN = "forbidden"
+
+
+def forum_update_post(db, post_id, username, title, body):
+    """Update a post's title/body iff `username` is its author. -> shaped post / None / FORBIDDEN."""
+    post = db.forum_posts.find_one({"id": post_id})
+    if post is None:
+        return None
+    if post.get("author") != username:
+        return FORBIDDEN
+    db.forum_posts.update_one({"id": post_id}, {"$set": {"title": title, "body": body}})
+    post["title"], post["body"] = title, body
+    return _shape(post)
+
+
+def forum_delete_post(db, post_id, username):
+    """Delete a post iff `username` is its author. -> True (deleted) / None / FORBIDDEN."""
+    post = db.forum_posts.find_one({"id": post_id})
+    if post is None:
+        return None
+    if post.get("author") != username:
+        return FORBIDDEN
+    db.forum_posts.delete_one({"id": post_id})
+    return True

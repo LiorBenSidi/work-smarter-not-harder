@@ -110,6 +110,24 @@ class FakeForum:
         post["score"] = sum(post["votes"].values())
         return post["score"]
 
+    def update_post(self, post_id, username, title, body):
+        post = self._posts.get(post_id)
+        if post is None:
+            return None
+        if post["author"] != username:
+            return "forbidden"
+        post["title"], post["body"] = title, body
+        return post
+
+    def delete_post(self, post_id, username):
+        post = self._posts.get(post_id)
+        if post is None:
+            return None
+        if post["author"] != username:
+            return "forbidden"
+        del self._posts[post_id]
+        return True
+
 
 class _CsrfClient:
     """Wraps the Flask test client: seeds the double-submit CSRF cookie (one GET) and auto-sends the
@@ -137,6 +155,9 @@ class _CsrfClient:
 
     def put(self, *args, **kwargs):
         return self.raw.put(*args, **self._with_token(kwargs))
+
+    def patch(self, *args, **kwargs):
+        return self.raw.patch(*args, **self._with_token(kwargs))
 
     def delete(self, *args, **kwargs):
         return self.raw.delete(*args, **self._with_token(kwargs))
