@@ -83,7 +83,7 @@ The only coordination points are the seams (`/predict` shape, `db.py`'s function
 | `docker-compose.yml` **and** `docker-compose.test.yml` | 🟡 main done; **test compose TODO** | Elad |
 | `debug` flag toggles debug mode | 🟡 env wired; confirm it toggles | Lior |
 | Password hashing (werkzeug) | ⬜ | Lior |
-| Input validation (routes) + injection-safe queries (`db.py`) | ⬜ | Lior · Elad |
+| Input validation (routes) + injection-safe queries (thin `db.py` CRUD) | ✅ | Lior |
 | Rate-limit / anti-spam (flask-limiter) | ⬜ | Elad |
 | Fault tolerance + **isolation tested** (stop ai/db → web survives) | 🟡 `ai_client` degrades; kill-container tests TODO | Elad + all |
 | Parallel programming + scaling — multiprocessing batch · replicas/workers · multi-machine (Swarm / Azure VM) · **queue-free** | 🟡 concrete plan | Shiri (parallel code) · Elad (scaling) |
@@ -104,6 +104,7 @@ gate are live — that CI already earns the **5-pt CI-only** partial of the depl
 
 **Live now:** the runnable 3-container skeleton (`docker-compose` + healthchecks + gunicorn, only `web` exposed),
 the `web↔ai` glue (`ai_client`) + a `db` connection helper, the **F4 calorie** function (`ai/calories.py`), and the
-ratified split. **Still to build:** the RF model + real `/predict`, the recommendation engine, the web features
-(auth/profile/dashboard/history/frontend), the `db.py` CRUD, `docker-compose.test.yml`, Azure deploy, and the Forum.
-Due **23 Aug 2026**.
+ratified split. The **web tier is built** (auth/profile/dashboard/history/frontend + CSRF + Forum CRUD/UI) and the
+**thin `db.py` CRUD** is implemented + tested. **Still to build:** the RF model + real `/predict`, the recommendation
+engine, the Mongo container + indexes, `docker-compose.test.yml`, rate-limiting, Azure deploy, and the Forum real-time
+layer. Due **23 Aug 2026**.
