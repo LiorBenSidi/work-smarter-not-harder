@@ -1,0 +1,161 @@
+"""Unit tests for the thin core CRUD in web/services/db.py. OWNER: Lior (thin core CRUD).
+
+The data layer is exercised against an in-memory fake collection (the course's mocking technique —
+no real Mongo, no Docker), so these pin the *behaviour contract* the web stores depend on:
+``get_user`` / ``create_user`` / ``get_profile`` / ``save_profile`` / ``list_history`` and the five
+``forum_*`` functions. The fake implements only the pymongo operators db.py uses.
+"""
+import importlib.util
+from pathlib import Path
+from types import SimpleNamespace
+
+import pytest
+
+WEB = Path(__file__).resolve().parents[2] / "web"
+
+
+@pytest.fixture
+def db_mod():
+    pytest.importorskip("pymongo")
+    spec = importlib.util.spec_from_file_location("web_db_under_test", str(WEB / "services" / "db.py"))
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+class _FakeColl:
+    """Minimal stand-in for a pymongo collection — supports just the ops db.py calls."""
+
+    def __init__(self):
+        self.docs = []
+
+    def _match(self, doc, filt):
+        return all(doc.get(k) == v for k, v in filt.items())
+
+    def find_one(self, filt):
+        return next((dict(d) for d in self.docs if self._match(d, filt)), None)
+
+    def find(self, filt=None):
+        filt = filt or {}
+        return [dict(d) for d in self.docs if self._match(d, filt)]
+
+    def insert_one(self, doc):
+        self.docs.append(dict(doc))
+        return SimpleNamespace(inserted_id="fake")
+
+    def update_one(self, filt, update, upsert=False):
+        for d in self.docs:
+            if self._match(d, filt):
+                d.update(update.get("$set", {}))
+                for key, val in update.get("$push", {}).items():
+                    d.setdefault(key, []).append(val)
+                return SimpleNamespace(matched_count=1, upserted_id=None)
+        if upsert:
+            new = dict(filt)
+            new.update(update.get("$setOnInsert", {}))
+            new.update(update.get("$set", {}))
+            self.docs.append(new)
+            return SimpleNamespace(matched_count=0, upserted_id="fake")
+        return SimpleNamespace(matched_count=0, upserted_id=None)
+
+
+class _FakeDB:
+    def __init__(self):
+        self.users = _FakeColl()
+        self.profiles = _FakeColl()
+        self.analysis_history = _FakeColl()
+        self.forum_posts = _FakeColl()
+
+
+@pytest.fixture
+def db():
+    return _FakeDB()
+
+
+# ---- users ----
+def test_create_user_then_get(db_mod, db):
+    assert db_mod.create_user(db, "alice", "hash123") is True
+    rec = db_mod.get_user(db, "alice")
+    assert rec["username"] == "alice"
+    assert rec["password_hash"] == "hash123"
+    assert "_id" not in rec  # never leak the raw mongo id
+
+
+def test_create_duplicate_user_returns_false(db_mod, db):
+    assert db_mod.create_user(db, "alice", "h1") is True
+    assert db_mod.create_user(db, "alice", "h2") is False
+    assert db_mod.get_user(db, "alice")["password_hash"] == "h1"  # original wins, no overwrite
+
+
+def test_get_missing_user_is_none(db_mod, db):
+    assert db_mod.get_user(db, "nobody") is None
+
+
+# ---- profiles ----
+def test_save_then_get_profile(db_mod, db):
+    profile = {"age": 30, "goal": "maintain"}
+    db_mod.save_profile(db, "alice", profile)
+    assert db_mod.get_profile(db, "alice") == profile
+
+
+def test_save_profile_overwrites(db_mod, db):
+    db_mod.save_profile(db, "alice", {"age": 30})
+    db_mod.save_profile(db, "alice", {"age": 31})
+    assert db_mod.get_profile(db, "alice") == {"age": 31}
+
+
+def test_get_missing_profile_is_none(db_mod, db):
+    assert db_mod.get_profile(db, "alice") is None
+
+
+# ---- history ----
+def test_list_history_empty(db_mod, db):
+    assert db_mod.list_history(db, "alice") == []
+
+
+def test_list_history_returns_entries_for_user_only(db_mod, db):
+    db.analysis_history.docs.append({"username": "alice", "entry": {"assessment": "Ready"}})
+    db.analysis_history.docs.append({"username": "bob", "entry": {"assessment": "Rest"}})
+    out = db_mod.list_history(db, "alice")
+    assert out == [{"assessment": "Ready"}]
+
+
+# ---- forum ----
+def test_forum_create_then_get_and_list(db_mod, db):
+    post = db_mod.forum_create_post(db, "alice", "Title", "Body", False)
+    assert post["id"] and isinstance(post["id"], str)
+    assert post["score"] == 0 and post["comments"] == []
+    assert "votes" not in post and "_id" not in post  # internal/raw fields not leaked
+    assert db_mod.forum_get_post(db, post["id"])["body"] == "Body"
+    assert len(db_mod.forum_list_posts(db)) == 1
+
+
+def test_forum_get_missing_post_is_none(db_mod, db):
+    assert db_mod.forum_get_post(db, "does-not-exist") is None
+
+
+def test_forum_add_comment(db_mod, db):
+    pid = db_mod.forum_create_post(db, "alice", "T", "B", False)["id"]
+    comment = db_mod.forum_add_comment(db, pid, "bob", "nice")
+    assert comment == {"author": "bob", "body": "nice"}
+    assert db_mod.forum_get_post(db, pid)["comments"] == [{"author": "bob", "body": "nice"}]
+
+
+def test_forum_add_comment_on_missing_post_is_none(db_mod, db):
+    assert db_mod.forum_add_comment(db, "nope", "bob", "x") is None
+
+
+def test_forum_vote_sets_and_replaces_score(db_mod, db):
+    pid = db_mod.forum_create_post(db, "alice", "T", "B", False)["id"]
+    assert db_mod.forum_vote(db, pid, "alice", 1) == 1
+    assert db_mod.forum_vote(db, pid, "alice", -1) == -1  # one vote per user — replaces, not adds
+
+
+def test_forum_votes_aggregate_across_users(db_mod, db):
+    pid = db_mod.forum_create_post(db, "alice", "T", "B", False)["id"]
+    db_mod.forum_vote(db, pid, "alice", 1)
+    assert db_mod.forum_vote(db, pid, "bob", 1) == 2  # distinct users sum
+
+
+def test_forum_vote_on_missing_post_is_none(db_mod, db):
+    assert db_mod.forum_vote(db, "nope", "alice", 1) is None
