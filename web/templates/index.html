@@ -199,11 +199,11 @@
       if (d.ai_status === "unavailable") {
         html += '<p class="flash warn">Readiness is temporarily unavailable (AI service down).</p>';
       } else if (d.readiness) {
-        html += '<div class="state">' + (d.readiness.state || "—") + '</div>';
-        const recs = d.readiness.recommendations || [];
-        if (recs.length) html += "<ul>" + recs.map((x) => "<li>" + x + "</li>").join("") + "</ul>";
+        html += '<div class="state">' + escapeHtml(d.readiness.state || "—") + '</div>';
+        const recs = Array.isArray(d.readiness.recommendations) ? d.readiness.recommendations : [];
+        if (recs.length) html += "<ul>" + recs.map((x) => "<li>" + escapeHtml(x) + "</li>").join("") + "</ul>";
       }
-      if (d.calories != null) html += '<p style="margin-top:10px"><span class="pill">Daily target: ' + d.calories + ' kcal</span></p>';
+      if (d.calories != null) html += '<p style="margin-top:10px"><span class="pill">Daily target: ' + escapeHtml(d.calories) + ' kcal</span></p>';
       el.innerHTML = html || '<p class="muted">No readiness yet.</p>';
     }
 
@@ -215,9 +215,9 @@
       const items = (r.data && r.data.history) || [];
       if (!items.length) { el.innerHTML = '<p class="muted">No past analyses yet.</p>'; return; }
       el.innerHTML = "<ul>" + items.map((it) =>
-        "<li><strong>" + (it.assessment || "—") + "</strong> "
-        + (it.calories != null ? "· " + it.calories + " kcal " : "")
-        + '<span class="muted">' + (it.timestamp || "") + "</span></li>"
+        "<li><strong>" + escapeHtml(it.assessment || "—") + "</strong> "
+        + (it.calories != null ? "· " + escapeHtml(it.calories) + " kcal " : "")
+        + '<span class="muted">' + escapeHtml(it.timestamp || "") + "</span></li>"
       ).join("") + "</ul>";
     }
 
