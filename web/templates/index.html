@@ -1,8 +1,218 @@
 <!doctype html>
 <html lang="en">
-<head><meta charset="utf-8"><title>Work Smarter, Not Harder</title></head>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Work Smarter, Not Harder</title>
+  <style>
+    :root { --bg:#0f1220; --card:#1a1f35; --ink:#e7e9f3; --muted:#9aa3c0; --accent:#6c8cff; --ok:#3ecf8e; --warn:#ffb454; --err:#ff6b6b; --line:#2a3052; }
+    * { box-sizing: border-box; }
+    body { margin:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background: var(--bg); color: var(--ink); }
+    header { padding: 18px 24px; border-bottom: 1px solid var(--line); display:flex; align-items:center; justify-content:space-between; }
+    header h1 { font-size: 18px; margin:0; }
+    main { max-width: 820px; margin: 0 auto; padding: 24px; }
+    .card { background: var(--card); border:1px solid var(--line); border-radius: 12px; padding: 20px; margin-bottom: 18px; }
+    .card h2 { margin: 0 0 14px; font-size: 15px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+    label { display:block; font-size: 13px; color: var(--muted); margin: 10px 0 4px; }
+    input, select { width:100%; padding: 9px 11px; background:#11152a; border:1px solid var(--line); border-radius: 8px; color: var(--ink); font-size: 14px; }
+    button { background: var(--accent); color:#0b0e1c; border:0; border-radius: 8px; padding: 10px 16px; font-weight: 600; cursor: pointer; font-size: 14px; }
+    button.ghost { background: transparent; color: var(--accent); border:1px solid var(--line); }
+    .row { display:grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .flash { font-size: 13px; margin-top: 10px; min-height: 18px; }
+    .flash.error { color: var(--err); } .flash.ok { color: var(--ok); } .flash.warn { color: var(--warn); }
+    .tabs { display:flex; gap: 8px; margin-bottom: 14px; }
+    .tabs button { background: transparent; border:1px solid var(--line); color: var(--muted); }
+    .tabs button.active { background: var(--accent); color:#0b0e1c; border-color: var(--accent); }
+    .state { font-size: 26px; font-weight: 700; margin: 6px 0; }
+    .pill { display:inline-block; padding: 3px 10px; border-radius: 999px; font-size: 12px; background:#11152a; border:1px solid var(--line); color: var(--muted); }
+    ul { margin: 8px 0 0; padding-left: 18px; } li { margin: 4px 0; }
+    .muted { color: var(--muted); font-size: 13px; }
+    [hidden] { display:none !important; }
+  </style>
+</head>
 <body>
-  <h1>Work Smarter, Not Harder</h1>
-  <p>Skeleton — the frontend lives here. OWNER: Lior.</p>
+  <header>
+    <h1>🏋️ Work Smarter, Not Harder</h1>
+    <div id="who" hidden><span id="who-name" class="muted"></span>
+      <button id="logout-btn" class="ghost" style="margin-left:10px">Log out</button>
+    </div>
+  </header>
+
+  <main>
+    <!-- ===== Auth view ===== -->
+    <section id="auth-view">
+      <div class="card" style="max-width:420px;margin:40px auto">
+        <div class="tabs">
+          <button id="tab-login" class="active" onclick="showTab('login')">Log in</button>
+          <button id="tab-register" onclick="showTab('register')">Register</button>
+        </div>
+
+        <form id="login-form">
+          <label>Username</label><input name="username" autocomplete="username" required>
+          <label>Password</label><input name="password" type="password" autocomplete="current-password" required>
+          <div style="margin-top:14px"><button type="submit">Log in</button></div>
+          <div id="login-flash" class="flash"></div>
+        </form>
+
+        <form id="register-form" hidden>
+          <label>Username</label><input name="username" autocomplete="username" required>
+          <label>Password (min 8 chars)</label><input name="password" type="password" autocomplete="new-password" required>
+          <div style="margin-top:14px"><button type="submit">Create account</button></div>
+          <div id="register-flash" class="flash"></div>
+        </form>
+      </div>
+    </section>
+
+    <!-- ===== App view ===== -->
+    <section id="app-view" hidden>
+      <div class="card">
+        <h2>Your profile</h2>
+        <form id="profile-form">
+          <div class="row">
+            <div><label>Age</label><input name="age" type="number" min="10" max="120" required></div>
+            <div><label>Gender</label>
+              <select name="gender"><option value="male">Male</option><option value="female">Female</option><option value="other">Other</option></select>
+            </div>
+            <div><label>Height (cm)</label><input name="height" type="number" min="50" max="300" step="0.1" required></div>
+            <div><label>Weight (kg)</label><input name="weight" type="number" min="20" max="500" step="0.1" required></div>
+            <div><label>Goal</label>
+              <select name="goal"><option value="lose">Lose</option><option value="maintain">Maintain</option><option value="gain">Gain</option></select>
+            </div>
+            <div><label>Training days / week</label><input name="training_frequency" type="number" min="0" max="14" required></div>
+          </div>
+          <div style="margin-top:14px"><button type="submit">Save profile</button></div>
+          <div id="profile-flash" class="flash"></div>
+        </form>
+      </div>
+
+      <div class="card">
+        <h2>Dashboard — readiness <button id="dashboard-refresh" class="ghost" style="float:right;padding:5px 10px">Refresh</button></h2>
+        <div id="dashboard"><p class="muted">Loading…</p></div>
+      </div>
+
+      <div class="card">
+        <h2>History <button id="history-refresh" class="ghost" style="float:right;padding:5px 10px">Refresh</button></h2>
+        <div id="history"><p class="muted">Loading…</p></div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+
+    async function api(path, { method = "GET", body = null } = {}) {
+      const opts = { method, headers: {}, credentials: "same-origin" };
+      if (body !== null) { opts.headers["Content-Type"] = "application/json"; opts.body = JSON.stringify(body); }
+      const res = await fetch(path, opts);
+      let data = null;
+      try { data = await res.json(); } catch (_) { data = null; }
+      return { ok: res.ok, status: res.status, data };
+    }
+
+    function showTab(which) {
+      $("tab-login").classList.toggle("active", which === "login");
+      $("tab-register").classList.toggle("active", which === "register");
+      $("login-form").hidden = which !== "login";
+      $("register-form").hidden = which !== "register";
+    }
+
+    function showView(view) {
+      $("auth-view").hidden = view !== "auth";
+      $("app-view").hidden = view !== "app";
+      $("who").hidden = view !== "app";
+    }
+
+    function flash(id, msg, kind = "error") { const el = $(id); el.textContent = msg || ""; el.className = "flash " + kind; }
+
+    // ---- Auth ----
+    $("login-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const f = e.target;
+      const r = await api("/login", { method: "POST", body: { username: f.username.value, password: f.password.value } });
+      if (r.ok) { enterApp(r.data.username); } else { flash("login-flash", (r.data && r.data.error) || "Login failed"); }
+    });
+
+    $("register-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const f = e.target;
+      const r = await api("/register", { method: "POST", body: { username: f.username.value, password: f.password.value } });
+      if (r.ok) { flash("register-flash", "Account created — you can log in now.", "ok"); showTab("login"); }
+      else { flash("register-flash", (r.data && r.data.error) || "Registration failed"); }
+    });
+
+    $("logout-btn").addEventListener("click", async () => { await api("/logout", { method: "POST" }); showView("auth"); });
+
+    // ---- Profile ----
+    $("profile-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const f = e.target;
+      const body = {
+        age: Number.parseInt(f.age.value, 10),
+        gender: f.gender.value,
+        height: Number(f.height.value),
+        weight: Number(f.weight.value),
+        goal: f.goal.value,
+        training_frequency: Number.parseInt(f.training_frequency.value, 10),
+      };
+      const r = await api("/profile", { method: "POST", body });
+      if (r.ok) { flash("profile-flash", "Saved.", "ok"); loadDashboard(); }
+      else { flash("profile-flash", (r.data && r.data.error) || "Could not save profile"); }
+    });
+
+    async function loadProfile() {
+      const r = await api("/profile");
+      if (r.ok && r.data && r.data.profile) {
+        const p = r.data.profile, f = $("profile-form");
+        for (const k of ["age", "gender", "height", "weight", "goal", "training_frequency"]) {
+          if (p[k] !== undefined && f[k]) f[k].value = p[k];
+        }
+      }
+    }
+
+    // ---- Dashboard ----
+    async function loadDashboard() {
+      const el = $("dashboard"); el.innerHTML = '<p class="muted">Loading…</p>';
+      const r = await api("/dashboard");
+      if (!r.ok) { el.innerHTML = '<p class="flash error">Could not load the dashboard.</p>'; return; }
+      const d = r.data;
+      if (d.needs_profile) { el.innerHTML = '<p class="muted">Fill in your profile above to see your readiness.</p>'; return; }
+      let html = "";
+      if (d.ai_status === "unavailable") {
+        html += '<p class="flash warn">Readiness is temporarily unavailable (AI service down).</p>';
+      } else if (d.readiness) {
+        html += '<div class="state">' + (d.readiness.state || "—") + '</div>';
+        const recs = d.readiness.recommendations || [];
+        if (recs.length) html += "<ul>" + recs.map((x) => "<li>" + x + "</li>").join("") + "</ul>";
+      }
+      if (d.calories != null) html += '<p style="margin-top:10px"><span class="pill">Daily target: ' + d.calories + ' kcal</span></p>';
+      el.innerHTML = html || '<p class="muted">No readiness yet.</p>';
+    }
+
+    // ---- History ----
+    async function loadHistory() {
+      const el = $("history"); el.innerHTML = '<p class="muted">Loading…</p>';
+      const r = await api("/history");
+      if (!r.ok) { el.innerHTML = '<p class="flash error">Could not load history.</p>'; return; }
+      const items = (r.data && r.data.history) || [];
+      if (!items.length) { el.innerHTML = '<p class="muted">No past analyses yet.</p>'; return; }
+      el.innerHTML = "<ul>" + items.map((it) =>
+        "<li><strong>" + (it.assessment || "—") + "</strong> "
+        + (it.calories != null ? "· " + it.calories + " kcal " : "")
+        + '<span class="muted">' + (it.timestamp || "") + "</span></li>"
+      ).join("") + "</ul>";
+    }
+
+    function enterApp(username) {
+      $("who-name").textContent = "Hi, " + username;
+      showView("app");
+      loadProfile(); loadDashboard(); loadHistory();
+    }
+
+    // ---- Boot: am I already logged in? (GET /me) ----
+    (async function init() {
+      const r = await api("/me");
+      if (r.ok && r.data && r.data.username) { enterApp(r.data.username); } else { showView("auth"); }
+    })();
+  </script>
 </body>
 </html>
