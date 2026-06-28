@@ -13,6 +13,11 @@ services:
       FLASK_DEBUG: ${FLASK_DEBUG:-0}
       TESTING: ${TESTING:-0}
       SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-0}   # set to 1 in production (HTTPS)
+      ENABLE_LOGGING: ${ENABLE_LOGGING:-1}                 # 0 -> suppress logging (Lab-9.1 cost toggle)
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      LOG_FILE: ${LOG_FILE:-/app/logs/web.log}             # RotatingFileHandler target (persisted below)
+    volumes:
+      - web-logs:/app/logs                                 # keep the rotating log for inspection / ELK
     depends_on:
       ai: { condition: service_healthy }
       db: { condition: service_healthy }
@@ -47,3 +52,4 @@ services:
 
 volumes:
   mongo-data:
+  web-logs:
