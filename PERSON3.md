@@ -13,7 +13,7 @@ harness, and the cross-container test harness immediately — none of it waits o
 - Only `web` is exposed (host 8000 → 5000); `ai` + `db` internal.
 
 ## Mandatory (course — graded)
-- **docker-compose** (the base 3-container file already exists — extend it) — healthchecks, only `web` published (host 8000, never 5000).
+- **docker-compose** — the base 3-container file already exists with healthchecks **and fault-tolerance hardening in place** (restart policies + `start_period` + `web` boots even if `ai` is down — Lior), so **extend** it (don't redo it): your additions are the **test-runner service**, the **deploy job**, and **scaling** (replicas/workers). Only `web` published (host 8000, never 5000).
 - **`docker-compose.test.yml`** — a second compose for the test run (`TESTING=1`).
 - **Never commit `.env`** (commit `.env.example`).
 - **Rate limiting** (flask-limiter) on the public endpoints; defend against spammers.
