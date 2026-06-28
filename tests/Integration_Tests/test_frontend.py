@@ -54,6 +54,15 @@ def test_ui_polish_present(client):
     assert 'aria-live="polite"' in html            # flash messages announced to assistive tech
 
 
+def test_register_has_credential_requirement_tooltips(client):
+    # hover/focus info icons show the real validator bounds (auth.py: 3-64 / 8-256).
+    html = client.get("/").get_data(as_text=True)
+    assert 'class="info"' in html
+    assert "3–64 characters" in html
+    assert "8–256 characters" in html
+    assert 'aria-label="Username must be 3 to 64 characters"' in html  # screen-reader text
+
+
 def test_dark_mode_and_a11y_present(client):
     # dark mode done right (declared scheme + light-mode adaptation) + keyboard/label a11y.
     html = client.get("/").get_data(as_text=True)

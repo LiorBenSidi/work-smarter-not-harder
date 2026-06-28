@@ -34,6 +34,9 @@
     .pill { display:inline-block; padding: 3px 10px; border-radius: 999px; font-size: 12px; background:var(--field); border:1px solid var(--line); color: var(--muted); }
     ul { margin: 8px 0 0; padding-left: 18px; } li { margin: 4px 0; }
     .muted { color: var(--muted); font-size: 13px; }
+    .info { position:relative; display:inline-flex; align-items:center; justify-content:center; width:15px; height:15px; margin-left:6px; border-radius:50%; background:var(--accent); color:var(--on-accent); font-size:10px; font-weight:700; font-style:normal; cursor:help; vertical-align:middle; }
+    .info .tip { position:absolute; top:150%; left:0; white-space:nowrap; background:var(--card); color:var(--ink); border:1px solid var(--line); border-radius:6px; padding:6px 9px; font-size:12px; font-weight:400; text-transform:none; letter-spacing:0; box-shadow:0 6px 18px rgba(0,0,0,.35); opacity:0; pointer-events:none; transition:opacity .12s; z-index:20; }
+    .info:hover .tip, .info:focus-visible .tip, .info:focus .tip { opacity:1; }
     button:disabled { opacity:.55; cursor:not-allowed; }
     :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
     [hidden] { display:none !important; }
@@ -65,8 +68,8 @@
         </form>
 
         <form id="register-form" hidden>
-          <label for="reg-username">Username</label><input id="reg-username" name="username" autocomplete="username" required>
-          <label for="reg-password">Password (min 8 chars)</label><input id="reg-password" name="password" type="password" autocomplete="new-password" required>
+          <label for="reg-username">Username<span class="info" tabindex="0" role="note" aria-label="Username must be 3 to 64 characters">i<span class="tip" aria-hidden="true">3–64 characters</span></span></label><input id="reg-username" name="username" autocomplete="username" minlength="3" maxlength="64" required>
+          <label for="reg-password">Password (min 8 chars)<span class="info" tabindex="0" role="note" aria-label="Password must be 8 to 256 characters">i<span class="tip" aria-hidden="true">8–256 characters</span></span></label><input id="reg-password" name="password" type="password" autocomplete="new-password" minlength="8" maxlength="256" required>
           <div style="margin-top:14px"><button type="submit">Create account</button></div>
           <div id="register-flash" class="flash" aria-live="polite"></div>
         </form>
