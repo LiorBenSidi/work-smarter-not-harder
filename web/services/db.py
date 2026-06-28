@@ -1,20 +1,34 @@
 """MongoDB data layer (pymongo).
 
 OWNERSHIP: the **thin core CRUD** below (the seam the web tier calls — users / profiles / history /
-forum) is Lior's; the **Mongo container**, indexes/schema tuning, the Forum real-time backbone
-(notifications / DM / media / seeding) and rate-limiting stay Elad's. See docs/COLLABORATORS.md.
+forum) + its own unique-constraint indexes (``ensure_indexes``) are Lior's; the **Mongo container**
+and schema/perf tuning, the Forum real-time backbone (notifications / DM / media / seeding) and
+rate-limiting stay Elad's. See docs/COLLABORATORS.md.
 
 The web stores (web/app.py ``_Db*`` classes) call these functions with the db handle from ``get_db``.
 Inputs are already type-validated at the route layer (NoSQL-injection defense) before they reach here.
 Collections (DESIGN.md §2): ``users``, ``profiles``, ``analysis_history``, ``forum_posts``.
 """
+import logging
 import threading
 import uuid
 
 from pymongo import MongoClient
 
+logger = logging.getLogger(__name__)
+
 _client = None
 _client_lock = threading.Lock()
+
+
+def ensure_indexes(db):
+    """Create the unique constraints the CRUD relies on (idempotent — safe to call repeatedly).
+
+    A unique index on ``users.username`` is defence-in-depth behind ``create_user``'s atomic upsert
+    (also guards against direct DB writes), and ``forum_posts.id`` keeps the opaque post ids unique.
+    """
+    db.users.create_index("username", unique=True)
+    db.forum_posts.create_index("id", unique=True)
 
 
 def get_db(mongo_uri):
@@ -22,13 +36,19 @@ def get_db(mongo_uri):
 
     The client is built once under a lock (double-checked) so concurrent first-requests under a
     threaded/multi-worker server don't each open a connection pool. ``serverSelectionTimeoutMS`` makes
-    a down Mongo fail fast (~5s) so the routes' try/except degrades to 503 instead of hanging.
+    a down Mongo fail fast (~5s) so the routes' try/except degrades to 503 instead of hanging. Indexes
+    are ensured best-effort on first connect — if Mongo isn't ready yet it's logged and skipped, never
+    fatal (the app-level checks still hold).
     """
     global _client
     if _client is None:
         with _client_lock:
             if _client is None:
                 _client = MongoClient(mongo_uri, serverSelectionTimeoutMS=5000)
+                try:
+                    ensure_indexes(_client.get_default_database())
+                except Exception:
+                    logger.warning("index creation deferred — Mongo not ready", exc_info=True)
     return _client.get_default_database()
 
 
