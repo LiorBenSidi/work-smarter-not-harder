@@ -7,8 +7,8 @@
 | Person | GitHub | Owns | Roadmap |
 |---|---|---|---|
 | **Shiri** | `shiriHaboob` | **AI brain** — model, `/predict`, recommendation engine, the dataset, the Forum cold-seed generator | [PERSON1.md](PERSON1.md) |
-| **Lior** | `LiorBenSidi` | **Web app + observability + container/CI plumbing** — the Flask **backend** (API · auth/sessions · validation · orchestration of ai+db) + the frontend + the **thin core data-layer CRUD** (`services/db.py`) + **Week-9 logging/observability** + the **`web`/`ai` container build & compose fault-tolerance** + the **CI gate** (ruff→bandit→pytest; the banked +5 of the CI/CD +10) | [PERSON2.md](PERSON2.md) |
-| **Elad** | `EladNa1` | **Running infra + deploy + Mongo + real-time** — running the **Mongo container** (schema / perf-indexes / auth / volume), rate-limit (flask-limiter), **Azure deploy** (the deploy +5 of CI/CD) + the test-runner service, the **Forum real-time layer** (notifications / DM / media / seeding store) + stress / cross-container tests | [PERSON3.md](PERSON3.md) |
+| **Lior** | `LiorBenSidi` | **Web app + observability + data/container/CI plumbing** — the Flask **backend** (API · auth/sessions · validation · orchestration of ai+db) + the frontend + the **data layer & Mongo internals** (`services/db.py` thin CRUD, indexes, `$jsonSchema` validators, env-gated auth wiring, `db/seed.py`) + **Week-9 logging/observability** + the **`web`/`ai` container build & compose fault-tolerance** + the **CI gate** (the banked +5 of CI/CD) | [PERSON2.md](PERSON2.md) |
+| **Elad** | `EladNa1` | **Deploy + real-time + prod ops** — **Azure deploy** (the deploy +5 of CI/CD) + the test-runner service, **operating Mongo in prod** (least-privilege app user, backups / retention), rate-limit (flask-limiter), the **Forum real-time layer** (notifications / DM / media) + stress / cross-container tests | [PERSON3.md](PERSON3.md) |
 | **Shared** | all three | **Tests** — each owns their plane's unit tests; all run in the one CI; Elad anchors integration/system/stress | — |
 
 Roles are **containers/aspects**, not a rigid feature list — see "Freedom" below.

@@ -9,7 +9,7 @@ The course grades the **backend**, and `web` is the application backend:
 - **Auth + sessions** — werkzeug hashing, login/session/token handling, the auth-gate decorator.
 - **Request handling + validation** — parse and validate input (reject bad types) before it reaches `db`.
 - **Orchestration** — call the AI (`ai_client` → `/predict`) and the DB (`db.py`), combine the results, and degrade gracefully when either is down (don't crash).
-- **Thin core data-layer CRUD** (`services/db.py`) — the users/profiles/history/forum functions `web` calls. (The Mongo **container** + schema/indexes are Elad's.)
+- **Data layer + Mongo internals** (`services/db.py`, `db/seed.py`) — the users/profiles/history/forum CRUD `web` calls, plus the indexes, `$jsonSchema` validators, auth wiring, and seed mechanism. (Operating Mongo in prod is Elad's.)
 - **Frontend** — the templates/UI on top; not graded, but it matters for the demo vote.
 
 ## Start now — unblocked on day 1
@@ -19,7 +19,7 @@ dashboard) against the in-memory fakes — in parallel, without waiting on the l
 
 ## Your contracts (fixed)
 - Call the AI via `services/ai_client.py` → `POST /predict`.
-- Read/write data via the `services/db.py` thin-CRUD functions (yours); the **Mongo container** + schema/indexes are Elad's.
+- Read/write data via the `services/db.py` thin-CRUD functions (yours); operating the **Mongo container** in prod is Elad's.
 - `web` is the only exposed container (host 8000 → 5000).
 
 ## Mandatory (course — graded)
@@ -39,12 +39,13 @@ dashboard) against the in-memory fakes — in parallel, without waiting on the l
 - [x] **Forum** — UI + post/comment/up-down-vote CRUD (anonymity, XSS-escaped) + **edit/delete your own post (author-only)**.
 - [x] **Thin core data-layer CRUD** (`services/db.py`) — users/profiles/history/forum fns + thread-safe `get_db` + `ensure_indexes` (unique constraints) + votes stored as a list (no username-keyed Mongo fields). **Concurrency-hardened** (atomic create-user dedupe, optimistic-concurrency vote, TOCTOU-safe edit/delete) + malformed-doc guards. In-memory fake for unit tests; a real-Mongo integration suite runs when a DB is up.
 - [x] **Week-9 logging** — `logging_config.py` (console + rotating file, `ENABLE_LOGGING`/`LOG_LEVEL`, per-request access log with timing) wired at the gunicorn entrypoint (`wsgi.py`).
-- [x] **Container build/run** — `web` (+ `ai`) Dockerfile + the runnable 3-container compose; fault-tolerance hardening on the shared compose (restart policies, healthcheck `start_period`, `web` boots and degrades even if `ai` is down). *(The Mongo container internals + Azure deploy/CD remain Elad's.)*
+- [x] **Container build/run** — `web` (+ `ai`) Dockerfile + the runnable 3-container compose; fault-tolerance hardening on the shared compose (restart policies, healthcheck `start_period`, `web` boots and degrades even if `ai` is down). *(Operating Mongo in prod + Azure deploy/CD remain Elad's.)*
 - [x] **CI gate** — `.github/workflows/ci.yml` (ruff → bandit → pytest) on every PR + branch-protected `main` + a local pre-commit hook. This is the **+5 CI-only half** of the CI/CD +10 (the Azure auto-deploy +5 is Elad's).
+- [x] **Mongo internals** — `ensure_indexes` (unique `users.username`/`forum_posts.id`/`profiles.username` + a `analysis_history.username` perf index), `ensure_schema` (`$jsonSchema` validators on all four collections — DB-layer defense), env-gated container **auth wiring** (compose + `.env.example`), and `db/seed.py` (idempotent cold-start seeding mechanism). *(Operating Mongo in prod — least-privilege user, backups — is Elad's; the cold-seed content is Shiri's.)*
 
 All gated/validated, adversarial + **mutation-tested**, independently QA-verified, live-browser-tested (dark/light/mobile). The web tier is feature-complete.
 
-**Next (Lior):** bring up the full stack + prove the data layer against a real Mongo (`test_db_mongo.py`), then integrate/regress as Shiri's model and Elad's deploy/Mongo/real-time land. Remaining cross-team work is theirs; I keep the web tier + its tests green as the pieces connect.
+**Done live (Lior):** the full 3-container stack runs end-to-end — `/health`, a real web→ai→db request path (**12/12** interactive E2E), the real-Mongo integration suite (**6/6**, incl. the validators + perf-indexes + seed), and Week-9 logging emitting in the container. **Next:** integrate/regress as Shiri's model and Elad's deploy/real-time land; I keep the web + data tiers green as the pieces connect.
 
 ## You own the decisions
 Page structure, server-rendered vs JS frontend, session vs token, the API shape — your call. Keep the contracts + mandatory items.
