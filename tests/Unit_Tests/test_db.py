@@ -76,6 +76,11 @@ class _FakeDB:
         self.profiles = _FakeColl()
         self.analysis_history = _FakeColl()
         self.forum_posts = _FakeColl()
+        self.commands = []                       # records db.command(...) calls (ensure_schema)
+
+    def command(self, command, value=None, **kwargs):
+        self.commands.append((command, value, kwargs))
+        return {"ok": 1}
 
 
 @pytest.fixture
@@ -83,11 +88,59 @@ def db():
     return _FakeDB()
 
 
-# ---- indexes ----
+# ---- indexes + schema ----
 def test_ensure_indexes_creates_unique_constraints(db_mod, db):
     db_mod.ensure_indexes(db)
-    assert ("username", True) in db.users.indexes        # unique username
-    assert ("id", True) in db.forum_posts.indexes        # unique forum post id
+    assert ("username", True) in db.users.indexes            # unique username
+    assert ("id", True) in db.forum_posts.indexes            # unique forum post id
+    assert ("username", True) in db.profiles.indexes         # one profile per user
+    assert ("username", False) in db.analysis_history.indexes  # perf (non-unique) per-user history scan
+
+
+def test_ensure_schema_applies_a_jsonschema_validator_to_every_collection(db_mod, db):
+    db_mod.ensure_schema(db)
+    targets = {value for (cmd, value, kw) in db.commands if cmd == "collMod"}
+    assert targets == {"users", "profiles", "analysis_history", "forum_posts"}
+    for (cmd, value, kw) in db.commands:
+        assert "$jsonSchema" in kw["validator"]              # each carries a shape validator
+
+
+def test_ensure_schema_skips_when_collmod_is_unauthorized(db_mod):
+    # a restricted user (no collMod rights) is skipped, not crashed, and never falls through to create (C1)
+    from pymongo.errors import OperationFailure
+
+    class _UnauthDB:
+        def __init__(self):
+            self.created = []
+
+        def command(self, *a, **k):
+            raise OperationFailure("not authorized", code=13)
+
+        def create_collection(self, name, **k):
+            self.created.append(name)
+
+    db = _UnauthDB()
+    db_mod.ensure_schema(db)                                  # must NOT raise
+    assert db.created == []                                   # and must NOT create_collection on a 13
+
+
+def test_ensure_schema_creates_collection_when_namespace_absent(db_mod):
+    # NamespaceNotFound (code 26) -> create the collection WITH the validator (C1/C2 path)
+    from pymongo.errors import OperationFailure
+
+    class _AbsentDB:
+        def __init__(self):
+            self.created = []
+
+        def command(self, *a, **k):
+            raise OperationFailure("ns not found", code=26)
+
+        def create_collection(self, name, **k):
+            self.created.append(name)
+
+    db = _AbsentDB()
+    db_mod.ensure_schema(db)
+    assert set(db.created) == {"users", "profiles", "analysis_history", "forum_posts"}
 
 
 # ---- users ----
