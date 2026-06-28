@@ -1,13 +1,90 @@
-"""Profile route — GET/POST the athlete profile. OWNER: Lior (route) + Elad (data layer).
+"""Profile routes — GET/POST /profile (gated). OWNER: Lior (F2 route; Elad owns the db side).
 
-The route lives in `web`; the data access is Elad's `services/db.py`. Mandatory: validate input
-before any Mongo query (NoSQL-injection defense). Implement behind this URL.
+The current user's profile (docs/DESIGN.md §2: age, gender, height, weight, goal,
+training_frequency). Input is validated + injection-safe before any query; the profile store is
+injected (``app.config["PROFILES"]`` — the web->db seam: ``.get`` / ``.save``).
 """
-from flask import Blueprint, jsonify
+import logging
+
+from flask import Blueprint, current_app, jsonify, request, session
+
+from routes.auth import login_required
+
+logger = logging.getLogger(__name__)
 
 profile_bp = Blueprint("profile", __name__)
 
+GOALS = {"lose", "maintain", "gain"}
 
-@profile_bp.route("/profile", methods=["GET", "POST"])
-def profile():
-    return jsonify(detail="profile not implemented yet"), 501
+
+def validate_profile(data):
+    """Return a clean profile dict for a well-formed payload, else raise ``ValueError``.
+
+    Every field is type- and range-checked; non-primitive values (e.g. a ``{"$gt": ""}`` injection
+    object) are rejected before any query. ``bool`` is explicitly excluded from the numeric fields
+    (it is an ``int`` subclass in Python).
+    """
+    if not isinstance(data, dict):
+        raise ValueError("expected a JSON object")
+
+    def _int(name, lo, hi):
+        value = data.get(name)
+        if isinstance(value, bool) or not isinstance(value, int):
+            raise ValueError(f"{name} must be an integer")
+        if not lo <= value <= hi:
+            raise ValueError(f"{name} must be {lo}-{hi}")
+        return value
+
+    def _number(name, lo, hi):
+        value = data.get(name)
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise ValueError(f"{name} must be a number")
+        if not lo <= value <= hi:
+            raise ValueError(f"{name} must be {lo}-{hi}")
+        return value
+
+    gender = data.get("gender")
+    if not isinstance(gender, str) or not 1 <= len(gender.strip()) <= 32:
+        raise ValueError("gender must be a short string")
+    goal = data.get("goal")
+    if not isinstance(goal, str) or goal not in GOALS:
+        raise ValueError(f"goal must be one of {sorted(GOALS)}")
+
+    return {
+        "age": _int("age", 10, 120),
+        "gender": gender.strip(),
+        "height": _number("height", 50, 300),
+        "weight": _number("weight", 20, 500),
+        "goal": goal,
+        "training_frequency": _int("training_frequency", 0, 14),
+    }
+
+
+def _profiles():
+    return current_app.config["PROFILES"]
+
+
+@profile_bp.get("/profile")
+@login_required
+def get_profile():
+    try:
+        profile = _profiles().get(session["username"])
+    except Exception:
+        logger.exception("profile store unavailable during get")
+        return jsonify(error="profile store unavailable"), 503
+    return jsonify(profile=profile), 200
+
+
+@profile_bp.post("/profile")
+@login_required
+def save_profile():
+    try:
+        clean = validate_profile(request.get_json(silent=True))
+    except ValueError as exc:
+        return jsonify(error=str(exc)), 400
+    try:
+        _profiles().save(session["username"], clean)
+    except Exception:
+        logger.exception("profile store unavailable during save")
+        return jsonify(error="profile store unavailable"), 503
+    return jsonify(status="saved", profile=clean), 200

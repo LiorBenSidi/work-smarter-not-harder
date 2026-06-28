@@ -1,7 +1,7 @@
 """Web container — the ONLY user-facing service. OWNER: Lior (auth + dashboard + frontend).
 
-App-factory that registers the route blueprints. `/health` is live and auth (F1) is implemented;
-the remaining feature routes are 501 stubs behind their final URLs for their owners to fill in.
+App-factory that registers the route blueprints. `/health` is live; auth (F1) + profile (F2) are
+implemented; the dashboard route is a 501 stub behind its final URL.
 """
 import logging
 import secrets
@@ -40,7 +40,30 @@ class _DbUsers:
         return db_module.create_user(handle, username, password_hash)
 
 
-def create_app(config=Config, *, users=None):
+class _DbProfiles:
+    """Default profile store — delegates to the data layer (services/db.py, owned by Elad).
+
+    The web->db seam Elad implements: ``get_profile(db, username) -> record | None`` and
+    ``save_profile(db, username, profile)``. Resolved lazily (same rationale as _DbUsers).
+    """
+
+    def __init__(self, app):
+        self._app = app
+
+    def _resolve(self):
+        from services import db as db_module
+        return db_module, db_module.get_db(self._app.config["MONGO_URI"])
+
+    def get(self, username):
+        db_module, handle = self._resolve()
+        return db_module.get_profile(handle, username)
+
+    def save(self, username, profile):
+        db_module, handle = self._resolve()
+        return db_module.save_profile(handle, username, profile)
+
+
+def create_app(config=Config, *, users=None, profiles=None):
     app = Flask(__name__)
     app.config.from_object(config)
 
@@ -51,9 +74,10 @@ def create_app(config=Config, *, users=None):
         app.config["SECRET_KEY"] = secrets.token_hex(32)
         logger.warning("SECRET_KEY not set — using an ephemeral key (set SECRET_KEY in production)")
 
-    # Injectable user store (the web->db seam: .get / .add). Tests inject an in-memory fake;
-    # production falls back to the db.py-backed store.
+    # Injectable data-access stores (the web->db seam). Tests inject in-memory fakes; production
+    # falls back to the db.py-backed stores.
     app.config["USERS"] = users if users is not None else _DbUsers(app)
+    app.config["PROFILES"] = profiles if profiles is not None else _DbProfiles(app)
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(profile_bp)
