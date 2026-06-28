@@ -50,7 +50,10 @@ def seed(mongo_uri):
         db_mod.ensure_indexes(db)
         db_mod.ensure_schema(db)
         logger.info("indexes + validators applied")
-        if db.forum_posts.count_documents({}) == 0:
+        # bounded existence check (don't full-count a large forum). Run a SINGLE seeder — two concurrent
+        # runs could both see an empty forum and double-seed (the post ids are random, so the unique
+        # index won't dedupe them); for the demo/init this is a one-shot step.
+        if db.forum_posts.count_documents({}, limit=1) == 0:
             for author, title, body in SEED_POSTS:
                 db_mod.forum_create_post(db, author, title, body, False)
             logger.info("seeded %d starter forum posts", len(SEED_POSTS))

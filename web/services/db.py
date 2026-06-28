@@ -14,7 +14,7 @@ import threading
 import uuid
 
 from pymongo import MongoClient
-from pymongo.errors import DuplicateKeyError, OperationFailure
+from pymongo.errors import CollectionInvalid, DuplicateKeyError, OperationFailure
 
 logger = logging.getLogger(__name__)
 
@@ -42,7 +42,9 @@ def ensure_indexes(db):
 # Document-shape validators ($jsonSchema) — defence-in-depth behind the route-layer validation: the DB
 # itself rejects a structurally-wrong document (a direct write, a buggy migration). Only the load-bearing
 # string fields are required/typed; score/comments/votes pass as unconstrained extra fields so every real
-# CRUD write validates. validationLevel "moderate" => validate inserts + updates-to-already-valid docs.
+# CRUD write validates. validationLevel "strict" => validate ALL inserts AND updates (a later bad write to
+# a legacy-invalid doc is rejected too) — our real writes are all valid, so nothing legitimate is blocked.
+_NAMESPACE_NOT_FOUND = 26      # MongoDB OperationFailure code: the collection doesn't exist yet
 _SCHEMAS = {
     "users": {"bsonType": "object", "required": ["username", "password_hash"],
               "properties": {"username": {"bsonType": "string"}, "password_hash": {"bsonType": "string"}}},
@@ -57,18 +59,30 @@ _SCHEMAS = {
 
 
 def ensure_schema(db):
-    """Apply the $jsonSchema validators to every collection (idempotent).
+    """Apply the $jsonSchema validators to every collection (idempotent, best-effort, race-tolerant).
 
-    ``collMod`` on an existing collection, else create it with the validator. Best-effort at the call
-    site: a restricted app user without ``collMod`` rights simply skips this (the route-layer validation
-    still holds); an admin / the seed script applies it for real.
+    Per collection: ``collMod`` it; if it doesn't exist yet (NamespaceNotFound), create it with the
+    validator; if a concurrent writer auto-created it in between, fall back to ``collMod``. Any OTHER
+    failure (e.g. a restricted app user without ``collMod`` rights, or a view) is logged and skipped —
+    the route-layer validation still holds, and an admin / the seed script applies it for real. So one
+    unprivileged or unusual collection never aborts provisioning for the rest.
     """
     for name, schema in _SCHEMAS.items():
         validator = {"$jsonSchema": schema}
         try:
-            db.command("collMod", name, validator=validator, validationLevel="moderate")
-        except OperationFailure:
-            db.create_collection(name, validator=validator, validationLevel="moderate")
+            db.command("collMod", name, validator=validator, validationLevel="strict")
+            continue
+        except OperationFailure as exc:
+            if getattr(exc, "code", None) != _NAMESPACE_NOT_FOUND:
+                logger.warning("schema validator skipped for %s (not authorized / not a collection)", name)
+                continue
+        try:                                                  # collection absent -> create it with the validator
+            db.create_collection(name, validator=validator, validationLevel="strict")
+        except (CollectionInvalid, OperationFailure):         # raced a concurrent auto-create -> collMod instead
+            try:
+                db.command("collMod", name, validator=validator, validationLevel="strict")
+            except OperationFailure:
+                logger.warning("schema validator skipped for %s", name)
 
 
 def get_db(mongo_uri):
@@ -86,11 +100,12 @@ def get_db(mongo_uri):
             if _client is None:
                 _client = MongoClient(mongo_uri, serverSelectionTimeoutMS=5000)
                 try:
-                    handle = _client.get_default_database()
-                    ensure_indexes(handle)
-                    ensure_schema(handle)
+                    ensure_indexes(_client.get_default_database())
                 except Exception:
-                    logger.warning("index/schema setup deferred — Mongo not ready", exc_info=True)
+                    logger.warning("index creation deferred — Mongo not ready", exc_info=True)
+                # Note: the $jsonSchema validators (ensure_schema) are NOT applied per-connect — collMod
+                # takes a collection lock, so running it on every worker's boot is a needless storm. The
+                # seed/provisioning step (db/seed.py) applies them once. Indexes are cheap, so they stay.
     return _client.get_default_database()
 
 
