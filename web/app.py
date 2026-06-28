@@ -12,6 +12,7 @@ from flask import Flask, jsonify, render_template
 from config import Config
 from csrf import init_csrf
 from routes.auth import auth_bp
+from routes.checkin import checkin_bp
 from routes.dashboard import dashboard_bp
 from routes.forum import forum_bp
 from routes.history import history_bp
@@ -61,11 +62,15 @@ class _DbProfiles(_DbStore):
 
 
 class _DbHistory(_DbStore):
-    """Seam Elad implements: ``list_history(db, username) -> list``."""
+    """Seam fns: ``list_history(db, username) -> list`` / ``add_history(db, username, entry)``."""
 
     def list(self, username):
         db_module, handle = self._resolve()
         return db_module.list_history(handle, username)
+
+    def add(self, username, entry):
+        db_module, handle = self._resolve()
+        db_module.add_history(handle, username, entry)
 
 
 class _DbForum(_DbStore):
@@ -117,6 +122,7 @@ def create_app(config=Config, *, users=None, profiles=None, history=None, forum=
     app.register_blueprint(profile_bp)
     app.register_blueprint(dashboard_bp)
     app.register_blueprint(history_bp)
+    app.register_blueprint(checkin_bp)
     app.register_blueprint(forum_bp)
 
     init_csrf(app)  # double-submit CSRF on all state-changing requests

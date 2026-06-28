@@ -1,0 +1,80 @@
+"""Integration tests for the daily check-in flow (F3 input). OWNER: Lior.
+
+POST /checkin validates today's metrics, forwards them (+ profile context) to the ai container, and
+records the assessment in analysis_history. It degrades gracefully when the ai container is down
+(the check-in is still saved, assessment unavailable) and is auth-gated. `ai_client.predict` is mocked.
+"""
+import sys
+
+
+def _login(c, username="alice"):
+    c.post("/register", json={"username": username, "password": "s3cretpw!"})
+    c.post("/login", json={"username": username, "password": "s3cretpw!"})
+
+
+def _metrics():
+    return {"sleep_hours": 7.5, "resting_hr": 55, "fatigue": 3, "soreness": 2, "training_load": 6}
+
+
+def _set_predict(monkeypatch, result):
+    monkeypatch.setattr(sys.modules["services.ai_client"], "predict", lambda url, features, **kw: result)
+
+
+def _client(make_client, fake_users, fake_profiles, fake_history):
+    return make_client(fake_users, fake_profiles, history=fake_history)
+
+
+def test_checkin_saves_assessment_to_history(make_client, fake_users, fake_profiles, fake_history, monkeypatch):
+    _set_predict(monkeypatch, {"state": "Ready", "calories": 2200})
+    c = _client(make_client, fake_users, fake_profiles, fake_history)
+    _login(c)
+    resp = c.post("/checkin", json=_metrics())
+    assert resp.status_code == 201
+    body = resp.get_json()
+    assert body["ai_status"] == "ok"
+    assert body["entry"]["assessment"] == "Ready"
+    assert body["entry"]["calories"] == 2200
+    assert body["entry"]["timestamp"]                       # a timestamp was stamped
+    # the entry is now in history, in the shape /history renders
+    hist = c.get("/history").get_json()["history"]
+    assert len(hist) == 1
+    assert hist[0]["assessment"] == "Ready"
+
+
+def test_checkin_requires_login(make_client, fake_users, fake_profiles, fake_history):
+    c = _client(make_client, fake_users, fake_profiles, fake_history)
+    assert c.post("/checkin", json=_metrics()).status_code == 401
+
+
+def test_checkin_rejects_bad_metrics_400(make_client, fake_users, fake_profiles, fake_history):
+    c = _client(make_client, fake_users, fake_profiles, fake_history)
+    _login(c)
+    assert c.post("/checkin", json={"sleep_hours": 7.5}).status_code == 400          # missing fields
+    assert c.post("/checkin", json={**_metrics(), "fatigue": {"$gt": ""}}).status_code == 400  # injection
+
+
+def test_checkin_still_saved_when_ai_down(make_client, fake_users, fake_profiles, fake_history, monkeypatch):
+    _set_predict(monkeypatch, None)  # ai unreachable
+    c = _client(make_client, fake_users, fake_profiles, fake_history)
+    _login(c)
+    resp = c.post("/checkin", json=_metrics())
+    assert resp.status_code == 201                          # graceful, not a crash
+    body = resp.get_json()
+    assert body["ai_status"] == "unavailable"
+    assert body["entry"]["assessment"] is None
+    assert c.get("/history").get_json()["history"][0]["metrics"]["sleep_hours"] == 7.5  # metrics still recorded
+
+
+class _BrokenHistory:
+    def list(self, *a):
+        return []
+
+    def add(self, *a):
+        raise RuntimeError("down")
+
+
+def test_checkin_degrades_to_503_when_history_store_fails(make_client, fake_users, fake_profiles, monkeypatch):
+    _set_predict(monkeypatch, {"state": "Ready"})
+    c = make_client(fake_users, fake_profiles, history=_BrokenHistory())
+    _login(c)
+    assert c.post("/checkin", json=_metrics()).status_code == 503

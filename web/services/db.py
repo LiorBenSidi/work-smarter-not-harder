@@ -83,10 +83,15 @@ def save_profile(db, username, profile):
     db.profiles.update_one({"username": username}, {"$set": {"profile": profile}}, upsert=True)
 
 
-# ---- history (F8 seam, read-only; writes land with the check-in flow) ----
+# ---- history (F8 read + the check-in write) ----
 def list_history(db, username):
     """Return the user's analysis-history entries (oldest-first insertion order)."""
     return [doc["entry"] for doc in db.analysis_history.find({"username": username})]
+
+
+def add_history(db, username, entry):
+    """Append one analysis-history entry for the user (written by the daily check-in)."""
+    db.analysis_history.insert_one({"username": username, "entry": entry})
 
 
 # ---- forum (CRUD seam; real-time push + seeding stay Elad's) ----
