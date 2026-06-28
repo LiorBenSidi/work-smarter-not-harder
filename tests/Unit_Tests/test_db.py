@@ -170,3 +170,20 @@ def test_forum_votes_aggregate_across_users(db_mod, db):
 
 def test_forum_vote_on_missing_post_is_none(db_mod, db):
     assert db_mod.forum_vote(db, "nope", "alice", 1) is None
+
+
+def test_votes_are_stored_as_a_list_not_keyed_by_username(db_mod, db):
+    # votes must be a list of {user, value} — NOT a dict keyed by username (usernames can contain
+    # '.'/'$', which are illegal/fragile MongoDB field names). Catches a regression to the dict form.
+    pid = db_mod.forum_create_post(db, "alice", "T", "B", False)["id"]
+    db_mod.forum_vote(db, pid, "bob.smith", 1)
+    raw = db.forum_posts.find_one({"id": pid})
+    assert isinstance(raw["votes"], list)
+    assert raw["votes"] == [{"user": "bob.smith", "value": 1}]
+
+
+def test_forum_vote_handles_dotted_or_dollar_usernames(db_mod, db):
+    pid = db_mod.forum_create_post(db, "alice", "T", "B", False)["id"]
+    assert db_mod.forum_vote(db, pid, "bob.smith", 1) == 1
+    assert db_mod.forum_vote(db, pid, "$admin", 1) == 2        # distinct users sum
+    assert db_mod.forum_vote(db, pid, "bob.smith", -1) == 0    # same user replaces (1 -> -1)

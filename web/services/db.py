@@ -91,7 +91,7 @@ def list_history(db, username):
 
 # ---- forum (CRUD seam; real-time push + seeding stay Elad's) ----
 def _shape(post):
-    """Public projection of a forum post — drops the raw _id and the internal votes map."""
+    """Public projection of a forum post — drops the raw _id and the internal votes list."""
     return {"id": post["id"], "author": post["author"], "anonymous": post.get("anonymous", False),
             "title": post["title"], "body": post["body"],
             "score": post.get("score", 0), "comments": post.get("comments", [])}
@@ -100,7 +100,7 @@ def _shape(post):
 def forum_create_post(db, author, title, body, anonymous):
     """Insert a post and return its public shape (opaque string id)."""
     post = {"id": uuid.uuid4().hex, "author": author, "anonymous": anonymous,
-            "title": title, "body": body, "score": 0, "comments": [], "votes": {}}
+            "title": title, "body": body, "score": 0, "comments": [], "votes": []}
     db.forum_posts.insert_one(post)
     return _shape(post)
 
@@ -124,12 +124,17 @@ def forum_add_comment(db, post_id, author, body):
 
 
 def forum_vote(db, post_id, username, value):
-    """Record one vote per user (re-voting replaces) and return the new score, or None if unknown."""
+    """Record one vote per user (re-voting replaces) and return the new score, or None if unknown.
+
+    Votes are stored as a LIST of ``{"user", "value"}`` — never a dict keyed by username, since a
+    username may contain ``.`` or ``$`` (the validator only bounds length), which are illegal/fragile
+    as MongoDB field names.
+    """
     post = db.forum_posts.find_one({"id": post_id})
     if post is None:
         return None
-    votes = post.get("votes", {})
-    votes[username] = value
-    score = sum(votes.values())
+    votes = [v for v in post.get("votes", []) if v.get("user") != username]  # drop this user's prior vote
+    votes.append({"user": username, "value": value})
+    score = sum(v["value"] for v in votes)
     db.forum_posts.update_one({"id": post_id}, {"$set": {"votes": votes, "score": score}})
     return score
