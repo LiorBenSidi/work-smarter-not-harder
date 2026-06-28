@@ -9,16 +9,17 @@ The course grades the **backend**, and `web` is the application backend:
 - **Auth + sessions** — werkzeug hashing, login/session/token handling, the auth-gate decorator.
 - **Request handling + validation** — parse and validate input (reject bad types) before it reaches `db`.
 - **Orchestration** — call the AI (`ai_client` → `/predict`) and the DB (`db.py`), combine the results, and degrade gracefully when either is down (don't crash).
+- **Thin core data-layer CRUD** (`services/db.py`) — the users/profiles/history/forum functions `web` calls. (The Mongo **container** + schema/indexes are Elad's.)
 - **Frontend** — the templates/UI on top; not graded, but it matters for the demo vote.
 
 ## Start now — unblocked on day 1
 `web` already calls the `ai /predict` stub (which returns the real contract) via `services/ai_client.py`, and reads/writes
-data through Elad's `services/db.py` functions. So you can build the backend (auth, the API routes, the dashboard) against
-those stubs — in parallel, without waiting on the real model or DB code.
+data through the `services/db.py` thin-CRUD functions (yours). So you can build the backend (auth, the API routes, the
+dashboard) against the in-memory fakes — in parallel, without waiting on the live Mongo container.
 
 ## Your contracts (fixed)
 - Call the AI via `services/ai_client.py` → `POST /predict`.
-- Read/write data via Elad's `services/db.py` functions (e.g. `create_user`, `get_profile`) — don't write Mongo queries yourself.
+- Read/write data via the `services/db.py` thin-CRUD functions (yours); the **Mongo container** + schema/indexes are Elad's.
 - `web` is the only exposed container (host 8000 → 5000).
 
 ## Mandatory (course — graded)
@@ -35,6 +36,7 @@ those stubs — in parallel, without waiting on the real model or DB code.
 - [ ] **Dashboard (F7) + History (F8)** — current state (via `ai_client`), plan, calories, past analyses (via `db`).
 - [ ] **Frontend** — the `templates/` pages (or a JS frontend) + styling.
 - [ ] **Forum:** the UI + post/comment/vote CRUD.
+- [x] **Thin core data-layer CRUD** (`services/db.py`) — users/profiles/history/forum functions + thread-safe `get_db`; done, tested against an in-memory fake.
 
 ## You own the decisions
 Page structure, server-rendered vs JS frontend, session vs token, the API shape — your call. Keep the contracts + mandatory items.
