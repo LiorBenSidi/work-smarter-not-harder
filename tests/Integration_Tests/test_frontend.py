@@ -44,3 +44,11 @@ def test_forum_list_escapes_post_id(client):
     # post id is interpolated into a data-id HTML attribute; a store-supplied id must be escaped too.
     html = client.get("/").get_data(as_text=True)
     assert "escapeHtml(p.id)" in html
+
+
+def test_ui_polish_present(client):
+    # UX guards: responsive collapse, double-submit guard, and aria-live flash regions.
+    html = client.get("/").get_data(as_text=True)
+    assert "@media (max-width:" in html            # profile grid collapses on mobile
+    assert "btn.disabled = true" in html           # submit disabled while a request is in flight
+    assert 'aria-live="polite"' in html            # flash messages announced to assistive tech

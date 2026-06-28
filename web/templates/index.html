@@ -8,7 +8,7 @@
     :root { --bg:#0f1220; --card:#1a1f35; --ink:#e7e9f3; --muted:#9aa3c0; --accent:#6c8cff; --ok:#3ecf8e; --warn:#ffb454; --err:#ff6b6b; --line:#2a3052; }
     * { box-sizing: border-box; }
     body { margin:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background: var(--bg); color: var(--ink); }
-    header { padding: 18px 24px; border-bottom: 1px solid var(--line); display:flex; align-items:center; justify-content:space-between; }
+    header { padding: 18px 24px; border-bottom: 1px solid var(--line); display:flex; align-items:center; justify-content:space-between; flex-wrap: wrap; gap: 10px; }
     header h1 { font-size: 18px; margin:0; }
     main { max-width: 820px; margin: 0 auto; padding: 24px; }
     .card { background: var(--card); border:1px solid var(--line); border-radius: 12px; padding: 20px; margin-bottom: 18px; }
@@ -27,7 +27,9 @@
     .pill { display:inline-block; padding: 3px 10px; border-radius: 999px; font-size: 12px; background:#11152a; border:1px solid var(--line); color: var(--muted); }
     ul { margin: 8px 0 0; padding-left: 18px; } li { margin: 4px 0; }
     .muted { color: var(--muted); font-size: 13px; }
+    button:disabled { opacity:.55; cursor:not-allowed; }
     [hidden] { display:none !important; }
+    @media (max-width: 560px) { .row { grid-template-columns: 1fr; } main { padding: 16px; } }
   </style>
 </head>
 <body>
@@ -51,14 +53,14 @@
           <label>Username</label><input name="username" autocomplete="username" required>
           <label>Password</label><input name="password" type="password" autocomplete="current-password" required>
           <div style="margin-top:14px"><button type="submit">Log in</button></div>
-          <div id="login-flash" class="flash"></div>
+          <div id="login-flash" class="flash" aria-live="polite"></div>
         </form>
 
         <form id="register-form" hidden>
           <label>Username</label><input name="username" autocomplete="username" required>
           <label>Password (min 8 chars)</label><input name="password" type="password" autocomplete="new-password" required>
           <div style="margin-top:14px"><button type="submit">Create account</button></div>
-          <div id="register-flash" class="flash"></div>
+          <div id="register-flash" class="flash" aria-live="polite"></div>
         </form>
       </div>
     </section>
@@ -81,7 +83,7 @@
             <div><label>Training days / week</label><input name="training_frequency" type="number" min="0" max="14" required></div>
           </div>
           <div style="margin-top:14px"><button type="submit">Save profile</button></div>
-          <div id="profile-flash" class="flash"></div>
+          <div id="profile-flash" class="flash" aria-live="polite"></div>
         </form>
       </div>
 
@@ -102,7 +104,7 @@
           <textarea name="body" placeholder="Share something…" rows="2" required style="margin-top:8px;resize:vertical"></textarea>
           <label style="display:flex;align-items:center;gap:6px;margin-top:8px"><input type="checkbox" name="anonymous" style="width:auto"> Post anonymously</label>
           <div style="margin-top:8px"><button type="submit">Post</button></div>
-          <div id="forum-flash" class="flash"></div>
+          <div id="forum-flash" class="flash" aria-live="polite"></div>
         </form>
         <div id="forum-list"><p class="muted">Loading…</p></div>
         <div id="forum-detail" hidden></div>
@@ -143,17 +145,23 @@
 
     function flash(id, msg, kind = "error") { const el = $(id); el.textContent = msg || ""; el.className = "flash " + kind; }
 
+    // Disable the submit button while the request is in flight -> no double-submit (e.g. double posts).
+    function onSubmit(formId, handler) {
+      $(formId).addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const btn = e.target.querySelector("button[type=submit]");
+        if (btn) btn.disabled = true;
+        try { await handler(e.target); } finally { if (btn) btn.disabled = false; }
+      });
+    }
+
     // ---- Auth ----
-    $("login-form").addEventListener("submit", async (e) => {
-      e.preventDefault();
-      const f = e.target;
+    onSubmit("login-form", async (f) => {
       const r = await api("/login", { method: "POST", body: { username: f.username.value, password: f.password.value } });
       if (r.ok) { enterApp(r.data.username); } else { flash("login-flash", (r.data && r.data.error) || "Login failed"); }
     });
 
-    $("register-form").addEventListener("submit", async (e) => {
-      e.preventDefault();
-      const f = e.target;
+    onSubmit("register-form", async (f) => {
       const r = await api("/register", { method: "POST", body: { username: f.username.value, password: f.password.value } });
       if (r.ok) { flash("register-flash", "Account created — you can log in now.", "ok"); showTab("login"); }
       else { flash("register-flash", (r.data && r.data.error) || "Registration failed"); }
@@ -162,9 +170,7 @@
     $("logout-btn").addEventListener("click", async () => { await api("/logout", { method: "POST" }); showView("auth"); });
 
     // ---- Profile ----
-    $("profile-form").addEventListener("submit", async (e) => {
-      e.preventDefault();
-      const f = e.target;
+    onSubmit("profile-form", async (f) => {
       const body = {
         age: Number.parseInt(f.age.value, 10),
         gender: f.gender.value,
@@ -264,9 +270,8 @@
             : '<p class="muted">No comments yet.</p>')
         + '<form id="comment-form" style="margin-top:8px"><input name="body" placeholder="Add a comment" maxlength="2000" required>'
         + '<div style="margin-top:6px"><button type="submit">Comment</button></div></form></div>';
-      $("comment-form").addEventListener("submit", async (e) => {
-        e.preventDefault();
-        const cr = await api("/forum/posts/" + id + "/comments", { method: "POST", body: { body: e.target.body.value } });
+      onSubmit("comment-form", async (f) => {
+        const cr = await api("/forum/posts/" + id + "/comments", { method: "POST", body: { body: f.body.value } });
         if (cr.ok) openPost(id);
       });
     }
@@ -279,9 +284,7 @@
       if (r.ok) { openPost(currentPostId); loadForum(); }
     }
 
-    $("forum-form").addEventListener("submit", async (e) => {
-      e.preventDefault();
-      const f = e.target;
+    onSubmit("forum-form", async (f) => {
       const r = await api("/forum/posts", { method: "POST", body: { title: f.title.value, body: f.body.value, anonymous: f.anonymous.checked } });
       if (r.ok) { f.reset(); flash("forum-flash", "Posted.", "ok"); loadForum(); }
       else { flash("forum-flash", (r.data && r.data.error) || "Could not post"); }
