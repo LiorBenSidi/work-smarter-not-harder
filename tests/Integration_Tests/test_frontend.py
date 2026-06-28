@@ -38,3 +38,9 @@ def test_history_escapes_entry_fields(client):
     assert "escapeHtml(it.assessment" in html
     assert "escapeHtml(it.timestamp" in html
     assert "escapeHtml(it.calories" in html
+
+
+def test_forum_list_escapes_post_id(client):
+    # post id is interpolated into a data-id HTML attribute; a store-supplied id must be escaped too.
+    html = client.get("/").get_data(as_text=True)
+    assert "escapeHtml(p.id)" in html

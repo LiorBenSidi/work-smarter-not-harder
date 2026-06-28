@@ -2,6 +2,22 @@
 import os
 
 
+def _int_env(name, default):
+    """Parse a positive int env var; fall back to `default` on a missing/garbage/<=0 value.
+
+    Runs at import time, so a typo (e.g. MAX_CONTENT_LENGTH=64kb) must NOT raise — that would kill
+    the worker on startup. Degrade to the safe default instead.
+    """
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    try:
+        value = int(raw)
+    except (TypeError, ValueError):
+        return default
+    return value if value > 0 else default
+
+
 class Config:
     SECRET_KEY = os.environ.get("SECRET_KEY", "")          # required in real runs (set via .env)
     MONGO_URI = os.environ.get("MONGO_URI", "mongodb://db:27017/worksmarter")
@@ -16,4 +32,4 @@ class Config:
     SESSION_COOKIE_SAMESITE = "Lax"
 
     # Cap request bodies (auth/profile are small JSON) -> a huge body is rejected (413) before parsing.
-    MAX_CONTENT_LENGTH = int(os.environ.get("MAX_CONTENT_LENGTH", str(64 * 1024)))
+    MAX_CONTENT_LENGTH = _int_env("MAX_CONTENT_LENGTH", 64 * 1024)
