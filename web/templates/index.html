@@ -99,6 +99,21 @@
       </div>
 
       <div class="card">
+        <h2>Daily check-in</h2>
+        <form id="checkin-form">
+          <div class="row">
+            <div><label for="sleep_hours">Sleep (hours)</label><input id="sleep_hours" name="sleep_hours" type="number" min="0" max="24" step="0.1" required></div>
+            <div><label for="resting_hr">Resting HR (bpm)</label><input id="resting_hr" name="resting_hr" type="number" min="30" max="220" required></div>
+            <div><label for="fatigue">Fatigue (1–10)</label><input id="fatigue" name="fatigue" type="number" min="1" max="10" required></div>
+            <div><label for="soreness">Soreness (1–10)</label><input id="soreness" name="soreness" type="number" min="1" max="10" required></div>
+            <div><label for="training_load">Training load (0–10)</label><input id="training_load" name="training_load" type="number" min="0" max="10" required></div>
+          </div>
+          <div style="margin-top:14px"><button type="submit">Submit check-in</button></div>
+          <div id="checkin-flash" class="flash" aria-live="polite"></div>
+        </form>
+      </div>
+
+      <div class="card">
         <h2>Dashboard — readiness <button id="dashboard-refresh" class="ghost" style="padding:5px 10px">Refresh</button></h2>
         <div id="dashboard"><p class="muted">Loading…</p></div>
       </div>
@@ -193,6 +208,20 @@
       const r = await api("/profile", { method: "POST", body });
       if (r.ok) { flash("profile-flash", "Saved.", "ok"); loadDashboard(); }
       else { flash("profile-flash", (r.data && r.data.error) || "Could not save profile"); }
+    });
+
+    // ---- Daily check-in ----
+    onSubmit("checkin-form", async (f) => {
+      const body = {
+        sleep_hours: Number(f.sleep_hours.value),
+        resting_hr: Number.parseInt(f.resting_hr.value, 10),
+        fatigue: Number.parseInt(f.fatigue.value, 10),
+        soreness: Number.parseInt(f.soreness.value, 10),
+        training_load: Number.parseInt(f.training_load.value, 10),
+      };
+      const r = await api("/checkin", { method: "POST", body });
+      if (r.ok) { flash("checkin-flash", "Check-in saved.", "ok"); f.reset(); loadDashboard(); loadHistory(); }
+      else { flash("checkin-flash", (r.data && r.data.error) || "Could not save check-in"); }
     });
 
     async function loadProfile() {
