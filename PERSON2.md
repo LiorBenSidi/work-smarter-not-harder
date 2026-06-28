@@ -30,13 +30,15 @@ dashboard) against the in-memory fakes — in parallel, without waiting on the l
 - **`debug` flag** — `FLASK_DEBUG` is already read in `config.py`; make the app actually honour it (debug mode on when set).
 - **Tests run on any machine** — security (wrong pw → 401, gated-without-login → 401, injection rejected) + integration (register → login → dashboard).
 
-## Roadmap (build these — your way)
-- [ ] **Auth (F1)** — `/register` `/login` `/logout`; hash; sessions/tokens; an auth-gate decorator.
-- [ ] **Profile (F2)** — `/profile` route + page; save via `db`.
-- [ ] **Dashboard (F7) + History (F8)** — current state (via `ai_client`), plan, calories, past analyses (via `db`).
-- [ ] **Frontend** — the `templates/` pages (or a JS frontend) + styling.
-- [ ] **Forum:** the UI + post/comment/vote CRUD.
-- [x] **Thin core data-layer CRUD** (`services/db.py`) — users/profiles/history/forum functions + thread-safe `get_db`; done, tested against an in-memory fake.
+## Roadmap — web tier COMPLETE (2026-06-28)
+- [x] **Auth (F1)** — `/register` `/login` `/logout` `/me`; werkzeug hashing; session gate (`login_required`); constant-time login (no user-enumeration); injection-safe validation.
+- [x] **Profile (F2)** — `/profile` GET/POST + validation (ranges, bool/type gate).
+- [x] **Dashboard (F7) + History (F8)** — readiness via `ai_client` (degrades when AI down), calories, `/history`.
+- [x] **Frontend** — single-page UI + CSRF (double-submit) + responsive/dark-light theming + a11y (focus, labels, aria-live) + credential-requirement tooltips driven by `/auth/config`.
+- [x] **Forum** — UI + post/comment/up-down-vote CRUD (anonymity, XSS-escaped).
+- [x] **Thin core data-layer CRUD** (`services/db.py`) — users/profiles/history/forum fns + thread-safe `get_db` + `ensure_indexes` (unique constraints) + votes stored as a list (no username-keyed Mongo fields). Tested against an in-memory fake; a real-Mongo integration suite runs when a DB is up.
+
+All gated/validated, adversarial + **mutation-tested**, independently QA-verified, live-browser-tested. The only solo item left is the **daily check-in flow** — blocked on the AI contract (where the daily readiness inputs come from — Shiri).
 
 ## You own the decisions
 Page structure, server-rendered vs JS frontend, session vs token, the API shape — your call. Keep the contracts + mandatory items.

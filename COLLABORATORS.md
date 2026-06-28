@@ -38,7 +38,7 @@ step-by-step script.**
 cp .env.example .env
 docker compose up --build        # 3 containers; then open http://localhost:8000/health
 ```
-The skeleton is **runnable now** — `/health` works on all three; feature endpoints return **501** until their owner implements them.
+**Status:** the **web tier is fully implemented** (auth, profile, dashboard, history, frontend, CSRF, the Forum CRUD/UI) on the thin `db.py` CRUD. The `ai` `/predict` is a placeholder until Shiri's model lands, and `db` is a stock `mongo:7` (just needs `docker compose up`).
 
 ## Sync points (when to coordinate)
 1. **Kickoff** — confirm the split, run the stack, claim your PERSON file.
