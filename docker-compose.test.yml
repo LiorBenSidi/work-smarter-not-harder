@@ -1,0 +1,15 @@
+# Test-stack override — applied ON TOP of docker-compose.yml:
+#   docker compose -f docker-compose.yml -f docker-compose.test.yml up --build
+#
+# Brings the same 3 containers up in TESTING mode against a THROWAWAY database (`worksmarter_test`),
+# so a test run never touches dev/prod data. Only `web` stays exposed.
+#
+# This is the initial scaffold. The test-RUNNER service (a container that runs `pytest` against the
+# live stack — incl. the real-Mongo suite tests/Integration_Tests/test_db_mongo.py via
+# TEST_MONGO_URI=mongodb://db:27017/worksmarter_test) is Elad's to add: it depends on his Dockerfile /
+# how the tests are mounted into an image, which is his infra call.
+services:
+  web:
+    environment:
+      TESTING: "1"
+      MONGO_URI: mongodb://db:27017/worksmarter_test
