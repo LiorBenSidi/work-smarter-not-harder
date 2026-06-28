@@ -40,8 +40,11 @@ dashboard) against the in-memory fakes — in parallel, without waiting on the l
 - [x] **Thin core data-layer CRUD** (`services/db.py`) — users/profiles/history/forum fns + thread-safe `get_db` + `ensure_indexes` (unique constraints) + votes stored as a list (no username-keyed Mongo fields). **Concurrency-hardened** (atomic create-user dedupe, optimistic-concurrency vote, TOCTOU-safe edit/delete) + malformed-doc guards. In-memory fake for unit tests; a real-Mongo integration suite runs when a DB is up.
 - [x] **Week-9 logging** — `logging_config.py` (console + rotating file, `ENABLE_LOGGING`/`LOG_LEVEL`, per-request access log with timing) wired at the gunicorn entrypoint (`wsgi.py`).
 - [x] **Container build/run** — `web` (+ `ai`) Dockerfile + the runnable 3-container compose; fault-tolerance hardening on the shared compose (restart policies, healthcheck `start_period`, `web` boots and degrades even if `ai` is down). *(The Mongo container internals + Azure deploy/CD remain Elad's.)*
+- [x] **CI gate** — `.github/workflows/ci.yml` (ruff → bandit → pytest) on every PR + branch-protected `main` + a local pre-commit hook. This is the **+5 CI-only half** of the CI/CD +10 (the Azure auto-deploy +5 is Elad's).
 
-All gated/validated, adversarial + **mutation-tested**, independently QA-verified, live-browser-tested (dark/light/mobile). The web tier is feature-complete; remaining cross-team work is integration against Shiri's real model + Elad's deploy/Mongo/real-time.
+All gated/validated, adversarial + **mutation-tested**, independently QA-verified, live-browser-tested (dark/light/mobile). The web tier is feature-complete.
+
+**Next (Lior):** bring up the full stack + prove the data layer against a real Mongo (`test_db_mongo.py`), then integrate/regress as Shiri's model and Elad's deploy/Mongo/real-time land. Remaining cross-team work is theirs; I keep the web tier + its tests green as the pieces connect.
 
 ## You own the decisions
 Page structure, server-rendered vs JS frontend, session vs token, the API shape — your call. Keep the contracts + mandatory items.
