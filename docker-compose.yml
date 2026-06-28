@@ -8,7 +8,7 @@ services:
       - "8000:5000"                 # the ONLY published port
     environment:
       SECRET_KEY: ${SECRET_KEY:?set SECRET_KEY in .env}
-      MONGO_URI: mongodb://db:27017/worksmarter
+      MONGO_URI: ${MONGO_URI:-mongodb://db:27017/worksmarter}   # override with creds when DB auth is on
       AI_URL: http://ai:5000
       FLASK_DEBUG: ${FLASK_DEBUG:-0}
       TESTING: ${TESTING:-0}
@@ -41,9 +41,12 @@ services:
       retries: 5
       start_period: 30s
 
-  db:                               # MongoDB — internal only. Container infra ready (see db/README.md);
-    image: mongo:7                  # schema / perf indexes / auth / seeding WITHIN the DB = Elad.
+  db:                               # MongoDB — internal only. Indexes / validators / seeding live in
+    image: mongo:7                  # web/services/db.py + db/seed.py (see db/README.md).
     restart: unless-stopped         # recover from a crash on its own (the data lives in the volume)
+    environment:                    # auth is env-gated: BOTH blank -> no auth (local dev); set both ->
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_USER:-}     # mongo creates a root user and requires auth
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD:-} # (then point MONGO_URI at the creds — see .env.example)
     expose:
       - "27017"
     volumes:

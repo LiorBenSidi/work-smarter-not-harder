@@ -76,6 +76,11 @@ class _FakeDB:
         self.profiles = _FakeColl()
         self.analysis_history = _FakeColl()
         self.forum_posts = _FakeColl()
+        self.commands = []                       # records db.command(...) calls (ensure_schema)
+
+    def command(self, command, value=None, **kwargs):
+        self.commands.append((command, value, kwargs))
+        return {"ok": 1}
 
 
 @pytest.fixture
@@ -83,11 +88,21 @@ def db():
     return _FakeDB()
 
 
-# ---- indexes ----
+# ---- indexes + schema ----
 def test_ensure_indexes_creates_unique_constraints(db_mod, db):
     db_mod.ensure_indexes(db)
-    assert ("username", True) in db.users.indexes        # unique username
-    assert ("id", True) in db.forum_posts.indexes        # unique forum post id
+    assert ("username", True) in db.users.indexes            # unique username
+    assert ("id", True) in db.forum_posts.indexes            # unique forum post id
+    assert ("username", True) in db.profiles.indexes         # one profile per user
+    assert ("username", False) in db.analysis_history.indexes  # perf (non-unique) per-user history scan
+
+
+def test_ensure_schema_applies_a_jsonschema_validator_to_every_collection(db_mod, db):
+    db_mod.ensure_schema(db)
+    targets = {value for (cmd, value, kw) in db.commands if cmd == "collMod"}
+    assert targets == {"users", "profiles", "analysis_history", "forum_posts"}
+    for (cmd, value, kw) in db.commands:
+        assert "$jsonSchema" in kw["validator"]              # each carries a shape validator
 
 
 # ---- users ----

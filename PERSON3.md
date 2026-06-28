@@ -1,15 +1,15 @@
 # PERSON 3 — Elad — infra, deploy, data & the real-time backend
 
 > Your area, the mandatory course items, and a roadmap. How you build it is your call. You own the plumbing that
-> runs and ships the app, the **data store** (the **Mongo container** + schema/indexes; the thin CRUD in
-> `services/db.py` is Lior's), plus the Forum's real-time backend. `docker-compose.yml` is your starting point.
+> runs and ships the app — **deploy, prod ops, and operating Mongo in production** (its internals —
+> indexes/validators/auth-wiring/seed — are Lior's), plus the Forum's **real-time backend**. `docker-compose.yml` is your starting point.
 
 ## Start now — unblocked on day 1
 The 3-container skeleton already runs, so you can start the Azure setup, the second compose file, the stress
 harness, and the cross-container test harness immediately — none of it waits on the features.
 
 ## Your contracts (fixed)
-- You own the **Mongo container** (`db` service) + its volume/schema/indexes. The thin CRUD functions in `web/services/db.py` are **Lior's** (already implemented + tested); you provide the running Mongo they connect to. `get_db()` reads `MONGO_URI` — keep the `db` service reachable at that URI.
+- You **operate the Mongo container in prod** (`db` service + volume + a least-privilege app user + backups/retention). Its **internals are Lior's** — the thin CRUD, indexes, `$jsonSchema` validators, env-gated auth wiring, and `db/seed.py` (in `web/services/db.py` + `db/`). `get_db()` reads `MONGO_URI` — keep the `db` service reachable at that URI.
 - Only `web` is exposed (host 8000 → 5000); `ai` + `db` internal.
 
 ## Mandatory (course — graded)
@@ -21,7 +21,7 @@ harness, and the cross-container test harness immediately — none of it waits o
 - **The deploy +10** — Azure deploy + CI auto-deploy on green (the CI gate already runs).
 
 ## Roadmap (build these — your way)
-- [ ] **Mongo container** — stand up the `db` service with a persistent volume reachable at `MONGO_URI`. The CRUD's **unique indexes** (`users.username`, `forum_posts.id`) already ship in `services/db.py` `ensure_indexes()` (Lior, best-effort on first connect); you add any further **performance/schema indexes** + tuning, plus **container auth** for prod. (The thin CRUD itself is **Lior's** — implemented + tested against a fake.) Once it's up, validate the CRUD against real Mongo: `TEST_MONGO_URI="mongodb://localhost:27017/worksmarter_test" pytest tests/Integration_Tests/test_db_mongo.py` (skips without a DB).
+- [ ] **Operate Mongo in prod** — the `db` service + persistent volume run via compose; the **indexes, `$jsonSchema` validators, env-gated auth wiring, and seed mechanism are in place** (Lior — `ensure_indexes`/`ensure_schema`/`db/seed.py`, verified 6/6 against real Mongo). Your part: a **least-privilege app user** for prod (the env-gated root is the demo path), **backups/retention**, and turning auth on for Azure. Validate anytime: `TEST_MONGO_URI="mongodb://localhost:27017/worksmarter_test" pytest tests/Integration_Tests/test_db_mongo.py`.
 - [ ] **Azure deploy + CI/CD** — extend the live pipeline to deploy on green `main`; scale via `ai` replicas + gunicorn workers. Start early.
 - [ ] **Cross-container test harness** — `docker-compose.test.yml` is **scaffolded** (TESTING=1 + a throwaway `worksmarter_test` DB); add the **test-runner service** that runs `pytest` against the live stack (your Dockerfile / how the tests mount into an image).
 - [ ] **Fault tolerance + scaling** — graceful degradation (AI / DB down); horizontal scaling (replicas + gunicorn workers) + the **multi-machine path** (Docker Swarm overlay, or `ai` replicas on the Azure VM; **queue-free**) + a locust before/after.

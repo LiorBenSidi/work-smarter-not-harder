@@ -81,3 +81,28 @@ def test_unique_index_is_actually_enforced(db_mod, real_db):
     real_db.users.insert_one({"username": "alice", "password_hash": "x"})
     with pytest.raises(DuplicateKeyError):
         real_db.users.insert_one({"username": "alice", "password_hash": "y"})  # unique index blocks it
+
+
+def test_perf_indexes_and_schema_validator_are_applied(db_mod, real_db):
+    from pymongo.errors import WriteError
+    db_mod.ensure_indexes(real_db)
+    db_mod.ensure_schema(real_db)
+    # the performance index exists on analysis_history.username
+    assert any("username" in idx["key"] for idx in real_db.analysis_history.list_indexes())
+    # the $jsonSchema validator rejects a structurally-wrong document (DB-layer defense)
+    with pytest.raises(WriteError):
+        real_db.users.insert_one({"username": "nopass"})        # missing required password_hash
+
+
+def test_seed_is_idempotent(db_mod, real_db):
+    import importlib.util
+
+    seed_path = Path(__file__).resolve().parents[2] / "db" / "seed.py"
+    spec = importlib.util.spec_from_file_location("seed_under_test", str(seed_path))
+    seed = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(seed)
+    uri = os.environ["TEST_MONGO_URI"]
+    first = seed.seed(uri)                                       # empty forum -> seeds
+    second = seed.seed(uri)                                      # already seeded -> no-op
+    assert first == len(seed.SEED_POSTS) and second == 0
+    assert real_db.forum_posts.count_documents({}) == len(seed.SEED_POSTS)

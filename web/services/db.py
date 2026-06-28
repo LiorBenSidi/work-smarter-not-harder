@@ -1,9 +1,9 @@
 """MongoDB data layer (pymongo).
 
 OWNERSHIP: the **thin core CRUD** below (the seam the web tier calls — users / profiles / history /
-forum) + its own unique-constraint indexes (``ensure_indexes``) are Lior's; the **Mongo container**
-and schema/perf tuning, the Forum real-time backbone (notifications / DM / media / seeding) and
-rate-limiting stay Elad's. See docs/COLLABORATORS.md.
+forum), its indexes (``ensure_indexes``), the **document-shape validators** (``ensure_schema``) and the
+**seed** script (``db/seed.py``) are Lior's; the Forum real-time backbone (notifications / DM / media)
+and rate-limiting stay Elad's. See docs/COLLABORATORS.md.
 
 The web stores (web/app.py ``_Db*`` classes) call these functions with the db handle from ``get_db``.
 Inputs are already type-validated at the route layer (NoSQL-injection defense) before they reach here.
@@ -14,7 +14,7 @@ import threading
 import uuid
 
 from pymongo import MongoClient
-from pymongo.errors import DuplicateKeyError
+from pymongo.errors import DuplicateKeyError, OperationFailure
 
 logger = logging.getLogger(__name__)
 
@@ -25,13 +25,50 @@ _client_lock = threading.Lock()
 
 
 def ensure_indexes(db):
-    """Create the unique constraints the CRUD relies on (idempotent — safe to call repeatedly).
+    """Create the indexes the CRUD relies on (idempotent — safe to call repeatedly).
 
-    A unique index on ``users.username`` is defence-in-depth behind ``create_user``'s atomic upsert
-    (also guards against direct DB writes), and ``forum_posts.id`` keeps the opaque post ids unique.
+    Unique constraints (integrity): ``users.username`` is defence-in-depth behind ``create_user``'s
+    atomic upsert (also guards direct DB writes); ``forum_posts.id`` keeps the opaque post ids unique;
+    ``profiles.username`` enforces one profile per user (matches ``save_profile``'s upsert key).
+    Performance: ``analysis_history.username`` makes ``list_history`` a per-user index scan rather than
+    a full-collection scan as history grows.
     """
     db.users.create_index("username", unique=True)
     db.forum_posts.create_index("id", unique=True)
+    db.profiles.create_index("username", unique=True)
+    db.analysis_history.create_index("username")
+
+
+# Document-shape validators ($jsonSchema) — defence-in-depth behind the route-layer validation: the DB
+# itself rejects a structurally-wrong document (a direct write, a buggy migration). Only the load-bearing
+# string fields are required/typed; score/comments/votes pass as unconstrained extra fields so every real
+# CRUD write validates. validationLevel "moderate" => validate inserts + updates-to-already-valid docs.
+_SCHEMAS = {
+    "users": {"bsonType": "object", "required": ["username", "password_hash"],
+              "properties": {"username": {"bsonType": "string"}, "password_hash": {"bsonType": "string"}}},
+    "profiles": {"bsonType": "object", "required": ["username", "profile"],
+                 "properties": {"username": {"bsonType": "string"}, "profile": {"bsonType": "object"}}},
+    "analysis_history": {"bsonType": "object", "required": ["username", "entry"],
+                         "properties": {"username": {"bsonType": "string"}, "entry": {"bsonType": "object"}}},
+    "forum_posts": {"bsonType": "object", "required": ["id", "author", "title", "body"],
+                    "properties": {"id": {"bsonType": "string"}, "author": {"bsonType": "string"},
+                                   "title": {"bsonType": "string"}, "body": {"bsonType": "string"}}},
+}
+
+
+def ensure_schema(db):
+    """Apply the $jsonSchema validators to every collection (idempotent).
+
+    ``collMod`` on an existing collection, else create it with the validator. Best-effort at the call
+    site: a restricted app user without ``collMod`` rights simply skips this (the route-layer validation
+    still holds); an admin / the seed script applies it for real.
+    """
+    for name, schema in _SCHEMAS.items():
+        validator = {"$jsonSchema": schema}
+        try:
+            db.command("collMod", name, validator=validator, validationLevel="moderate")
+        except OperationFailure:
+            db.create_collection(name, validator=validator, validationLevel="moderate")
 
 
 def get_db(mongo_uri):
@@ -49,9 +86,11 @@ def get_db(mongo_uri):
             if _client is None:
                 _client = MongoClient(mongo_uri, serverSelectionTimeoutMS=5000)
                 try:
-                    ensure_indexes(_client.get_default_database())
+                    handle = _client.get_default_database()
+                    ensure_indexes(handle)
+                    ensure_schema(handle)
                 except Exception:
-                    logger.warning("index creation deferred — Mongo not ready", exc_info=True)
+                    logger.warning("index/schema setup deferred — Mongo not ready", exc_info=True)
     return _client.get_default_database()
 
 
