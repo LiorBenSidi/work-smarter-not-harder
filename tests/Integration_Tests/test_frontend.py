@@ -54,21 +54,18 @@ def test_ui_polish_present(client):
     assert 'aria-live="polite"' in html            # flash messages announced to assistive tech
 
 
-def test_register_tooltips_reflect_validator_bounds(client, auth_module):
-    # the info-icon tooltips render the validator's ACTUAL constants (not a hardcoded duplicate).
+def test_served_html_has_no_unrendered_template_placeholders(client):
+    # guard against the raw `{{ ... }}` bug: the served shell must carry no template placeholders.
+    html = client.get("/").get_data(as_text=True)
+    assert "{{" not in html and "}}" not in html
+
+
+def test_register_hints_are_fetched_from_the_config_endpoint(client):
+    # the credential hints are JS-driven from /auth/config (single source of truth), not hardcoded.
     html = client.get("/").get_data(as_text=True)
     assert 'class="info"' in html
-    assert f"{auth_module.USERNAME_MIN}–{auth_module.USERNAME_MAX} characters" in html
-    assert f"{auth_module.PASSWORD_MIN}–{auth_module.PASSWORD_MAX} characters" in html
-    assert f'minlength="{auth_module.PASSWORD_MIN}"' in html  # native enforcement tracks it too
-
-
-def test_tooltips_follow_a_change_to_the_validator_bounds(client, auth_module, monkeypatch):
-    # change the validator -> the rendered tooltip + native maxlength must follow (proves it's dynamic).
-    monkeypatch.setattr(auth_module, "PASSWORD_MAX", 999)
-    html = client.get("/").get_data(as_text=True)
-    assert f"{auth_module.PASSWORD_MIN}–999 characters" in html
-    assert 'maxlength="999"' in html
+    assert "/auth/config" in html
+    assert 'id="reg-username-tip"' in html and 'id="reg-password-tip"' in html
 
 
 def test_dark_mode_and_a11y_present(client):

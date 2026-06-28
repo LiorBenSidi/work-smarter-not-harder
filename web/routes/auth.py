@@ -63,6 +63,13 @@ def _users():
     return current_app.config["USERS"]
 
 
+@auth_bp.get("/auth/config")
+def auth_config():
+    """Public: the credential bounds, so the UI shows requirements from one source of truth (here)."""
+    return jsonify(username_min=USERNAME_MIN, username_max=USERNAME_MAX,
+                   password_min=PASSWORD_MIN, password_max=PASSWORD_MAX), 200
+
+
 @auth_bp.post("/register")
 def register():
     try:
