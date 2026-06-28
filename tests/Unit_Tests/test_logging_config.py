@@ -115,3 +115,25 @@ def test_request_emits_access_log_with_timing(make_client, fake_users, caplog):
         client.get("/health")
     msgs = [r.getMessage() for r in caplog.records]
     assert any("/health" in m and "->" in m and "ms" in m for m in msgs)
+
+
+def test_access_log_sanitizes_crlf_in_path(make_client, fake_users, caplog):
+    # a CRLF-bearing path must NOT produce a raw newline in the log line (CWE-117 log forging)
+    client = make_client(fake_users)
+    with caplog.at_level(logging.INFO):
+        client.get("/foo%0d%0afake-log-line")
+    line = next((r.getMessage() for r in caplog.records if "foo" in r.getMessage()), "")
+    assert line, "expected an access-log line for the request"
+    assert "\n" not in line and "\r" not in line     # no raw CR/LF -> no forged second line
+    assert "\\r" in line or "\\n" in line             # the control chars were escaped, not dropped silently
+
+
+def test_disabled_then_enabled_without_force_recovers(logmod, isolated_root_logger):
+    # refutes the adversarial "stuck-mute" claim: disabling then re-enabling restores logging even
+    # WITHOUT force=True — the disabled branch attaches no managed handler, so the next enable=True
+    # never hits the idempotency early-return and reaches logging.disable(NOTSET).
+    logmod.configure_logging(enable=False)                  # no force
+    assert logging.root.manager.disable == logging.CRITICAL
+    logmod.configure_logging(enable=True, log_file="")      # no force
+    assert logging.root.manager.disable == logging.NOTSET   # recovered, not stuck-muted
+    assert _managed(logging.getLogger())                    # console handler attached
