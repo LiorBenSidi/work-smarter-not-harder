@@ -27,18 +27,11 @@ def validate_profile(data):
     if not isinstance(data, dict):
         raise ValueError("expected a JSON object")
 
-    def _int(name, lo, hi):
+    def _num(name, lo, hi, *, integer):
         value = data.get(name)
-        if isinstance(value, bool) or not isinstance(value, int):
-            raise ValueError(f"{name} must be an integer")
-        if not lo <= value <= hi:
-            raise ValueError(f"{name} must be {lo}-{hi}")
-        return value
-
-    def _number(name, lo, hi):
-        value = data.get(name)
-        if isinstance(value, bool) or not isinstance(value, (int, float)):
-            raise ValueError(f"{name} must be a number")
+        allowed = int if integer else (int, float)  # bool excluded below (it is an int subclass)
+        if isinstance(value, bool) or not isinstance(value, allowed):
+            raise ValueError(f"{name} must be {'an integer' if integer else 'a number'}")
         if not lo <= value <= hi:
             raise ValueError(f"{name} must be {lo}-{hi}")
         return value
@@ -51,12 +44,12 @@ def validate_profile(data):
         raise ValueError(f"goal must be one of {sorted(GOALS)}")
 
     return {
-        "age": _int("age", 10, 120),
+        "age": _num("age", 10, 120, integer=True),
         "gender": gender.strip(),
-        "height": _number("height", 50, 300),
-        "weight": _number("weight", 20, 500),
+        "height": _num("height", 50, 300, integer=False),
+        "weight": _num("weight", 20, 500, integer=False),
         "goal": goal,
-        "training_frequency": _int("training_frequency", 0, 14),
+        "training_frequency": _num("training_frequency", 0, 14, integer=True),
     }
 
 
