@@ -30,15 +30,18 @@ dashboard) against the in-memory fakes — in parallel, without waiting on the l
 - **`debug` flag** — `FLASK_DEBUG` is already read in `config.py`; make the app actually honour it (debug mode on when set).
 - **Tests run on any machine** — security (wrong pw → 401, gated-without-login → 401, injection rejected) + integration (register → login → dashboard).
 
-## Roadmap — web tier COMPLETE (2026-06-28)
-- [x] **Auth (F1)** — `/register` `/login` `/logout` `/me`; werkzeug hashing; session gate (`login_required`); constant-time login (no user-enumeration); injection-safe validation.
+## Roadmap — web tier COMPLETE (updated 2026-06-28)
+- [x] **Auth (F1)** — `/register` `/login` `/logout` `/me`; werkzeug hashing; session gate (`login_required`); constant-time login (no user-enumeration); injection-safe validation; public `/auth/config` (credential bounds for the UI).
 - [x] **Profile (F2)** — `/profile` GET/POST + validation (ranges, bool/type gate).
+- [x] **Daily check-in (F3)** — `/checkin`: validate the daily metrics → `ai_client` `/predict` → save the entry to history; fault-tolerant (AI down → saved with no assessment; store down → 503).
 - [x] **Dashboard (F7) + History (F8)** — readiness via `ai_client` (degrades when AI down), calories, `/history`.
-- [x] **Frontend** — single-page UI + CSRF (double-submit) + responsive/dark-light theming + a11y (focus, labels, aria-live) + credential-requirement tooltips driven by `/auth/config`.
-- [x] **Forum** — UI + post/comment/up-down-vote CRUD (anonymity, XSS-escaped).
-- [x] **Thin core data-layer CRUD** (`services/db.py`) — users/profiles/history/forum fns + thread-safe `get_db` + `ensure_indexes` (unique constraints) + votes stored as a list (no username-keyed Mongo fields). Tested against an in-memory fake; a real-Mongo integration suite runs when a DB is up.
+- [x] **Frontend** — single-page UI + CSRF (double-submit) + responsive theming + a11y (focus, labels, aria-live) + credential tooltips driven by `/auth/config`; **a distinctive "performance-lab" visual identity** (readiness-verdict signature, teal/coral palette, monospace data).
+- [x] **Forum** — UI + post/comment/up-down-vote CRUD (anonymity, XSS-escaped) + **edit/delete your own post (author-only)**.
+- [x] **Thin core data-layer CRUD** (`services/db.py`) — users/profiles/history/forum fns + thread-safe `get_db` + `ensure_indexes` (unique constraints) + votes stored as a list (no username-keyed Mongo fields). **Concurrency-hardened** (atomic create-user dedupe, optimistic-concurrency vote, TOCTOU-safe edit/delete) + malformed-doc guards. In-memory fake for unit tests; a real-Mongo integration suite runs when a DB is up.
+- [x] **Week-9 logging** — `logging_config.py` (console + rotating file, `ENABLE_LOGGING`/`LOG_LEVEL`, per-request access log with timing) wired at the gunicorn entrypoint (`wsgi.py`).
+- [x] **Container build/run** — `web` (+ `ai`) Dockerfile + the runnable 3-container compose; fault-tolerance hardening on the shared compose (restart policies, healthcheck `start_period`, `web` boots and degrades even if `ai` is down). *(The Mongo container internals + Azure deploy/CD remain Elad's.)*
 
-All gated/validated, adversarial + **mutation-tested**, independently QA-verified, live-browser-tested. The only solo item left is the **daily check-in flow** — blocked on the AI contract (where the daily readiness inputs come from — Shiri).
+All gated/validated, adversarial + **mutation-tested**, independently QA-verified, live-browser-tested (dark/light/mobile). The web tier is feature-complete; remaining cross-team work is integration against Shiri's real model + Elad's deploy/Mongo/real-time.
 
 ## You own the decisions
 Page structure, server-rendered vs JS frontend, session vs token, the API shape — your call. Keep the contracts + mandatory items.

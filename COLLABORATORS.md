@@ -38,7 +38,7 @@ step-by-step script.**
 cp .env.example .env
 docker compose up --build        # 3 containers; then open http://localhost:8000/health
 ```
-**Status:** the **web tier is fully implemented** (auth, profile, dashboard, history, frontend, CSRF, the Forum CRUD/UI) on the thin `db.py` CRUD. The `ai` `/predict` is a placeholder until Shiri's model lands, and `db` is a stock `mongo:7` (just needs `docker compose up`).
+**Status:** the **web tier is feature-complete** — auth, profile, **daily check-in**, dashboard, history, the Forum (CRUD + **edit/delete your own post**), the frontend (CSRF + a distinct visual identity), **Week-9 logging**, and the concurrency-hardened thin `db.py` CRUD. The 3 containers build and run (`docker compose up --build`) with **fault tolerance** (restart policies + healthcheck `start_period`; `web` boots and degrades even if `ai` is down). The `ai` `/predict` is a contract-shaped placeholder until Shiri's model lands; `db` is a stock `mongo:7` whose schema / indexes / auth / seeding are Elad's.
 
 ## Sync points (when to coordinate)
 1. **Kickoff** — confirm the split, run the stack, claim your PERSON file.
