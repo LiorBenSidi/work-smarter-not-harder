@@ -52,3 +52,38 @@ def test_logout_clears_session(client):
     assert client.get("/me").status_code == 200
     assert client.post("/logout").status_code == 200
     assert client.get("/me").status_code == 401
+
+
+def test_relogin_as_different_user_replaces_session(client):
+    # session.clear() on login must prevent stale-user bleed
+    _register(client, "alice", "s3cretpw!")
+    _register(client, "bob", "s3cretpw!")
+    _login(client, "alice", "s3cretpw!")
+    _login(client, "bob", "s3cretpw!")
+    assert client.get("/me").get_json()["username"] == "bob"
+
+
+def test_logout_without_login_is_idempotent(client):
+    assert client.post("/logout").status_code == 200
+
+
+def test_get_on_post_only_route_is_405(client):
+    assert client.get("/login").status_code == 405
+
+
+def test_usernames_are_case_sensitive(client):
+    # intended (documented) behavior: distinct case -> distinct accounts
+    assert _register(client, "alice", "s3cretpw!").status_code == 201
+    assert _register(client, "Alice", "s3cretpw!").status_code == 201
+
+
+def test_duplicate_is_detected_after_whitespace_strip(client):
+    assert _register(client, "alice", "s3cretpw!").status_code == 201
+    assert _register(client, "  alice  ", "s3cretpw!").status_code == 409
+
+
+def test_default_store_app_serves_health(make_client):
+    # the PRODUCTION default user store (no fake injected) must still boot + serve /health (no Mongo)
+    resp = make_client().get("/health")
+    assert resp.status_code == 200
+    assert resp.get_json() == {"status": "ok", "service": "web"}
