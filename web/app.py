@@ -1,7 +1,7 @@
 """Web container — the ONLY user-facing service. OWNER: Lior (auth + dashboard + frontend).
 
 App-factory that registers the route blueprints. `/health` is live; auth (F1), profile (F2),
-the dashboard (F7) and history (F8) are implemented.
+the dashboard (F7), history (F8) and the forum are implemented.
 """
 import logging
 import os
@@ -13,6 +13,7 @@ from config import Config
 from csrf import init_csrf
 from routes.auth import auth_bp
 from routes.dashboard import dashboard_bp
+from routes.forum import forum_bp
 from routes.history import history_bp
 from routes.profile import profile_bp
 
@@ -87,7 +88,44 @@ class _DbHistory:
         return db_module.list_history(handle, username)
 
 
-def create_app(config=Config, *, users=None, profiles=None, history=None):
+class _DbForum:
+    """Default forum store — delegates to the data layer (services/db.py, owned by Elad).
+
+    The web->db seam Elad implements: ``forum_create_post(db, author, title, body, anonymous)``,
+    ``forum_list_posts(db)``, ``forum_get_post(db, post_id)``,
+    ``forum_add_comment(db, post_id, author, body)`` and ``forum_vote(db, post_id, username, value)``.
+    Resolved lazily (same rationale as _DbUsers).
+    """
+
+    def __init__(self, app):
+        self._app = app
+
+    def _resolve(self):
+        from services import db as db_module
+        return db_module, db_module.get_db(self._app.config["MONGO_URI"])
+
+    def create_post(self, author, title, body, anonymous):
+        db_module, handle = self._resolve()
+        return db_module.forum_create_post(handle, author, title, body, anonymous)
+
+    def list_posts(self):
+        db_module, handle = self._resolve()
+        return db_module.forum_list_posts(handle)
+
+    def get_post(self, post_id):
+        db_module, handle = self._resolve()
+        return db_module.forum_get_post(handle, post_id)
+
+    def add_comment(self, post_id, author, body):
+        db_module, handle = self._resolve()
+        return db_module.forum_add_comment(handle, post_id, author, body)
+
+    def vote(self, post_id, username, value):
+        db_module, handle = self._resolve()
+        return db_module.forum_vote(handle, post_id, username, value)
+
+
+def create_app(config=Config, *, users=None, profiles=None, history=None, forum=None):
     # Absolute template_folder so the app renders regardless of how it's launched / imported.
     app = Flask(__name__, template_folder=_TEMPLATES)
     app.config.from_object(config)
@@ -104,11 +142,13 @@ def create_app(config=Config, *, users=None, profiles=None, history=None):
     app.config["USERS"] = users if users is not None else _DbUsers(app)
     app.config["PROFILES"] = profiles if profiles is not None else _DbProfiles(app)
     app.config["HISTORY"] = history if history is not None else _DbHistory(app)
+    app.config["FORUM"] = forum if forum is not None else _DbForum(app)
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(profile_bp)
     app.register_blueprint(dashboard_bp)
     app.register_blueprint(history_bp)
+    app.register_blueprint(forum_bp)
 
     init_csrf(app)  # double-submit CSRF on all state-changing requests
 
