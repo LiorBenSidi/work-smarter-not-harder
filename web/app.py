@@ -6,8 +6,9 @@ the dashboard (F7), history (F8) and the forum are implemented.
 import logging
 import os
 import secrets
+import time
 
-from flask import Flask, jsonify, render_template
+from flask import Flask, g, jsonify, render_template, request
 
 from config import Config
 from csrf import init_csrf
@@ -134,6 +135,20 @@ def create_app(config=Config, *, users=None, profiles=None, history=None, forum=
     app.register_blueprint(forum_bp)
 
     init_csrf(app)  # double-submit CSRF on all state-changing requests
+
+    @app.before_request
+    def _start_timer():
+        g._start = time.perf_counter()
+
+    @app.after_request
+    def _access_log(response):
+        # Per-request access log with timing (Week-9 / Lab-9.1: "logging has a cost"). Emits only when
+        # a handler is configured (the container, via wsgi.py); a no-op in the test suite.
+        start = getattr(g, "_start", None)
+        if start is not None:
+            logger.info("%s %s -> %s (%.1f ms)", request.method, request.path,
+                        response.status_code, (time.perf_counter() - start) * 1000)
+        return response
 
     @app.get("/")
     def index():
