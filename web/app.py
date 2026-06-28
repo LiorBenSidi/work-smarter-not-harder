@@ -1,7 +1,7 @@
 """Web container — the ONLY user-facing service. OWNER: Lior (auth + dashboard + frontend).
 
-App-factory that registers the route blueprints. `/health` is live; auth (F1), profile (F2) and
-the dashboard (F7) are implemented.
+App-factory that registers the route blueprints. `/health` is live; auth (F1), profile (F2),
+the dashboard (F7) and history (F8) are implemented.
 """
 import logging
 import secrets
@@ -11,6 +11,7 @@ from flask import Flask, jsonify, render_template
 from config import Config
 from routes.auth import auth_bp
 from routes.dashboard import dashboard_bp
+from routes.history import history_bp
 from routes.profile import profile_bp
 
 logger = logging.getLogger(__name__)
@@ -63,7 +64,26 @@ class _DbProfiles:
         return db_module.save_profile(handle, username, profile)
 
 
-def create_app(config=Config, *, users=None, profiles=None):
+class _DbHistory:
+    """Default analysis-history store — delegates to the data layer (services/db.py, owned by Elad).
+
+    The web->db seam Elad implements: ``list_history(db, username) -> list``. Resolved lazily
+    (same rationale as _DbUsers).
+    """
+
+    def __init__(self, app):
+        self._app = app
+
+    def _resolve(self):
+        from services import db as db_module
+        return db_module, db_module.get_db(self._app.config["MONGO_URI"])
+
+    def list(self, username):
+        db_module, handle = self._resolve()
+        return db_module.list_history(handle, username)
+
+
+def create_app(config=Config, *, users=None, profiles=None, history=None):
     app = Flask(__name__)
     app.config.from_object(config)
 
@@ -78,10 +98,12 @@ def create_app(config=Config, *, users=None, profiles=None):
     # falls back to the db.py-backed stores.
     app.config["USERS"] = users if users is not None else _DbUsers(app)
     app.config["PROFILES"] = profiles if profiles is not None else _DbProfiles(app)
+    app.config["HISTORY"] = history if history is not None else _DbHistory(app)
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(profile_bp)
     app.register_blueprint(dashboard_bp)
+    app.register_blueprint(history_bp)
 
     @app.get("/")
     def index():

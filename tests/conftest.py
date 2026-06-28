@@ -1,9 +1,9 @@
 """Shared web-suite fixtures.
 
 `web/` is not an installed package, so we exec `web/app.py` off disk (same loader the smoke test
-uses). The web layer is built test-first against injected stores — `FakeUsers` / `FakeProfiles` are
-in-memory stand-ins for Elad's data layer (the `web -> db` seam is just `.get` / `.add` / `.save`),
-so the whole layer runs with NO Mongo and NO Docker (Mini-HW3 DI pattern).
+uses). The web layer is built test-first against injected stores — `FakeUsers` / `FakeProfiles` /
+`FakeHistory` are in-memory stand-ins for Elad's data layer (the `web -> db` seam is just `.get` /
+`.add` / `.save` / `.list`), so the whole layer runs with NO Mongo and NO Docker (Mini-HW3 DI pattern).
 """
 import importlib.util
 import sys
@@ -60,6 +60,19 @@ class FakeProfiles:
         self._by_user[username] = profile
 
 
+class FakeHistory:
+    """In-memory analysis-history store — the `web -> db` seam Elad implements in db.py (.list / .add)."""
+
+    def __init__(self):
+        self._by_user = {}
+
+    def list(self, username):
+        return self._by_user.get(username, [])
+
+    def add(self, username, entry):
+        self._by_user.setdefault(username, []).append(entry)
+
+
 @pytest.fixture
 def web_app_module():
     pytest.importorskip("flask")
@@ -83,11 +96,20 @@ def fake_profiles():
 
 
 @pytest.fixture
-def make_client(web_app_module):
-    """Factory: build a web test client with given user/profile stores (None -> production default)."""
+def fake_history():
+    return FakeHistory()
 
-    def _make(users=None, profiles=None):
-        extra = {} if profiles is None else {"profiles": profiles}
+
+@pytest.fixture
+def make_client(web_app_module):
+    """Factory: build a web test client with given user/profile/history stores (None -> prod default)."""
+
+    def _make(users=None, profiles=None, history=None):
+        extra = {}
+        if profiles is not None:
+            extra["profiles"] = profiles
+        if history is not None:
+            extra["history"] = history
         app = web_app_module.create_app(users=users, **extra)
         app.config.update(SECRET_KEY="test-secret-key", TESTING=True)
         return app.test_client()
@@ -103,3 +125,8 @@ def client(make_client, fake_users):
 @pytest.fixture
 def profile_client(make_client, fake_users, fake_profiles):
     return make_client(fake_users, fake_profiles)
+
+
+@pytest.fixture
+def history_client(make_client, fake_users, fake_history):
+    return make_client(fake_users, history=fake_history)
