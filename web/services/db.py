@@ -14,8 +14,11 @@ import threading
 import uuid
 
 from pymongo import MongoClient
+from pymongo.errors import DuplicateKeyError
 
 logger = logging.getLogger(__name__)
+
+_VOTE_RETRIES = 8        # optimistic-concurrency retries for forum_vote (see its docstring)
 
 _client = None
 _client_lock = threading.Lock()
@@ -54,28 +57,40 @@ def get_db(mongo_uri):
 
 # ---- users (auth seam) ----
 def get_user(db, username):
-    """Return ``{"username", "password_hash"}`` for `username`, or None."""
+    """Return ``{"username", "password_hash"}`` for `username`, or None.
+
+    A doc missing ``password_hash`` (a partial/corrupt write, or a direct DB edit) is treated as
+    "no user" so login fails closed rather than 500-ing on a KeyError.
+    """
     doc = db.users.find_one({"username": username})
-    if doc is None:
+    if doc is None or "password_hash" not in doc:
         return None
     return {"username": doc["username"], "password_hash": doc["password_hash"]}
 
 
 def create_user(db, username, password_hash):
-    """Create the user if absent. Return True if created, False if the username already exists."""
-    result = db.users.update_one(
-        {"username": username},
-        {"$setOnInsert": {"username": username, "password_hash": password_hash}},
-        upsert=True,
-    )
+    """Create the user if absent. Return True if created, False if the username already exists.
+
+    The upsert + unique index on ``users.username`` make this atomic: when two registrations of the
+    same username race, exactly one insert wins and the loser's upsert raises ``DuplicateKeyError`` —
+    caught here and reported as False (the user now exists), honouring the contract under concurrency.
+    """
+    try:
+        result = db.users.update_one(
+            {"username": username},
+            {"$setOnInsert": {"username": username, "password_hash": password_hash}},
+            upsert=True,
+        )
+    except DuplicateKeyError:
+        return False
     return result.upserted_id is not None
 
 
 # ---- profiles (F2 seam) ----
 def get_profile(db, username):
-    """Return the stored profile dict for `username`, or None."""
+    """Return the stored profile dict for `username`, or None (also None if the row has no profile)."""
     doc = db.profiles.find_one({"username": username})
-    return doc["profile"] if doc else None
+    return doc.get("profile") if doc else None
 
 
 def save_profile(db, username, profile):
@@ -85,8 +100,12 @@ def save_profile(db, username, profile):
 
 # ---- history (F8 read + the check-in write) ----
 def list_history(db, username):
-    """Return the user's analysis-history entries (oldest-first insertion order)."""
-    return [doc["entry"] for doc in db.analysis_history.find({"username": username})]
+    """Return the user's analysis-history entries (oldest-first; append-only natural order).
+
+    Malformed rows without an ``entry`` field are skipped rather than raising, so one bad write can't
+    500 the whole history view.
+    """
+    return [doc["entry"] for doc in db.analysis_history.find({"username": username}) if "entry" in doc]
 
 
 def add_history(db, username, entry):
@@ -134,15 +153,28 @@ def forum_vote(db, post_id, username, value):
     Votes are stored as a LIST of ``{"user", "value"}`` — never a dict keyed by username, since a
     username may contain ``.`` or ``$`` (the validator only bounds length), which are illegal/fragile
     as MongoDB field names.
+
+    Concurrency: the read-rebuild-write is guarded by **optimistic concurrency control** — the write
+    only lands if the post's ``votes`` array is unchanged since we read it (the array is in the update
+    filter). Two simultaneous votes can't lose each other's update: the loser's filter misses and it
+    retries on the fresh state. A concurrent *delete* makes the re-read return None -> None. Extreme
+    sustained contention exhausts the retries and raises (the route degrades it to a 503).
     """
-    post = db.forum_posts.find_one({"id": post_id})
-    if post is None:
-        return None
-    votes = [v for v in post.get("votes", []) if v.get("user") != username]  # drop this user's prior vote
-    votes.append({"user": username, "value": value})
-    score = sum(v["value"] for v in votes)
-    db.forum_posts.update_one({"id": post_id}, {"$set": {"votes": votes, "score": score}})
-    return score
+    for _ in range(_VOTE_RETRIES):
+        post = db.forum_posts.find_one({"id": post_id})
+        if post is None:
+            return None
+        old_votes = post.get("votes", [])
+        new_votes = [v for v in old_votes if v.get("user") != username]   # drop this user's prior vote
+        new_votes.append({"user": username, "value": value})
+        score = sum(v["value"] for v in new_votes)
+        result = db.forum_posts.update_one(
+            {"id": post_id, "votes": old_votes},                          # CAS: only if votes unchanged
+            {"$set": {"votes": new_votes, "score": score}},
+        )
+        if result.matched_count:
+            return score
+    raise RuntimeError(f"forum_vote: lost the update race on post {post_id} after retries")
 
 
 # A post may only be edited/deleted by its real author (even for anonymous posts, where the displayed
@@ -157,7 +189,9 @@ def forum_update_post(db, post_id, username, title, body):
         return None
     if post.get("author") != username:
         return FORBIDDEN
-    db.forum_posts.update_one({"id": post_id}, {"$set": {"title": title, "body": body}})
+    result = db.forum_posts.update_one({"id": post_id}, {"$set": {"title": title, "body": body}})
+    if not result.matched_count:
+        return None                       # concurrently deleted between the author check and the write
     post["title"], post["body"] = title, body
     return _shape(post)
 
