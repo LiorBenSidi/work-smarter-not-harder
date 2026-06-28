@@ -131,6 +131,14 @@ def test_list_history_returns_entries_for_user_only(db_mod, db):
     assert out == [{"assessment": "Ready"}]
 
 
+def test_add_history_then_list_roundtrip(db_mod, db):
+    db_mod.add_history(db, "alice", {"assessment": "Ready", "timestamp": "t1"})
+    db_mod.add_history(db, "alice", {"assessment": "Rest", "timestamp": "t2"})
+    db_mod.add_history(db, "bob", {"assessment": "Go", "timestamp": "t3"})
+    out = db_mod.list_history(db, "alice")
+    assert out == [{"assessment": "Ready", "timestamp": "t1"}, {"assessment": "Rest", "timestamp": "t2"}]
+
+
 # ---- forum ----
 def test_forum_create_then_get_and_list(db_mod, db):
     post = db_mod.forum_create_post(db, "alice", "Title", "Body", False)

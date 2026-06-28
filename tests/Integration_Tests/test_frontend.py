@@ -60,6 +60,15 @@ def test_served_html_has_no_unrendered_template_placeholders(client):
     assert "{{" not in html and "}}" not in html
 
 
+def test_daily_checkin_section_present_and_wired(client):
+    # the check-in form posts today's readiness metrics to /checkin.
+    html = client.get("/").get_data(as_text=True)
+    assert 'id="checkin-form"' in html
+    assert "/checkin" in html
+    for field in ["sleep_hours", "resting_hr", "fatigue", "soreness", "training_load"]:
+        assert f'name="{field}"' in html
+
+
 def test_register_hints_are_fetched_from_the_config_endpoint(client):
     # the credential hints are JS-driven from /auth/config (single source of truth), not hardcoded.
     html = client.get("/").get_data(as_text=True)
