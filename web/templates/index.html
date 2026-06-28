@@ -236,9 +236,9 @@
       const posts = (r.data && r.data.posts) || [];
       if (!posts.length) { el.innerHTML = '<p class="muted">No posts yet — start one above.</p>'; return; }
       el.innerHTML = posts.map((p) =>
-        '<div class="post" data-id="' + p.id + '" style="padding:8px 0;border-top:1px solid var(--line);cursor:pointer">'
-        + '<strong>' + escapeHtml(p.title) + '</strong> <span class="pill">score ' + p.score + '</span><br>'
-        + '<span class="muted">by ' + escapeHtml(p.author) + ' · ' + p.comments + ' comment' + (p.comments === 1 ? '' : 's') + '</span></div>'
+        '<div class="post" data-id="' + escapeHtml(p.id) + '" style="padding:8px 0;border-top:1px solid var(--line);cursor:pointer">'
+        + '<strong>' + escapeHtml(p.title) + '</strong> <span class="pill">score ' + escapeHtml(p.score) + '</span><br>'
+        + '<span class="muted">by ' + escapeHtml(p.author) + ' · ' + escapeHtml(p.comments) + ' comment' + (p.comments === 1 ? '' : 's') + '</span></div>'
       ).join("");
       el.querySelectorAll(".post").forEach((d) => d.addEventListener("click", () => openPost(d.dataset.id)));
     }
@@ -256,7 +256,7 @@
         + '<h3 style="margin:0 0 4px">' + escapeHtml(p.title) + '</h3>'
         + '<p class="muted" style="margin:0 0 8px">by ' + escapeHtml(p.author) + '</p>'
         + '<p>' + escapeHtml(p.body) + '</p>'
-        + '<p><button class="ghost" onclick="vote(1)">▲ up</button> <span class="pill">score ' + p.score
+        + '<p><button class="ghost" onclick="vote(1)">▲ up</button> <span class="pill">score ' + escapeHtml(p.score)
         + '</span> <button class="ghost" onclick="vote(-1)">▼ down</button></p>'
         + '<h4 style="margin:12px 0 6px">Comments</h4>'
         + (p.comments.length
