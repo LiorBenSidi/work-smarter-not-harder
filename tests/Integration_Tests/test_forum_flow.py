@@ -54,6 +54,34 @@ def test_get_missing_post_is_404(forum_client):
     assert forum_client.get("/forum/posts/999").status_code == 404
 
 
+def test_author_can_edit_their_post(forum_client):
+    _login(forum_client)
+    pid = _new_post(forum_client, "Old", "old body").get_json()["post"]["id"]
+    resp = forum_client.patch(f"/forum/posts/{pid}", json={"title": "New", "body": "new body"})
+    assert resp.status_code == 200
+    assert resp.get_json()["post"]["title"] == "New"
+    assert forum_client.get(f"/forum/posts/{pid}").get_json()["post"]["body"] == "new body"
+
+
+def test_author_can_delete_their_post(forum_client):
+    _login(forum_client)
+    pid = _new_post(forum_client).get_json()["post"]["id"]
+    assert forum_client.delete(f"/forum/posts/{pid}").status_code == 200
+    assert forum_client.get(f"/forum/posts/{pid}").status_code == 404  # gone
+    assert forum_client.get("/forum/posts").get_json()["posts"] == []
+
+
+def test_edit_missing_post_is_404(forum_client):
+    _login(forum_client)
+    assert forum_client.patch("/forum/posts/999", json={"title": "X", "body": "y"}).status_code == 404
+
+
+def test_edit_rejects_bad_body_400(forum_client):
+    _login(forum_client)
+    pid = _new_post(forum_client).get_json()["post"]["id"]
+    assert forum_client.patch(f"/forum/posts/{pid}", json={"title": "", "body": "y"}).status_code == 400
+
+
 def test_votes_aggregate_across_users(forum_client):
     # one vote per user, but DISTINCT users' votes sum into the score (not last-write-wins)
     _login(forum_client, "alice")
