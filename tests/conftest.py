@@ -1,9 +1,9 @@
 """Shared web-suite fixtures.
 
 `web/` is not an installed package, so we exec `web/app.py` off disk (same loader the smoke test
-uses). Auth is built test-first against an injected user store — `FakeUsers` is an in-memory
-stand-in for Elad's data layer (the `web -> db` seam is just `.get(username)` / `.add(username,
-password_hash)`), so the whole auth layer runs with NO Mongo and NO Docker (Mini-HW3 DI pattern).
+uses). The web layer is built test-first against injected stores — `FakeUsers` / `FakeProfiles` are
+in-memory stand-ins for Elad's data layer (the `web -> db` seam is just `.get` / `.add` / `.save`),
+so the whole layer runs with NO Mongo and NO Docker (Mini-HW3 DI pattern).
 """
 import importlib.util
 import sys
@@ -47,6 +47,19 @@ class FakeUsers:
         return True
 
 
+class FakeProfiles:
+    """In-memory profile store — the `web -> db` seam Elad implements in db.py (.get / .save)."""
+
+    def __init__(self):
+        self._by_user = {}
+
+    def get(self, username):
+        return self._by_user.get(username)
+
+    def save(self, username, profile):
+        self._by_user[username] = profile
+
+
 @pytest.fixture
 def web_app_module():
     pytest.importorskip("flask")
@@ -65,11 +78,17 @@ def fake_users():
 
 
 @pytest.fixture
-def make_client(web_app_module):
-    """Factory: build a web test client with a given user store (None -> the production default)."""
+def fake_profiles():
+    return FakeProfiles()
 
-    def _make(users=None):
-        app = web_app_module.create_app(users=users)
+
+@pytest.fixture
+def make_client(web_app_module):
+    """Factory: build a web test client with given user/profile stores (None -> production default)."""
+
+    def _make(users=None, profiles=None):
+        extra = {} if profiles is None else {"profiles": profiles}
+        app = web_app_module.create_app(users=users, **extra)
         app.config.update(SECRET_KEY="test-secret-key", TESTING=True)
         return app.test_client()
 
@@ -79,3 +98,8 @@ def make_client(web_app_module):
 @pytest.fixture
 def client(make_client, fake_users):
     return make_client(fake_users)
+
+
+@pytest.fixture
+def profile_client(make_client, fake_users, fake_profiles):
+    return make_client(fake_users, fake_profiles)
