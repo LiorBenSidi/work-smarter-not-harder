@@ -1,7 +1,7 @@
 """Web container — the ONLY user-facing service. OWNER: Lior (auth + dashboard + frontend).
 
-App-factory that registers the route blueprints. `/health` is live; auth (F1) + profile (F2) are
-implemented; the dashboard route is a 501 stub behind its final URL.
+App-factory that registers the route blueprints. `/health` is live; auth (F1), profile (F2) and
+the dashboard (F7) are implemented.
 """
 import logging
 import secrets
