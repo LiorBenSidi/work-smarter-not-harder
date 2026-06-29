@@ -1,4 +1,4 @@
-# PERSON 3 — Elad — infra, deploy, data & the real-time backend
+# PERSON 3 — Elad — deploy, prod ops & the real-time backend
 
 > Your area, the mandatory course items, and a roadmap. How you build it is your call. You own the plumbing that
 > runs and ships the app — **deploy, prod ops, and operating Mongo in production** (its internals —
