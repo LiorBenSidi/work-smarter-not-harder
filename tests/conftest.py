@@ -28,7 +28,7 @@ def _load_web_app():
 
 
 class FakeUsers:
-    """In-memory user store — the `web -> db` seam Elad implements for real in db.py.
+    """In-memory user store — the `web -> db` seam Lior implements for real in db.py.
 
     Contract: `add` returns False if the username already exists (else stores and returns True);
     `get` returns the stored record dict (with `password_hash`) or None.
@@ -48,7 +48,7 @@ class FakeUsers:
 
 
 class FakeProfiles:
-    """In-memory profile store — the `web -> db` seam Elad implements in db.py (.get / .save)."""
+    """In-memory profile store — the `web -> db` seam Lior implements in db.py (.get / .save)."""
 
     def __init__(self):
         self._by_user = {}
@@ -61,7 +61,7 @@ class FakeProfiles:
 
 
 class FakeHistory:
-    """In-memory analysis-history store — the `web -> db` seam Elad implements in db.py (.list / .add)."""
+    """In-memory analysis-history store — the `web -> db` seam Lior implements in db.py (.list / .add)."""
 
     def __init__(self):
         self._by_user = {}
@@ -74,7 +74,7 @@ class FakeHistory:
 
 
 class FakeForum:
-    """In-memory forum store — the `web -> db` seam Elad implements in db.py
+    """In-memory forum store — the `web -> db` seam Lior implements in db.py
     (create_post / list_posts / get_post / add_comment / vote)."""
 
     def __init__(self):
