@@ -167,7 +167,7 @@ def add_history(db, username, entry):
     db.analysis_history.insert_one({"username": username, "entry": entry})
 
 
-# ---- forum (CRUD seam; real-time push + seeding stay Elad's) ----
+# ---- forum (CRUD seam; the real-time push stays Elad's; the seed mechanism is db/seed.py) ----
 def _shape(post):
     """Public projection of a forum post — drops the raw _id and the internal votes list."""
     return {"id": post["id"], "author": post["author"], "anonymous": post.get("anonymous", False),

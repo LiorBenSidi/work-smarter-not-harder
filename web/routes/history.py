@@ -1,4 +1,4 @@
-"""History route — GET /history (gated). OWNER: Lior (F8 route; Elad owns the db side).
+"""History route — GET /history (gated). OWNER: Lior (F8 route + the db side).
 
 Returns the current user's past analyses (analysis_history — DESIGN §2). Read-only; entries are
 written when a readiness analysis is saved (the check-in flow). The history store is injected

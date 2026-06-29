@@ -2,7 +2,7 @@
 
 `web/` is not an installed package, so we exec `web/app.py` off disk (same loader the smoke test
 uses). The web layer is built test-first against injected stores — `FakeUsers` / `FakeProfiles` /
-`FakeHistory` are in-memory stand-ins for Elad's data layer (the `web -> db` seam is just `.get` /
+`FakeHistory` are in-memory stand-ins for Lior's data layer (the `web -> db` seam is just `.get` /
 `.add` / `.save` / `.list`), so the whole layer runs with NO Mongo and NO Docker (Mini-HW3 DI pattern).
 """
 import importlib.util

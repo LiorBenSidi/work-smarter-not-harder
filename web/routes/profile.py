@@ -1,4 +1,4 @@
-"""Profile routes — GET/POST /profile (gated). OWNER: Lior (F2 route; Elad owns the db side).
+"""Profile routes — GET/POST /profile (gated). OWNER: Lior (F2 route + the db side).
 
 The current user's profile (docs/DESIGN.md §2: age, gender, height, weight, goal,
 training_frequency). Input is validated + injection-safe before any query; the profile store is
