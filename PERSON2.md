@@ -9,7 +9,7 @@ The course grades the **backend**, and `web` is the application backend:
 - **Auth + sessions** — werkzeug hashing, login/session/token handling, the auth-gate decorator.
 - **Request handling + validation** — parse and validate input (reject bad types) before it reaches `db`.
 - **Orchestration** — call the AI (`ai_client` → `/predict`) and the DB (`db.py`), combine the results, and degrade gracefully when either is down (don't crash).
-- **Data layer + Mongo internals** (`services/db.py`, `db/seed.py`) — the users/profiles/history/forum CRUD `web` calls, plus the indexes, `$jsonSchema` validators, auth wiring, and seed mechanism. (Operating Mongo in prod is Elad's.)
+- **Data layer** (`services/db.py`, `db/seed.py`) — the users/profiles/history/forum CRUD `web` calls, plus the indexes, `$jsonSchema` validators, auth config, backups, and seed.
 - **Frontend** — the templates/UI on top; not graded, but it matters for the demo vote.
 
 ## Start now — unblocked on day 1
@@ -19,7 +19,7 @@ dashboard) against the in-memory fakes — in parallel, without waiting on the l
 
 ## Your contracts (fixed)
 - Call the AI via `services/ai_client.py` → `POST /predict`.
-- Read/write data via the `services/db.py` thin-CRUD functions (yours); operating the **Mongo container** in prod is Elad's.
+- Read/write data via the `services/db.py` functions (yours — the whole data layer).
 - `web` is the only exposed container (host 8000 → 5000).
 
 ## Mandatory (course — graded)
@@ -39,9 +39,9 @@ dashboard) against the in-memory fakes — in parallel, without waiting on the l
 - [x] **Forum** — UI + post/comment/up-down-vote CRUD (anonymity, XSS-escaped) + **edit/delete your own post (author-only)**.
 - [x] **Thin core data-layer CRUD** (`services/db.py`) — users/profiles/history/forum fns + thread-safe `get_db` + `ensure_indexes` (unique constraints) + votes stored as a list (no username-keyed Mongo fields). **Concurrency-hardened** (atomic create-user dedupe, optimistic-concurrency vote, TOCTOU-safe edit/delete) + malformed-doc guards. In-memory fake for unit tests; a real-Mongo integration suite runs when a DB is up.
 - [x] **Week-9 logging** — `logging_config.py` (console + rotating file, `ENABLE_LOGGING`/`LOG_LEVEL`, per-request access log with timing) wired at the gunicorn entrypoint (`wsgi.py`).
-- [x] **Container build/run** — `web` (+ `ai`) Dockerfile + the runnable 3-container compose; fault-tolerance hardening on the shared compose (restart policies, healthcheck `start_period`, `web` boots and degrades even if `ai` is down). *(Operating Mongo in prod + Azure deploy/CD remain Elad's.)*
+- [x] **Container build/run** — `web` (+ `ai`) Dockerfile + the runnable 3-container compose; fault-tolerance hardening on the shared compose (restart policies, healthcheck `start_period`, `web` boots and degrades even if `ai` is down).
 - [x] **CI gate** — `.github/workflows/ci.yml` (ruff → bandit → pytest) on every PR + branch-protected `main` + a local pre-commit hook. This is the **CI half** of the CI/CD requirement; the Azure auto-deploy is Elad's.
-- [x] **Mongo internals** — `ensure_indexes` (unique `users.username`/`forum_posts.id`/`profiles.username` + a `analysis_history.username` perf index), `ensure_schema` (`$jsonSchema` validators on all four collections — DB-layer defense), env-gated container **auth wiring** (compose + `.env.example`), and `db/seed.py` (idempotent cold-start seeding mechanism). *(Operating Mongo in prod — least-privilege user, backups — is Elad's; the cold-seed content is Shiri's.)*
+- [x] **Mongo internals** — `ensure_indexes` (unique `users.username`/`forum_posts.id`/`profiles.username` + a `analysis_history.username` perf index), `ensure_schema` (`$jsonSchema` validators on all four collections — DB-layer defense), env-gated container **auth config** (compose + `.env.example`), and `db/seed.py` (idempotent cold-start seeding mechanism). *(The cold-seed content is Shiri's.)*
 
 All gated/validated, adversarial + **mutation-tested**, independently QA-verified, live-browser-tested (dark/light/mobile). The web tier is feature-complete.
 

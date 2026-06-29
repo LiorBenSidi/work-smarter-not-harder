@@ -2,8 +2,8 @@
 
 OWNERSHIP: the **thin core CRUD** below (the seam the web tier calls — users / profiles / history /
 forum), its indexes (``ensure_indexes``), the **document-shape validators** (``ensure_schema``) and the
-**seed** script (``db/seed.py``) are Lior's; the Forum real-time backbone (notifications / DM / media)
-and rate-limiting stay Elad's. See docs/COLLABORATORS.md.
+**seed** script (``db/seed.py``) are Lior's; the Forum real-time backbone (notifications / DM / media),
+rate-limiting and the Azure deploy are Elad's. See docs/COLLABORATORS.md.
 
 The web stores (web/app.py ``_Db*`` classes) call these functions with the db handle from ``get_db``.
 Inputs are already type-validated at the route layer (NoSQL-injection defense) before they reach here.
