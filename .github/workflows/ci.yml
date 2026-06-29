@@ -12,6 +12,11 @@ jobs:
   checks:
     name: checks
     runs-on: ubuntu-latest
+    services:
+      mongo:                              # real MongoDB so the data-layer integration tests RUN in CI (not skip)
+        image: mongo:7
+        ports:
+          - 27017:27017
     steps:
       - uses: actions/checkout@v4
 
@@ -33,7 +38,24 @@ jobs:
       - name: Security scan (bandit)
         run: bandit -r . -q -x ./tests,./.venv,./venv,./env   # exclude tests + any local venv (matches the hook). Tune with -ll if noisy.
 
-      - name: Tests (pytest) — Unit/Integration/System/Security under tests/
+      - name: Wait for MongoDB
+        run: |
+          python - <<'PY'
+          import sys, time
+          from pymongo import MongoClient
+          from pymongo.errors import PyMongoError
+          for _ in range(30):
+              try:
+                  MongoClient("mongodb://localhost:27017/", serverSelectionTimeoutMS=1000).admin.command("ping")
+                  print("mongo ready"); sys.exit(0)
+              except PyMongoError:
+                  time.sleep(1)
+          sys.exit("MongoDB did not become ready in time")
+          PY
+
+      - name: Tests (pytest) — Unit/Integration/System/Security under tests/ (+ real-Mongo IT)
+        env:
+          TEST_MONGO_URI: mongodb://localhost:27017/worksmarter_test   # makes test_db_mongo.py RUN, not skip
         run: python -m pytest tests/ -q   # must pass; a suite that collects 0 tests now FAILS (no false-green)
 
   # Stress tests (locust) run on demand, not as a merge gate — they need a running stack.
