@@ -25,7 +25,7 @@ _TEMPLATES = os.path.join(os.path.dirname(os.path.abspath(__file__)), "templates
 
 
 class _DbStore:
-    """Base for the db.py-backed stores (owned by Elad). Lazily resolves ``(db module, handle)`` from
+    """Base for the db.py-backed stores (owned by Lior). Lazily resolves ``(db module, handle)`` from
     the app's MONGO_URI, so the web app boots and ``/health`` works before the DB layer lands; unit
     tests inject in-memory fakes instead. Subclasses just call the seam functions on the handle.
     """
@@ -39,7 +39,7 @@ class _DbStore:
 
 
 class _DbUsers(_DbStore):
-    """Seam Elad implements: ``get_user(db, username)`` / ``create_user(db, username, password_hash)``."""
+    """Seam Lior implements: ``get_user(db, username)`` / ``create_user(db, username, password_hash)``."""
 
     def get(self, username):
         db_module, handle = self._resolve()
@@ -51,7 +51,7 @@ class _DbUsers(_DbStore):
 
 
 class _DbProfiles(_DbStore):
-    """Seam Elad implements: ``get_profile(db, username)`` / ``save_profile(db, username, profile)``."""
+    """Seam Lior implements: ``get_profile(db, username)`` / ``save_profile(db, username, profile)``."""
 
     def get(self, username):
         db_module, handle = self._resolve()
@@ -75,7 +75,7 @@ class _DbHistory(_DbStore):
 
 
 class _DbForum(_DbStore):
-    """Seam Elad implements: ``forum_create_post(db, author, title, body, anonymous)``,
+    """Seam Lior implements: ``forum_create_post(db, author, title, body, anonymous)``,
     ``forum_list_posts(db)``, ``forum_get_post(db, post_id)``,
     ``forum_add_comment(db, post_id, author, body)``, ``forum_vote(db, post_id, username, value)``."""
 

@@ -2,7 +2,7 @@
 
 `web/` is not an installed package, so we exec `web/app.py` off disk (same loader the smoke test
 uses). The web layer is built test-first against injected stores — `FakeUsers` / `FakeProfiles` /
-`FakeHistory` are in-memory stand-ins for Elad's data layer (the `web -> db` seam is just `.get` /
+`FakeHistory` are in-memory stand-ins for Lior's data layer (the `web -> db` seam is just `.get` /
 `.add` / `.save` / `.list`), so the whole layer runs with NO Mongo and NO Docker (Mini-HW3 DI pattern).
 """
 import importlib.util
@@ -28,7 +28,7 @@ def _load_web_app():
 
 
 class FakeUsers:
-    """In-memory user store — the `web -> db` seam Elad implements for real in db.py.
+    """In-memory user store — the `web -> db` seam Lior implements for real in db.py.
 
     Contract: `add` returns False if the username already exists (else stores and returns True);
     `get` returns the stored record dict (with `password_hash`) or None.
@@ -48,7 +48,7 @@ class FakeUsers:
 
 
 class FakeProfiles:
-    """In-memory profile store — the `web -> db` seam Elad implements in db.py (.get / .save)."""
+    """In-memory profile store — the `web -> db` seam Lior implements in db.py (.get / .save)."""
 
     def __init__(self):
         self._by_user = {}
@@ -61,7 +61,7 @@ class FakeProfiles:
 
 
 class FakeHistory:
-    """In-memory analysis-history store — the `web -> db` seam Elad implements in db.py (.list / .add)."""
+    """In-memory analysis-history store — the `web -> db` seam Lior implements in db.py (.list / .add)."""
 
     def __init__(self):
         self._by_user = {}
@@ -74,7 +74,7 @@ class FakeHistory:
 
 
 class FakeForum:
-    """In-memory forum store — the `web -> db` seam Elad implements in db.py
+    """In-memory forum store — the `web -> db` seam Lior implements in db.py
     (create_post / list_posts / get_post / add_comment / vote)."""
 
     def __init__(self):
