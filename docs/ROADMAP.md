@@ -69,7 +69,7 @@ audit-then-`!`-install when you reach it). All 8 sub-features are needed for the
 The contracts are fixed and stubbed, so the three planes build independently from the first commit — nobody waits:
 - **Shiri (`ai/`)** — standalone; builds + tests the model and `/predict` via the test client.
 - **Lior (`web/`)** — the web app (against the `/predict` stub) + the `db.py` CRUD & Mongo internals + the container build + the CI gate.
-- **Elad (deploy/ops)** — Azure setup, the test-runner service (in `docker-compose.test.yml`), operating Mongo in prod, the Forum real-time layer, and the stress + cross-container harness.
+- **Elad (deploy/real-time)** — Azure setup + the deploy job, the test-runner service (in `docker-compose.test.yml`), the Forum real-time layer, and the stress + cross-container harness.
 
 The only coordination points are the seams (`/predict` shape, `db.py`'s function API, only-`web`-exposed) — changing one is a **sync point** (flag it in the PR + the group chat).
 

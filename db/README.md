@@ -39,9 +39,9 @@ creates a root user and requires auth) and point `MONGO_URI` at the creds with `
 TEST_MONGO_URI="mongodb://localhost:27017/worksmarter_test" pytest tests/Integration_Tests/test_db_mongo.py
 ```
 
-## Still Elad's
+## Elad's adjacent pieces
 
-- A **least-privilege app user** for real prod (the env-gated root above is the demo path) + **backups / retention**.
+- The **Azure deploy** that runs this `db` container as part of the live stack (keep it reachable at `MONGO_URI`).
 - The Forum **real-time backbone** — WebSocket/SSE, notifications, DM transport, media/file store.
 - **flask-limiter** rate-limiting on the public routes; **stress** + cross-container tests.
 - The containerized **test-runner** in `docker-compose.test.yml` (runs `pytest` against the live stack).
