@@ -39,6 +39,23 @@ creates a root user and requires auth) and point `MONGO_URI` at the creds with `
 TEST_MONGO_URI="mongodb://localhost:27017/worksmarter_test" pytest tests/Integration_Tests/test_db_mongo.py
 ```
 
+(CI also runs this real-Mongo suite on every PR via a `mongo:7` service — see `.github/workflows/ci.yml`.)
+
+### Backups & retention
+
+`db/backup.sh` (mongodump) dumps the database to a timestamped gzip archive and prunes archives older
+than `RETENTION_DAYS`. Run it on a schedule against the prod Mongo; restore with `mongorestore`:
+
+```
+MONGO_URI="mongodb://user:pass@db:27017/worksmarter?authSource=admin" \
+  BACKUP_DIR=/var/backups/worksmarter RETENTION_DAYS=7 ./db/backup.sh
+# restore a chosen archive:
+mongorestore --gzip --archive=worksmarter-<stamp>.gz --uri="$MONGO_URI"
+```
+
+`mongodump`/`mongorestore` ship with `mongo:7` (mongodb-database-tools), so the job can run from a
+sidecar or the db host. The script fails fast if `MONGO_URI` is unset (covered by a unit test).
+
 ## Elad's adjacent pieces
 
 - The **Azure deploy** that runs this `db` container as part of the live stack (keep it reachable at `MONGO_URI`).
