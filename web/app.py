@@ -12,6 +12,7 @@ from flask import Flask, g, jsonify, render_template, request, send_from_directo
 
 from config import Config
 from csrf import init_csrf
+from perf import init_perf
 from routes.auth import auth_bp
 from routes.checkin import checkin_bp
 from routes.dashboard import dashboard_bp
@@ -187,6 +188,10 @@ def create_app(config=Config, *, users=None, profiles=None, history=None, forum=
             logger.info("%s %s -> %s (%.1f ms)", safe_method, safe_path,
                         response.status_code, (time.perf_counter() - start) * 1000)
         return response
+
+    # gzip + static cache headers (registered last -> runs first in the after_request chain, so the
+    # access log above still times the fully-prepared, compressed response).
+    init_perf(app)
 
     @app.get("/")
     def index():
