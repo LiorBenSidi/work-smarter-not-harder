@@ -51,3 +51,6 @@ class Config:
     OTP_ENABLED = os.environ.get("OTP_ENABLED", "1") == "1"
     OTP_TTL_SECONDS = _int_env("OTP_TTL_SECONDS", 600)             # 10 min
     OTP_MAX_ATTEMPTS = _int_env("OTP_MAX_ATTEMPTS", 5)
+    # Opt-in "remember this browser" cookie: how long a browser stays trusted (skips the login OTP)
+    # before it must re-verify. Invalidated early by a password change (embedded hash tail) or logout.
+    REMEMBER_COOKIE_MAX_AGE = _int_env("REMEMBER_COOKIE_MAX_AGE", 30 * 24 * 3600)   # 30 days
