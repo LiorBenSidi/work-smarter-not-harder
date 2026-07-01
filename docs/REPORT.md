@@ -57,12 +57,12 @@ is implemented independently.
 | `/forum/posts/<id>/comments` | POST | Forum: comment |
 | `/forum/posts/<id>/vote` | POST | Forum: vote (strict `+1` / `-1`) |
 | `/` · `/health` | GET | SPA entry · liveness probe |
-| `ai:/predict` | POST | readiness class + probabilities + recommendations + calories (internal) |
+| `ai:/predict` | POST | readiness class + probabilities + recommendations (internal; web also reads an optional calorie target, added once the model lands) |
 
 ### Data model (MongoDB)
 
 `users` { username, password_hash } · `profiles` { username, age, gender, height, weight, goal,
-training_frequency } · `analysis_history` { username, assessment, recommendations, calories, timestamp } ·
+training_frequency } · `analysis_history` { username, metrics, assessment, calories, timestamp } ·
 `forum_posts` { id, author, title, body, anonymous, score, votes, comments }.
 
 ---
@@ -78,7 +78,7 @@ not a per-line credit — see §6.
 | F2 — Athlete profile (validated, injection-safe) | ✅ | web |
 | F3 — Readiness analysis — **web path** (check-in → `ai /predict` → persist → surface) | ✅ | web |
 | F3 — Readiness analysis — **the model** (Random Forest, real `/predict`) | ⬜ | ai |
-| F4 — Calorie recommendation (Mifflin–St Jeor, `ai/calories.py`) | ✅ | ai |
+| F4 — Calorie recommendation (Mifflin–St Jeor, `ai/calories.py`) | 🟡 engine + 14 unit tests done; live value wires into `/predict` with the model | ai |
 | F5 — Workout generator | ⬜ | ai |
 | F6 — Program-balance analysis (folds into F7, pending Noam) | ⬜ | ai |
 | F7 — Action plan / recommendations — **web surfaces the list**; **engine** | 🟡 | web ✅ · ai ⬜ |
@@ -97,10 +97,11 @@ not a per-line credit — see §6.
 | Azure VM deploy + CI/CD auto-deploy | ⬜ | deploy/scale |
 | Parallel programming — measured CPU-bound path + horizontal `ai` scaling | 🟡 (plan in DESIGN §4) | ai · deploy |
 
-**In one sentence:** the entire web tier, the whole data layer, observability, the 3-container build, the CI
-gate, and the calorie engine are complete and **proven end-to-end** (a real `web → ai → db` request path,
-the real-Mongo integration suite, and in-container logging all verified); the Random Forest model and the
-deploy / real-time / scale plane are the remaining build.
+**In one sentence:** the entire web tier, the whole data layer, observability, the 3-container build, and the
+CI gate are complete and **proven end-to-end** (a real `web → ai → db` request path, the real-Mongo integration
+suite, and in-container logging all verified live); the calorie engine is built + unit-tested but its value
+goes live once the model wires it into `/predict`, and the Random Forest model and the deploy / real-time /
+scale plane are the remaining build.
 
 ---
 
@@ -115,7 +116,7 @@ Every cell names the **actual test file(s)** and count. This supersedes the aspi
 | **F2 Profile** | `test_profile_validation` (27) | `test_profile_flow` (4) | `test_e2e` leg | — | `test_profile` (4) |
 | **F3 Readiness (web path)** | `test_checkin_validation` (25) · `test_ai_client` (3) | `test_checkin_flow` (5) · `test_web_ai` (2) | `test_e2e` leg | ⬜ *(planned — locust)* | — |
 | **F3 Readiness (model)** | `test_ai` (2, ⏸ scaffold) | — | — | — | — |
-| **F4 Calorie** | `test_calories` (14) | via `test_checkin_flow` / `test_dashboard_flow` | `test_e2e` leg | — | — |
+| **F4 Calorie** | `test_calories` (14) | via `test_checkin_flow` / `test_dashboard_flow` | — *(value surfaces with the model)* | — | — |
 | **F7 Action plan (web surfaces list)** | — | `test_web_ai` (2) · `test_dashboard_flow` (5) | `test_e2e` leg | — | — |
 | **F8 Dashboard** | — | `test_dashboard_flow` (5) | `test_e2e` leg | — | `test_dashboard` (2) |
 | **F9 History** | — | `test_history_flow` (3) | `test_e2e` leg | — | `test_history` (2) |
@@ -140,6 +141,10 @@ they run the moment their dependency is present:
 - `test_ai` (2) and `test_load` (1) — TDD scaffolds for the owners still building those planes (the AI
   model and the locust load scenario); they fail loudly (`NotImplementedError`) once un-skipped, so they
   can't rot into false green.
+
+With the live stack up (`E2E_BASE_URL` + `TEST_MONGO_URI` set), the real-Mongo IT and the system e2e execute
+against the running containers too — **289 pass / 3 skip** (only the unwritten AI-model and locust scaffolds
+stay skipped).
 
 No test is commented-out or `assert True` (course rule: a broken test is deleted or fixed, never muted).
 

@@ -21,7 +21,7 @@ User → web ──┬──► ai   (POST /predict, internal)
 - `users` — { username, password_hash }
 - `profiles` — { user_id, age, gender, height, weight, goal, training_frequency }
 - `programs` — { workout programs / exercise catalog }
-- `analysis_history` — { user_id, assessment, recommendations, calories, timestamp }
+- `analysis_history` — { user_id, metrics, assessment, calories, timestamp }
 
 ## 3. API contracts
 | Endpoint | Method | Container | Notes |
@@ -30,7 +30,7 @@ User → web ──┬──► ai   (POST /predict, internal)
 | `/profile` | GET/POST | web | reads/writes `profiles`; validate input (NoSQL-injection guard) |
 | `/predict` | POST | ai (internal) | state assessment + recommendations |
 
-**`web → ai` `POST /predict`** (internal): request `{ features: { sleep_hours, resting_hr, hr_change, fatigue, soreness, weekly_freq, training_load, calorie_balance, bodyweight_trend } }` → response `{ state: <category>, proba: { <category>: <float> }, recommendations: [ … ] }`. *(`recommendations` is a **list** of prioritized action items — each item's content is the AI owner's call. Feature set + category set are candidates, finalized during data exploration.)*
+**`web → ai` `POST /predict`** (internal): request `{ features: { sleep_hours, resting_hr, hr_change, fatigue, soreness, weekly_freq, training_load, calorie_balance, bodyweight_trend } }` → response `{ state: <category>, proba: { <category>: <float> }, recommendations: [ … ] }`. *(`recommendations` is a **list** of prioritized action items — each item's content is the AI owner's call. Feature set + category set are candidates, finalized during data exploration.)* The web also reads an **optional `calories`** target from the response and surfaces it on the dashboard (it degrades to `null` when absent); the `ai` includes it once `ai/calories.py` is wired into `/predict`.
 
 ## 4. AI decision engine (the heart)
 One pipeline, two capabilities:
