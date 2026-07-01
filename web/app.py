@@ -40,7 +40,8 @@ class _DbStore:
 
 
 class _DbUsers(_DbStore):
-    """Seam: ``get_user`` / ``create_user`` / ``get_user_by_email`` / ``update_password``."""
+    """Seam: ``get_user`` / ``create_user`` / ``get_user_by_email`` / ``update_password`` +
+    the login-OTP challenge (``set_otp`` / ``get_otp`` / ``clear_otp`` / ``bump_otp_attempts``)."""
 
     def get(self, username):
         db_module, handle = self._resolve()
@@ -57,6 +58,22 @@ class _DbUsers(_DbStore):
     def set_password(self, username, password_hash):
         db_module, handle = self._resolve()
         return db_module.update_password(handle, username, password_hash)
+
+    def set_otp(self, username, otp_hash, expires_at):
+        db_module, handle = self._resolve()
+        return db_module.set_otp(handle, username, otp_hash, expires_at)
+
+    def get_otp(self, username):
+        db_module, handle = self._resolve()
+        return db_module.get_otp(handle, username)
+
+    def clear_otp(self, username):
+        db_module, handle = self._resolve()
+        db_module.clear_otp(handle, username)
+
+    def bump_otp_attempts(self, username):
+        db_module, handle = self._resolve()
+        return db_module.bump_otp_attempts(handle, username)
 
 
 class _DbProfiles(_DbStore):

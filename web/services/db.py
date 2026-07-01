@@ -13,7 +13,7 @@ import logging
 import threading
 import uuid
 
-from pymongo import MongoClient
+from pymongo import MongoClient, ReturnDocument
 from pymongo.errors import CollectionInvalid, DuplicateKeyError, OperationFailure
 
 logger = logging.getLogger(__name__)
@@ -151,6 +151,51 @@ def get_user_by_email(db, email):
 def update_password(db, username, password_hash):
     """Set a new password hash for `username`. Returns True if a user matched (else name unknown)."""
     return db.users.update_one({"username": username}, {"$set": {"password_hash": password_hash}}).matched_count > 0
+
+
+# ---- login OTP (2-step verification) — a transient challenge stored on the user doc ----
+# The code is stored HASHED (never plaintext), with an absolute expiry and an attempt counter; all three
+# are $unset by clear_otp once used/expired. They're unconstrained extra fields under the users
+# $jsonSchema (like score/votes on posts), so no validator change is needed.
+def set_otp(db, username, otp_hash, expires_at):
+    """Store a fresh login-OTP challenge on the user (overwrites any prior one, resets attempts to 0).
+
+    Returns True if a user matched. ``expires_at`` is absolute epoch seconds (the route computes it);
+    keeping the clock in the route makes this seam trivially fakeable in unit tests.
+    """
+    return db.users.update_one(
+        {"username": username},
+        {"$set": {"otp_hash": otp_hash, "otp_expires_at": expires_at, "otp_attempts": 0}},
+    ).matched_count > 0
+
+
+def get_otp(db, username):
+    """Return ``{"otp_hash", "expires_at", "attempts"}`` for the pending challenge, or None if none."""
+    doc = db.users.find_one({"username": username})
+    if not doc or "otp_hash" not in doc:
+        return None
+    return {"otp_hash": doc["otp_hash"], "expires_at": doc.get("otp_expires_at", 0),
+            "attempts": doc.get("otp_attempts", 0)}
+
+
+def clear_otp(db, username):
+    """Remove the pending OTP challenge (after a success, an expiry, or a lockout)."""
+    db.users.update_one({"username": username},
+                        {"$unset": {"otp_hash": "", "otp_expires_at": "", "otp_attempts": ""}})
+
+
+def bump_otp_attempts(db, username):
+    """Atomically increment the failed-attempt counter; return the new count (0 if the challenge is gone).
+
+    Atomic ``$inc`` (not read-modify-write) so two racing wrong guesses each observe a distinct
+    post-increment value — neither can slip past the lockout by reading a stale pre-increment count.
+    """
+    doc = db.users.find_one_and_update(
+        {"username": username, "otp_hash": {"$exists": True}},
+        {"$inc": {"otp_attempts": 1}},
+        return_document=ReturnDocument.AFTER,
+    )
+    return doc.get("otp_attempts", 0) if doc else 0
 
 
 # ---- profiles (F2 seam) ----
