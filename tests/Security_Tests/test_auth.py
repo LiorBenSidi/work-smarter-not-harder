@@ -7,7 +7,7 @@ gated endpoints reject the unauthenticated. In-memory user store injected (no Mo
 
 
 def _register(client, username="alice", password="s3cretpw!"):
-    return client.post("/register", json={"username": username, "password": password})
+    return client.post("/register", json={"username": username, "password": password, "email": f"{username}@example.com"})
 
 
 def test_password_is_hashed_not_plaintext(client, fake_users):
@@ -64,7 +64,7 @@ class _BrokenUsers:
 
 
 def test_register_degrades_to_503_when_store_fails(make_client):
-    resp = make_client(_BrokenUsers()).post("/register", json={"username": "alice", "password": "s3cretpw!"})
+    resp = make_client(_BrokenUsers()).post("/register", json={"username": "alice", "password": "s3cretpw!", "email": "alice@example.com"})
     assert resp.status_code == 503
 
 

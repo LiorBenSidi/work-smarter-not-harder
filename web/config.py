@@ -33,3 +33,21 @@ class Config:
 
     # Cap request bodies (auth/profile are small JSON) -> a huge body is rejected (413) before parsing.
     MAX_CONTENT_LENGTH = _int_env("MAX_CONTENT_LENGTH", 64 * 1024)
+
+    # Email (OTP + password reset). No SMTP_HOST -> the log backend (dev): the message is logged and
+    # nothing leaves the box. Set SMTP_HOST/USER/PASS in .env to send real mail (STARTTLS, default :587).
+    SMTP_HOST = os.environ.get("SMTP_HOST", "")
+    SMTP_PORT = _int_env("SMTP_PORT", 587)
+    SMTP_USER = os.environ.get("SMTP_USER", "")
+    SMTP_PASS = os.environ.get("SMTP_PASS", "")
+    SMTP_STARTTLS = os.environ.get("SMTP_STARTTLS", "1") == "1"
+    MAIL_FROM = os.environ.get("MAIL_FROM", "Work Smarter <no-reply@worksmarter.local>")
+    # Public base URL used to build the password-reset link in emails (the deploy sets its real domain).
+    APP_BASE_URL = os.environ.get("APP_BASE_URL", "http://localhost:8000")
+    # Signed-token lifetimes (seconds): password-reset link and (PR-C) the login OTP.
+    RESET_TOKEN_MAX_AGE = _int_env("RESET_TOKEN_MAX_AGE", 1800)     # 30 min
+    # 2-step verification (email OTP on login). On by default in real runs; the test suite turns it off
+    # (see the login route) so the existing username+password login tests stay valid.
+    OTP_ENABLED = os.environ.get("OTP_ENABLED", "1") == "1"
+    OTP_TTL_SECONDS = _int_env("OTP_TTL_SECONDS", 600)             # 10 min
+    OTP_MAX_ATTEMPTS = _int_env("OTP_MAX_ATTEMPTS", 5)

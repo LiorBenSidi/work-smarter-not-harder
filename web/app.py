@@ -40,15 +40,23 @@ class _DbStore:
 
 
 class _DbUsers(_DbStore):
-    """Seam Lior implements: ``get_user(db, username)`` / ``create_user(db, username, password_hash)``."""
+    """Seam: ``get_user`` / ``create_user`` / ``get_user_by_email`` / ``update_password``."""
 
     def get(self, username):
         db_module, handle = self._resolve()
         return db_module.get_user(handle, username)
 
-    def add(self, username, password_hash):
+    def add(self, username, password_hash, email=None):
         db_module, handle = self._resolve()
-        return db_module.create_user(handle, username, password_hash)
+        return db_module.create_user(handle, username, password_hash, email)
+
+    def by_email(self, email):
+        db_module, handle = self._resolve()
+        return db_module.get_user_by_email(handle, email)
+
+    def set_password(self, username, password_hash):
+        db_module, handle = self._resolve()
+        return db_module.update_password(handle, username, password_hash)
 
 
 class _DbProfiles(_DbStore):

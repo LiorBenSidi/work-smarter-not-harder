@@ -198,13 +198,30 @@
           <label for="login-password">Password</label><input id="login-password" name="password" type="password" autocomplete="current-password" required>
           <div style="margin-top:16px"><button type="submit">Log in</button></div>
           <div id="login-flash" class="flash" aria-live="polite"></div>
+          <div style="margin-top:12px;text-align:center"><a href="#" id="forgot-link" class="muted" style="text-decoration:none">Forgot your password?</a></div>
         </form>
 
         <form id="register-form" hidden>
           <label for="reg-username">Username<span class="info" id="reg-username-info" tabindex="0" role="note" aria-label="Username requirements">i<span class="tip" aria-hidden="true" id="reg-username-tip"></span></span></label><input id="reg-username" name="username" autocomplete="username" required>
+          <label for="reg-email">Email</label><input id="reg-email" name="email" type="email" autocomplete="email" required>
           <label for="reg-password">Password<span id="reg-pw-minhint"></span><span class="info" id="reg-password-info" tabindex="0" role="note" aria-label="Password requirements">i<span class="tip" aria-hidden="true" id="reg-password-tip"></span></span></label><input id="reg-password" name="password" type="password" autocomplete="new-password" required>
           <div style="margin-top:16px"><button type="submit">Create account</button></div>
           <div id="register-flash" class="flash" aria-live="polite"></div>
+        </form>
+
+        <form id="forgot-form" hidden>
+          <p class="muted" style="margin:0 0 12px">Enter your email and we'll send you a reset link.</p>
+          <label for="forgot-email">Email</label><input id="forgot-email" name="email" type="email" autocomplete="email" required>
+          <div style="margin-top:16px"><button type="submit">Send reset link</button>
+            <button type="button" class="ghost" onclick="showTab('login')">Back</button></div>
+          <div id="forgot-flash" class="flash" aria-live="polite"></div>
+        </form>
+
+        <form id="reset-form" hidden>
+          <p class="muted" style="margin:0 0 12px">Choose a new password for your account.</p>
+          <label for="reset-password">New password</label><input id="reset-password" name="password" type="password" autocomplete="new-password" required>
+          <div style="margin-top:16px"><button type="submit">Set new password</button></div>
+          <div id="reset-flash" class="flash" aria-live="polite"></div>
         </form>
       </div>
     </section>
@@ -294,6 +311,20 @@
       $("tab-register").classList.toggle("active", which === "register");
       $("login-form").hidden = which !== "login";
       $("register-form").hidden = which !== "register";
+      $("forgot-form").hidden = true; $("reset-form").hidden = true;
+      document.querySelector(".tabs").hidden = false;
+    }
+
+    function showForgot() {
+      ["login-form", "register-form", "reset-form"].forEach((id) => { $(id).hidden = true; });
+      $("forgot-form").hidden = false;
+      document.querySelector(".tabs").hidden = true;
+    }
+
+    function showReset() {
+      ["login-form", "register-form", "forgot-form"].forEach((id) => { $(id).hidden = true; });
+      $("reset-form").hidden = false;
+      document.querySelector(".tabs").hidden = true;
     }
 
     function showView(view) {
@@ -321,12 +352,29 @@
     });
 
     onSubmit("register-form", async (f) => {
-      const r = await api("/register", { method: "POST", body: { username: f.username.value, password: f.password.value } });
+      const r = await api("/register", { method: "POST", body: { username: f.username.value, password: f.password.value, email: f.email.value } });
       if (r.ok) { flash("register-flash", "Account created — you can log in now.", "ok"); showTab("login"); }
       else { flash("register-flash", (r.data && r.data.error) || "Registration failed"); }
     });
 
     $("logout-btn").addEventListener("click", async () => { await api("/logout", { method: "POST" }); showView("auth"); });
+
+    // ---- Forgot / reset password ----
+    let resetToken = null;
+    $("forgot-link").addEventListener("click", (e) => { e.preventDefault(); showForgot(); });
+
+    onSubmit("forgot-form", async (f) => {
+      const r = await api("/forgot-password", { method: "POST", body: { email: f.email.value } });
+      flash("forgot-flash", (r.data && r.data.status) || "If that email is registered, a reset link is on its way.", "ok");
+    });
+
+    onSubmit("reset-form", async (f) => {
+      const r = await api("/reset-password", { method: "POST", body: { token: resetToken, password: f.password.value } });
+      if (r.ok) {
+        flash("reset-flash", "Password updated — you can log in now.", "ok");
+        setTimeout(() => { history.replaceState({}, "", "/"); showTab("login"); }, 1000);
+      } else { flash("reset-flash", (r.data && r.data.error) || "Could not reset your password"); }
+    });
 
     // ---- Profile ----
     onSubmit("profile-form", async (f) => {
@@ -547,6 +595,8 @@
     // ---- Boot: am I already logged in? (GET /me) ----
     (async function init() {
       applyCredentialHints();
+      const t = new URLSearchParams(location.search).get("reset_token");
+      if (t) { resetToken = t; showView("auth"); showReset(); return; }
       const r = await api("/me");
       if (r.ok && r.data && r.data.username) { enterApp(r.data.username); } else { showView("auth"); }
     })();

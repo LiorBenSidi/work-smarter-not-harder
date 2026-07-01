@@ -6,7 +6,7 @@ Flask test client used to simulate a forged request that lacks / mismatches the 
 
 
 def _creds():
-    return {"username": "alice", "password": "s3cretpw!"}
+    return {"username": "alice", "password": "s3cretpw!", "email": "alice@example.com"}
 
 
 def test_unsafe_request_without_token_is_rejected_403(client):

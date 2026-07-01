@@ -47,7 +47,8 @@ def ensure_indexes(db):
 _NAMESPACE_NOT_FOUND = 26      # MongoDB OperationFailure code: the collection doesn't exist yet
 _SCHEMAS = {
     "users": {"bsonType": "object", "required": ["username", "password_hash"],
-              "properties": {"username": {"bsonType": "string"}, "password_hash": {"bsonType": "string"}}},
+              "properties": {"username": {"bsonType": "string"}, "password_hash": {"bsonType": "string"},
+                             "email": {"bsonType": "string"}}},
     "profiles": {"bsonType": "object", "required": ["username", "profile"],
                  "properties": {"username": {"bsonType": "string"}, "profile": {"bsonType": "object"}}},
     "analysis_history": {"bsonType": "object", "required": ["username", "entry"],
@@ -112,7 +113,7 @@ def get_db(mongo_uri):
 
 # ---- users (auth seam) ----
 def get_user(db, username):
-    """Return ``{"username", "password_hash"}`` for `username`, or None.
+    """Return ``{"username", "password_hash", "email"}`` for `username`, or None (email may be None).
 
     A doc missing ``password_hash`` (a partial/corrupt write, or a direct DB edit) is treated as
     "no user" so login fails closed rather than 500-ing on a KeyError.
@@ -120,25 +121,36 @@ def get_user(db, username):
     doc = db.users.find_one({"username": username})
     if doc is None or "password_hash" not in doc:
         return None
-    return {"username": doc["username"], "password_hash": doc["password_hash"]}
+    return {"username": doc["username"], "password_hash": doc["password_hash"], "email": doc.get("email")}
 
 
-def create_user(db, username, password_hash):
+def create_user(db, username, password_hash, email=None):
     """Create the user if absent. Return True if created, False if the username already exists.
 
     The upsert + unique index on ``users.username`` make this atomic: when two registrations of the
     same username race, exactly one insert wins and the loser's upsert raises ``DuplicateKeyError`` —
     caught here and reported as False (the user now exists), honouring the contract under concurrency.
+    ``email`` is stored when given (registration provides it; other callers may omit it).
     """
+    doc = {"username": username, "password_hash": password_hash}
+    if email is not None:
+        doc["email"] = email
     try:
-        result = db.users.update_one(
-            {"username": username},
-            {"$setOnInsert": {"username": username, "password_hash": password_hash}},
-            upsert=True,
-        )
+        result = db.users.update_one({"username": username}, {"$setOnInsert": doc}, upsert=True)
     except DuplicateKeyError:
         return False
     return result.upserted_id is not None
+
+
+def get_user_by_email(db, email):
+    """Return the username registered to `email`, or None (used by the password-reset request)."""
+    doc = db.users.find_one({"email": email})
+    return doc["username"] if doc and "password_hash" in doc else None
+
+
+def update_password(db, username, password_hash):
+    """Set a new password hash for `username`. Returns True if a user matched (else name unknown)."""
+    return db.users.update_one({"username": username}, {"$set": {"password_hash": password_hash}}).matched_count > 0
 
 
 # ---- profiles (F2 seam) ----

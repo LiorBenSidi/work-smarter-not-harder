@@ -2,7 +2,7 @@
 
 
 def _login(c, username="alice"):
-    c.post("/register", json={"username": username, "password": "s3cretpw!"})
+    c.post("/register", json={"username": username, "password": "s3cretpw!", "email": f"{username}@example.com"})
     c.post("/login", json={"username": username, "password": "s3cretpw!"})
 
 
