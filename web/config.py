@@ -34,6 +34,12 @@ class Config:
     # Cap request bodies (auth/profile are small JSON) -> a huge body is rejected (413) before parsing.
     MAX_CONTENT_LENGTH = _int_env("MAX_CONTENT_LENGTH", 64 * 1024)
 
+    # Static-asset caching (perf, course L7): Flask's send_file stamps the icons/manifest with
+    # `Cache-Control: public, max-age=<n>` + an ETag, so repeat visits revalidate cheaply (304) or skip
+    # the round-trip entirely. The served HTML shell is render_template (not a file send) -> uncached, so
+    # UI updates ship immediately; sw.js overrides to no-cache in its route so the SW keeps updating.
+    SEND_FILE_MAX_AGE_DEFAULT = _int_env("SEND_FILE_MAX_AGE_DEFAULT", 86400)   # 24h
+
     # Email (OTP + password reset). No SMTP_HOST -> the log backend (dev): the message is logged and
     # nothing leaves the box. Set SMTP_HOST/USER/PASS in .env to send real mail (STARTTLS, default :587).
     SMTP_HOST = os.environ.get("SMTP_HOST", "")
