@@ -2,8 +2,8 @@
 
 
 def _login(c):
-    c.post("/register", json={"username": "alice", "password": "s3cretpw!"})
-    c.post("/login", json={"username": "alice", "password": "s3cretpw!"})
+    c.post("/register", json={"username": "alice", "password": "s3cretpw!", "email": "alice@example.com"})
+    c.post("/login", json={"username": "alice", "password": "s3cretpw!", "email": "alice@example.com"})
 
 
 class _BrokenForum:
@@ -55,8 +55,8 @@ def test_invalid_vote_value_is_rejected_400(forum_client):
 def test_partial_store_row_does_not_crash_the_list(make_client, fake_users):
     # one malformed/partial row from the store must degrade per-row (defaults), not 500 the whole list
     c = make_client(fake_users, forum=_PartialForum())
-    c.post("/register", json={"username": "alice", "password": "s3cretpw!"})
-    c.post("/login", json={"username": "alice", "password": "s3cretpw!"})
+    c.post("/register", json={"username": "alice", "password": "s3cretpw!", "email": "alice@example.com"})
+    c.post("/login", json={"username": "alice", "password": "s3cretpw!", "email": "alice@example.com"})
     resp = c.get("/forum/posts")
     assert resp.status_code == 200
     post = resp.get_json()["posts"][0]
@@ -66,14 +66,14 @@ def test_partial_store_row_does_not_crash_the_list(make_client, fake_users):
 
 def test_forum_degrades_to_503_when_store_fails(make_client, fake_users):
     c = make_client(fake_users, forum=_BrokenForum())
-    c.post("/register", json={"username": "alice", "password": "s3cretpw!"})
-    c.post("/login", json={"username": "alice", "password": "s3cretpw!"})
+    c.post("/register", json={"username": "alice", "password": "s3cretpw!", "email": "alice@example.com"})
+    c.post("/login", json={"username": "alice", "password": "s3cretpw!", "email": "alice@example.com"})
     assert c.post("/forum/posts", json={"title": "T", "body": "b"}).status_code == 503
 
 
 def _as(c, username):
-    c.post("/register", json={"username": username, "password": "s3cretpw!"})
-    c.post("/login", json={"username": username, "password": "s3cretpw!"})
+    c.post("/register", json={"username": username, "password": "s3cretpw!", "email": f"{username.strip()}@example.com"})
+    c.post("/login", json={"username": username, "password": "s3cretpw!", "email": f"{username.strip()}@example.com"})
 
 
 def test_cannot_edit_someone_elses_post(forum_client):

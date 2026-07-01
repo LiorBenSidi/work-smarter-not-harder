@@ -32,7 +32,7 @@ def test_full_user_journey_web_ai_db(client):
     s = client
     user, pw = "e2e_" + uuid.uuid4().hex[:8], "s3cret-e2e-pw!"
 
-    assert s.post(f"{BASE}/register", json={"username": user, "password": pw}, headers=_h(s)).status_code in (200, 201)
+    assert s.post(f"{BASE}/register", json={"username": user, "password": pw, "email": user + "@example.com"}, headers=_h(s)).status_code in (200, 201)
     assert s.post(f"{BASE}/login", json={"username": user, "password": pw}, headers=_h(s)).status_code == 200
     assert s.get(f"{BASE}/me").json().get("username") == user
 

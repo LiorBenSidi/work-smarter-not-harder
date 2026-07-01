@@ -8,8 +8,8 @@ import sys
 
 
 def _register_then_login(client):
-    client.post("/register", json={"username": "alice", "password": "s3cretpw!"})
-    return client.post("/login", json={"username": "alice", "password": "s3cretpw!"})
+    client.post("/register", json={"username": "alice", "password": "s3cretpw!", "email": "alice@example.com"})
+    return client.post("/login", json={"username": "alice", "password": "s3cretpw!", "email": "alice@example.com"})
 
 
 def test_session_cookie_is_httponly_and_samesite_lax(client):
@@ -25,8 +25,8 @@ def test_session_cookie_secure_attribute_follows_config(web_app_module, fake_use
     c.get("/health")  # issue the csrf cookie (double-submit)
     cc = c.get_cookie("csrf_token")
     headers = {"X-CSRF-Token": cc.value if cc else ""}
-    c.post("/register", json={"username": "alice", "password": "s3cretpw!"}, headers=headers)
-    login = c.post("/login", json={"username": "alice", "password": "s3cretpw!"}, headers=headers)
+    c.post("/register", json={"username": "alice", "password": "s3cretpw!", "email": "alice@example.com"}, headers=headers)
+    login = c.post("/login", json={"username": "alice", "password": "s3cretpw!", "email": "alice@example.com"}, headers=headers)
     session_cookie = next((ck for ck in login.headers.getlist("Set-Cookie") if ck.startswith("session=")), "")
     assert "Secure" in session_cookie
 

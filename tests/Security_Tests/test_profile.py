@@ -2,8 +2,8 @@
 
 
 def _login(c):
-    c.post("/register", json={"username": "alice", "password": "s3cretpw!"})
-    c.post("/login", json={"username": "alice", "password": "s3cretpw!"})
+    c.post("/register", json={"username": "alice", "password": "s3cretpw!", "email": "alice@example.com"})
+    c.post("/login", json={"username": "alice", "password": "s3cretpw!", "email": "alice@example.com"})
 
 
 def _profile():
@@ -35,6 +35,6 @@ class _BrokenProfiles:
 
 def test_profile_degrades_to_503_when_store_fails(make_client, fake_users):
     c = make_client(fake_users, _BrokenProfiles())
-    c.post("/register", json={"username": "alice", "password": "s3cretpw!"})
-    c.post("/login", json={"username": "alice", "password": "s3cretpw!"})
+    c.post("/register", json={"username": "alice", "password": "s3cretpw!", "email": "alice@example.com"})
+    c.post("/login", json={"username": "alice", "password": "s3cretpw!", "email": "alice@example.com"})
     assert c.post("/profile", json=_profile()).status_code == 503
