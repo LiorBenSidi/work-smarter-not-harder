@@ -56,7 +56,7 @@ def test_users_roundtrip_and_dedupe(db_mod, real_db):
     db_mod.ensure_indexes(real_db)
     assert db_mod.create_user(real_db, "alice", "h1") is True
     assert db_mod.create_user(real_db, "alice", "h2") is False           # upsert dup -> False
-    assert db_mod.get_user(real_db, "alice") == {"username": "alice", "password_hash": "h1"}  # no _id
+    assert db_mod.get_user(real_db, "alice") == {"username": "alice", "password_hash": "h1", "email": None}  # no _id
 
 
 def test_profile_and_history_roundtrip(db_mod, real_db):
