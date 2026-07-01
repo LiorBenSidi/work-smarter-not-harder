@@ -5,90 +5,179 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Work Smarter, Not Harder</title>
   <style>
-    /* "Work Smarter" — a training-readiness coach. Visual identity: a performance lab. Teal signal +
-       a coral brand mark (not the generic dashboard blue); data set in monospace; the readiness verdict
-       is the signature element — a live-signal dot + a recovery track, color-coded green/amber/red. */
+    /* "Work Smarter" — a training-readiness coach. Visual identity: calm recovery instrument.
+       A dusk gradient with a drifting aurora; one luminous mint→lilac accent. The signature is the
+       breathing readiness orb — a circular gauge that fills to today's readiness and breathes, colored
+       green/amber/coral by state. Premium mobile-app idiom: soft rounded glass cards, generous space. */
     :root { color-scheme: light dark;
-      --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      --font-sans: ui-rounded, "SF Pro Rounded", "Hiragino Maru Gothic ProN", "Segoe UI Variable", "Nunito", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
       --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
-      /* dark (default) — the lab at night */
-      --bg:#080d1a; --card:#111a30; --ink:#eaf0ff; --muted:#8b98ba; --accent:#2dd4bf;
-      --ok:#34d399; --warn:#fbbf24; --err:#fb7185; --line:#212c49; --field:#0c1426; --on-accent:#04201d;
-      --brand:#fb7185; --ready:#34d399; --moderate:#fbbf24; --rest:#fb7185;
-      --shadow:0 18px 40px -26px rgba(0,0,0,.85); --glow:rgba(45,212,191,.12); }
+      /* dusk (default) — recovery at rest */
+      --bg:#0a0e20; --bg2:#170f30; --ink:#eef0fb; --muted:#9aa2c9;
+      --card: color-mix(in srgb, #1b1740 58%, transparent); --field: rgba(255,255,255,.05); --line: rgba(255,255,255,.10);
+      --accent:#6ff0cf; --accent2:#b39bff; --on-accent:#04231b;
+      --ok:#6ff0cf; --warn:#ffce7a; --err:#ff9db4; --ready:#6ff0cf; --moderate:#ffce7a; --rest:#ff9db4; --brand:#b39bff;
+      --shadow:0 30px 70px -34px rgba(3,6,20,.85);
+      --glow-a: rgba(111,240,207,.22); --glow-b: rgba(179,155,255,.22); --glow-c: rgba(96,150,255,.16); }
     @media (prefers-color-scheme: light) {
       :root {
-        --bg:#f3f6fc; --card:#ffffff; --ink:#101831; --muted:#5a657f; --accent:#0d9488;
-        --ok:#059669; --warn:#b45309; --err:#dc2626; --line:#dde4f2; --field:#eef2fb; --on-accent:#ffffff;
-        --brand:#e11d6b; --ready:#059669; --moderate:#b45309; --rest:#dc2626;
-        --shadow:0 18px 40px -28px rgba(20,40,80,.22); --glow:rgba(13,148,136,.10); }
+        --bg:#eef0fb; --bg2:#e7e4fb; --ink:#1a1f3a; --muted:#5c6486;
+        --card: color-mix(in srgb, #ffffff 78%, transparent); --field: rgba(20,26,60,.05); --line: rgba(30,36,80,.12);
+        --accent:#0eb389; --accent2:#7c5cff; --on-accent:#ffffff;
+        --ok:#0eb389; --warn:#b5730c; --err:#d5477a; --ready:#0eb389; --moderate:#b5730c; --rest:#d5477a; --brand:#7c5cff;
+        --shadow:0 30px 60px -34px rgba(60,60,120,.30);
+        --glow-a: rgba(14,179,137,.16); --glow-b: rgba(124,92,255,.16); --glow-c: rgba(96,150,255,.12); }
     }
-    * { box-sizing: border-box; }
-    body { margin:0; font-family: var(--font-sans); color: var(--ink);
-      background: radial-gradient(1100px 420px at 50% -240px, var(--glow), transparent) no-repeat, var(--bg);
-      background-attachment: fixed; -webkit-font-smoothing: antialiased; }
-    header { padding: 16px 24px; border-bottom: 1px solid var(--line); display:flex; align-items:center; justify-content:space-between; flex-wrap: wrap; gap: 10px; }
-    .brand { display:flex; align-items:baseline; gap:10px; text-decoration:none; color:inherit; }
-    .brand-dot { width:11px; height:11px; border-radius:50%; background:var(--brand); align-self:center;
-      box-shadow:0 0 0 4px color-mix(in srgb, var(--brand) 22%, transparent); animation: beat 2.4s ease-in-out infinite; }
-    .brand-name { font-size:18px; font-weight:800; letter-spacing:.10em; }
-    .brand-tag { font-family: var(--font-mono); font-size:11px; color:var(--muted); letter-spacing:.02em; }
-    main { max-width: 840px; margin: 0 auto; padding: 28px 24px 48px; animation: rise .4s ease both; }
-    .card { background: var(--card); border:1px solid var(--line); border-radius: 14px; padding: 22px; margin-bottom: 18px; box-shadow: var(--shadow); }
-    .card h2 { margin: 0 0 16px; font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .12em; font-weight:700; display:flex; align-items:center; justify-content:space-between; gap:10px; }
-    label { display:block; font-size: 13px; color: var(--muted); margin: 10px 0 4px; }
-    input, select, textarea { width:100%; padding: 10px 12px; background:var(--field); border:1px solid var(--line); border-radius: 9px; color: var(--ink); font-size: 14px; font-family: inherit; transition: border-color .12s, box-shadow .12s; }
-    input[type=number] { font-family: var(--font-mono); }
-    input:focus, select:focus, textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent); outline: none; }
-    button { background: var(--accent); color:var(--on-accent); border:0; border-radius: 9px; padding: 10px 16px; font-weight: 700; cursor: pointer; font-size: 14px; transition: filter .12s, transform .04s; }
-    button:hover { filter: brightness(1.08); } button:active { transform: translateY(1px); }
-    button.ghost { background: transparent; color: var(--accent); border:1px solid var(--line); font-weight:600; }
-    button.ghost:hover { border-color: var(--accent); filter:none; }
-    .row { display:grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-    .flash { font-size: 13px; margin-top: 10px; min-height: 18px; }
-    .flash.error { color: var(--err); } .flash.ok { color: var(--ok); } .flash.warn { color: var(--warn); }
-    .tabs { display:flex; gap: 8px; margin-bottom: 16px; }
-    .tabs button { background: transparent; border:1px solid var(--line); color: var(--muted); font-weight:600; }
-    .tabs button.active { background: var(--accent); color:var(--on-accent); border-color: var(--accent); }
-    /* signature: the readiness verdict — a live signal + a recovery track, color-coded by state */
-    .readiness { --st: var(--muted); }
+    @property --w { syntax:'<number>'; inherits:false; initial-value:0; }
+    * { box-sizing:border-box; }
+    html, body { min-height:100%; }
+    body { margin:0; font-family:var(--font-sans); color:var(--ink); line-height:1.5; overflow-x:hidden;
+      -webkit-font-smoothing:antialiased; background-attachment:fixed;
+      background:
+        radial-gradient(60% 44% at 14% 6%, var(--glow-b), transparent 60%),
+        radial-gradient(52% 40% at 90% 2%, var(--glow-a), transparent 55%),
+        radial-gradient(54% 46% at 62% 104%, var(--glow-c), transparent 60%),
+        linear-gradient(158deg, var(--bg), var(--bg2)); }
+    body::before { content:""; position:fixed; inset:-28% -12% auto -12%; height:78vh; z-index:-1; pointer-events:none;
+      filter: blur(34px); opacity:.65; animation: drift 26s ease-in-out infinite alternate;
+      background: radial-gradient(38% 50% at 30% 32%, var(--glow-a), transparent 62%),
+                  radial-gradient(44% 56% at 72% 42%, var(--glow-b), transparent 62%); }
+
+    header { position:sticky; top:0; z-index:30; display:flex; align-items:center; justify-content:space-between; gap:12px;
+      padding:13px 20px; border-bottom:1px solid var(--line);
+      background: color-mix(in srgb, var(--bg) 58%, transparent); backdrop-filter: blur(16px) saturate(1.2); }
+    .brand { display:flex; align-items:center; gap:11px; text-decoration:none; color:inherit; }
+    .brand-dot { width:26px; height:26px; border-radius:50%; flex:none;
+      background: radial-gradient(circle at 33% 28%, color-mix(in srgb, var(--accent) 92%, #fff), var(--accent) 42%, var(--accent2) 92%);
+      box-shadow:0 0 18px color-mix(in srgb, var(--accent) 55%, transparent); animation: breathe 5.5s ease-in-out infinite; }
+    .brand-name { font-size:16px; font-weight:800; letter-spacing:.04em; white-space:nowrap; }
+    .brand-tag { font-size:12px; color:var(--muted); white-space:nowrap; }
+    #who { display:flex; align-items:center; gap:10px; }
+    #who-name { white-space:nowrap; }
+
+    main { max-width:560px; margin:0 auto; padding:24px 18px 64px; }
+    .card { background:var(--card); border:1px solid var(--line); border-radius:24px; padding:22px; margin-bottom:18px;
+      box-shadow:var(--shadow); backdrop-filter: blur(18px) saturate(1.15); animation: rise .6s cubic-bezier(.2,.7,.2,1) both; }
+    #app-view .card:nth-child(1){ animation-delay:.02s } #app-view .card:nth-child(2){ animation-delay:.08s }
+    #app-view .card:nth-child(3){ animation-delay:.14s } #app-view .card:nth-child(4){ animation-delay:.20s }
+    #app-view .card:nth-child(5){ animation-delay:.26s }
+    .card h2 { margin:0 0 16px; font-size:12px; color:var(--muted); text-transform:uppercase; letter-spacing:.14em; font-weight:800;
+      display:flex; align-items:center; justify-content:space-between; gap:10px; }
+
+    label { display:block; font-size:13px; color:var(--muted); margin:12px 0 6px; font-weight:600; }
+    input, select, textarea { width:100%; padding:13px 14px; background:var(--field); border:1px solid var(--line); border-radius:14px;
+      color:var(--ink); font-size:15px; font-family:inherit; transition: border-color .15s, box-shadow .15s, background .15s; }
+    input[type=number] { font-family:var(--font-mono); }
+    input:focus, select:focus, textarea:focus { outline:none; border-color:transparent;
+      box-shadow:0 0 0 3px color-mix(in srgb, var(--accent) 45%, transparent); }
+    button { background: linear-gradient(135deg, var(--accent), color-mix(in srgb, var(--accent) 52%, var(--accent2)));
+      color:var(--on-accent); border:0; border-radius:999px; padding:12px 20px; font-weight:800; font-size:15px; font-family:inherit;
+      cursor:pointer; white-space:nowrap; box-shadow:0 12px 26px -14px color-mix(in srgb, var(--accent) 85%, transparent);
+      transition: transform .08s, box-shadow .15s, filter .15s; }
+    button:hover { filter:brightness(1.05); box-shadow:0 16px 32px -14px color-mix(in srgb, var(--accent) 92%, transparent); }
+    button:active { transform: translateY(1px) scale(.99); }
+    button:disabled { opacity:.5; cursor:not-allowed; }
+    button.ghost { background:transparent; color:var(--ink); border:1px solid var(--line); box-shadow:none; font-weight:700; }
+    button.ghost:hover { border-color: color-mix(in srgb, var(--accent) 55%, transparent); background:var(--field); filter:none; }
+    button.mini { padding:7px 13px; font-size:12.5px; }
+
+    .row { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+    .flash { font-size:13.5px; margin-top:12px; min-height:18px; font-weight:600; }
+    .flash.error { color:var(--err); } .flash.ok { color:var(--ok); } .flash.warn { color:var(--warn); }
+
+    .tabs { display:flex; gap:5px; margin-bottom:18px; padding:5px; background:var(--field); border:1px solid var(--line); border-radius:999px; }
+    .tabs button { flex:1; background:transparent; color:var(--muted); box-shadow:none; padding:10px; border-radius:999px; font-weight:800; }
+    .tabs button.active { background: linear-gradient(135deg, var(--accent), color-mix(in srgb, var(--accent) 55%, var(--accent2)));
+      color:var(--on-accent); }
+
+    /* hero (logged-out) — the first impression */
+    .hero { text-align:center; padding:34px 8px 6px; animation: rise .7s cubic-bezier(.2,.7,.2,1) both; }
+    .hero-orb { width:132px; height:132px; margin:0 auto 24px; border-radius:50%; position:relative;
+      background: radial-gradient(circle at 34% 30%, color-mix(in srgb, var(--accent) 92%, #fff), var(--accent) 40%, var(--accent2) 92%);
+      box-shadow:0 0 70px -6px color-mix(in srgb, var(--accent) 55%, transparent), inset 0 0 44px -10px rgba(255,255,255,.5);
+      animation: breathe 6s ease-in-out infinite; }
+    .hero-orb::after { content:""; position:absolute; inset:-16px; border-radius:50%;
+      border:1px solid color-mix(in srgb, var(--accent) 34%, transparent); animation: halo 6s ease-in-out infinite; }
+    .hero-title { font-size:31px; font-weight:800; letter-spacing:-.02em; line-height:1.14; margin:0 0 10px; }
+    .hero-sub { color:var(--muted); font-size:15px; margin:0 auto 20px; max-width:33ch; }
+
+    /* signature: the breathing readiness orb */
+    .readiness { --st: var(--muted); text-align:center; }
     .readiness.ready { --st: var(--ready); } .readiness.moderate { --st: var(--moderate); } .readiness.rest { --st: var(--rest); }
-    .verdict { display:flex; align-items:center; gap:12px; font-size:30px; font-weight:800; letter-spacing:-.02em; line-height:1.1; color: var(--st); }
-    .signal { width:13px; height:13px; border-radius:50%; background: var(--st); flex:none;
+    .orb { position:relative; width:206px; height:206px; margin:4px auto 6px; border-radius:50%; display:grid; place-items:center;
+      background: conic-gradient(from -90deg, var(--st) calc(var(--w,0) * 1%), color-mix(in srgb, var(--st) 12%, transparent) 0);
+      box-shadow:0 0 54px -14px color-mix(in srgb, var(--st) 50%, transparent); transition:--w 1.1s cubic-bezier(.2,.7,.2,1); }
+    .orb-inner { width:76%; height:76%; border-radius:50%; display:grid; place-items:center; gap:1px; background:var(--bg);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.06), inset 0 0 30px -10px color-mix(in srgb, var(--st) 45%, transparent);
+      animation: breathe 5.5s ease-in-out infinite; }
+    .signal { width:9px; height:9px; border-radius:50%; background:var(--st); margin-bottom:2px;
       box-shadow:0 0 0 4px color-mix(in srgb, var(--st) 20%, transparent); animation: beat 2s ease-in-out infinite; }
-    .track { height:6px; border-radius:999px; background: var(--field); overflow:hidden; margin:14px 0 4px; }
-    .track > span { display:block; height:100%; width:0; background: var(--st); border-radius:999px; transition: width .7s cubic-bezier(.2,.7,.2,1); }
-    .pill { display:inline-block; padding: 4px 11px; border-radius: 999px; font-size: 12px; font-family: var(--font-mono); background:var(--field); border:1px solid var(--line); color: var(--ink); }
-    ul { margin: 10px 0 0; padding-left: 18px; } li { margin: 5px 0; }
-    .muted { color: var(--muted); font-size: 13px; }
-    .info { position:relative; display:inline-flex; align-items:center; justify-content:center; width:15px; height:15px; margin-left:6px; border-radius:50%; background:var(--accent); color:var(--on-accent); font-size:10px; font-weight:700; font-style:normal; cursor:help; vertical-align:middle; }
-    .info .tip { position:absolute; top:150%; left:0; white-space:nowrap; background:var(--card); color:var(--ink); border:1px solid var(--line); border-radius:6px; padding:6px 9px; font-size:12px; font-weight:400; text-transform:none; letter-spacing:0; box-shadow:0 6px 18px rgba(0,0,0,.35); opacity:0; pointer-events:none; transition:opacity .12s; z-index:20; }
+    .verdict { font-size:26px; font-weight:800; letter-spacing:-.01em; line-height:1.1; color:var(--st); }
+    .orb-sub { font-size:10.5px; letter-spacing:.18em; text-transform:uppercase; color:var(--muted); }
+    .recs { list-style:none; margin:18px 0 0; padding:0; text-align:left; }
+    .recs li { position:relative; margin:8px 0; padding:11px 13px 11px 34px; background:var(--field); border:1px solid var(--line); border-radius:14px; font-size:14px; }
+    .recs li::before { content:""; position:absolute; left:13px; top:15px; width:8px; height:8px; border-radius:50%;
+      background:var(--accent); box-shadow:0 0 8px var(--accent); }
+
+    .pill { display:inline-block; padding:6px 13px; border-radius:999px; font-size:12.5px; font-family:var(--font-mono);
+      background:var(--field); border:1px solid var(--line); color:var(--ink); white-space:nowrap; }
+    .muted { color:var(--muted); font-size:13.5px; }
+    ul { margin:10px 0 0; padding-left:18px; } li { margin:6px 0; }
+
+    /* forum */
+    .post { padding:14px 15px; border:1px solid var(--line); border-radius:16px; margin:10px 0; background:var(--field);
+      cursor:pointer; transition: transform .12s, border-color .15s, background .15s; }
+    .post:hover { transform: translateY(-2px); border-color: color-mix(in srgb, var(--accent) 45%, transparent); }
+    .post-top { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:4px; }
+    .detail { background: color-mix(in srgb, var(--field) 60%, var(--card)); margin-top:12px; position:relative; }
+    .detail h3 { margin:0 4px 4px 0; font-size:19px; } .detail .by { margin:0 0 10px; } .detail .body { margin:0 0 14px; }
+    .detail .close { position:absolute; top:14px; right:14px; padding:6px 11px; }
+    .vote-row { display:flex; align-items:center; gap:10px; margin:4px 0 2px; }
+    .own-actions { margin-top:10px; display:flex; gap:8px; }
+    .comments { list-style:none; padding:0; margin:8px 0 0; }
+    .comments li { padding:9px 12px; background:var(--field); border:1px solid var(--line); border-radius:12px; margin:6px 0; font-size:14px; }
+
+    .info { position:relative; display:inline-flex; align-items:center; justify-content:center; width:16px; height:16px; margin-left:6px;
+      border-radius:50%; background:var(--accent); color:var(--on-accent); font-size:10px; font-weight:800; font-style:normal; cursor:help; vertical-align:middle; }
+    .info .tip { position:absolute; top:150%; left:0; white-space:nowrap; background:var(--card); color:var(--ink); border:1px solid var(--line);
+      border-radius:9px; padding:7px 10px; font-size:12px; font-weight:500; text-transform:none; letter-spacing:0; box-shadow:var(--shadow);
+      backdrop-filter: blur(12px); opacity:0; pointer-events:none; transition: opacity .14s; z-index:20; }
     .info:hover .tip, .info:focus-visible .tip, .info:focus .tip { opacity:1; }
-    button:disabled { opacity:.55; cursor:not-allowed; }
-    :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+    :focus-visible { outline:2px solid var(--accent); outline-offset:3px; border-radius:8px; }
     [hidden] { display:none !important; }
-    @keyframes beat { 0%,100%{ box-shadow:0 0 0 3px color-mix(in srgb, var(--st, var(--brand)) 28%, transparent); } 50%{ box-shadow:0 0 0 8px color-mix(in srgb, var(--st, var(--brand)) 4%, transparent); } }
-    @keyframes rise { from { opacity:0; transform: translateY(8px); } to { opacity:1; transform:none; } }
-    @media (max-width: 560px) { .row { grid-template-columns: 1fr; } main { padding: 18px 16px 40px; } }
-    @media (prefers-reduced-motion: reduce) { *, ::before, ::after { animation: none !important; transition: none !important; } .track > span { width: var(--w, 100%) !important; } }
+
+    @keyframes breathe { 0%,100% { transform: scale(1); } 50% { transform: scale(1.045); } }
+    @keyframes halo { 0%,100% { opacity:.5; transform: scale(1); } 50% { opacity:.9; transform: scale(1.06); } }
+    @keyframes beat { 0%,100% { box-shadow:0 0 0 3px color-mix(in srgb, var(--st, var(--accent)) 26%, transparent); }
+      50% { box-shadow:0 0 0 8px color-mix(in srgb, var(--st, var(--accent)) 4%, transparent); } }
+    @keyframes rise { from { opacity:0; transform: translateY(12px); } to { opacity:1; transform:none; } }
+    @media (max-width: 640px) { .brand-tag { display:none; } }
+    @media (max-width: 560px) { .row { grid-template-columns:1fr; } main { padding:18px 16px 48px; } .hero-title { font-size:27px; } #who-name { display:none; } }
+    @media (prefers-reduced-motion: reduce) { *, ::before, ::after { animation:none !important; transition:none !important; } }
   </style>
 </head>
 <body>
   <header>
     <a class="brand" href="/" aria-label="Work Smarter, Not Harder — home">
       <span class="brand-dot" aria-hidden="true"></span>
-      <span class="brand-name">WORK SMARTER</span>
-      <span class="brand-tag">training readiness, decided</span>
+      <span class="brand-name">Work Smarter</span>
+      <span class="brand-tag">readiness, every morning</span>
     </a>
     <div id="who" hidden><span id="who-name" class="muted"></span>
-      <button id="logout-btn" class="ghost" style="margin-left:10px">Log out</button>
+      <button id="logout-btn" class="ghost mini">Log out</button>
     </div>
   </header>
 
   <main>
     <!-- ===== Auth view ===== -->
     <section id="auth-view">
-      <div class="card" style="max-width:420px;margin:40px auto">
+      <div class="hero">
+        <div class="hero-orb" aria-hidden="true"></div>
+        <h1 class="hero-title">Know when to push.<br>Know when to rest.</h1>
+        <p class="hero-sub">Your training readiness — measured each morning, in one calm signal.</p>
+      </div>
+      <div class="card" style="max-width:420px;margin:6px auto 0">
         <div class="tabs">
           <button id="tab-login" class="active" onclick="showTab('login')">Log in</button>
           <button id="tab-register" onclick="showTab('register')">Register</button>
@@ -97,14 +186,14 @@
         <form id="login-form">
           <label for="login-username">Username</label><input id="login-username" name="username" autocomplete="username" required>
           <label for="login-password">Password</label><input id="login-password" name="password" type="password" autocomplete="current-password" required>
-          <div style="margin-top:14px"><button type="submit">Log in</button></div>
+          <div style="margin-top:16px"><button type="submit">Log in</button></div>
           <div id="login-flash" class="flash" aria-live="polite"></div>
         </form>
 
         <form id="register-form" hidden>
           <label for="reg-username">Username<span class="info" id="reg-username-info" tabindex="0" role="note" aria-label="Username requirements">i<span class="tip" aria-hidden="true" id="reg-username-tip"></span></span></label><input id="reg-username" name="username" autocomplete="username" required>
           <label for="reg-password">Password<span id="reg-pw-minhint"></span><span class="info" id="reg-password-info" tabindex="0" role="note" aria-label="Password requirements">i<span class="tip" aria-hidden="true" id="reg-password-tip"></span></span></label><input id="reg-password" name="password" type="password" autocomplete="new-password" required>
-          <div style="margin-top:14px"><button type="submit">Create account</button></div>
+          <div style="margin-top:16px"><button type="submit">Create account</button></div>
           <div id="register-flash" class="flash" aria-live="polite"></div>
         </form>
       </div>
@@ -127,7 +216,7 @@
             </div>
             <div><label for="training_frequency">Training days / week</label><input id="training_frequency" name="training_frequency" type="number" min="0" max="14" required></div>
           </div>
-          <div style="margin-top:14px"><button type="submit">Save profile</button></div>
+          <div style="margin-top:16px"><button type="submit">Save profile</button></div>
           <div id="profile-flash" class="flash" aria-live="polite"></div>
         </form>
       </div>
@@ -142,28 +231,28 @@
             <div><label for="soreness">Soreness (1–10)</label><input id="soreness" name="soreness" type="number" min="1" max="10" required></div>
             <div><label for="training_load">Training load (0–10)</label><input id="training_load" name="training_load" type="number" min="0" max="10" required></div>
           </div>
-          <div style="margin-top:14px"><button type="submit">Submit check-in</button></div>
+          <div style="margin-top:16px"><button type="submit">Submit check-in</button></div>
           <div id="checkin-flash" class="flash" aria-live="polite"></div>
         </form>
       </div>
 
       <div class="card">
-        <h2>Dashboard — readiness <button id="dashboard-refresh" class="ghost" style="padding:5px 10px">Refresh</button></h2>
+        <h2>Readiness <button id="dashboard-refresh" class="ghost mini">Refresh</button></h2>
         <div id="dashboard"><p class="muted">Loading…</p></div>
       </div>
 
       <div class="card">
-        <h2>History <button id="history-refresh" class="ghost" style="padding:5px 10px">Refresh</button></h2>
+        <h2>History <button id="history-refresh" class="ghost mini">Refresh</button></h2>
         <div id="history"><p class="muted">Loading…</p></div>
       </div>
 
       <div class="card">
-        <h2>Forum <button id="forum-refresh" class="ghost" style="padding:5px 10px">Refresh</button></h2>
+        <h2>Forum <button id="forum-refresh" class="ghost mini">Refresh</button></h2>
         <form id="forum-form" style="margin-bottom:14px">
           <input name="title" placeholder="Post title" aria-label="Post title" maxlength="140" required>
           <textarea name="body" placeholder="Share something…" aria-label="Post body" rows="2" required style="margin-top:8px;resize:vertical"></textarea>
-          <label style="display:flex;align-items:center;gap:6px;margin-top:8px"><input type="checkbox" name="anonymous" style="width:auto"> Post anonymously</label>
-          <div style="margin-top:8px"><button type="submit">Post</button></div>
+          <label style="display:flex;align-items:center;gap:8px;margin-top:8px;font-weight:600"><input type="checkbox" name="anonymous" style="width:auto"> Post anonymously</label>
+          <div style="margin-top:10px"><button type="submit">Post</button></div>
           <div id="forum-flash" class="flash" aria-live="polite"></div>
         </form>
         <div id="forum-list"><p class="muted">Loading…</p></div>
@@ -269,7 +358,7 @@
     }
 
     // ---- Dashboard ----
-    // Map the AI's free-form state word to a readiness bucket + track level (presentation only; the AI
+    // Map the AI's free-form state word to a readiness bucket + orb level (presentation only; the AI
     // owns the actual words, so an unknown state degrades to a neutral signal rather than miscolouring).
     function readinessClass(state) {
       const s = String(state || "").toLowerCase();
@@ -291,18 +380,20 @@
       } else if (d.readiness) {
         const [cls, pct] = readinessClass(d.readiness.state);
         html += '<div class="readiness ' + cls + '">'
-          + '<div class="verdict"><span class="signal" aria-hidden="true"></span>' + escapeHtml(d.readiness.state || "—") + '</div>'
-          + '<div class="track"><span data-w="' + pct + '"></span></div>';
+          + '<div class="orb" data-w="' + pct + '" role="img" aria-label="Readiness: ' + escapeHtml(d.readiness.state || "unknown") + '">'
+          + '<div class="orb-inner"><span class="signal" aria-hidden="true"></span>'
+          + '<div class="verdict">' + escapeHtml(d.readiness.state || "—") + '</div>'
+          + '<div class="orb-sub">readiness</div></div></div>';
         const recs = Array.isArray(d.readiness.recommendations) ? d.readiness.recommendations : [];
-        if (recs.length) html += "<ul>" + recs.map((x) => "<li>" + escapeHtml(x) + "</li>").join("") + "</ul>";
+        if (recs.length) html += '<ul class="recs">' + recs.map((x) => "<li>" + escapeHtml(x) + "</li>").join("") + "</ul>";
         html += '</div>';
       }
-      if (d.calories != null) html += '<p style="margin-top:14px"><span class="pill">Daily target: ' + escapeHtml(d.calories) + ' kcal</span></p>';
+      if (d.calories != null) html += '<p style="margin-top:16px;text-align:center"><span class="pill">Daily target · ' + escapeHtml(d.calories) + ' kcal</span></p>';
       el.innerHTML = html || '<p class="muted">No readiness yet.</p>';
-      // animate the recovery track from 0 -> level (one orchestrated moment; reduced-motion shows it filled)
+      // fill the orb from 0 -> level (one orchestrated moment; reduced-motion snaps to the final value)
       requestAnimationFrame(() => {
-        const bar = el.querySelector(".track > span");
-        if (bar) { bar.style.setProperty("--w", bar.dataset.w + "%"); bar.style.width = bar.dataset.w + "%"; }
+        const orb = el.querySelector(".orb");
+        if (orb) orb.style.setProperty("--w", orb.dataset.w);
       });
     }
 
@@ -337,8 +428,8 @@
       const posts = (r.data && r.data.posts) || [];
       if (!posts.length) { el.innerHTML = '<p class="muted">No posts yet — start one above.</p>'; return; }
       el.innerHTML = posts.map((p) =>
-        '<div class="post" data-id="' + escapeHtml(p.id) + '" style="padding:8px 0;border-top:1px solid var(--line);cursor:pointer">'
-        + '<strong>' + escapeHtml(p.title) + '</strong> <span class="pill">score ' + escapeHtml(p.score) + '</span><br>'
+        '<div class="post" data-id="' + escapeHtml(p.id) + '">'
+        + '<div class="post-top"><strong>' + escapeHtml(p.title) + '</strong><span class="pill">▲ ' + escapeHtml(p.score) + '</span></div>'
         + '<span class="muted">by ' + escapeHtml(p.author) + ' · ' + escapeHtml(p.comments) + ' comment' + (p.comments === 1 ? '' : 's') + '</span></div>'
       ).join("");
       el.querySelectorAll(".post").forEach((d) => d.addEventListener("click", () => openPost(d.dataset.id)));
@@ -353,22 +444,22 @@
       currentPost = p;
       box.hidden = false;
       box.innerHTML =
-        '<div class="card" style="background:var(--field);margin-top:12px">'
-        + '<button class="ghost" style="float:right;padding:4px 9px" onclick="closePost()">Close</button>'
-        + '<h3 style="margin:0 0 4px">' + escapeHtml(p.title) + '</h3>'
-        + '<p class="muted" style="margin:0 0 8px">by ' + escapeHtml(p.author) + '</p>'
-        + '<p>' + escapeHtml(p.body) + '</p>'
-        + '<p><button class="ghost" onclick="vote(1)">▲ up</button> <span class="pill">score ' + escapeHtml(p.score)
-        + '</span> <button class="ghost" onclick="vote(-1)">▼ down</button></p>'
+        '<div class="card detail">'
+        + '<button class="ghost close" onclick="closePost()" aria-label="Close">✕</button>'
+        + '<h3>' + escapeHtml(p.title) + '</h3>'
+        + '<p class="muted by">by ' + escapeHtml(p.author) + '</p>'
+        + '<p class="body">' + escapeHtml(p.body) + '</p>'
+        + '<div class="vote-row"><button class="ghost" onclick="vote(1)">▲ up</button> <span class="pill">score ' + escapeHtml(p.score)
+        + '</span> <button class="ghost" onclick="vote(-1)">▼ down</button></div>'
         + (p.author === currentUser
-            ? '<p><button class="ghost" onclick="editPost()">Edit</button> <button class="ghost" onclick="deletePost()">Delete</button></p>'
+            ? '<div class="own-actions"><button class="ghost" onclick="editPost()">Edit</button> <button class="ghost" onclick="deletePost()">Delete</button></div>'
             : '')
-        + '<h4 style="margin:12px 0 6px">Comments</h4>'
+        + '<h4 style="margin:14px 0 6px">Comments</h4>'
         + (p.comments.length
-            ? '<ul>' + p.comments.map((c) => '<li><strong>' + escapeHtml(c.author) + ':</strong> ' + escapeHtml(c.body) + '</li>').join("") + '</ul>'
+            ? '<ul class="comments">' + p.comments.map((c) => '<li><strong>' + escapeHtml(c.author) + '</strong> ' + escapeHtml(c.body) + '</li>').join("") + '</ul>'
             : '<p class="muted">No comments yet.</p>')
-        + '<form id="comment-form" style="margin-top:8px"><input name="body" placeholder="Add a comment" aria-label="Add a comment" maxlength="2000" required>'
-        + '<div style="margin-top:6px"><button type="submit">Comment</button></div></form></div>';
+        + '<form id="comment-form" style="margin-top:10px"><input name="body" placeholder="Add a comment" aria-label="Add a comment" maxlength="2000" required>'
+        + '<div style="margin-top:8px"><button type="submit">Comment</button></div></form></div>';
       onSubmit("comment-form", async (f) => {
         const cr = await api("/forum/posts/" + id + "/comments", { method: "POST", body: { body: f.body.value } });
         if (cr.ok) openPost(id);
@@ -386,11 +477,11 @@
     function editPost() {
       if (!currentPost) return;
       $("forum-detail").innerHTML =
-        '<div class="card" style="background:var(--field);margin-top:12px">'
-        + '<h3 style="margin:0 0 8px">Edit post</h3>'
+        '<div class="card detail">'
+        + '<h3 style="margin:0 0 10px">Edit post</h3>'
         + '<form id="edit-form"><input name="title" maxlength="140" aria-label="Title" required>'
         + '<textarea name="body" rows="3" maxlength="5000" aria-label="Body" style="margin-top:8px;resize:vertical" required></textarea>'
-        + '<div style="margin-top:8px"><button type="submit">Save</button> '
+        + '<div style="margin-top:10px"><button type="submit">Save</button> '
         + '<button type="button" class="ghost" onclick="cancelEdit()">Cancel</button></div></form></div>';
       $("edit-form").elements.title.value = currentPost.title;   // set via .value -> no HTML-injection
       $("edit-form").elements.body.value = currentPost.body;
