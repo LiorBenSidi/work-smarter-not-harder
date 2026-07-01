@@ -15,6 +15,6 @@ def test_history_requires_login(history_client):
 
 def test_history_degrades_to_503_when_store_fails(make_client, fake_users):
     c = make_client(fake_users, history=_BrokenHistory())
-    c.post("/register", json={"username": "alice", "password": "s3cretpw!"})
-    c.post("/login", json={"username": "alice", "password": "s3cretpw!"})
+    c.post("/register", json={"username": "alice", "password": "s3cretpw!", "email": "alice@example.com"})
+    c.post("/login", json={"username": "alice", "password": "s3cretpw!", "email": "alice@example.com"})
     assert c.get("/history").status_code == 503

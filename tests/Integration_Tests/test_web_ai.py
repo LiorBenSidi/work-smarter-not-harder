@@ -10,7 +10,7 @@ from unittest.mock import patch
 
 
 def _login_with_profile(client, profiles):
-    client.post("/register", json={"username": "alice", "password": "s3cretpw!"})
+    client.post("/register", json={"username": "alice", "password": "s3cretpw!", "email": "alice@example.com"})
     client.post("/login", json={"username": "alice", "password": "s3cretpw!"})
     profiles.save("alice", {"age": 30, "goal": "maintain"})
 

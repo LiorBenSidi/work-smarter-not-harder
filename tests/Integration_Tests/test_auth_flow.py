@@ -5,7 +5,7 @@ The real HTTP flow: register -> login -> session-gated `/me` -> logout. OWNER: L
 
 
 def _register(client, username="alice", password="s3cretpw!"):
-    return client.post("/register", json={"username": username, "password": password})
+    return client.post("/register", json={"username": username, "password": password, "email": f"{username.strip()}@example.com"})
 
 
 def _login(client, username="alice", password="s3cretpw!"):
