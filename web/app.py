@@ -8,7 +8,7 @@ import os
 import secrets
 import time
 
-from flask import Flask, g, jsonify, render_template, request
+from flask import Flask, g, jsonify, render_template, request, send_from_directory
 
 from config import Config
 from csrf import init_csrf
@@ -22,6 +22,7 @@ from routes.profile import profile_bp
 logger = logging.getLogger(__name__)
 
 _TEMPLATES = os.path.join(os.path.dirname(os.path.abspath(__file__)), "templates")
+_STATIC = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
 
 
 class _DbStore:
@@ -109,8 +110,9 @@ class _DbForum(_DbStore):
 
 
 def create_app(config=Config, *, users=None, profiles=None, history=None, forum=None):
-    # Absolute template_folder so the app renders regardless of how it's launched / imported.
-    app = Flask(__name__, template_folder=_TEMPLATES)
+    # Absolute template_folder + static_folder so the app renders and serves its PWA assets
+    # (manifest, service worker, icons) regardless of how it's launched / imported.
+    app = Flask(__name__, template_folder=_TEMPLATES, static_folder=_STATIC)
     app.config.from_object(config)
 
     if not app.config.get("SECRET_KEY"):
@@ -170,5 +172,19 @@ def create_app(config=Config, *, users=None, profiles=None, history=None, forum=
     @app.get("/health")
     def health():
         return jsonify(status="ok", service="web")
+
+    @app.get("/manifest.webmanifest")
+    def manifest():
+        # PWA manifest at the root path -> correct scope + mimetype, so the app is installable.
+        return send_from_directory(app.static_folder, "manifest.webmanifest",
+                                   mimetype="application/manifest+json")
+
+    @app.get("/sw.js")
+    def service_worker():
+        # served from root so the service worker controls the whole app scope (not just /static).
+        resp = send_from_directory(app.static_folder, "sw.js", mimetype="text/javascript")
+        resp.headers["Service-Worker-Allowed"] = "/"
+        resp.headers["Cache-Control"] = "no-cache"
+        return resp
 
     return app

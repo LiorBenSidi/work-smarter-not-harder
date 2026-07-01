@@ -92,3 +92,28 @@ def test_dark_mode_and_a11y_present(client):
     assert "prefers-color-scheme: light" in html        # respects an OS light preference
     assert ":focus-visible" in html                     # visible focus ring for keyboard users
     assert 'for="age"' in html and 'id="age"' in html   # labels associated with their inputs
+
+
+def test_manifest_is_served_for_pwa(client):
+    # the web manifest makes the app installable (name + icons + start_url), at the right mimetype.
+    resp = client.get("/manifest.webmanifest")
+    assert resp.status_code == 200
+    assert "manifest" in resp.content_type              # application/manifest+json
+    data = resp.get_json(force=True)
+    assert data["name"] and data["icons"] and data["start_url"] == "/"
+
+
+def test_service_worker_served_at_root_scope(client):
+    # the SW is served from root with Service-Worker-Allowed:/ so it controls the whole app scope.
+    resp = client.get("/sw.js")
+    assert resp.status_code == 200
+    assert "javascript" in resp.content_type
+    assert resp.headers.get("Service-Worker-Allowed") == "/"
+
+
+def test_index_wires_the_pwa(client):
+    # the shell links the manifest + theme-color + apple icon and registers the service worker.
+    html = client.get("/").get_data(as_text=True)
+    assert 'rel="manifest"' in html and 'name="theme-color"' in html
+    assert 'rel="apple-touch-icon"' in html
+    assert "serviceWorker" in html and "/sw.js" in html

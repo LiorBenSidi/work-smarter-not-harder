@@ -3,6 +3,14 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0a0e20">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" href="/static/icon-192.png">
+  <link rel="apple-touch-icon" href="/static/apple-touch-icon.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Work Smarter">
   <title>Work Smarter, Not Harder</title>
   <style>
     /* "Work Smarter" — a training-readiness coach. Visual identity: calm recovery instrument.
@@ -100,6 +108,8 @@
       border:1px solid color-mix(in srgb, var(--accent) 34%, transparent); animation: halo 6s ease-in-out infinite; }
     .hero-title { font-size:31px; font-weight:800; letter-spacing:-.02em; line-height:1.14; margin:0 0 10px; }
     .hero-sub { color:var(--muted); font-size:15px; margin:0 auto 20px; max-width:33ch; }
+    .hero-title .accent { background: linear-gradient(120deg, var(--accent), var(--accent2));
+      -webkit-background-clip:text; background-clip:text; color:transparent; }
 
     /* signature: the breathing readiness orb */
     .readiness { --st: var(--muted); text-align:center; }
@@ -174,7 +184,7 @@
     <section id="auth-view">
       <div class="hero">
         <div class="hero-orb" aria-hidden="true"></div>
-        <h1 class="hero-title">Know when to push.<br>Know when to rest.</h1>
+        <h1 class="hero-title">Know when to push.<br>Know when to <span class="accent">rest</span>.</h1>
         <p class="hero-sub">Your training readiness — measured each morning, in one calm signal.</p>
       </div>
       <div class="card" style="max-width:420px;margin:6px auto 0">
@@ -540,6 +550,12 @@
       const r = await api("/me");
       if (r.ok && r.data && r.data.username) { enterApp(r.data.username); } else { showView("auth"); }
     })();
+  </script>
+  <script>
+    // Register the service worker so the app is installable ("Add to Home Screen") over HTTPS.
+    if ("serviceWorker" in navigator) {
+      window.addEventListener("load", () => navigator.serviceWorker.register("/sw.js").catch(() => {}));
+    }
   </script>
 </body>
 </html>
