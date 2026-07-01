@@ -5,7 +5,7 @@ Never comment out a broken test — fix it or delete it (course rule).
 """
 import pytest
 
-pytestmark = pytest.mark.skip(reason="TDD scaffold — Lior fills these with the model (remove skip as you go)")
+pytestmark = pytest.mark.skip(reason="TDD scaffold — Shiri fills these with the model (remove skip as you go)")
 
 
 def test_predict_returns_a_valid_class():
