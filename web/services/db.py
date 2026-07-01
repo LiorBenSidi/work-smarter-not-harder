@@ -89,8 +89,9 @@ def get_db(mongo_uri):
     """Return the default database handle for `mongo_uri` (lazy, process-wide pymongo client).
 
     The client is built once under a lock (double-checked) so concurrent first-requests under a
-    threaded/multi-worker server don't each open a connection pool. ``serverSelectionTimeoutMS`` makes
-    a down Mongo fail fast (~5s) so the routes' try/except degrades to 503 instead of hanging. Indexes
+    threaded/multi-worker server don't each open a connection pool. ``serverSelectionTimeoutMS`` +
+    ``connectTimeoutMS`` make a down/unreachable Mongo fail fast (~2s) so the routes' try/except degrades
+    to 503 instead of stalling a sync worker for many seconds during an outage. Indexes
     are ensured best-effort on first connect — if Mongo isn't ready yet it's logged and skipped, never
     fatal (the app-level checks still hold).
     """
@@ -98,7 +99,7 @@ def get_db(mongo_uri):
     if _client is None:
         with _client_lock:
             if _client is None:
-                _client = MongoClient(mongo_uri, serverSelectionTimeoutMS=5000)
+                _client = MongoClient(mongo_uri, serverSelectionTimeoutMS=2000, connectTimeoutMS=2000)
                 try:
                     ensure_indexes(_client.get_default_database())
                 except Exception:
