@@ -90,7 +90,7 @@ The only coordination points are the seams (`/predict` shape, `db.py`'s function
 | Parallel programming + scaling — multiprocessing batch · replicas/workers · multi-machine (Swarm / Azure VM) · **queue-free** | 🟡 concrete plan | Shiri (parallel code) · Elad (scaling) |
 | Stress tests (decide what can crash) | ⬜ | Elad |
 | GitHub: regular commits from **all 3**, meaningful messages | 🟡 in progress | all |
-| Report (app + features×tests + **risk assessment**) | ⬜ | all (Elad: risk) |
+| Report (app + features×tests + **risk assessment**) | 🟡 first draft ([`REPORT.md`](REPORT.md)); regenerated as tests land | all (Elad: risk) |
 | Demo video of using the app | ⬜ | all |
 | Azure VM deploy + CI/CD auto-deploy (+10; base deploy optional) | 🟡 CI gate live; Azure auto-deploy TODO | Lior (CI) · Elad (Azure) |
 | Online Forum — real-time, 8 sub-features (+10) | 🟡 Lior's CRUD+UI (posts/comments/votes, anonymity, **edit/delete own**) done; real-time + seeding + DM TODO | Lior (CRUD/UI ✅) · Elad (real-time) · Shiri (seeding) |
@@ -99,7 +99,7 @@ The only coordination points are the seams (`/predict` shape, `db.py`'s function
 
 Legend: ✅ done · 🟡 partial / in-progress · ⬜ not started.
 
-## Status (2026-06-28)
+## Status (2026-07-01)
 Scaffold + branch-protected PR-only `main` + CI gate (ruff → bandit → pytest, no-false-green) + a local pre-commit
 gate are live — that CI already covers the **CI portion** of the deploy requirement.
 
@@ -108,10 +108,12 @@ with **fault-tolerance hardening** (restart policies, healthcheck `start_period`
 down), the `web↔ai` glue (`ai_client`), the **F4 calorie** function (`ai/calories.py`), and the ratified split.
 The **web tier is feature-complete + polished**: auth / profile / **daily check-in (F3)** / dashboard / history /
 frontend + CSRF + responsive theming + a11y + credential-hint tooltips (`/auth/config`) + a **distinct visual
-identity**, Forum CRUD/UI **with edit/delete-your-own**. The **thin `db.py` CRUD** is implemented, **concurrency-
-hardened** (atomic dedupe, optimistic-concurrency vote, TOCTOU-safe edit/delete) + tested (incl. `ensure_indexes`,
-votes-as-a-list, and a real-Mongo integration suite that skips until a DB is up). **Week-9 logging** is wired
+identity**, Forum CRUD/UI **with edit/delete-your-own**. The **whole data layer** is implemented — the thin
+`db.py` CRUD **concurrency-hardened** (atomic dedupe, optimistic-concurrency vote, TOCTOU-safe edit/delete) plus
+the Mongo internals (`ensure_indexes` + `$jsonSchema` validators + env-gated auth + `db/seed.py` + `db/backup.sh`),
+tested (incl. votes-as-a-list and a real-Mongo integration suite that runs in CI via a `mongo:7` service).
+**Week-9 logging** is wired
 (named loggers + console/rotating-file handlers + per-request access log). **Still to build:** the RF model + real
-`/predict` + recommendation engine (Shiri); running the Mongo container + perf indexes + auth, the
+`/predict` + recommendation engine (Shiri); the
 `docker-compose.test.yml` test-runner, rate-limiting, Azure deploy, the Forum real-time layer + stress/cross-
 container tests (Elad). Due **23 Aug 2026**.
