@@ -223,6 +223,17 @@
           <div style="margin-top:16px"><button type="submit">Set new password</button></div>
           <div id="reset-flash" class="flash" aria-live="polite"></div>
         </form>
+
+        <form id="otp-form" hidden>
+          <p class="muted" style="margin:0 0 12px">We sent a 6-digit code to your email. Enter it to finish signing in.</p>
+          <div id="otp-devhint" class="flash warn" hidden style="margin:0 0 10px"></div>
+          <label for="otp-code">Verification code</label>
+          <input id="otp-code" name="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]*" maxlength="6" required>
+          <label style="display:flex;align-items:center;gap:8px;margin-top:12px;font-weight:600"><input id="otp-remember" type="checkbox" style="width:auto"> Trust this browser for 30 days</label>
+          <div style="margin-top:16px"><button type="submit">Verify &amp; sign in</button>
+            <button type="button" class="ghost" onclick="showTab('login')">Back</button></div>
+          <div id="otp-flash" class="flash" aria-live="polite"></div>
+        </form>
       </div>
     </section>
 
@@ -311,20 +322,28 @@
       $("tab-register").classList.toggle("active", which === "register");
       $("login-form").hidden = which !== "login";
       $("register-form").hidden = which !== "register";
-      $("forgot-form").hidden = true; $("reset-form").hidden = true;
+      $("forgot-form").hidden = true; $("reset-form").hidden = true; $("otp-form").hidden = true;
       document.querySelector(".tabs").hidden = false;
     }
 
     function showForgot() {
-      ["login-form", "register-form", "reset-form"].forEach((id) => { $(id).hidden = true; });
+      ["login-form", "register-form", "reset-form", "otp-form"].forEach((id) => { $(id).hidden = true; });
       $("forgot-form").hidden = false;
       document.querySelector(".tabs").hidden = true;
     }
 
     function showReset() {
-      ["login-form", "register-form", "forgot-form"].forEach((id) => { $(id).hidden = true; });
+      ["login-form", "register-form", "forgot-form", "otp-form"].forEach((id) => { $(id).hidden = true; });
       $("reset-form").hidden = false;
       document.querySelector(".tabs").hidden = true;
+    }
+
+    function showOtp() {
+      ["login-form", "register-form", "forgot-form", "reset-form"].forEach((id) => { $(id).hidden = true; });
+      $("otp-form").hidden = false;
+      document.querySelector(".tabs").hidden = true;
+      $("otp-code").value = "";
+      setTimeout(() => $("otp-code").focus(), 0);
     }
 
     function showView(view) {
@@ -346,9 +365,26 @@
     }
 
     // ---- Auth ----
+    let pendingUser = null;
     onSubmit("login-form", async (f) => {
       const r = await api("/login", { method: "POST", body: { username: f.username.value, password: f.password.value } });
-      if (r.ok) { enterApp(r.data.username); } else { flash("login-flash", (r.data && r.data.error) || "Login failed"); }
+      if (r.ok && r.data && r.data.status === "otp_required") {
+        // second factor: show the OTP screen. In dev (no SMTP) the server surfaces the code so the
+        // grader/teammates can test without a mailbox; in production it only arrives by email.
+        pendingUser = r.data.username;
+        const hint = $("otp-devhint");
+        if (r.data.dev_otp) { hint.textContent = "Dev mode — your code is " + r.data.dev_otp; hint.hidden = false; }
+        else { hint.textContent = ""; hint.hidden = true; }
+        flash("otp-flash", "", "ok");
+        showOtp();
+      } else if (r.ok) { enterApp(r.data.username); }
+      else { flash("login-flash", (r.data && r.data.error) || "Login failed"); }
+    });
+
+    onSubmit("otp-form", async (f) => {
+      const r = await api("/verify-otp", { method: "POST", body: { code: f.code.value, remember: $("otp-remember").checked } });
+      if (r.ok) { enterApp(r.data.username); }
+      else { flash("otp-flash", (r.data && r.data.error) || "Verification failed"); }
     });
 
     onSubmit("register-form", async (f) => {

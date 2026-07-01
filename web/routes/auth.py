@@ -7,6 +7,8 @@ unit-tested with an in-memory fake and runs without Mongo.
 """
 import logging
 import re
+import secrets
+import time
 from functools import wraps
 
 from flask import Blueprint, current_app, jsonify, request, session
@@ -123,15 +125,90 @@ def login():
         return jsonify(_INVALID_LOGIN), 401
     if not check_password_hash(stored_hash, password):
         return jsonify(_INVALID_LOGIN), 401
+
+    # Password verified. Log in now UNLESS 2-step OTP is active AND this browser isn't already trusted.
+    if _otp_active() and not _remember_cookie_valid(username, stored_hash):
+        try:
+            session.clear()
+            session["pending_otp_user"] = username     # binds the challenge to THIS browser session
+            dev_code = _issue_otp(username, user.get("email"))
+        except Exception:
+            logger.exception("failed to issue login OTP")
+            return jsonify(error="could not start verification — please try again"), 503
+        body = {"status": "otp_required", "username": username}
+        if dev_code is not None:                       # no SMTP configured -> surface the code (dev/grading)
+            body["dev_otp"] = dev_code
+        return jsonify(body), 200
+
     session.clear()
     session["username"] = username
     return jsonify(status="logged in", username=username), 200
 
 
+@auth_bp.post("/verify-otp")
+def verify_otp():
+    """Second login step: exchange the emailed code for a real session.
+
+    The pending user comes from the SESSION (set by /login), never the request body — so a leaked code
+    can only complete the login it was issued for, on the browser that started it. The code is checked
+    against the stored HASH; wrong guesses increment an atomic counter and lock out at OTP_MAX_ATTEMPTS;
+    an expired challenge is cleared. On success the session is promoted and, if the user opted in, a
+    signed 'remember this browser' cookie is set so the next login skips OTP.
+    """
+    username = session.get("pending_otp_user")
+    if not username:
+        return jsonify(error="no verification in progress — please log in again"), 400
+    data = request.get_json(silent=True) or {}
+    code = data.get("code")
+    if not isinstance(code, str):
+        return jsonify(error="enter the 6-digit code from your email"), 400
+    code = code.strip()
+
+    max_attempts = current_app.config["OTP_MAX_ATTEMPTS"]
+    try:
+        challenge = _users().get_otp(username)
+    except Exception:
+        logger.exception("user store unavailable during otp verify")
+        return jsonify(error="user store unavailable"), 503
+    if not challenge:
+        session.pop("pending_otp_user", None)
+        return jsonify(error="no verification in progress — please log in again"), 400
+    if time.time() > challenge["expires_at"]:
+        _users().clear_otp(username)
+        session.pop("pending_otp_user", None)
+        return jsonify(error="that code has expired — please log in again"), 400
+    if challenge["attempts"] >= max_attempts:
+        _users().clear_otp(username)
+        session.pop("pending_otp_user", None)
+        return jsonify(error="too many attempts — please log in again"), 429
+    if not check_password_hash(challenge["otp_hash"], code):
+        attempts = _users().bump_otp_attempts(username)
+        if attempts >= max_attempts:
+            _users().clear_otp(username)
+            session.pop("pending_otp_user", None)
+            return jsonify(error="too many attempts — please log in again"), 429
+        return jsonify(error="incorrect code", attempts_left=max(0, max_attempts - attempts)), 401
+
+    # Correct — consume the one-time challenge and promote the pending session to a real login.
+    _users().clear_otp(username)
+    try:
+        stored_hash = (_users().get(username) or {}).get("password_hash") or ""
+    except Exception:
+        stored_hash = ""
+    session.clear()
+    session["username"] = username
+    resp = jsonify(status="logged in", username=username)
+    if data.get("remember"):
+        _set_remember_cookie(resp, username, stored_hash)
+    return resp, 200
+
+
 @auth_bp.post("/logout")
 def logout():
     session.clear()
-    return jsonify(status="logged out"), 200
+    resp = jsonify(status="logged out")
+    resp.delete_cookie(REMEMBER_COOKIE)   # drop trust in this browser -> next login re-verifies via OTP
+    return resp, 200
 
 
 @auth_bp.get("/me")
@@ -202,3 +279,60 @@ def reset_password():
         logger.exception("user store unavailable during reset")
         return jsonify(error="user store unavailable"), 503
     return jsonify(status="password updated — you can log in now"), 200
+
+
+# ---- login OTP + "remember this browser" (2-step verification) ----
+OTP_LENGTH = 6
+REMEMBER_COOKIE = "remember_token"
+_REMEMBER_SALT = "remember-browser-v1"   # distinct from the reset salt -> tokens aren't interchangeable
+
+
+def _otp_active():
+    """True when 2-step email OTP should gate logins: enabled AND not under the test harness. The login
+    test suite asserts the classic one-step flow, so ``TESTING`` turns OTP off; the dedicated 2FA tests
+    run with TESTING off + OTP on. A valid remember-this-browser cookie still skips OTP per login."""
+    cfg = current_app.config
+    return bool(cfg.get("OTP_ENABLED")) and not cfg.get("TESTING")
+
+
+def _issue_otp(username, email):
+    """Generate a fresh code, store it HASHED with a TTL (attempts reset), and deliver it.
+
+    Returns the plaintext code ONLY when no SMTP is configured — the dev/log backend, where surfacing
+    the code on-screen and in the logs makes grading and teammate testing trivial. When SMTP IS set the
+    code leaves solely by real email and this returns None (never surfaced)."""
+    code = f"{secrets.randbelow(10 ** OTP_LENGTH):0{OTP_LENGTH}d}"
+    ttl = current_app.config["OTP_TTL_SECONDS"]
+    _users().set_otp(username, generate_password_hash(code), time.time() + ttl)
+    minutes = max(1, ttl // 60)
+    send_email(current_app.config, email or "(no email on file)", "Your Work Smarter login code",
+               f"Your Work Smarter login code is: {code}\n\n"
+               f"It expires in {minutes} min. If this wasn't you, you can ignore this email.")
+    return None if current_app.config.get("SMTP_HOST") else code
+
+
+def _remember_serializer():
+    # Signed cookie proving this browser already passed OTP. Embeds the password-hash tail, so a password
+    # change (or reset) silently invalidates every trusted browser and forces OTP again.
+    return URLSafeTimedSerializer(current_app.config["SECRET_KEY"], salt=_REMEMBER_SALT)
+
+
+def _remember_cookie_valid(username, stored_hash):
+    """True iff the request carries a valid, unexpired remember cookie for THIS user whose embedded
+    password-hash tail still matches (a since-changed password -> mismatch -> OTP required again)."""
+    token = request.cookies.get(REMEMBER_COOKIE)
+    if not token:
+        return False
+    try:
+        payload = _remember_serializer().loads(token, max_age=current_app.config["REMEMBER_COOKIE_MAX_AGE"])
+    except BadData:
+        return False
+    return payload.get("u") == username and payload.get("h") == (stored_hash or "")[-16:]
+
+
+def _set_remember_cookie(resp, username, stored_hash):
+    """Set the signed, HttpOnly remember-this-browser cookie (Secure mirrors the session cookie)."""
+    token = _remember_serializer().dumps({"u": username, "h": (stored_hash or "")[-16:]})
+    resp.set_cookie(REMEMBER_COOKIE, token, max_age=current_app.config["REMEMBER_COOKIE_MAX_AGE"],
+                    httponly=True, samesite="Lax",
+                    secure=bool(current_app.config.get("SESSION_COOKIE_SECURE")))

@@ -59,6 +59,20 @@ def test_users_roundtrip_and_dedupe(db_mod, real_db):
     assert db_mod.get_user(real_db, "alice") == {"username": "alice", "password_hash": "h1", "email": None}  # no _id
 
 
+def test_otp_challenge_roundtrip(db_mod, real_db):
+    # the login-OTP seam against real Mongo: set -> get -> atomic $inc -> $unset, and clearing the
+    # transient fields must leave the core identity doc untouched.
+    db_mod.create_user(real_db, "alice", "h1")
+    assert db_mod.get_otp(real_db, "alice") is None
+    assert db_mod.set_otp(real_db, "alice", "otp-hash", 9999999999) is True
+    assert db_mod.get_otp(real_db, "alice") == {"otp_hash": "otp-hash", "expires_at": 9999999999, "attempts": 0}
+    assert db_mod.bump_otp_attempts(real_db, "alice") == 1
+    assert db_mod.bump_otp_attempts(real_db, "alice") == 2
+    db_mod.clear_otp(real_db, "alice")
+    assert db_mod.get_otp(real_db, "alice") is None
+    assert db_mod.get_user(real_db, "alice") == {"username": "alice", "password_hash": "h1", "email": None}
+
+
 def test_profile_and_history_roundtrip(db_mod, real_db):
     db_mod.save_profile(real_db, "alice", {"age": 30, "goal": "maintain"})
     assert db_mod.get_profile(real_db, "alice") == {"age": 30, "goal": "maintain"}

@@ -59,6 +59,34 @@ class FakeUsers:
         rec["password_hash"] = password_hash
         return True
 
+    # ---- login-OTP challenge (mirrors db.py set_otp/get_otp/clear_otp/bump_otp_attempts) ----
+    def set_otp(self, username, otp_hash, expires_at):
+        rec = self._by_name.get(username)
+        if rec is None:
+            return False
+        rec.update(otp_hash=otp_hash, otp_expires_at=expires_at, otp_attempts=0)
+        return True
+
+    def get_otp(self, username):
+        rec = self._by_name.get(username)
+        if not rec or "otp_hash" not in rec:
+            return None
+        return {"otp_hash": rec["otp_hash"], "expires_at": rec.get("otp_expires_at", 0),
+                "attempts": rec.get("otp_attempts", 0)}
+
+    def clear_otp(self, username):
+        rec = self._by_name.get(username)
+        if rec:
+            for key in ("otp_hash", "otp_expires_at", "otp_attempts"):
+                rec.pop(key, None)
+
+    def bump_otp_attempts(self, username):
+        rec = self._by_name.get(username)
+        if not rec or "otp_hash" not in rec:
+            return 0
+        rec["otp_attempts"] = rec.get("otp_attempts", 0) + 1
+        return rec["otp_attempts"]
+
 
 class FakeProfiles:
     """In-memory profile store — the `web -> db` seam Lior implements in db.py (.get / .save)."""
@@ -245,3 +273,25 @@ def fake_forum():
 @pytest.fixture
 def forum_client(make_client, fake_users, fake_forum):
     return make_client(fake_users, forum=fake_forum)
+
+
+@pytest.fixture
+def make_otp_client(web_app_module):
+    """Like make_client but with 2-step login OTP ACTIVE (OTP_ENABLED on, TESTING off — the gate the
+    login route reads). SMTP is left unset so the code is dev-surfaced in the /login response, which is
+    how the 2FA tests read it. `**overrides` lets a test flip SMTP_HOST / OTP bounds."""
+
+    def _make(users=None, **overrides):
+        app = web_app_module.create_app(users=users)
+        app.config.update(SECRET_KEY="test-secret-key", TESTING=False, PROPAGATE_EXCEPTIONS=True,
+                          OTP_ENABLED=True, SMTP_HOST="", OTP_TTL_SECONDS=600, OTP_MAX_ATTEMPTS=5,
+                          REMEMBER_COOKIE_MAX_AGE=30 * 24 * 3600)
+        app.config.update(overrides)
+        return _CsrfClient(app.test_client())
+
+    return _make
+
+
+@pytest.fixture
+def otp_client(make_otp_client, fake_users):
+    return make_otp_client(fake_users)
