@@ -48,5 +48,5 @@ stress harness, and the remaining Forum media/attachments immediately — none o
 
 ## You own the decisions
 The deploy mechanism, the compose/CI structure, the media-storage approach, the scaling
-approach — your call. (The DM/notification real-time is done via polling; vote notifications can reuse it or
-upgrade to SSE/WebSocket — your call there too.)
+approach — your call. (The DM/notification real-time is done via SSE push — `GET /events` streams
+`text/event-stream`; vote notifications can hook straight into the notification feed it pushes.)
