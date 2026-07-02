@@ -7,6 +7,7 @@ uses). The web layer is built test-first against injected stores — `FakeUsers`
 """
 import importlib.util
 import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -170,6 +171,79 @@ class FakeForum:
         return True
 
 
+class FakeMessages:
+    """In-memory DM store — mirrors db.py's ``message_*`` seam contract. ``created_at`` is a real epoch
+    (so the route's time-based rate limit works) nudged by a counter to keep ordering strict in tests."""
+
+    def __init__(self):
+        self._msgs = []
+        self._seq = 0
+
+    def _public(self, m):
+        return {k: m[k] for k in ("id", "sender", "recipient", "body", "created_at", "read")}
+
+    def send(self, sender, recipient, body):
+        self._seq += 1
+        m = {"id": str(self._seq), "sender": sender, "recipient": recipient, "body": body,
+             "created_at": time.time() + self._seq * 1e-6, "read": False}
+        self._msgs.append(m)
+        return self._public(m)
+
+    def list_conversation(self, user_a, user_b):
+        pair = {user_a, user_b}
+        return [self._public(m) for m in self._msgs if {m["sender"], m["recipient"]} == pair]
+
+    def list_conversations(self, user):
+        convos = {}
+        for m in self._msgs:
+            if user not in (m["sender"], m["recipient"]):
+                continue
+            peer = m["recipient"] if m["sender"] == user else m["sender"]
+            row = convos.setdefault(peer, {"peer": peer, "last_message": "", "last_at": 0, "unread": 0})
+            row["last_message"], row["last_at"] = m["body"], m["created_at"]
+            if m["recipient"] == user and not m["read"]:
+                row["unread"] += 1
+        return sorted(convos.values(), key=lambda c: c["last_at"], reverse=True)
+
+    def mark_read(self, user, peer):
+        for m in self._msgs:
+            if m["sender"] == peer and m["recipient"] == user:
+                m["read"] = True
+
+    def count_since(self, user, since):
+        return sum(1 for m in self._msgs if m["sender"] == user and m["created_at"] >= since)
+
+
+class FakeNotifications:
+    """In-memory notification store — mirrors db.py's ``notification_*`` seam contract."""
+
+    def __init__(self):
+        self._items = []
+        self._seq = 0
+
+    def _public(self, n):
+        return {k: n[k] for k in ("id", "type", "actor", "ref", "text", "created_at", "read")}
+
+    def add(self, user, ntype, actor, ref, text):
+        self._seq += 1
+        n = {"id": str(self._seq), "user": user, "type": ntype, "actor": actor, "ref": ref,
+             "text": text, "created_at": time.time() + self._seq * 1e-6, "read": False}
+        self._items.append(n)
+        return self._public(n)
+
+    def list(self, user, since=None):
+        items = [n for n in self._items if n["user"] == user]
+        if since is not None:
+            items = [n for n in items if n["created_at"] > since]
+        return [self._public(n) for n in sorted(items, key=lambda n: n["created_at"], reverse=True)]
+
+    def mark_read(self, user, ids=None):
+        target = set(ids) if ids is not None else None      # [] -> mark nothing, None -> mark all
+        for n in self._items:
+            if n["user"] == user and (target is None or n["id"] in target):
+                n["read"] = True
+
+
 class _CsrfClient:
     """Wraps the Flask test client: seeds the double-submit CSRF cookie (one GET) and auto-sends the
     matching X-CSRF-Token header on unsafe requests, so feature tests don't repeat CSRF plumbing.
@@ -235,7 +309,7 @@ def fake_history():
 def make_client(web_app_module):
     """Factory: build a web test client with given user/profile/history stores (None -> prod default)."""
 
-    def _make(users=None, profiles=None, history=None, forum=None):
+    def _make(users=None, profiles=None, history=None, forum=None, messages=None, notifications=None):
         extra = {}
         if profiles is not None:
             extra["profiles"] = profiles
@@ -243,6 +317,10 @@ def make_client(web_app_module):
             extra["history"] = history
         if forum is not None:
             extra["forum"] = forum
+        if messages is not None:
+            extra["messages"] = messages
+        if notifications is not None:
+            extra["notifications"] = notifications
         app = web_app_module.create_app(users=users, **extra)
         app.config.update(SECRET_KEY="test-secret-key", TESTING=True)
         return _CsrfClient(app.test_client())
@@ -273,6 +351,21 @@ def fake_forum():
 @pytest.fixture
 def forum_client(make_client, fake_users, fake_forum):
     return make_client(fake_users, forum=fake_forum)
+
+
+@pytest.fixture
+def fake_messages():
+    return FakeMessages()
+
+
+@pytest.fixture
+def fake_notifications():
+    return FakeNotifications()
+
+
+@pytest.fixture
+def messages_client(make_client, fake_users, fake_messages, fake_notifications):
+    return make_client(fake_users, messages=fake_messages, notifications=fake_notifications)
 
 
 @pytest.fixture
