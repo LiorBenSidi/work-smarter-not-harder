@@ -32,8 +32,8 @@ before anything reaches GitHub.
 | You | Your file | Your area |
 |---|---|---|
 | **Shiri** | [`PERSON1.md`](PERSON1.md) | the **AI** — model, `/predict`, recommendation engine, dataset |
-| **Lior** | [`PERSON2.md`](PERSON2.md) | the **web app + data + observability + CI plumbing** — the Flask **backend** + frontend + the `db.py` CRUD & **Mongo internals** + **Week-9 logging** + the `web`/`ai` **container build** + the **CI gate** |
-| **Elad** | [`PERSON3.md`](PERSON3.md) | **deployment + real-time + scale** — Azure deploy + auto-deploy, the **Forum real-time** layer, rate-limit, stress, the test-runner |
+| **Lior** | [`PERSON2.md`](PERSON2.md) | the **web app + data + observability + CI/CD** — the Flask **backend** (auth incl. reset/OTP/email) + frontend/PWA + the `db.py` CRUD & **Mongo internals** + backups + **Week-9 logging** + the `web`/`ai` **container build** + the **CI gate** + the **CI/CD deploy pipeline** |
+| **Elad** | [`PERSON3.md`](PERSON3.md) | **deployment + real-time + scale** — the **live** Azure deploy + demo (the pipeline *code* is Lior's), the **Forum real-time** layer, rate-limit, stress, the test-runner |
 
 Your file = your area + the must-do (course) items + a roadmap. **How** you build it is your choice.
 
