@@ -2,7 +2,8 @@
 
 Maps the CI/CD assignment requirements (R1–R10) to where and how this repository satisfies them.
 Pipeline: [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) · Prod stack:
-[`docker-compose.prod.yml`](../docker-compose.prod.yml) · TLS: [`Caddyfile`](../Caddyfile).
+[`docker-compose.prod.yml`](../docker-compose.prod.yml) · TLS: [`Caddyfile`](../Caddyfile) · Demo run-sheet + UptimeRobot
+setup + grader Q&A: [`DEPLOY_DEMO.md`](DEPLOY_DEMO.md).
 
 **The app & its health endpoint.** *Work Smarter, Not Harder* is a 3-container Flask app (web + internal `ai`
 inference + MongoDB). Only `web` is public. It exposes `GET /health` ([`web/app.py`](../web/app.py)) returning
