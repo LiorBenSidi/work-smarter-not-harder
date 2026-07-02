@@ -52,6 +52,39 @@ python -m pytest tests/         # full suite — runs on any machine (no local p
 `main` is protected: **no direct pushes.** All changes land via a pull request from a branch. See
 [`CONTRIBUTING.md`](CONTRIBUTING.md).
 
+## Deployment (CI/CD → Azure)
+Every push to `main` runs an automated pipeline ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) that takes the
+dockerized stack from commit to a running container on an Azure VM, served over HTTPS. The app exposes `GET /health`
+(returns `200 {"status":"ok"}`) — used by the container healthcheck, the pipeline's post-deploy check, and the external
+monitor. Full requirement-by-requirement mapping: [`docs/CICD_REPORT.md`](docs/CICD_REPORT.md).
+
+**Pipeline stages** (a PR runs only stage 1 — it never deploys):
+```
+push/PR ─▶ 1. checks     ruff + bandit + pytest (real mongo:7 service)      ← gates everything
+push    ─▶ 2. build      docker build web + ai  ─▶ push to GHCR (latest + <short-sha>)
+push    ─▶ 3. deploy     ssh → VM: docker compose pull && up -d  (VM pulls, never builds)
+push    ─▶ 4. verify     curl --fail https://<FQDN>/health        ← fails the run if unhealthy
+```
+Caddy (in [`docker-compose.prod.yml`](docker-compose.prod.yml)) terminates TLS with an auto-renewing Let's Encrypt
+certificate and redirects HTTP→HTTPS; the VM runs the prod compose, which **pulls** the GHCR images rather than building.
+
+**GitHub Actions secrets & variables** (names only — values live only in repo settings):
+
+| Kind | Name | Purpose |
+|---|---|---|
+| Secret | `SSH_PRIVATE_KEY` | dedicated deploy key for the VM's `deploy` user (never a personal key) |
+| Secret | `APP_SECRET_KEY` | Flask `SECRET_KEY`, injected into the VM's `.env` at deploy time |
+| Variable | `SSH_HOST` | the VM's FQDN (`<label>.<region>.cloudapp.azure.com`); also the deploy/health target. **Until this is set, the deploy job is skipped and `main` stays green** |
+| — (built-in) | `GITHUB_TOKEN` | authenticates the GHCR push automatically — no PAT, no signup |
+
+`SSH_USER` is the same for every group (`deploy`) and is hardcoded in the workflow. `SSH_HOST` is a **variable**, not a
+secret — a hostname needs no masking.
+
+**VM provisioning:** the instructor provisions **one Azure VM per group** (ports 22/80/443 only, `deploy` user, key-only
+SSH via cloud-init) and gives you its FQDN. You generate a **dedicated** deploy keypair
+(`ssh-keygen -t ed25519 -f groupNN_deploy -N ""`), send the instructor the `.pub`, store the private key as
+`SSH_PRIVATE_KEY`, and set `SSH_HOST` to the FQDN. Idle VMs auto-stop; start yours from the Azure portal (Technion login).
+
 ## For AI agents (any tool)
 The workflow is **enforced for every tool and human**: `main` is branch-protected, so direct pushes are
 rejected and changes land only via a PR that passes CI — no agent can bypass it, whatever it reads. For

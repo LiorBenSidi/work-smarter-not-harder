@@ -58,5 +58,101 @@ jobs:
           TEST_MONGO_URI: mongodb://localhost:27017/worksmarter_test   # makes test_db_mongo.py RUN, not skip
         run: python -m pytest tests/ -q   # must pass; a suite that collects 0 tests now FAILS (no false-green)
 
+  # ---------------------------------------------------------------------------
+  # CD half (assignment R3–R10). These jobs run ONLY on push to main — a PR
+  # stops after `checks` above (R1.3), because both are gated on the push event.
+  # ---------------------------------------------------------------------------
+
+  build:
+    name: build & push image (GHCR)
+    needs: checks                       # R2.2: a failed test build never proceeds to build/push/deploy
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'   # R1.3: a PR never reaches here
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write                   # lets the built-in GITHUB_TOKEN push to THIS repo's GHCR (R4.2)
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compute image vars
+        id: vars
+        run: |
+          echo "owner=${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_OUTPUT"   # GHCR requires a lowercase owner
+          echo "sha=${GITHUB_SHA::7}"               >> "$GITHUB_OUTPUT"   # short, immutable per-commit tag (R3.2)
+
+      - name: Log in to GHCR
+        # the workflow's built-in GITHUB_TOKEN — no PAT, no registry signup (R4.2, Noam Q4).
+        # --password-stdin keeps the token out of the process list and the logs.
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: Build & push web image
+        env:
+          IMG: ghcr.io/${{ steps.vars.outputs.owner }}/work-smarter-web
+        run: |
+          docker build -t "$IMG:latest" -t "$IMG:${{ steps.vars.outputs.sha }}" ./web   # R3.1/R3.3: from ./web/Dockerfile, repo only
+          docker push "$IMG:latest"                                                       # R4.3: push BOTH tags...
+          docker push "$IMG:${{ steps.vars.outputs.sha }}"                                # ...the stable one and the immutable one
+
+      - name: Build & push ai image
+        env:
+          IMG: ghcr.io/${{ steps.vars.outputs.owner }}/work-smarter-ai
+        run: |
+          docker build -t "$IMG:latest" -t "$IMG:${{ steps.vars.outputs.sha }}" ./ai
+          docker push "$IMG:latest"
+          docker push "$IMG:${{ steps.vars.outputs.sha }}"
+
+  deploy:
+    name: deploy to Azure VM
+    needs: build
+    # Same push gate PLUS a live-VM gate: until SSH_HOST is set this job is SKIPPED (main stays green), then it
+    # activates automatically the moment the VM variable + secrets exist — no code change needed to go live.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.SSH_HOST != ''
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Load the deploy SSH key
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}   # a DEDICATED deploy key, not a personal key (§10)
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/deploy_key   # secret -> file; GitHub masks it in logs (R6.2)
+          chmod 600 ~/.ssh/deploy_key
+
+      - name: Render the prod .env (from GitHub secrets/vars — never committed, R6.1)
+        env:
+          APP_SECRET_KEY: ${{ secrets.APP_SECRET_KEY }}   # Flask SECRET_KEY, injected at runtime
+          SITE_ADDRESS: ${{ vars.SSH_HOST }}
+          OWNER: ${{ github.repository_owner }}
+        run: |
+          {
+            echo "SECRET_KEY=${APP_SECRET_KEY}"
+            echo "SITE_ADDRESS=${SITE_ADDRESS}"                    # Caddy issues the Let's Encrypt cert for this FQDN (R10)
+            echo "IMAGE_OWNER=$(echo "$OWNER" | tr 'A-Z' 'a-z')"  # which GHCR namespace the VM pulls from
+          } > prod.env
+
+      - name: Ship compose + Caddyfile + env to the VM
+        env:
+          HOST: ${{ vars.SSH_HOST }}
+        run: |
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=accept-new "deploy@$HOST" "mkdir -p ~/app"
+          scp -i ~/.ssh/deploy_key -o StrictHostKeyChecking=accept-new \
+            docker-compose.prod.yml Caddyfile prod.env "deploy@$HOST:~/app/"
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=accept-new "deploy@$HOST" "mv ~/app/prod.env ~/app/.env"
+
+      - name: Deploy — the VM PULLS from GHCR and runs (R5.2; it never builds locally)
+        env:
+          HOST: ${{ vars.SSH_HOST }}
+        run: |
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=accept-new "deploy@$HOST" \
+            "cd ~/app && docker compose -f docker-compose.prod.yml pull && \
+             docker compose -f docker-compose.prod.yml up -d --remove-orphans"   # idempotent (R5.3); restart policy => reboot-safe (R5.4)
+
+      - name: Health check against the HTTPS FQDN (R7 — the real VM, not the runner)
+        env:
+          HOST: ${{ vars.SSH_HOST }}
+        # --fail => non-zero on any 4xx/5xx; --retry-connrefused rides out the container still booting (no explicit sleep).
+        run: curl --fail --retry 10 --retry-delay 5 --retry-connrefused "https://$HOST/health"
+
   # Stress tests (locust) run on demand, not as a merge gate — they need a running stack.
   # Add a separate job (or a manual `workflow_dispatch`) once the app is up, per the course's stress-testing lab.

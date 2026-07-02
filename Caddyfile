@@ -1,0 +1,11 @@
+# Caddy config for the Azure VM (assignment R10).
+# {$SITE_ADDRESS} is read from the environment (set in docker-compose.prod.yml -> the VM's .env, = the FQDN).
+# For that one hostname Caddy automatically:
+#   - obtains a Let's Encrypt certificate on first boot (ACME HTTP-01 over port 80),   -> R10.2
+#   - renews it before expiry with no cron/timer to maintain,                          -> R10.3
+#   - redirects all plain HTTP to HTTPS.                                               -> R10.4
+# reverse_proxy forwards the decrypted request to the internal web container on 5000
+# (gunicorn stays on plain HTTP behind the proxy — the pattern the assignment's R10 note requires).
+{$SITE_ADDRESS} {
+	reverse_proxy web:5000
+}
