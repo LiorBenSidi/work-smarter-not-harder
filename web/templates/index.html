@@ -77,7 +77,8 @@
 
     label { display:block; font-size:13px; color:var(--muted); margin:12px 0 6px; font-weight:600; }
     input, select, textarea { width:100%; padding:13px 14px; background:var(--field); border:1px solid var(--line); border-radius:14px;
-      color:var(--ink); font-size:15px; font-family:inherit; transition: border-color .15s, box-shadow .15s, background .15s; }
+      color:var(--ink); font-size:16px; font-family:inherit; transition: border-color .15s, box-shadow .15s, background .15s; }
+      /* 16px minimum: iOS Safari auto-zooms the page on focusing any input under 16px */
     input[type=number] { font-family:var(--font-mono); }
     input:focus, select:focus, textarea:focus { outline:none; border-color:transparent;
       box-shadow:0 0 0 3px color-mix(in srgb, var(--accent) 45%, transparent); }
@@ -101,6 +102,15 @@
     .tabs button { flex:1; background:transparent; color:var(--muted); box-shadow:none; padding:10px; border-radius:999px; font-weight:800; }
     .tabs button.active { background: linear-gradient(135deg, var(--accent), color-mix(in srgb, var(--accent) 55%, var(--accent2)));
       color:var(--on-accent); }
+
+    /* auth card: full-width primary action (matches the app's Post/Save buttons; the iOS-native form
+       pattern), with Back stacked below it as a quiet secondary. */
+    #auth-view form button[type=submit] { width:100%; }
+    #auth-view form button.ghost { width:100%; margin-top:8px; }
+    /* the 6-digit login code reads as a security code: large centered mono digits. The left padding
+       offsets the trailing letter-space so the digit group stays optically centered. */
+    #otp-code { font-family:var(--font-mono); font-size:22px; letter-spacing:.45em; text-align:center;
+      padding-left:calc(14px + .45em); }
 
     /* hero (logged-out) — the first impression */
     .hero { text-align:center; padding:34px 8px 6px; animation: rise .7s cubic-bezier(.2,.7,.2,1) both; }
@@ -212,7 +222,9 @@
       50% { box-shadow:0 0 0 8px color-mix(in srgb, var(--st, var(--accent)) 4%, transparent); } }
     @keyframes rise { from { opacity:0; transform: translateY(12px); } to { opacity:1; transform:none; } }
     @media (max-width: 640px) { .brand-tag { display:none; } }
-    @media (max-width: 560px) { .row { grid-template-columns:1fr; } main { padding:16px 14px 40px; } .hero-title { font-size:27px; } #who-name { display:none; } }
+    @media (max-width: 560px) { .row { grid-template-columns:1fr; } main { padding:16px 14px 40px; } .hero-title { font-size:27px; } #who-name { display:none; }
+      /* tighter hero on phones: the orb stays the signature but the auth card's action lands near the fold */
+      .hero { padding-top:18px; } .hero-orb { width:104px; height:104px; margin-bottom:18px; } .hero-sub { margin-bottom:14px; } }
     @media (prefers-reduced-motion: reduce) { *, ::before, ::after { animation:none !important; transition:none !important; } }
   </style>
 </head>
@@ -488,8 +500,12 @@
 
     onSubmit("register-form", async (f) => {
       const r = await api("/register", { method: "POST", body: { username: f.username.value, password: f.password.value, email: f.email.value } });
-      if (r.ok) { flash("register-flash", "Account created — you can log in now.", "ok"); showTab("login"); }
-      else { flash("register-flash", (r.data && r.data.error) || "Registration failed"); }
+      if (r.ok) {
+        showTab("login");
+        // the register form is hidden now — surface the confirmation where the user actually IS
+        flash("login-flash", "Account created — you can log in now.", "ok");
+        flash("register-flash", "", "ok");
+      } else { flash("register-flash", (r.data && r.data.error) || "Registration failed"); }
     });
 
     $("logout-btn").addEventListener("click", async () => { await api("/logout", { method: "POST" }); showView("auth"); });
