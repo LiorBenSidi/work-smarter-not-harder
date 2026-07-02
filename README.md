@@ -54,16 +54,17 @@ python -m pytest tests/         # full suite — runs on any machine (no local p
 
 ## Deployment (CI/CD → Azure)
 Every push to `main` runs an automated pipeline ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) that takes the
-dockerized stack from commit to a running container on an Azure VM, served over HTTPS. The app exposes `GET /health`
-(returns `200 {"status":"ok"}`) — used by the container healthcheck, the pipeline's post-deploy check, and the external
-monitor. Full requirement-by-requirement mapping: [`docs/CICD_REPORT.md`](docs/CICD_REPORT.md).
+dockerized stack from commit to a running container on an Azure VM, served over HTTPS. The app exposes two probes: `GET /health`
+(trivial **liveness** — `200 {"status":"ok"}`, no Mongo, so it boots before the DB layer) and `GET /ready` (**readiness** — pings
+Mongo, `503` if the DB is down). The container healthcheck uses `/health`; the post-deploy gate + external monitor use `/ready`.
+Full requirement-by-requirement mapping: [`docs/CICD_REPORT.md`](docs/CICD_REPORT.md).
 
 **Pipeline stages** (a PR runs only stage 1 — it never deploys):
 ```
 push/PR ─▶ 1. checks     ruff + bandit + pytest (real mongo:7 service)      ← gates everything
-push    ─▶ 2. build      docker build web + ai  ─▶ push to GHCR (latest + <short-sha>)
+push    ─▶ 2. build      docker build web + ai (cached) ─▶ GHCR (latest + <short-sha>)
 push    ─▶ 3. deploy     ssh → VM: docker compose pull && up -d  (VM pulls, never builds)
-push    ─▶ 4. verify     curl --fail https://<FQDN>/health        ← fails the run if unhealthy
+push    ─▶ 4. verify     curl --fail https://<FQDN>/ready   ← fails the run + auto-rolls-back if unhealthy
 ```
 Caddy (in [`docker-compose.prod.yml`](docker-compose.prod.yml)) terminates TLS with an auto-renewing Let's Encrypt
 certificate and redirects HTTP→HTTPS; the VM runs the prod compose, which **pulls** the GHCR images rather than building.

@@ -29,9 +29,9 @@ monitor (R9).
 | **R6.1** secrets as GitHub Actions secrets, injected at runtime | `SSH_PRIVATE_KEY`, `APP_SECRET_KEY` (secrets); `SSH_HOST` (variable) | repo settings, `deploy` job |
 | **R6.2** no secret in repo/image/logs | `.env`, `prod.env`, `*_deploy` gitignored; key written to a file, GitHub masks secret values | `.gitignore`, `deploy` job |
 | **R6.3** VM: key-only SSH | enforced by the instructor's cloud-init (verified by grader) | (instructor) |
-| **R7.1/7.2** post-deploy health check on the deployed server | `curl --fail --retry 15 --retry-all-errors https://$SSH_HOST/health` (retries through the cold-boot TLS issuance) | `deploy` job |
+| **R7.1/7.2** post-deploy health check on the deployed server | `curl --fail --retry 15 --retry-all-errors https://$SSH_HOST/ready` — `/ready` pings Mongo, so a pass proves the whole stack (not just that web answers); retries through the cold-boot TLS issuance | `deploy` job |
 | **R8.1** any stage failing fails the whole run | `needs:` chain + default fail-fast | `ci.yml` |
-| **R8.2** *(optional)* rollback on failed health check | not implemented (documented gap) | — |
+| **R8.2** *(optional)* rollback on failed health check | **implemented** — the deploy records the last-good SHA on the VM; a failed `/ready` check re-deploys it (the run still ends red) | `deploy` job |
 | **R9** external uptime monitor, ≤5 min, alert, down→up | UptimeRobot on `https://<FQDN>/health` (browser setup) | README / live |
 | **R10.1–10.5** valid auto-renewing Let's Encrypt HTTPS at the FQDN; HTTP→HTTPS | `caddy` service + `Caddyfile` (`reverse_proxy web:5000`); gunicorn stays internal | `docker-compose.prod.yml`, `Caddyfile` |
 
@@ -49,16 +49,14 @@ monitor (R9).
   default, and the VM's `docker compose pull` runs with no registry login. After the first `build`, set both packages
   to Public (or the VM would need a stored read-token, which we deliberately avoid). Until then, R5.2's pull can't
   succeed. This is a one-time UI step, not a code change.
-- **`/health` is a liveness probe, kept trivial on purpose** — it returns `200` without touching Mongo (a documented
-  course rule; `tests/Integration_Tests/test_auth_flow.py::test_default_store_app_serves_health` enforces it). So a
-  bare 200 proves the web process is up and reachable over HTTPS, not that Mongo is connected. In practice the compose
-  dependency graph covers the gap: `web` has `depends_on: db: { condition: service_healthy }`, so `web` only starts
-  after Mongo is healthy — a successful post-deploy 200 therefore *transitively* implies a healthy DB at deploy time.
-  A dedicated `/ready` endpoint (DB-pinging) for the R7 gate is a possible enhancement, left out to respect the rule.
-- **R8.2 rollback** — not implemented. A failed health check fails the run (good), but `up -d` has already swapped the
-  containers, so **the new image is left live on the VM** until a human intervenes. The deploy now pins the immutable
-  SHA (`IMAGE_TAG`), which makes a rollback trivial to add later (re-`up` the previous SHA); full auto-rollback is the
-  documented follow-up.
+- **`/health` (liveness) vs `/ready` (readiness).** `/health` returns `200` without touching Mongo (a course rule;
+  `tests/Integration_Tests/test_auth_flow.py::test_default_store_app_serves_health` enforces it) and drives the
+  *container* healthcheck. `/ready` pings Mongo and returns `503` when the DB is down; the **post-deploy gate (R7) and
+  the external monitor target `/ready`**, so a green deploy proves the whole stack serves — not just that web answers.
+- **R8.2 auto-rollback — implemented.** The deploy records the last-good SHA on the VM (`~/app/.last_good_sha`); if the
+  post-deploy `/ready` check fails, it re-deploys that SHA so the VM is restored to the last healthy image. The run
+  still ends red (R8.1 intact) — rollback repairs prod, it doesn't mask the failure. (The very first deploy has no
+  prior SHA to roll back to.)
 - **R9 monitor** and the **first Let's Encrypt issuance (R10)** require the live VM and a browser step (UptimeRobot
   account), so they are configured at provisioning time, not in code.
 - The **live demo** (push a visible change → watch it reach the VM; break a PR test; show the monitor's down→up) is
@@ -85,5 +83,6 @@ monitor (R9).
 - `--password-stdin` — keeps `GITHUB_TOKEN` out of the process list and logs (R4.2/R6.2).
 - prod compose uses `image:` not `build:` — the VM runs the exact bits CI pushed; it never rebuilds (R5.2).
 - `restart: unless-stopped` — the container comes back after a crash or VM reboot (R5.4).
-- `curl --fail --retry-connrefused` — non-zero on any HTTP error; rides out container boot without an explicit sleep; targets the FQDN so it proves the VM, not the runner (R7).
+- `curl --fail --retry-all-errors …/ready` — `/ready` pings Mongo (proves the whole stack, not just liveness); `--fail` → non-zero on any HTTP error; `--retry-all-errors` also rides out the cold-boot TLS handshake; targets the FQDN so it proves the VM, not the runner (R7).
+- **auto-rollback** — the deploy records the last-good SHA; a failed `/ready` re-deploys it so prod is restored, while the run still ends red (R8.2).
 - Caddy `reverse_proxy web:5000` — Caddy does ACME + renewal + HTTP→HTTPS automatically; gunicorn stays on plain HTTP behind it (R10, per the assignment's gunicorn note).

@@ -203,6 +203,19 @@ def create_app(config=Config, *, users=None, profiles=None, history=None, forum=
     def health():
         return jsonify(status="ok", service="web")
 
+    @app.get("/ready")
+    def ready():
+        # Readiness = liveness + a DB ping. The post-deploy gate (R7) and the external monitor target
+        # THIS, not /health — so a green deploy proves the whole stack serves, not just that the web
+        # process answers. /health stays trivial (course rule: it must boot without Mongo).
+        try:
+            from services import db as db_module
+            db_module.get_db(app.config["MONGO_URI"]).command("ping")
+        except Exception:
+            logger.warning("readiness check failed: database not reachable", exc_info=True)
+            return jsonify(status="degraded", db="down"), 503
+        return jsonify(status="ready", db="up"), 200
+
     @app.get("/manifest.webmanifest")
     def manifest():
         # PWA manifest at the root path -> correct scope + mimetype, so the app is installable.

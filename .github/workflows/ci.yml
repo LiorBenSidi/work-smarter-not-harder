@@ -90,16 +90,22 @@ jobs:
       - name: Build & push web image
         env:
           IMG: ghcr.io/${{ steps.vars.outputs.owner }}/work-smarter-web
+          DOCKER_BUILDKIT: "1"
         run: |
-          docker build -t "$IMG:latest" -t "$IMG:${{ steps.vars.outputs.sha }}" ./web   # R3.1/R3.3: from ./web/Dockerfile, repo only
-          docker push "$IMG:latest"                                                       # R4.3: push BOTH tags...
-          docker push "$IMG:${{ steps.vars.outputs.sha }}"                                # ...the stable one and the immutable one
+          docker pull "$IMG:latest" || true    # prime the layer cache from the previous build (first run misses)
+          docker build --cache-from "$IMG:latest" --build-arg BUILDKIT_INLINE_CACHE=1 \
+            -t "$IMG:latest" -t "$IMG:${{ steps.vars.outputs.sha }}" ./web   # R3.1/R3.3: from ./web/Dockerfile, repo only
+          docker push "$IMG:latest"                                          # R4.3: push BOTH tags (carry inline cache metadata)...
+          docker push "$IMG:${{ steps.vars.outputs.sha }}"                   # ...the stable one and the immutable one
 
       - name: Build & push ai image
         env:
           IMG: ghcr.io/${{ steps.vars.outputs.owner }}/work-smarter-ai
+          DOCKER_BUILDKIT: "1"
         run: |
-          docker build -t "$IMG:latest" -t "$IMG:${{ steps.vars.outputs.sha }}" ./ai
+          docker pull "$IMG:latest" || true
+          docker build --cache-from "$IMG:latest" --build-arg BUILDKIT_INLINE_CACHE=1 \
+            -t "$IMG:latest" -t "$IMG:${{ steps.vars.outputs.sha }}" ./ai
           docker push "$IMG:latest"
           docker push "$IMG:${{ steps.vars.outputs.sha }}"
 
@@ -109,6 +115,9 @@ jobs:
     # Same push gate PLUS a live-VM gate: until SSH_HOST is set this job is SKIPPED (main stays green), then it
     # activates automatically the moment the VM variable + secrets exist — no code change needed to go live.
     if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.SSH_HOST != ''
+    concurrency:
+      group: azure-deploy-${{ github.ref }}
+      cancel-in-progress: false     # never interrupt an in-flight deploy — queue the next push instead of racing the VM
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -158,20 +167,43 @@ jobs:
             docker-compose.prod.yml Caddyfile prod.env "deploy@$HOST:~/app/"
           ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=accept-new "deploy@$HOST" "mv ~/app/prod.env ~/app/.env"
 
-      - name: Deploy — the VM PULLS from GHCR and runs (R5.2; it never builds locally)
+      - name: Deploy — the VM PULLS from GHCR and runs; record the previous SHA for rollback (R5.2)
+        id: deploy
         env:
           HOST: ${{ vars.SSH_HOST }}
         run: |
+          # the last-good SHA (empty on the first deploy) — the rollback target if the health check fails
+          PREV=$(ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=accept-new "deploy@$HOST" "cat ~/app/.last_good_sha 2>/dev/null || true" || true)
+          echo "prev=$PREV" >> "$GITHUB_OUTPUT"
           ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=accept-new "deploy@$HOST" \
             "cd ~/app && docker compose -f docker-compose.prod.yml pull && \
              docker compose -f docker-compose.prod.yml up -d --remove-orphans"   # idempotent (R5.3); restart policy => reboot-safe (R5.4)
 
-      - name: Health check against the HTTPS FQDN (R7 — the real VM, not the runner)
+      - name: Health check against the HTTPS FQDN (R7 — readiness, the real VM + a live DB ping)
         env:
           HOST: ${{ vars.SSH_HOST }}
-        # --fail => non-zero on any 4xx/5xx. --retry-all-errors ALSO retries a TLS-handshake failure while Caddy is
-        # still issuing the first Let's Encrypt cert on a cold boot (plain --retry-connrefused would not). 15x5s window.
-        run: curl --fail --retry 15 --retry-delay 5 --retry-all-errors "https://$HOST/health"
+        # /ready pings Mongo, so a pass proves the WHOLE stack serves (not just that web answers). --fail => non-zero on
+        # any 4xx/5xx; --retry-all-errors also retries the TLS handshake during the first cold-boot cert issuance. 15x5s.
+        run: curl --fail --retry 15 --retry-delay 5 --retry-all-errors "https://$HOST/ready"
+
+      - name: Record this SHA as the last-good deploy
+        if: success()
+        env:
+          HOST: ${{ vars.SSH_HOST }}
+        run: ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=accept-new "deploy@$HOST" "printf '%s' '${GITHUB_SHA::7}' > ~/app/.last_good_sha"
+
+      - name: Roll back to the previous SHA on an unhealthy deploy (R8.2)
+        if: failure() && steps.deploy.outputs.prev != ''
+        env:
+          HOST: ${{ vars.SSH_HOST }}
+          PREV: ${{ steps.deploy.outputs.prev }}
+        run: |
+          echo "::warning::health check failed — rolling the VM back to ${PREV}"
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=accept-new "deploy@$HOST" \
+            "cd ~/app && sed -i 's/^IMAGE_TAG=.*/IMAGE_TAG=${PREV}/' .env && \
+             docker compose -f docker-compose.prod.yml pull && \
+             docker compose -f docker-compose.prod.yml up -d --remove-orphans"
+          # the run still ends RED (the health step already failed — R8.1 intact); rollback only restores the last-good image
 
   # Stress tests (locust) run on demand, not as a merge gate — they need a running stack.
   # Add a separate job (or a manual `workflow_dispatch`) once the app is up, per the course's stress-testing lab.
