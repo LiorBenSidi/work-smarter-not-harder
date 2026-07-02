@@ -567,7 +567,7 @@
       ["login-flash", "register-flash", "forgot-flash", "reset-flash", "otp-flash"].forEach((id) => flash(id, "", "ok"));
       const hint = $("otp-devhint"); hint.textContent = ""; hint.hidden = true;
       $("who-name").textContent = ""; $("profile-user").textContent = "";  // no username residue either
-      stopDmPolling(); $("dm-dot").hidden = true;                          // stop notification polling on logout
+      stopEvents(); $("dm-dot").hidden = true;                             // close the SSE stream + stop polling on logout
       pendingUser = null; resetToken = null; currentUser = null;
       showTab("login");
     }
@@ -952,7 +952,7 @@
       $("dm-thread-peer").innerHTML = avatarHtml(peer, 30) + "<span>" + escapeHtml(peer) + "</span>";
       await renderThread();
       $("dm-reply").focus();
-      clearInterval(dmThreadTimer); dmThreadTimer = setInterval(renderThread, 5000);  // catch the peer's replies
+      clearInterval(dmThreadTimer); dmThreadTimer = setInterval(renderThread, 15000);  // backstop; SSE pushes replies instantly
     }
 
     async function renderThread() {
@@ -1000,6 +1000,23 @@
     function startDmPolling() { pollNotifications(); clearInterval(dmPollTimer); dmPollTimer = setInterval(pollNotifications, 15000); }
     function stopDmPolling() { clearInterval(dmPollTimer); clearInterval(dmThreadTimer); dmPollTimer = dmThreadTimer = null; dmPeer = null; }
 
+    // ---- Real-time via Server-Sent Events (a persistent server->client push; polling is the fallback) ----
+    let evtSource = null;
+    function onRealtimeEvent() {
+      pollNotifications();                                         // refresh the Chat-tab pulse
+      if (dmPeer) renderThread();                                 // in a thread -> pull the peer's new message
+      else if (!$("screen-messages").hidden) loadConversations(); // on the inbox -> refresh the list
+    }
+    function startEvents() {
+      pollNotifications();                                         // initial pulse from the normal endpoint
+      if (typeof EventSource === "undefined") { startDmPolling(); return; }   // old browser -> poll
+      try { evtSource = new EventSource("/events"); } catch (_) { startDmPolling(); return; }
+      evtSource.addEventListener("notify", onRealtimeEvent);      // pushed the instant a notification lands
+      // EventSource auto-reconnects on a drop; a slow poll is the backstop if a proxy buffers the stream.
+      clearInterval(dmPollTimer); dmPollTimer = setInterval(pollNotifications, 45000);
+    }
+    function stopEvents() { if (evtSource) { evtSource.close(); evtSource = null; } stopDmPolling(); }
+
     async function openMessages() {
       $("dm-thread-view").hidden = true; $("dm-list-view").hidden = false; dmPeer = null;
       await loadConversations();
@@ -1027,7 +1044,7 @@
       showView("app");
       showScreen("today");
       loadProfile(); loadDashboard(); loadHistory(); loadForum();
-      startDmPolling();
+      startEvents();
     }
 
     // Populate the register-form requirement hints from the server's validator bounds (one source of

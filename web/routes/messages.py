@@ -1,9 +1,12 @@
 """Direct messages + notifications — the social layer's private channel and its notification feed.
 
-OWNER: Lior (absorbed from Elad's real-time lane per the 2026-06-28 handoff; see docs/COLLABORATORS.md).
-Real-time delivery is short-interval CLIENT polling of ``GET /notifications`` — no new dependency and no
-gunicorn worker-model change (an SSE/WebSocket push would tie up a worker thread per open client; that's
-the documented future upgrade). Every endpoint is auth-gated; a conversation is readable ONLY by its two
+OWNER: Lior (see docs/COLLABORATORS.md). Real-time delivery is a **Server-Sent Events** push
+(``GET /events`` streams ``text/event-stream``): the browser holds one ``EventSource`` open and the server
+pushes a "notify" ping whenever the user has a new notification, so the client refreshes with no polling
+(a slow poll remains only as a fallback). SSE is dependency-free (a streaming Flask response) and fits a
+server->client feed; the client still SENDS over normal POSTs, so no bidirectional WebSocket is needed. A
+connection holds a worker thread for its (capped) lifetime — fine for the demo on threaded workers; for
+large scale, gevent/eventlet workers are the upgrade. Every endpoint is auth-gated; a conversation is readable ONLY by its two
 participants (the thread id is derived from the caller + peer, so you can't name someone else's thread);
 sending is rate-limited (anti-spam, Noam's Online-Forum §10). The stores are injected (the web->db seam:
 ``app.config["MESSAGES"]`` / ``["NOTIFICATIONS"]``), so this layer unit-tests with in-memory fakes.
@@ -12,7 +15,7 @@ import logging
 import math
 import time
 
-from flask import Blueprint, current_app, jsonify, request, session
+from flask import Blueprint, Response, current_app, jsonify, request, session
 
 from routes.auth import login_required
 
@@ -140,3 +143,39 @@ def mark_notifications_read():
         logger.exception("notification store unavailable during mark-read")
         return jsonify(error="notifications are unavailable right now"), 503
     return jsonify(status="ok"), 200
+
+
+# ---- Server-Sent Events push (real-time, no polling on the client) ----
+EVENTS_MAX_SECONDS = 300      # recycle the connection every 5 min -> the browser auto-reconnects, freeing the thread
+EVENTS_TICK_SECONDS = 1.5     # how often the server checks for new notifications to push
+
+
+@messages_bp.get("/events")
+@login_required
+def events():
+    """Stream a `notify` ping whenever the signed-in user gets a new notification. The client holds one
+    EventSource open and re-fetches on each ping — no client polling. Auth-gated like every other route."""
+    me = session["username"]
+    notifications = _notifications()
+
+    def stream():
+        yield "retry: 3000\n\n"                        # browser reconnect delay after a drop
+        cursor = time.time()                           # only ping on notifications created after the stream opened
+        deadline = time.time() + EVENTS_MAX_SECONDS
+        while time.time() < deadline:
+            try:
+                fresh = notifications.list(me, since=cursor)
+            except Exception:
+                logger.warning("notification store unavailable during SSE stream", exc_info=True)
+                yield ": store-unavailable\n\n"
+                time.sleep(2)
+                continue
+            if fresh:
+                cursor = max(n["created_at"] for n in fresh)
+                yield "event: notify\ndata: {}\n\n"    # a change ping; the client re-fetches via the normal endpoints
+            else:
+                yield ": keepalive\n\n"                 # comment line keeps the connection warm through proxies
+            time.sleep(EVENTS_TICK_SECONDS)
+
+    return Response(stream(), mimetype="text/event-stream",
+                    headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no", "Connection": "keep-alive"})
