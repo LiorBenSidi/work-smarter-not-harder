@@ -229,6 +229,32 @@
     .tab svg { width:23px; height:23px; stroke:currentColor; fill:none; stroke-width:1.9; }
     .tab.active { color:var(--brand); background: color-mix(in srgb, var(--brand) 13%, transparent); }
     .tab.active svg { stroke:var(--brand); }
+    /* notification "pulse" on the Chat tab — a calm breathing mint dot, not a red count bubble */
+    .tab { position:relative; }
+    .tab-dot { position:absolute; top:6px; right:calc(50% - 17px); width:8px; height:8px; border-radius:50%;
+      background:var(--accent); box-shadow:0 0 8px var(--accent); animation: breathe 2.6s ease-in-out infinite; }
+
+    /* Direct messages: generative avatars (deterministic aurora gradient + initial — no uploads), calm bubbles */
+    .avatar { display:inline-flex; align-items:center; justify-content:center; flex:none; border-radius:50%;
+      color:#0b1220; font-weight:800; box-shadow:inset 0 1px 2px rgba(255,255,255,.42); }
+    .dm-row { display:flex; align-items:center; gap:12px; padding:11px; border-radius:16px; cursor:pointer;
+      border:1px solid transparent; transition: background .15s, border-color .15s; }
+    .dm-row:hover { background:var(--field); border-color:var(--line); }
+    .dm-main { flex:1; min-width:0; }
+    .dm-name { font-weight:700; font-size:14px; }
+    .dm-last { color:var(--muted); font-size:13px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .dm-unread { flex:none; min-width:20px; height:20px; padding:0 6px; border-radius:999px; font-size:11px; font-weight:800;
+      display:inline-flex; align-items:center; justify-content:center; color:var(--on-accent);
+      background:linear-gradient(135deg,var(--accent),var(--accent2)); }
+    .dm-thread-head { display:flex; align-items:center; gap:12px; margin-bottom:14px; }
+    .dm-peer { display:flex; align-items:center; gap:10px; font-weight:800; }
+    .dm-thread { display:flex; flex-direction:column; gap:8px; max-height:52vh; overflow-y:auto; padding:4px 2px; }
+    .bubble { max-width:78%; padding:9px 13px; border-radius:16px; font-size:14px; line-height:1.35; overflow-wrap:anywhere; }
+    .bubble.them { align-self:flex-start; background:var(--field); border:1px solid var(--line); border-bottom-left-radius:5px; }
+    .bubble.me { align-self:flex-end; color:var(--on-accent); border-bottom-right-radius:5px;
+      background:linear-gradient(135deg,var(--accent),color-mix(in srgb,var(--accent) 60%,var(--accent2))); }
+    #dm-reply-form { display:flex; gap:8px; margin-top:12px; }
+    #dm-reply-form input { flex:1; } #dm-reply-form button { flex:none; }
 
     :focus-visible { outline:2px solid var(--accent); outline-offset:3px; border-radius:8px; }
     [hidden] { display:none !important; }
@@ -394,6 +420,37 @@
         </section>
 
         <!-- Profile -->
+        <!-- Messages -->
+        <section id="screen-messages" class="screen" role="tabpanel" aria-label="Messages" hidden>
+          <div class="screen-head"><h1 class="screen-title">Messages</h1><p class="screen-sub">Train together, quietly</p></div>
+          <div id="dm-list-view">
+            <div class="card">
+              <h2><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span class="grow">New message</span></h2>
+              <form id="dm-new-form">
+                <label for="dm-to">To</label><input id="dm-to" name="to" placeholder="username" autocomplete="off" maxlength="64" required>
+                <label for="dm-body">Message</label><textarea id="dm-body" name="body" placeholder="Say hi…" rows="2" maxlength="2000" required style="resize:vertical"></textarea>
+                <div style="margin-top:12px"><button type="submit" class="block">Send</button></div>
+                <div id="dm-new-flash" class="flash" aria-live="polite"></div>
+              </form>
+            </div>
+            <div class="card">
+              <h2><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H8l-4 4V5a2 2 0 0 1 2-2h13a2 2 0 0 1 2 2z"/></svg><span class="grow">Conversations</span>
+                <button id="dm-refresh" class="ghost mini">Refresh</button></h2>
+              <div id="dm-conversations"><p class="muted">Loading…</p></div>
+            </div>
+          </div>
+          <div id="dm-thread-view" hidden>
+            <div class="card">
+              <div class="dm-thread-head"><button class="ghost mini" onclick="closeThread()">← Back</button>
+                <span id="dm-thread-peer" class="dm-peer"></span></div>
+              <div id="dm-thread" class="dm-thread"><p class="muted">Loading…</p></div>
+              <form id="dm-reply-form"><input id="dm-reply" name="body" placeholder="Message…" autocomplete="off" maxlength="2000" required>
+                <button type="submit">Send</button></form>
+              <div id="dm-reply-flash" class="flash" aria-live="polite"></div>
+            </div>
+          </div>
+        </section>
+
         <section id="screen-profile" class="screen" role="tabpanel" aria-label="Profile" hidden>
           <div class="screen-head"><h1 class="screen-title">Profile</h1><p class="screen-sub">Your details</p></div>
           <div class="card">
@@ -431,6 +488,8 @@
             <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><span>History</span></button>
           <button class="tab" data-screen="forum" role="tab" aria-selected="false" aria-controls="screen-forum">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H8l-4 4V5a2 2 0 0 1 2-2h13a2 2 0 0 1 2 2z"/></svg><span>Forum</span></button>
+          <button class="tab" data-screen="messages" role="tab" aria-selected="false" aria-controls="screen-messages">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 11.5a8.5 8.5 0 0 1-12.9 7.3L3 20l1.2-5.1A8.5 8.5 0 1 1 21 11.5z"/></svg><span>Chat</span><span class="tab-dot" id="dm-dot" hidden></span></button>
           <button class="tab" data-screen="profile" role="tab" aria-selected="false" aria-controls="screen-profile">
             <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6 8-6s8 2 8 6"/></svg><span>Profile</span></button>
         </div>
@@ -508,6 +567,7 @@
       ["login-flash", "register-flash", "forgot-flash", "reset-flash", "otp-flash"].forEach((id) => flash(id, "", "ok"));
       const hint = $("otp-devhint"); hint.textContent = ""; hint.hidden = true;
       $("who-name").textContent = ""; $("profile-user").textContent = "";  // no username residue either
+      stopDmPolling(); $("dm-dot").hidden = true;                          // stop notification polling on logout
       pendingUser = null; resetToken = null; currentUser = null;
       showTab("login");
     }
@@ -521,6 +581,8 @@
         t.setAttribute("aria-selected", on ? "true" : "false");
       });
       window.scrollTo({ top: 0, behavior: "instant" });
+      if (name === "messages") openMessages();
+      else { clearInterval(dmThreadTimer); dmThreadTimer = null; }   // stop the 5s thread poll when leaving Chat
     }
     document.querySelectorAll(".tab").forEach((t) => t.addEventListener("click", () => showScreen(t.dataset.screen)));
 
@@ -853,18 +915,119 @@
     $("dashboard-refresh").addEventListener("click", loadDashboard);
     $("history-refresh").addEventListener("click", loadHistory);
 
+    // ---- Direct messages + notifications ----
+    let dmPeer = null, dmPollTimer = null, dmThreadTimer = null;
+
+    // A deterministic avatar per username: hash -> a hue on the calm mint→lilac arc, drawn as a gradient
+    // disc with the initial. Same person always gets the same avatar; no uploads, no dependency.
+    function avatarHtml(name, size) {
+      const s = String(name || "?");
+      let h = 2166136261 >>> 0;
+      for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
+      const base = 150 + (h >>> 0) % 140;
+      const init = (Array.from(s.trim())[0] || "?").toUpperCase();   // full code point (emoji/surrogate-safe)
+      return '<span class="avatar" style="width:' + size + 'px;height:' + size + 'px;font-size:' + Math.round(size * 0.42)
+        + 'px;background:linear-gradient(135deg,hsl(' + base + ' 62% 62%),hsl(' + ((base + 55) % 360) + ' 60% 54%))">'
+        + escapeHtml(init) + '</span>';
+    }
+
+    async function loadConversations() {
+      const el = $("dm-conversations");
+      const r = await api("/conversations");
+      if (!r.ok) { el.innerHTML = '<p class="flash error">Could not load conversations.</p>'; return; }
+      const cs = (r.data && r.data.conversations) || [];
+      if (!cs.length) { el.innerHTML = '<p class="muted">No conversations yet — start one above.</p>'; return; }
+      el.innerHTML = cs.map((c) =>
+        '<div class="dm-row" data-peer="' + escapeHtml(c.peer) + '">' + avatarHtml(c.peer, 40)
+        + '<div class="dm-main"><div class="dm-name">' + escapeHtml(c.peer) + '</div>'
+        + '<div class="dm-last">' + escapeHtml(c.last_message || "") + '</div></div>'
+        + (c.unread ? '<span class="dm-unread">' + escapeHtml(c.unread) + '</span>' : '') + '</div>'
+      ).join("");
+      el.querySelectorAll(".dm-row").forEach((d) => d.addEventListener("click", () => openThread(d.dataset.peer)));
+    }
+
+    async function openThread(peer) {
+      dmPeer = peer;
+      $("dm-list-view").hidden = true; $("dm-thread-view").hidden = false;
+      $("dm-thread-peer").innerHTML = avatarHtml(peer, 30) + "<span>" + escapeHtml(peer) + "</span>";
+      await renderThread();
+      $("dm-reply").focus();
+      clearInterval(dmThreadTimer); dmThreadTimer = setInterval(renderThread, 5000);  // catch the peer's replies
+    }
+
+    async function renderThread() {
+      if (!dmPeer) return;
+      const r = await api("/conversations/" + encodeURIComponent(dmPeer));
+      const box = $("dm-thread");
+      if (!r.ok) { box.innerHTML = '<p class="flash error">Could not load this conversation.</p>'; return; }
+      const nearBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 40;   // don't yank the reader up
+      const msgs = (r.data && r.data.messages) || [];
+      box.innerHTML = msgs.length
+        ? msgs.map((m) => '<div class="bubble ' + (m.sender === currentUser ? "me" : "them") + '">' + escapeHtml(m.body) + "</div>").join("")
+        : '<p class="muted">No messages yet — say hi.</p>';
+      if (nearBottom) box.scrollTop = box.scrollHeight;
+    }
+
+    function closeThread() {
+      clearInterval(dmThreadTimer); dmThreadTimer = null; dmPeer = null;
+      $("dm-thread-view").hidden = true; $("dm-list-view").hidden = false;
+      loadConversations();
+    }
+
+    onSubmit("dm-new-form", async (f) => {
+      const to = f.to.value.trim();
+      const r = await api("/messages", { method: "POST", body: { to, body: f.body.value } });
+      if (r.ok) { f.reset(); flash("dm-new-flash", "", "ok"); openThread(to); }
+      else { flash("dm-new-flash", (r.data && r.data.error) || "Could not send"); }
+    });
+
+    onSubmit("dm-reply-form", async (f) => {
+      if (!dmPeer || !f.body.value.trim()) return;
+      const r = await api("/messages", { method: "POST", body: { to: dmPeer, body: f.body.value } });
+      if (r.ok) { f.reset(); flash("dm-reply-flash", "", "ok"); renderThread(); }
+      else { flash("dm-reply-flash", (r.data && r.data.error) || "Could not send"); }   // surface 429 / errors
+    });
+
+    $("dm-refresh").addEventListener("click", loadConversations);
+
+    // Poll the notification feed so the Chat tab's pulse reflects unread messages without a refresh.
+    async function pollNotifications() {
+      const u = currentUser;
+      const r = await api("/notifications");
+      if (u !== currentUser) return;                       // session switched mid-flight -> ignore this stale reply
+      if (r.ok && r.data) $("dm-dot").hidden = !(r.data.unread > 0);
+    }
+    function startDmPolling() { pollNotifications(); clearInterval(dmPollTimer); dmPollTimer = setInterval(pollNotifications, 15000); }
+    function stopDmPolling() { clearInterval(dmPollTimer); clearInterval(dmThreadTimer); dmPollTimer = dmThreadTimer = null; dmPeer = null; }
+
+    async function openMessages() {
+      $("dm-thread-view").hidden = true; $("dm-list-view").hidden = false; dmPeer = null;
+      await loadConversations();
+      // Opening the inbox clears only the DM notifications — other kinds (e.g. vote notifications) stay unread
+      // so the pulse still reflects them. The dot then mirrors whatever non-DM unread remains.
+      const r = await api("/notifications");
+      if (r.ok && r.data) {
+        const notes = r.data.notifications || [];
+        const dmIds = notes.filter((n) => n.type === "dm" && !n.read).map((n) => n.id);
+        if (dmIds.length) await api("/notifications/read", { method: "POST", body: { ids: dmIds } });
+        $("dm-dot").hidden = notes.filter((n) => n.type !== "dm" && !n.read).length === 0;
+      }
+    }
+
     function enterApp(username) {
       resetAuthState();  // scrub credentials/OTP state now, while the auth card is off-screen
       currentUser = username;
       $("who-name").textContent = "Hi, " + username;
       $("profile-user").textContent = "Signed in as " + username;
       // a previous account's residue must not survive a same-browser user switch
-      ["profile-form", "checkin-form", "forum-form"].forEach((id) => $(id).reset());
-      ["profile-flash", "checkin-flash", "forum-flash"].forEach((id) => flash(id, "", "ok"));
+      ["profile-form", "checkin-form", "forum-form", "dm-new-form"].forEach((id) => $(id).reset());
+      ["profile-flash", "checkin-flash", "forum-flash", "dm-new-flash"].forEach((id) => flash(id, "", "ok"));
       closePost();
+      $("dm-thread-view").hidden = true; $("dm-list-view").hidden = false; dmPeer = null;  // fresh DM view
       showView("app");
       showScreen("today");
       loadProfile(); loadDashboard(); loadHistory(); loadForum();
+      startDmPolling();
     }
 
     // Populate the register-form requirement hints from the server's validator bounds (one source of

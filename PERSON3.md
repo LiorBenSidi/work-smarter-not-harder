@@ -1,14 +1,16 @@
-# PERSON 3 — Elad — deployment, real-time & scale
+# PERSON 3 — Elad — deployment, scale & Forum media
 
 > Your area, the mandatory course items, and a roadmap. How you build it is your call. You own what
 > **ships, scales, and runs the app live** — taking the Azure deploy + CI/CD pipeline **live** (the pipeline
 > *code* is already in the repo — see Lior / [`docs/CICD_REPORT.md`](docs/CICD_REPORT.md)), the cross-container
-> test harness, and scaling — plus the Forum's **real-time backend** and rate-limiting.
-> `docker-compose.yml` is your starting point.
+> test harness, and scaling — plus the remaining Forum **media/attachments** and vote notifications.
+> `docker-compose.yml` is your starting point. *(P2P DM (text) + live DM notifications are already built — see
+> [`PERSON2.md`](PERSON2.md) / [`docs/ROADMAP.md`](docs/ROADMAP.md); the notification feed + polling are in place
+> for vote notifications to hook into.)*
 
 ## Start now — unblocked on day 1
 The 3-container skeleton already runs, so you can start the Azure setup, the test-runner service, the
-stress harness, and the real-time backend immediately — none of it waits on the features.
+stress harness, and the remaining Forum media/attachments immediately — none of it waits on the features.
 
 ## Your contracts (fixed)
 - The 3 containers are defined in `docker-compose.yml`; you deploy + run that stack on Azure. The `db`
@@ -40,10 +42,11 @@ stress harness, and the real-time backend immediately — none of it waits on th
   stack (your Dockerfile / how the tests mount into an image).
 - [ ] **Cross-container tests** — integration (web→ai→db) + system (register→profile→readiness) +
   **fault-isolation (stop `ai` / stop `db` → web survives)** + stress (locust).
-- [ ] **Forum:** the real-time layer (SSE/WebSocket) + notifications + DM transport + media/file storage.
-- [ ] **Rate limiting** — flask-limiter on the public routes.
+- [ ] **Forum:** media/attachment storage (images/video in posts, comments and DMs) + file-size limits + **upvote/downvote notifications** (hook into the existing `/notifications` feed + polling). *(P2P DM (text) + live DM notifications are built.)*
+- [ ] **Rate limiting** — `flask-limiter` on the public routes (login/register/forum). *(Messaging already has an anti-spam rate-limit — 20/min.)*
 - [ ] **Risk assessment** — anchor the report's "what can go wrong" section (with the team's input).
 
 ## You own the decisions
-The deploy mechanism, the compose/CI structure, the real-time transport (SSE vs Socket.IO), the scaling
-approach — your call.
+The deploy mechanism, the compose/CI structure, the media-storage approach, the scaling
+approach — your call. (The DM/notification real-time is done via polling; vote notifications can reuse it or
+upgrade to SSE/WebSocket — your call there too.)
