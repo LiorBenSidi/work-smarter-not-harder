@@ -20,12 +20,12 @@ Course rules the architecture is built to satisfy: ≥3 communicating containers
 
 ## Repo layout
 ```
-web/     Flask web container (to build)
-ai/      Random Forest + recommendation engine (to build)
+web/     Flask web app + the whole data layer (built)
+ai/      Random Forest + recommendation engine (Shiri — placeholder today)
 tests/   Unit_Tests · Integration_Tests · System_Tests · Stress_Tests · Security_Tests
-docs/    PROPOSAL.md (spec) · DESIGN · ROADMAP · FEEDBACK (rubric) · meeting-notes
+docs/    PROPOSAL · DESIGN · ROADMAP · REPORT · CICD_REPORT · DEPLOY_DEMO · FEEDBACK · meeting-notes
 ```
-This is a starting scaffold — the team fills it in via pull requests (see below).
+The web + data + CI/CD layers are built; `ai/` (Shiri's model) and the live deploy + real-time Forum (Elad) are in progress — all via pull requests (see below).
 
 ## Getting started (first-time, every clone)
 **New here? → [`GETTING_STARTED.md`](GETTING_STARTED.md)** — clone · run the stack · find your part · the loop (≈5 min). It also covers the gate setup below.
@@ -133,4 +133,6 @@ protection enforces them either way. (We intentionally don't add a separate conf
 clutters the repo and drifts; the README + `AGENTS.md` are the catch-all.)
 
 ## Status
-Proposal submitted; build in progress. Final project due **23 Aug 2026** (demo Week 12, present 16 July).
+Proposal graded **100/100**. **Built:** the web tier, the whole data layer, Week-9 logging, the 3-container build,
+the CI gate, and the CI/CD deploy pipeline (`main` green, 332 tests). **In progress:** the AI model (Shiri) and the
+live Azure deploy + real-time Forum (Elad). Final project due **23 Aug 2026** (demo Week 12, present 16 July).

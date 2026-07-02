@@ -2,6 +2,8 @@
 
 AI-powered sports-coaching platform (WSML 00950219). Canonical guidance: [`CLAUDE.md`](../CLAUDE.md); PR workflow: [`CONTRIBUTING.md`](../CONTRIBUTING.md).
 
+**Current status (2026-07-02):** backend built + CI-gated (web tier, whole data layer, logging, containers, CI, and the CI/CD deploy pipeline — all Lior; 332 tests, `main` green). **Open:** Shiri — the real model behind `POST /predict` (`ai/` is a placeholder); Elad — the live Azure deploy + demo, Forum real-time, rate-limit, stress, test-runner. Build within an open lane; don't redo the built parts. Full breakdown: `CLAUDE.md` → Current status.
+
 ## Cardinal rule
 `main` is branch-protected — **never push to `main`**. Make a branch (`feat|fix|test|docs|chore/…`) and open a PR; CI (ruff · bandit · pytest) must pass, then the **author merges their own PR** — no peer approval required (own your scope + tests; CI is the gate).
 
@@ -19,4 +21,4 @@ Local AI model only (no external API); bake the trained model into the image (no
 - Local hooks mirror CI: `sh scripts/setup-hooks.sh` + `pip install -r requirements-dev.txt` → ruff + bandit on commit, pytest on push.
 
 ## Testing & TDD (course)
-Write tests **before/with** the code; all 5 types in `tests/` — fill the scaffolds + remove the `skip` (see `tests/README.md`). Test **behaviour, not the implementation** (no `assert True`); a broken test is **fixed or deleted, never commented out**; tests run on any machine. Don't change a shared contract (`/predict`, the DB collections, only-`web`-exposed) without telling the team.
+Write tests **before/with** the code; all 5 types in `tests/`. The built areas have full tests — add tests alongside new code (see `tests/README.md`); the skips are **env-gated** (real Mongo / a live stack), not unwritten. Test **behaviour, not the implementation** (no `assert True`); a broken test is **fixed or deleted, never commented out**; tests run on any machine. Don't change a shared contract (`/predict`, the DB collections, only-`web`-exposed) without telling the team.

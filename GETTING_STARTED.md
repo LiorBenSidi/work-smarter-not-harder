@@ -39,8 +39,8 @@ Your file = your area + the must-do (course) items + a roadmap. **How** you buil
 
 ## 5. The loop (for every change)
 1. `git checkout -b feat/your-thing`
-2. **Write the test first.** Your scaffolds are in `tests/` (`tests/README.md` shows which). Remove the `skip`, make it fail, then make it pass.
-3. Replace the `501` stub in your file with the real code.
+2. **Write the test first.** Add it in `tests/` (`tests/README.md` shows the matrix) — make it fail, then make it pass. (The built areas already have full tests; the suite's skips are env-gated, not unwritten.)
+3. Implement your change behind its contract (e.g. Shiri: the real model behind the `ai/` `/predict` placeholder).
 4. `git commit` (gate runs) → `git push` (tests run) → open a PR → CI green → **merge it yourself** (no approval needed).
 5. **Commit often** — your GitHub history is graded.
 
