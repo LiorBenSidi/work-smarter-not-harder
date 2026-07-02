@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#0a0e20">
   <link rel="manifest" href="/manifest.webmanifest">
   <link rel="icon" href="/static/icon-192.png">
@@ -16,7 +16,8 @@
     /* "Work Smarter" — a training-readiness coach. Visual identity: calm recovery instrument.
        A dusk gradient with a drifting aurora; one luminous mint→lilac accent. The signature is the
        breathing readiness orb — a circular gauge that fills to today's readiness and breathes, colored
-       green/amber/coral by state. Premium mobile-app idiom: soft rounded glass cards, generous space. */
+       green/amber/coral by state. Logged-in idiom: a native mobile-app shell — sectioned screens under a
+       bottom tab bar (Today / History / Forum / Profile), soft rounded glass cards, generous space. */
     :root { color-scheme: light dark;
       --font-sans: ui-rounded, "SF Pro Rounded", "Hiragino Maru Gothic ProN", "Segoe UI Variable", "Nunito", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
       --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
@@ -50,6 +51,7 @@
       filter: blur(34px); opacity:.65; animation: drift 26s ease-in-out infinite alternate;
       background: radial-gradient(38% 50% at 30% 32%, var(--glow-a), transparent 62%),
                   radial-gradient(44% 56% at 72% 42%, var(--glow-b), transparent 62%); }
+    @keyframes drift { from { transform: translate3d(-3%, -1%, 0) scale(1); } to { transform: translate3d(4%, 2%, 0) scale(1.08); } }
 
     header { position:sticky; top:0; z-index:30; display:flex; align-items:center; justify-content:space-between; gap:12px;
       padding:13px 20px; border-bottom:1px solid var(--line);
@@ -61,16 +63,17 @@
     .brand-name { font-size:16px; font-weight:800; letter-spacing:.04em; white-space:nowrap; }
     .brand-tag { font-size:12px; color:var(--muted); white-space:nowrap; }
     #who { display:flex; align-items:center; gap:10px; }
-    #who-name { white-space:nowrap; }
+    #who-name { white-space:nowrap; font-weight:700; }
 
-    main { max-width:560px; margin:0 auto; padding:24px 18px 64px; }
+    main { max-width:560px; margin:0 auto; padding:22px 18px 64px; }
     .card { background:var(--card); border:1px solid var(--line); border-radius:24px; padding:22px; margin-bottom:18px;
       box-shadow:var(--shadow); backdrop-filter: blur(18px) saturate(1.15); animation: rise .6s cubic-bezier(.2,.7,.2,1) both; }
-    #app-view .card:nth-child(1){ animation-delay:.02s } #app-view .card:nth-child(2){ animation-delay:.08s }
-    #app-view .card:nth-child(3){ animation-delay:.14s } #app-view .card:nth-child(4){ animation-delay:.20s }
-    #app-view .card:nth-child(5){ animation-delay:.26s }
+    .screen .card:nth-child(2){ animation-delay:.04s } .screen .card:nth-child(3){ animation-delay:.10s }
+    .screen .card:nth-child(4){ animation-delay:.16s }
     .card h2 { margin:0 0 16px; font-size:12px; color:var(--muted); text-transform:uppercase; letter-spacing:.14em; font-weight:800;
-      display:flex; align-items:center; justify-content:space-between; gap:10px; }
+      display:flex; align-items:center; gap:8px; }
+    .card h2 .grow { flex:1; }
+    .card h2 svg { width:15px; height:15px; stroke:var(--accent); fill:none; stroke-width:2; flex:none; }
 
     label { display:block; font-size:13px; color:var(--muted); margin:12px 0 6px; font-weight:600; }
     input, select, textarea { width:100%; padding:13px 14px; background:var(--field); border:1px solid var(--line); border-radius:14px;
@@ -88,6 +91,7 @@
     button.ghost { background:transparent; color:var(--ink); border:1px solid var(--line); box-shadow:none; font-weight:700; }
     button.ghost:hover { border-color: color-mix(in srgb, var(--accent) 55%, transparent); background:var(--field); filter:none; }
     button.mini { padding:7px 13px; font-size:12.5px; }
+    button.block { width:100%; }
 
     .row { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
     .flash { font-size:13.5px; margin-top:12px; min-height:18px; font-weight:600; }
@@ -111,6 +115,23 @@
     .hero-title .accent { background: linear-gradient(120deg, var(--accent), var(--accent2));
       -webkit-background-clip:text; background-clip:text; color:transparent; }
 
+    /* ===== app shell (logged-in): sectioned screens + bottom tab bar ===== */
+    .app-shell { padding-bottom:26px; }
+    .screen { animation: rise .5s cubic-bezier(.2,.7,.2,1) both; }
+    .screen-head { margin:4px 4px 16px; }
+    .screen-title { font-size:27px; font-weight:800; letter-spacing:-.02em; margin:0; }
+    .screen-sub { color:var(--muted); font-size:14px; margin:3px 0 0; }
+
+    /* stat strip — glanceable numbers */
+    .stat-strip { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin:0 0 18px; }
+    .stat { background:var(--card); border:1px solid var(--line); border-radius:18px; padding:15px 10px 13px; text-align:center;
+      box-shadow:var(--shadow); backdrop-filter: blur(14px); animation: rise .5s cubic-bezier(.2,.7,.2,1) both; }
+    .stat .ico { width:19px; height:19px; stroke:var(--accent); fill:none; stroke-width:2; margin-bottom:5px; }
+    .stat .n { font-size:21px; font-weight:800; font-family:var(--font-mono); color:var(--ink); line-height:1.05;
+      max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .stat .n.accent { color:var(--brand); }
+    .stat .k { font-size:10px; letter-spacing:.1em; text-transform:uppercase; color:var(--muted); margin-top:5px; }
+
     /* signature: the breathing readiness orb */
     .readiness { --st: var(--muted); text-align:center; }
     .readiness.ready { --st: var(--ready); } .readiness.moderate { --st: var(--moderate); } .readiness.rest { --st: var(--rest); }
@@ -128,6 +149,21 @@
     .recs li { position:relative; margin:8px 0; padding:11px 13px 11px 34px; background:var(--field); border:1px solid var(--line); border-radius:14px; font-size:14px; }
     .recs li::before { content:""; position:absolute; left:13px; top:15px; width:8px; height:8px; border-radius:50%;
       background:var(--accent); box-shadow:0 0 8px var(--accent); }
+
+    /* readiness confidence breakdown (per-state proba) */
+    .conf { margin:18px 0 0; text-align:left; }
+    .conf-cap { font-size:11px; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); font-weight:800; margin:0 0 8px; }
+    .conf-row { display:grid; grid-template-columns:66px 1fr 40px; align-items:center; gap:10px; margin:7px 0; }
+    .conf-k { font-size:12.5px; color:var(--ink); font-weight:700; text-transform:capitalize; }
+    .conf-track { height:9px; border-radius:999px; background:var(--field); overflow:hidden; }
+    .conf-fill { display:block; height:100%; width:0; border-radius:999px; transition:width 1s cubic-bezier(.2,.7,.2,1);
+      background: linear-gradient(90deg, var(--st), color-mix(in srgb, var(--st) 45%, var(--accent2))); }
+    .conf-v { font-size:12px; font-family:var(--font-mono); color:var(--muted); text-align:right; }
+
+    /* history trend sparkline */
+    .trend { margin:2px 0 16px; }
+    .trend-cap { font-size:11px; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); font-weight:800; margin:0 0 8px; }
+    .trend svg { width:100%; height:66px; display:block; overflow:visible; }
 
     .pill { display:inline-block; padding:6px 13px; border-radius:999px; font-size:12.5px; font-family:var(--font-mono);
       background:var(--field); border:1px solid var(--line); color:var(--ink); white-space:nowrap; }
@@ -154,6 +190,19 @@
       backdrop-filter: blur(12px); opacity:0; pointer-events:none; transition: opacity .14s; z-index:20; }
     .info:hover .tip, .info:focus-visible .tip, .info:focus .tip { opacity:1; }
 
+    /* bottom tab bar — the app-shell navigation */
+    .tabbar { position:fixed; left:0; right:0; bottom:0; z-index:40; display:flex; justify-content:center;
+      padding:8px 12px calc(8px + env(safe-area-inset-bottom)); border-top:1px solid var(--line);
+      background: color-mix(in srgb, var(--bg) 74%, transparent); backdrop-filter: blur(22px) saturate(1.3); }
+    .tabbar-inner { display:flex; gap:4px; width:100%; max-width:560px; }
+    .tab { flex:1; background:transparent; box-shadow:none; color:var(--muted); border-radius:16px; padding:8px 4px 6px;
+      display:flex; flex-direction:column; align-items:center; gap:3px; font-weight:700; font-size:11px; letter-spacing:.02em;
+      transition: color .15s, background .15s; }
+    .tab:hover { filter:none; background:var(--field); color:var(--ink); }
+    .tab svg { width:23px; height:23px; stroke:currentColor; fill:none; stroke-width:1.9; }
+    .tab.active { color:var(--brand); background: color-mix(in srgb, var(--brand) 13%, transparent); }
+    .tab.active svg { stroke:var(--brand); }
+
     :focus-visible { outline:2px solid var(--accent); outline-offset:3px; border-radius:8px; }
     [hidden] { display:none !important; }
 
@@ -163,7 +212,7 @@
       50% { box-shadow:0 0 0 8px color-mix(in srgb, var(--st, var(--accent)) 4%, transparent); } }
     @keyframes rise { from { opacity:0; transform: translateY(12px); } to { opacity:1; transform:none; } }
     @media (max-width: 640px) { .brand-tag { display:none; } }
-    @media (max-width: 560px) { .row { grid-template-columns:1fr; } main { padding:18px 16px 48px; } .hero-title { font-size:27px; } #who-name { display:none; } }
+    @media (max-width: 560px) { .row { grid-template-columns:1fr; } main { padding:16px 14px 40px; } .hero-title { font-size:27px; } #who-name { display:none; } }
     @media (prefers-reduced-motion: reduce) { *, ::before, ::after { animation:none !important; transition:none !important; } }
   </style>
 </head>
@@ -174,9 +223,7 @@
       <span class="brand-name">Work Smarter</span>
       <span class="brand-tag">readiness, every morning</span>
     </a>
-    <div id="who" hidden><span id="who-name" class="muted"></span>
-      <button id="logout-btn" class="ghost mini">Log out</button>
-    </div>
+    <div id="who" hidden><span id="who-name" class="muted"></span></div>
   </header>
 
   <main>
@@ -237,65 +284,104 @@
       </div>
     </section>
 
-    <!-- ===== App view ===== -->
+    <!-- ===== App view: mobile-app shell (sectioned screens + bottom tab bar) ===== -->
     <section id="app-view" hidden>
-      <div class="card">
-        <h2>Your profile</h2>
-        <form id="profile-form">
-          <div class="row">
-            <div><label for="age">Age</label><input id="age" name="age" type="number" min="10" max="120" required></div>
-            <div><label for="gender">Gender</label>
-              <select id="gender" name="gender"><option value="male">Male</option><option value="female">Female</option><option value="other">Other</option></select>
-            </div>
-            <div><label for="height">Height (cm)</label><input id="height" name="height" type="number" min="50" max="300" step="0.1" required></div>
-            <div><label for="weight">Weight (kg)</label><input id="weight" name="weight" type="number" min="20" max="500" step="0.1" required></div>
-            <div><label for="goal">Goal</label>
-              <select id="goal" name="goal"><option value="lose">Lose</option><option value="maintain">Maintain</option><option value="gain">Gain</option></select>
-            </div>
-            <div><label for="training_frequency">Training days / week</label><input id="training_frequency" name="training_frequency" type="number" min="0" max="14" required></div>
+      <div class="app-shell">
+        <!-- Today -->
+        <section id="screen-today" class="screen" role="tabpanel" aria-label="Today">
+          <div class="screen-head"><h1 class="screen-title">Today</h1><p class="screen-sub">Your readiness, right now</p></div>
+          <div class="card">
+            <h2><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h4l2 5 4-13 2 8h6"/></svg><span class="grow">Readiness</span>
+              <button id="dashboard-refresh" class="ghost mini">Refresh</button></h2>
+            <div id="dashboard"><p class="muted">Loading…</p></div>
           </div>
-          <div style="margin-top:16px"><button type="submit">Save profile</button></div>
-          <div id="profile-flash" class="flash" aria-live="polite"></div>
-        </form>
-      </div>
-
-      <div class="card">
-        <h2>Daily check-in</h2>
-        <form id="checkin-form">
-          <div class="row">
-            <div><label for="sleep_hours">Sleep (hours)</label><input id="sleep_hours" name="sleep_hours" type="number" min="0" max="24" step="0.1" required></div>
-            <div><label for="resting_hr">Resting HR (bpm)</label><input id="resting_hr" name="resting_hr" type="number" min="30" max="220" required></div>
-            <div><label for="fatigue">Fatigue (1–10)</label><input id="fatigue" name="fatigue" type="number" min="1" max="10" required></div>
-            <div><label for="soreness">Soreness (1–10)</label><input id="soreness" name="soreness" type="number" min="1" max="10" required></div>
-            <div><label for="training_load">Training load (0–10)</label><input id="training_load" name="training_load" type="number" min="0" max="10" required></div>
+          <div id="stat-strip" class="stat-strip" aria-label="Quick stats"></div>
+          <div class="card">
+            <h2><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20V10M6 20v-4M18 20V6"/></svg><span class="grow">Daily check-in</span></h2>
+            <form id="checkin-form">
+              <div class="row">
+                <div><label for="sleep_hours">Sleep (hours)</label><input id="sleep_hours" name="sleep_hours" type="number" min="0" max="24" step="0.1" required></div>
+                <div><label for="resting_hr">Resting HR (bpm)</label><input id="resting_hr" name="resting_hr" type="number" min="30" max="220" required></div>
+                <div><label for="fatigue">Fatigue (1–10)</label><input id="fatigue" name="fatigue" type="number" min="1" max="10" required></div>
+                <div><label for="soreness">Soreness (1–10)</label><input id="soreness" name="soreness" type="number" min="1" max="10" required></div>
+                <div><label for="training_load">Training load (0–10)</label><input id="training_load" name="training_load" type="number" min="0" max="10" required></div>
+              </div>
+              <div style="margin-top:16px"><button type="submit" class="block">Submit check-in</button></div>
+              <div id="checkin-flash" class="flash" aria-live="polite"></div>
+            </form>
           </div>
-          <div style="margin-top:16px"><button type="submit">Submit check-in</button></div>
-          <div id="checkin-flash" class="flash" aria-live="polite"></div>
-        </form>
+        </section>
+
+        <!-- History -->
+        <section id="screen-history" class="screen" role="tabpanel" aria-label="History" hidden>
+          <div class="screen-head"><h1 class="screen-title">History</h1><p class="screen-sub">Your readiness over time</p></div>
+          <div class="card">
+            <h2><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><span class="grow">Past analyses</span>
+              <button id="history-refresh" class="ghost mini">Refresh</button></h2>
+            <div id="history-trend" class="trend"></div>
+            <div id="history"><p class="muted">Loading…</p></div>
+          </div>
+        </section>
+
+        <!-- Forum -->
+        <section id="screen-forum" class="screen" role="tabpanel" aria-label="Forum" hidden>
+          <div class="screen-head"><h1 class="screen-title">Forum</h1><p class="screen-sub">Train together</p></div>
+          <div class="card">
+            <h2><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H8l-4 4V5a2 2 0 0 1 2-2h13a2 2 0 0 1 2 2z"/></svg><span class="grow">Share something</span>
+              <button id="forum-refresh" class="ghost mini">Refresh</button></h2>
+            <form id="forum-form">
+              <input name="title" placeholder="Post title" aria-label="Post title" maxlength="140" required>
+              <textarea name="body" placeholder="Share something…" aria-label="Post body" rows="2" required style="margin-top:8px;resize:vertical"></textarea>
+              <label style="display:flex;align-items:center;gap:8px;margin-top:8px;font-weight:600"><input type="checkbox" name="anonymous" style="width:auto"> Post anonymously</label>
+              <div style="margin-top:10px"><button type="submit" class="block">Post</button></div>
+              <div id="forum-flash" class="flash" aria-live="polite"></div>
+            </form>
+          </div>
+          <div id="forum-list"><p class="muted">Loading…</p></div>
+          <div id="forum-detail" hidden></div>
+        </section>
+
+        <!-- Profile -->
+        <section id="screen-profile" class="screen" role="tabpanel" aria-label="Profile" hidden>
+          <div class="screen-head"><h1 class="screen-title">Profile</h1><p class="screen-sub">Your details</p></div>
+          <div class="card">
+            <h2><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6 8-6s8 2 8 6"/></svg><span class="grow">Your profile</span></h2>
+            <form id="profile-form">
+              <div class="row">
+                <div><label for="age">Age</label><input id="age" name="age" type="number" min="10" max="120" required></div>
+                <div><label for="gender">Gender</label>
+                  <select id="gender" name="gender"><option value="male">Male</option><option value="female">Female</option><option value="other">Other</option></select>
+                </div>
+                <div><label for="height">Height (cm)</label><input id="height" name="height" type="number" min="50" max="300" step="0.1" required></div>
+                <div><label for="weight">Weight (kg)</label><input id="weight" name="weight" type="number" min="20" max="500" step="0.1" required></div>
+                <div><label for="goal">Goal</label>
+                  <select id="goal" name="goal"><option value="lose">Lose</option><option value="maintain">Maintain</option><option value="gain">Gain</option></select>
+                </div>
+                <div><label for="training_frequency">Training days / week</label><input id="training_frequency" name="training_frequency" type="number" min="0" max="14" required></div>
+              </div>
+              <div style="margin-top:16px"><button type="submit" class="block">Save profile</button></div>
+              <div id="profile-flash" class="flash" aria-live="polite"></div>
+            </form>
+          </div>
+          <div class="card">
+            <p id="profile-user" class="muted" style="margin:0 0 12px"></p>
+            <button id="logout-btn" class="ghost block">Log out</button>
+          </div>
+        </section>
       </div>
 
-      <div class="card">
-        <h2>Readiness <button id="dashboard-refresh" class="ghost mini">Refresh</button></h2>
-        <div id="dashboard"><p class="muted">Loading…</p></div>
-      </div>
-
-      <div class="card">
-        <h2>History <button id="history-refresh" class="ghost mini">Refresh</button></h2>
-        <div id="history"><p class="muted">Loading…</p></div>
-      </div>
-
-      <div class="card">
-        <h2>Forum <button id="forum-refresh" class="ghost mini">Refresh</button></h2>
-        <form id="forum-form" style="margin-bottom:14px">
-          <input name="title" placeholder="Post title" aria-label="Post title" maxlength="140" required>
-          <textarea name="body" placeholder="Share something…" aria-label="Post body" rows="2" required style="margin-top:8px;resize:vertical"></textarea>
-          <label style="display:flex;align-items:center;gap:8px;margin-top:8px;font-weight:600"><input type="checkbox" name="anonymous" style="width:auto"> Post anonymously</label>
-          <div style="margin-top:10px"><button type="submit">Post</button></div>
-          <div id="forum-flash" class="flash" aria-live="polite"></div>
-        </form>
-        <div id="forum-list"><p class="muted">Loading…</p></div>
-        <div id="forum-detail" hidden></div>
-      </div>
+      <nav class="tabbar" role="tablist" aria-label="Sections">
+        <div class="tabbar-inner">
+          <button class="tab active" data-screen="today" role="tab" aria-selected="true" aria-controls="screen-today">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h4l2 5 4-13 2 8h6"/></svg><span>Today</span></button>
+          <button class="tab" data-screen="history" role="tab" aria-selected="false" aria-controls="screen-history">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><span>History</span></button>
+          <button class="tab" data-screen="forum" role="tab" aria-selected="false" aria-controls="screen-forum">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H8l-4 4V5a2 2 0 0 1 2-2h13a2 2 0 0 1 2 2z"/></svg><span>Forum</span></button>
+          <button class="tab" data-screen="profile" role="tab" aria-selected="false" aria-controls="screen-profile">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6 8-6s8 2 8 6"/></svg><span>Profile</span></button>
+        </div>
+      </nav>
     </section>
   </main>
 
@@ -317,6 +403,7 @@
       return { ok: res.ok, status: res.status, data };
     }
 
+    // ---- auth-view sub-forms ----
     function showTab(which) {
       $("tab-login").classList.toggle("active", which === "login");
       $("tab-register").classList.toggle("active", which === "register");
@@ -351,6 +438,18 @@
       $("app-view").hidden = view !== "app";
       $("who").hidden = view !== "app";
     }
+
+    // ---- app-shell screen navigation (bottom tab bar) ----
+    function showScreen(name) {
+      document.querySelectorAll(".screen").forEach((s) => { s.hidden = s.id !== "screen-" + name; });
+      document.querySelectorAll(".tab").forEach((t) => {
+        const on = t.dataset.screen === name;
+        t.classList.toggle("active", on);
+        t.setAttribute("aria-selected", on ? "true" : "false");
+      });
+      window.scrollTo({ top: 0, behavior: "instant" });
+    }
+    document.querySelectorAll(".tab").forEach((t) => t.addEventListener("click", () => showScreen(t.dataset.screen)));
 
     function flash(id, msg, kind = "error") { const el = $(id); el.textContent = msg || ""; el.className = "flash " + kind; }
 
@@ -451,6 +550,24 @@
       }
     }
 
+    // ---- Stat strip (Today) ----
+    const ICON = {
+      pulse: '<svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h4l2 5 4-13 2 8h6"/></svg>',
+      flame: '<svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3c1 3-2 4-2 7a4 4 0 1 0 8 0c0-2-1-3-2-4 0 2-1 3-2 3 .5-2-1-5-2-6z"/></svg>',
+      check: '<svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>',
+    };
+    let statState = "—", statKcal = "—", statCheckins = 0;
+    function statCard(ico, val, k, accent) {
+      return '<div class="stat">' + ico + '<div class="n' + (accent ? " accent" : "") + '">' + val + '</div><div class="k">' + k + "</div></div>";
+    }
+    function renderStats() {
+      const s = $("stat-strip"); if (!s) return;
+      // statState / statKcal are pre-escaped in loadDashboard; statCheckins is a number -> all HTML-safe.
+      s.innerHTML = statCard(ICON.pulse, statState, "readiness", true)
+        + statCard(ICON.flame, statKcal, "kcal target", false)
+        + statCard(ICON.check, String(statCheckins), "logged", false);
+    }
+
     // ---- Dashboard ----
     // Map the AI's free-form state word to a readiness bucket + orb level (presentation only; the AI
     // owns the actual words, so an unknown state degrades to a neutral signal rather than miscolouring).
@@ -467,7 +584,11 @@
       const r = await api("/dashboard");
       if (!r.ok) { el.innerHTML = '<p class="flash error">Could not load the dashboard.</p>'; return; }
       const d = r.data;
-      if (d.needs_profile) { el.innerHTML = '<p class="muted">Fill in your profile above to see your readiness.</p>'; return; }
+      // keep the glanceable stats in sync with the AI's latest read
+      statState = (d.readiness && d.readiness.state) ? escapeHtml(d.readiness.state) : "—";
+      statKcal = d.calories != null ? escapeHtml(d.calories) : "—";
+      renderStats();
+      if (d.needs_profile) { el.innerHTML = '<p class="muted">Fill in your profile (Profile tab) to see your readiness.</p>'; return; }
       let html = "";
       if (d.ai_status === "unavailable") {
         html += '<p class="flash warn">Readiness is temporarily unavailable (AI service down).</p>';
@@ -480,15 +601,32 @@
           + '<div class="orb-sub">readiness</div></div></div>';
         const recs = Array.isArray(d.readiness.recommendations) ? d.readiness.recommendations : [];
         if (recs.length) html += '<ul class="recs">' + recs.map((x) => "<li>" + escapeHtml(x) + "</li>").join("") + "</ul>";
-        html += '</div>';
+        html += confidenceHtml(d.readiness.proba);
+        html += "</div>";
       }
       if (d.calories != null) html += '<p style="margin-top:16px;text-align:center"><span class="pill">Daily target · ' + escapeHtml(d.calories) + ' kcal</span></p>';
       el.innerHTML = html || '<p class="muted">No readiness yet.</p>';
-      // fill the orb from 0 -> level (one orchestrated moment; reduced-motion snaps to the final value)
+      // animate the orb fill and confidence bars from 0 (reduced-motion snaps to final)
       requestAnimationFrame(() => {
         const orb = el.querySelector(".orb");
         if (orb) orb.style.setProperty("--w", orb.dataset.w);
+        el.querySelectorAll(".conf-fill").forEach((f) => { f.style.width = f.dataset.w + "%"; });
       });
+    }
+
+    // Per-state confidence breakdown (bars) from the AI's proba map — a compromised/buggy AI's labels are
+    // escaped and its values were already numeric-sanitised server-side; still clamp defensively here.
+    function confidenceHtml(proba) {
+      if (!proba || typeof proba !== "object") return "";
+      const entries = Object.entries(proba).filter(([, v]) => typeof v === "number").sort((a, b) => b[1] - a[1]);
+      if (!entries.length) return "";
+      return '<div class="conf"><p class="conf-cap">Confidence</p>' + entries.map(([k, v]) => {
+        const pct = Math.max(0, Math.min(100, Math.round(v * 100)));
+        const [rc] = readinessClass(k);
+        return '<div class="conf-row readiness ' + rc + '"><span class="conf-k">' + escapeHtml(k) + "</span>"
+          + '<span class="conf-track"><span class="conf-fill" data-w="' + pct + '"></span></span>'
+          + '<span class="conf-v">' + pct + "%</span></div>";
+      }).join("") + "</div>";
     }
 
     // ---- History ----
@@ -497,12 +635,32 @@
       const r = await api("/history");
       if (!r.ok) { el.innerHTML = '<p class="flash error">Could not load history.</p>'; return; }
       const items = (r.data && r.data.history) || [];
+      statCheckins = items.length; renderStats();
+      renderTrend(items);
       if (!items.length) { el.innerHTML = '<p class="muted">No past analyses yet.</p>'; return; }
       el.innerHTML = "<ul>" + items.map((it) =>
         "<li><strong>" + escapeHtml(it.assessment || "—") + "</strong> "
         + (it.calories != null ? "· " + escapeHtml(it.calories) + " kcal " : "")
         + '<span class="muted">' + escapeHtml(it.timestamp || "") + "</span></li>"
       ).join("") + "</ul>";
+    }
+
+    // Sparkline of the readiness assessments over time (Ready=3 / Moderate=2 / Rest=1). Coordinates are
+    // computed from numbers only (no innerHTML injection), colored by the latest state.
+    function renderTrend(items) {
+      const el = $("history-trend"); if (!el) return;
+      const level = (a) => { const [c] = readinessClass(a); return c === "ready" ? 3 : c === "moderate" ? 2 : c === "rest" ? 1 : 0; };
+      const pts = items.map((it) => level(it && it.assessment)).filter((v) => v > 0);
+      if (pts.length < 2) { el.innerHTML = ""; return; }
+      const W = 100, H = 26, n = pts.length;
+      const xy = pts.map((v, i) => [i * (W / (n - 1)), H - ((v - 1) / 2) * H]);
+      const path = xy.map((c, i) => (i ? "L" : "M") + c[0].toFixed(1) + " " + c[1].toFixed(1)).join(" ");
+      const dots = xy.map((c) => '<circle cx="' + c[0].toFixed(1) + '" cy="' + c[1].toFixed(1) + '" r="1.7" fill="var(--st)"/>').join("");
+      const [cls] = readinessClass(items[items.length - 1] && items[items.length - 1].assessment);
+      el.innerHTML = '<p class="trend-cap">Trend · last ' + n + ' check-ins</p>'
+        + '<div class="readiness ' + cls + '"><svg viewBox="0 0 ' + W + " " + H + '" preserveAspectRatio="none" role="img" aria-label="Readiness trend over the last ' + n + ' check-ins">'
+        + '<path d="' + path + '" fill="none" stroke="var(--st)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>'
+        + dots + "</svg></div>";
     }
 
     // ---- Forum ----
@@ -606,7 +764,9 @@
     function enterApp(username) {
       currentUser = username;
       $("who-name").textContent = "Hi, " + username;
+      $("profile-user").textContent = "Signed in as " + username;
       showView("app");
+      showScreen("today");
       loadProfile(); loadDashboard(); loadHistory(); loadForum();
     }
 

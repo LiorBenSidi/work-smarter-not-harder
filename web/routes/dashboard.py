@@ -36,6 +36,14 @@ def dashboard():
         return jsonify(profile=profile, readiness=None, calories=None, ai_status="unavailable"), 200
 
     recs = prediction.get("recommendations")
-    readiness = {"state": prediction.get("state"), "recommendations": recs if isinstance(recs, list) else []}
+    proba = prediction.get("proba")
+    readiness = {
+        "state": prediction.get("state"),
+        "recommendations": recs if isinstance(recs, list) else [],
+        # Per-state confidence for the UI's readiness breakdown. Numbers only — a buggy/hostile AI can't
+        # inject non-numeric values here (bool is excluded: it's an int subclass); None when absent.
+        "proba": {str(k): float(v) for k, v in proba.items()
+                  if isinstance(v, (int, float)) and not isinstance(v, bool)} if isinstance(proba, dict) else None,
+    }
     return jsonify(profile=profile, readiness=readiness,
                    calories=prediction.get("calories"), ai_status="ok"), 200

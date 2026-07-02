@@ -66,3 +66,20 @@ def test_dashboard_coerces_non_list_recommendations(profile_client, monkeypatch)
     data = profile_client.get("/dashboard").get_json()
     assert data["ai_status"] == "ok"
     assert data["readiness"]["recommendations"] == []
+
+
+def test_dashboard_passes_through_proba_for_the_confidence_viz(profile_client, monkeypatch):
+    # the per-state confidence drives the UI breakdown; numbers pass, non-numeric is dropped (defence).
+    _set_predict(monkeypatch, {"state": "Ready", "recommendations": [],
+                               "proba": {"Ready": 0.7, "Moderate": 0.2, "Rest": "boom"}, "calories": 2000})
+    _login(profile_client)
+    profile_client.post("/profile", json=_profile())
+    proba = profile_client.get("/dashboard").get_json()["readiness"]["proba"]
+    assert proba == {"Ready": 0.7, "Moderate": 0.2}       # the non-numeric "Rest" is sanitized out
+
+
+def test_dashboard_proba_is_none_when_absent(profile_client, monkeypatch):
+    _set_predict(monkeypatch, {"state": "Ready", "recommendations": [], "calories": 2000})
+    _login(profile_client)
+    profile_client.post("/profile", json=_profile())
+    assert profile_client.get("/dashboard").get_json()["readiness"]["proba"] is None
