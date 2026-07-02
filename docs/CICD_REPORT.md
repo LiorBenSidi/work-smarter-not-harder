@@ -23,13 +23,13 @@ monitor (R9).
 | **R4.1/4.3** push to GHCR, both tags | `docker push` of both tags to `ghcr.io/<owner>/work-smarter-{web,ai}` | `build` job |
 | **R4.2** auth via built-in token, no hard-coded creds | `docker login ghcr.io` with `GITHUB_TOKEN` + `permissions: packages: write` | `build` job |
 | **R5.1** deploy over SSH after a successful push | `deploy` job: `ssh deploy@$SSH_HOST` | `deploy` job |
-| **R5.2** VM **pulls** the image, never builds | `docker compose -f docker-compose.prod.yml pull && up -d`; prod compose uses `image:`, no `build:` | `deploy` job, `docker-compose.prod.yml` |
+| **R5.2** VM **pulls** the image, never builds | `docker compose -f docker-compose.prod.yml pull && up -d`; prod compose uses `image:`, no `build:`, pinned to the commit SHA via `IMAGE_TAG` (reproducible, not a moving `:latest`). *Precondition:* the GHCR packages must be **public** (see caveats) so the VM pulls without a host credential | `deploy` job, `docker-compose.prod.yml` |
 | **R5.3** idempotent redeploy | `pull && up -d` converges to the same state | `deploy` job |
 | **R5.4** survives a VM reboot | `restart: unless-stopped` on every service | `docker-compose.prod.yml` |
 | **R6.1** secrets as GitHub Actions secrets, injected at runtime | `SSH_PRIVATE_KEY`, `APP_SECRET_KEY` (secrets); `SSH_HOST` (variable) | repo settings, `deploy` job |
 | **R6.2** no secret in repo/image/logs | `.env`, `prod.env`, `*_deploy` gitignored; key written to a file, GitHub masks secret values | `.gitignore`, `deploy` job |
 | **R6.3** VM: key-only SSH | enforced by the instructor's cloud-init (verified by grader) | (instructor) |
-| **R7.1/7.2** post-deploy health check on the deployed server | `curl --fail --retry-connrefused https://$SSH_HOST/health` | `deploy` job |
+| **R7.1/7.2** post-deploy health check on the deployed server | `curl --fail --retry 15 --retry-all-errors https://$SSH_HOST/health` (retries through the cold-boot TLS issuance) | `deploy` job |
 | **R8.1** any stage failing fails the whole run | `needs:` chain + default fail-fast | `ci.yml` |
 | **R8.2** *(optional)* rollback on failed health check | not implemented (documented gap) | — |
 | **R9** external uptime monitor, ≤5 min, alert, down→up | UptimeRobot on `https://<FQDN>/health` (browser setup) | README / live |
@@ -43,14 +43,34 @@ monitor (R9).
   (keeps `main` green), and activates automatically once the VM FQDN + `SSH_PRIVATE_KEY` + `APP_SECRET_KEY` are set.
   R5, R7, R9, R10 then go live with no code change.
 
-## Documented gaps / not yet done
+## Honest caveats / documented gaps
 
-- **R8.2 rollback** — not implemented (a failed health check fails the run but does not auto-revert to the previous
-  image). Candidate follow-up: pin the previous SHA and re-`up` it on health failure.
+- **GHCR packages must be made public once** — images pushed by `GITHUB_TOKEN` from a private repo are private by
+  default, and the VM's `docker compose pull` runs with no registry login. After the first `build`, set both packages
+  to Public (or the VM would need a stored read-token, which we deliberately avoid). Until then, R5.2's pull can't
+  succeed. This is a one-time UI step, not a code change.
+- **`/health` is a liveness probe, kept trivial on purpose** — it returns `200` without touching Mongo (a documented
+  course rule; `tests/Integration_Tests/test_auth_flow.py::test_default_store_app_serves_health` enforces it). So a
+  bare 200 proves the web process is up and reachable over HTTPS, not that Mongo is connected. In practice the compose
+  dependency graph covers the gap: `web` has `depends_on: db: { condition: service_healthy }`, so `web` only starts
+  after Mongo is healthy — a successful post-deploy 200 therefore *transitively* implies a healthy DB at deploy time.
+  A dedicated `/ready` endpoint (DB-pinging) for the R7 gate is a possible enhancement, left out to respect the rule.
+- **R8.2 rollback** — not implemented. A failed health check fails the run (good), but `up -d` has already swapped the
+  containers, so **the new image is left live on the VM** until a human intervenes. The deploy now pins the immutable
+  SHA (`IMAGE_TAG`), which makes a rollback trivial to add later (re-`up` the previous SHA); full auto-rollback is the
+  documented follow-up.
 - **R9 monitor** and the **first Let's Encrypt issuance (R10)** require the live VM and a browser step (UptimeRobot
   account), so they are configured at provisioning time, not in code.
 - The **live demo** (push a visible change → watch it reach the VM; break a PR test; show the monitor's down→up) is
   performed at grading, per the assignment's acceptance criteria.
+
+## Beyond the rubric
+
+- **Real transactional email (enhancement, not graded).** The app sends OTP + password-reset mail via Brevo from the
+  authenticated `worksmarternotharder.dev` domain (SPF/DKIM/DMARC verified; Gmail inbox delivery confirmed). It is
+  self-gating in the deploy: with the `SMTP_*` secrets unset the app falls back to the log backend (login still works);
+  set them and real inbox delivery turns on. The app is *served* at the Azure FQDN (R10) — the domain is used only as
+  the email FROM, so the two concerns stay cleanly separate.
 
 ## Evidence (to attach after the first live runs)
 

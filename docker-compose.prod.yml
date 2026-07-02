@@ -22,7 +22,7 @@ services:
       web: { condition: service_started }
 
   web:                                     # NO host port now — only Caddy reaches it, over the internal network
-    image: ghcr.io/${IMAGE_OWNER:?set IMAGE_OWNER}/work-smarter-web:latest
+    image: ghcr.io/${IMAGE_OWNER:?set IMAGE_OWNER}/work-smarter-web:${IMAGE_TAG:-latest}   # CI pins the exact SHA (R5.2)
     restart: unless-stopped                # self-heal + survive a VM reboot (R5.4)
     environment:
       SECRET_KEY: ${SECRET_KEY:?set SECRET_KEY}
@@ -33,6 +33,13 @@ services:
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
       LOG_FILE: ${LOG_FILE:-/app/logs/web.log}
       APP_BASE_URL: https://${SITE_ADDRESS}                # public origin for links built into emails (OTP/reset)
+      # Email (OTP + password reset). BLANK SMTP_HOST -> safe log backend (OTP in the log); CI sets these from
+      # GitHub secrets only when configured, flipping on real Brevo inbox delivery. from-domain is Brevo-authenticated.
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      MAIL_FROM: ${MAIL_FROM:-}
     volumes:
       - web-logs:/app/logs
     depends_on:
@@ -46,7 +53,7 @@ services:
       start_period: 30s
 
   ai:                                      # internal only (OWNER: Shiri) — no host port
-    image: ghcr.io/${IMAGE_OWNER:?set IMAGE_OWNER}/work-smarter-ai:latest
+    image: ghcr.io/${IMAGE_OWNER:?set IMAGE_OWNER}/work-smarter-ai:${IMAGE_TAG:-latest}
     restart: unless-stopped
     expose:
       - "5000"

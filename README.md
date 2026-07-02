@@ -74,11 +74,18 @@ certificate and redirects HTTP→HTTPS; the VM runs the prod compose, which **pu
 |---|---|---|
 | Secret | `SSH_PRIVATE_KEY` | dedicated deploy key for the VM's `deploy` user (never a personal key) |
 | Secret | `APP_SECRET_KEY` | Flask `SECRET_KEY`, injected into the VM's `.env` at deploy time |
+| Secret | `SMTP_USER` | Brevo relay login — *optional*; set it + `SMTP_PASS` to turn on real inbox email (OTP/reset). Unset → safe log backend |
+| Secret | `SMTP_PASS` | Brevo SMTP key — *optional*; its presence is the switch that flips email from log-backend to real Brevo delivery |
 | Variable | `SSH_HOST` | the VM's FQDN (`<label>.<region>.cloudapp.azure.com`); also the deploy/health target. **Until this is set, the deploy job is skipped and `main` stays green** |
 | — (built-in) | `GITHUB_TOKEN` | authenticates the GHCR push automatically — no PAT, no signup |
 
 `SSH_USER` is the same for every group (`deploy`) and is hardcoded in the workflow. `SSH_HOST` is a **variable**, not a
-secret — a hostname needs no masking.
+secret — a hostname needs no masking. The `SMTP_*` pair is optional: with it unset the app writes the login code to its
+log (fine for the demo); set both to deliver real Brevo email from the authenticated `worksmarternotharder.dev` domain.
+
+> **One-time, after the first `build` runs:** the pushed GHCR packages (`work-smarter-web`, `work-smarter-ai`) are
+> **private** by default (this is a private repo). Set each to **Public** (package → *Package settings → Change
+> visibility*) so the VM can `docker compose pull` them without storing a registry credential on the host.
 
 **VM provisioning:** the instructor provisions **one Azure VM per group** (ports 22/80/443 only, `deploy` user, key-only
 SSH via cloud-init) and gives you its FQDN. You generate a **dedicated** deploy keypair
