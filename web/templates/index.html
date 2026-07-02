@@ -216,6 +216,19 @@
     :focus-visible { outline:2px solid var(--accent); outline-offset:3px; border-radius:8px; }
     [hidden] { display:none !important; }
 
+    /* "How it works" 3-step on the auth hero — a genuine sequence (check-in -> signal -> action). */
+    .how { list-style:none; display:flex; gap:10px; max-width:440px; margin:2px auto 0; padding:0; }
+    .how li { flex:1; margin:0; font-size:12px; line-height:1.35; color:var(--muted); text-align:center; }
+    .how-n { display:block; width:22px; height:22px; margin:0 auto 6px; border-radius:999px;
+      font-weight:800; font-size:12px; line-height:22px; color:var(--on-accent);
+      background:linear-gradient(135deg, var(--accent), var(--accent2)); }
+    /* per-field explanatory helper text under a check-in / profile input */
+    .hint { display:block; margin-top:5px; font-size:11.5px; line-height:1.3; color:var(--muted); }
+    /* greyed "example" readiness card shown before the first check-in (the no-profile empty state) */
+    .ex { opacity:.5; filter:grayscale(.35); pointer-events:none; margin-top:6px; }
+    .ex-tag { display:inline-block; margin-bottom:10px; padding:2px 9px; border-radius:999px; font-size:11px;
+      font-weight:700; letter-spacing:.02em; color:var(--muted); background:var(--field); border:1px solid var(--line); }
+
     @keyframes breathe { 0%,100% { transform: scale(1); } 50% { transform: scale(1.045); } }
     @keyframes halo { 0%,100% { opacity:.5; transform: scale(1); } 50% { opacity:.9; transform: scale(1.06); } }
     @keyframes beat { 0%,100% { box-shadow:0 0 0 3px color-mix(in srgb, var(--st, var(--accent)) 26%, transparent); }
@@ -245,6 +258,11 @@
         <div class="hero-orb" aria-hidden="true"></div>
         <h1 class="hero-title">Know when to push.<br>Know when to <span class="accent">rest</span>.</h1>
         <p class="hero-sub">Your training readiness — measured each morning, in one calm signal.</p>
+        <ol class="how" aria-label="How it works">
+          <li><span class="how-n">1</span>Log a 30-second morning check-in</li>
+          <li><span class="how-n">2</span>Get one signal — Ready, Moderate or Rest</li>
+          <li><span class="how-n">3</span>Follow today's recommendation</li>
+        </ol>
       </div>
       <div class="card" style="max-width:420px;margin:6px auto 0">
         <div class="tabs">
@@ -312,11 +330,16 @@
             <h2><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20V10M6 20v-4M18 20V6"/></svg><span class="grow">Daily check-in</span></h2>
             <form id="checkin-form">
               <div class="row">
-                <div><label for="sleep_hours">Sleep (hours)</label><input id="sleep_hours" name="sleep_hours" type="number" min="0" max="24" step="0.1" required></div>
-                <div><label for="resting_hr">Resting HR (bpm)</label><input id="resting_hr" name="resting_hr" type="number" min="30" max="220" required></div>
-                <div><label for="fatigue">Fatigue (1–10)</label><input id="fatigue" name="fatigue" type="number" min="1" max="10" required></div>
-                <div><label for="soreness">Soreness (1–10)</label><input id="soreness" name="soreness" type="number" min="1" max="10" required></div>
-                <div><label for="training_load">Training load (0–10)</label><input id="training_load" name="training_load" type="number" min="0" max="10" required></div>
+                <div><label for="sleep_hours">Sleep (hours)</label><input id="sleep_hours" name="sleep_hours" type="number" min="0" max="24" step="0.1" required>
+                  <small class="hint">How long you slept last night.</small></div>
+                <div><label for="resting_hr">Resting HR (bpm)</label><input id="resting_hr" name="resting_hr" type="number" min="30" max="220" required>
+                  <small class="hint">Beats per minute before getting up. Above your norm signals fatigue.</small></div>
+                <div><label for="fatigue">Fatigue (1–10)</label><input id="fatigue" name="fatigue" type="number" min="1" max="10" required>
+                  <small class="hint">How drained you feel — 1 fresh, 10 exhausted.</small></div>
+                <div><label for="soreness">Soreness (1–10)</label><input id="soreness" name="soreness" type="number" min="1" max="10" required>
+                  <small class="hint">Muscle soreness right now — 1 none, 10 very sore.</small></div>
+                <div><label for="training_load">Training load (0–10)</label><input id="training_load" name="training_load" type="number" min="0" max="10" required>
+                  <small class="hint">Yesterday's effort — 0 rest day, 10 max session.</small></div>
               </div>
               <div style="margin-top:16px"><button type="submit" class="block">Submit check-in</button></div>
               <div id="checkin-flash" class="flash" aria-live="polite"></div>
@@ -358,6 +381,7 @@
           <div class="screen-head"><h1 class="screen-title">Profile</h1><p class="screen-sub">Your details</p></div>
           <div class="card">
             <h2><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6 8-6s8 2 8 6"/></svg><span class="grow">Your profile</span></h2>
+            <p class="muted" style="margin:-2px 0 14px">Used to personalize your calorie target and readiness baseline.</p>
             <form id="profile-form">
               <div class="row">
                 <div><label for="age">Age</label><input id="age" name="age" type="number" min="10" max="120" required></div>
@@ -604,7 +628,18 @@
       statState = (d.readiness && d.readiness.state) ? escapeHtml(d.readiness.state) : "—";
       statKcal = d.calories != null ? escapeHtml(d.calories) : "—";
       renderStats();
-      if (d.needs_profile) { el.innerHTML = '<p class="muted">Fill in your profile (Profile tab) to see your readiness.</p>'; return; }
+      if (d.needs_profile) {
+        // Show the payoff, not just an instruction: a greyed sample of the readiness card a first
+        // check-in unlocks. aria-hidden -> it's illustrative, not read as real data.
+        el.innerHTML =
+          '<p class="muted" style="text-align:center;margin:0 0 2px">Fill in your profile, then log a check-in to see your readiness.</p>'
+          + '<div class="ex"><span class="ex-tag">Example</span>'
+          + '<div class="readiness ready" aria-hidden="true">'
+          + '<div class="orb" style="--w:100"><div class="orb-inner"><span class="signal"></span>'
+          + '<div class="verdict">Ready</div><div class="orb-sub">readiness</div></div></div>'
+          + '<ul class="recs"><li>Great day to push — hit your planned session.</li></ul></div></div>';
+        return;
+      }
       let html = "";
       if (d.ai_status === "unavailable") {
         html += '<p class="flash warn">Readiness is temporarily unavailable (AI service down).</p>';
@@ -614,7 +649,8 @@
           + '<div class="orb" data-w="' + pct + '" role="img" aria-label="Readiness: ' + escapeHtml(d.readiness.state || "unknown") + '">'
           + '<div class="orb-inner"><span class="signal" aria-hidden="true"></span>'
           + '<div class="verdict">' + escapeHtml(d.readiness.state || "—") + '</div>'
-          + '<div class="orb-sub">readiness</div></div></div>';
+          + '<div class="orb-sub">readiness</div></div></div>'
+          + '<p class="muted" style="text-align:center;margin:10px 0 0;font-size:12px">Based on today\'s check-in vs your baseline.</p>';
         const recs = Array.isArray(d.readiness.recommendations) ? d.readiness.recommendations : [];
         if (recs.length) html += '<ul class="recs">' + recs.map((x) => "<li>" + escapeHtml(x) + "</li>").join("") + "</ul>";
         html += confidenceHtml(d.readiness.proba);
