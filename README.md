@@ -77,7 +77,8 @@ certificate and redirects HTTP→HTTPS; the VM runs the prod compose, which **pu
 | Secret | `APP_SECRET_KEY` | Flask `SECRET_KEY`, injected into the VM's `.env` at deploy time |
 | Secret | `SMTP_USER` | Brevo relay login — *optional*; set it + `SMTP_PASS` to turn on real inbox email (OTP/reset). Unset → safe log backend |
 | Secret | `SMTP_PASS` | Brevo SMTP key — *optional*; its presence is the switch that flips email from log-backend to real Brevo delivery |
-| Variable | `SSH_HOST` | the VM's FQDN (`<label>.<region>.cloudapp.azure.com`); also the deploy/health target. **Until this is set, the deploy job is skipped and `main` stays green** |
+| Variable | `SSH_HOST` | the VM's FQDN (`<label>.<region>.cloudapp.azure.com`) — the **SSH/deploy target**. **Until this is set, the deploy job is skipped and `main` stays green** |
+| Variable | `SITE_ADDRESS` | *optional* — the **public** HTTPS address (TLS cert + health check + monitor + email links). Set it to serve the app at your own domain (e.g. `app.worksmarternotharder.dev`, CNAME'd to the FQDN); unset → falls back to the Azure FQDN |
 | — (built-in) | `GITHUB_TOKEN` | authenticates the GHCR push automatically — no PAT, no signup |
 
 `SSH_USER` is the same for every group (`deploy`) and is hardcoded in the workflow. `SSH_HOST` is a **variable**, not a

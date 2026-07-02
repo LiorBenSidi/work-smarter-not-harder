@@ -134,7 +134,9 @@ jobs:
       - name: Render the prod .env (from GitHub secrets/vars — never committed, R6.1)
         env:
           APP_SECRET_KEY: ${{ secrets.APP_SECRET_KEY }}   # Flask SECRET_KEY, injected at runtime
-          SITE_ADDRESS: ${{ vars.SSH_HOST }}
+          # Public address for the cert + links: your own domain if set (e.g. app.worksmarternotharder.dev),
+          # else the Azure FQDN. SSH still targets SSH_HOST — the ssh host and the public URL can differ.
+          SITE_ADDRESS: ${{ vars.SITE_ADDRESS || vars.SSH_HOST }}
           OWNER: ${{ github.repository_owner }}
           SMTP_USER: ${{ secrets.SMTP_USER }}   # Brevo relay login — enables real inbox delivery for OTP/reset
           SMTP_PASS: ${{ secrets.SMTP_PASS }}   # Brevo SMTP key (secret)
@@ -179,12 +181,12 @@ jobs:
             "cd ~/app && docker compose -f docker-compose.prod.yml pull && \
              docker compose -f docker-compose.prod.yml up -d --remove-orphans"   # idempotent (R5.3); restart policy => reboot-safe (R5.4)
 
-      - name: Health check against the HTTPS FQDN (R7 — readiness, the real VM + a live DB ping)
+      - name: Health check against the public HTTPS address (R7 — readiness, the real VM + a live DB ping)
         env:
-          HOST: ${{ vars.SSH_HOST }}
+          SITE: ${{ vars.SITE_ADDRESS || vars.SSH_HOST }}   # the branded domain if set, else the Azure FQDN
         # /ready pings Mongo, so a pass proves the WHOLE stack serves (not just that web answers). --fail => non-zero on
         # any 4xx/5xx; --retry-all-errors also retries the TLS handshake during the first cold-boot cert issuance. 15x5s.
-        run: curl --fail --retry 15 --retry-delay 5 --retry-all-errors "https://$HOST/ready"
+        run: curl --fail --retry 15 --retry-delay 5 --retry-all-errors "https://$SITE/ready"
 
       - name: Record this SHA as the last-good deploy
         if: success()
