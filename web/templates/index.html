@@ -446,6 +446,7 @@
               <div id="dm-thread" class="dm-thread"><p class="muted">Loading…</p></div>
               <form id="dm-reply-form"><input id="dm-reply" name="body" placeholder="Message…" autocomplete="off" maxlength="2000" required>
                 <button type="submit">Send</button></form>
+              <div id="dm-reply-flash" class="flash" aria-live="polite"></div>
             </div>
           </div>
         </section>
@@ -581,6 +582,7 @@
       });
       window.scrollTo({ top: 0, behavior: "instant" });
       if (name === "messages") openMessages();
+      else { clearInterval(dmThreadTimer); dmThreadTimer = null; }   // stop the 5s thread poll when leaving Chat
     }
     document.querySelectorAll(".tab").forEach((t) => t.addEventListener("click", () => showScreen(t.dataset.screen)));
 
@@ -923,7 +925,7 @@
       let h = 2166136261 >>> 0;
       for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
       const base = 150 + (h >>> 0) % 140;
-      const init = (s.trim()[0] || "?").toUpperCase();
+      const init = (Array.from(s.trim())[0] || "?").toUpperCase();   // full code point (emoji/surrogate-safe)
       return '<span class="avatar" style="width:' + size + 'px;height:' + size + 'px;font-size:' + Math.round(size * 0.42)
         + 'px;background:linear-gradient(135deg,hsl(' + base + ' 62% 62%),hsl(' + ((base + 55) % 360) + ' 60% 54%))">'
         + escapeHtml(init) + '</span>';
@@ -958,11 +960,12 @@
       const r = await api("/conversations/" + encodeURIComponent(dmPeer));
       const box = $("dm-thread");
       if (!r.ok) { box.innerHTML = '<p class="flash error">Could not load this conversation.</p>'; return; }
+      const nearBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 40;   // don't yank the reader up
       const msgs = (r.data && r.data.messages) || [];
       box.innerHTML = msgs.length
         ? msgs.map((m) => '<div class="bubble ' + (m.sender === currentUser ? "me" : "them") + '">' + escapeHtml(m.body) + "</div>").join("")
         : '<p class="muted">No messages yet — say hi.</p>';
-      box.scrollTop = box.scrollHeight;
+      if (nearBottom) box.scrollTop = box.scrollHeight;
     }
 
     function closeThread() {
@@ -979,26 +982,36 @@
     });
 
     onSubmit("dm-reply-form", async (f) => {
-      if (!dmPeer) return;
+      if (!dmPeer || !f.body.value.trim()) return;
       const r = await api("/messages", { method: "POST", body: { to: dmPeer, body: f.body.value } });
-      if (r.ok) { f.reset(); renderThread(); }
+      if (r.ok) { f.reset(); flash("dm-reply-flash", "", "ok"); renderThread(); }
+      else { flash("dm-reply-flash", (r.data && r.data.error) || "Could not send"); }   // surface 429 / errors
     });
 
     $("dm-refresh").addEventListener("click", loadConversations);
 
     // Poll the notification feed so the Chat tab's pulse reflects unread messages without a refresh.
     async function pollNotifications() {
+      const u = currentUser;
       const r = await api("/notifications");
+      if (u !== currentUser) return;                       // session switched mid-flight -> ignore this stale reply
       if (r.ok && r.data) $("dm-dot").hidden = !(r.data.unread > 0);
     }
     function startDmPolling() { pollNotifications(); clearInterval(dmPollTimer); dmPollTimer = setInterval(pollNotifications, 15000); }
-    function stopDmPolling() { clearInterval(dmPollTimer); clearInterval(dmThreadTimer); dmPollTimer = dmThreadTimer = null; }
+    function stopDmPolling() { clearInterval(dmPollTimer); clearInterval(dmThreadTimer); dmPollTimer = dmThreadTimer = null; dmPeer = null; }
 
     async function openMessages() {
       $("dm-thread-view").hidden = true; $("dm-list-view").hidden = false; dmPeer = null;
       await loadConversations();
-      await api("/notifications/read", { method: "POST", body: {} });   // seeing the inbox clears the pulse
-      $("dm-dot").hidden = true;
+      // Opening the inbox clears only the DM notifications — other kinds (e.g. vote notifications) stay unread
+      // so the pulse still reflects them. The dot then mirrors whatever non-DM unread remains.
+      const r = await api("/notifications");
+      if (r.ok && r.data) {
+        const notes = r.data.notifications || [];
+        const dmIds = notes.filter((n) => n.type === "dm" && !n.read).map((n) => n.id);
+        if (dmIds.length) await api("/notifications/read", { method: "POST", body: { ids: dmIds } });
+        $("dm-dot").hidden = notes.filter((n) => n.type !== "dm" && !n.read).length === 0;
+      }
     }
 
     function enterApp(username) {

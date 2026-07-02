@@ -69,7 +69,7 @@ audit-then-`!`-install when you reach it). All 8 sub-features are needed for the
 The contracts are fixed and stubbed, so the three planes build independently from the first commit — nobody waits:
 - **Shiri (`ai/`)** — standalone; builds + tests the model and `/predict` via the test client.
 - **Lior (`web/`)** — the web app (against the `/predict` stub) + the `db.py` CRUD & Mongo internals + the container build + the CI gate.
-- **Elad (deploy/real-time)** — Azure setup + the deploy job, the test-runner service (in `docker-compose.test.yml`), the Forum real-time layer, and the stress + cross-container harness.
+- **Elad (deploy/scale)** — Azure setup + the deploy job, the test-runner service (in `docker-compose.test.yml`), the remaining Forum media/attachments + vote notifications, and the stress + cross-container harness.
 
 The only coordination points are the seams (`/predict` shape, `db.py`'s function API, only-`web`-exposed) — changing one is a **sync point** (flag it in the PR + the group chat).
 
@@ -84,7 +84,7 @@ The only coordination points are the seams (`/predict` shape, `db.py`'s function
 | `debug` flag toggles debug mode | 🟡 env wired; confirm it toggles | Lior |
 | Password hashing (werkzeug) | ✅ | Lior |
 | Input validation (routes) + injection-safe queries (thin `db.py` CRUD) | ✅ | Lior |
-| Rate-limit / anti-spam (flask-limiter) | ⬜ | Elad |
+| Rate-limit / anti-spam | 🟡 messaging has an anti-spam rate-limit (20/min, Lior); `flask-limiter` on the other public routes TODO | Lior (messaging) · Elad (other routes) |
 | Fault tolerance + **isolation tested** (stop ai/db → web survives) | 🟡 `ai_client` degrades + compose hardening (restart/`start_period`, `web` boots if `ai` down); kill-container isolation tests TODO | Lior (degrade/compose) · Elad (kill tests) |
 | Observability — Week-9 logging (named loggers, handlers, levels, access log) | ✅ web | Lior |
 | Parallel programming + scaling — multiprocessing batch · replicas/workers · multi-machine (Swarm / Azure VM) · **queue-free** | 🟡 concrete plan | Shiri (parallel code) · Elad (scaling) |
@@ -93,7 +93,7 @@ The only coordination points are the seams (`/predict` shape, `db.py`'s function
 | Report (app + features×tests + **risk assessment**) | 🟡 first draft ([`REPORT.md`](REPORT.md)); regenerated as tests land | all (Elad: risk) |
 | Demo video of using the app | ⬜ | all |
 | Azure VM deploy + CI/CD auto-deploy (+10) | 🟡 pipeline code done (build→GHCR→SSH-deploy→Caddy HTTPS, PR #91); live VM provisioning + demo TODO | Lior (pipeline) · Elad (live VM + demo) |
-| Online Forum — real-time, 8 sub-features (+10) | 🟡 Lior's CRUD+UI (posts/comments/votes, anonymity, **edit/delete own**) done; real-time + seeding + DM TODO | Lior (CRUD/UI ✅) · Elad (real-time) · Shiri (seeding) |
+| Online Forum — real-time, 8 sub-features (+10) | 🟡 posts/comments/post-votes + anonymity + edit/delete-own + **P2P DM (text) + live DM notifications (polling) + anti-spam messaging rate-limit** done; open: media/attachments + file-size, vote notifications, comment votes, a received-engagement metric, fuller cold-seeding | Lior (CRUD/UI + DM + notifications) · Elad (media + vote-notifs) · Shiri (seed content) |
 | Present 16 Jul (6 min) · demo by Wk 12 · final 23 Aug | ⬜ | all |
 | No shipped API keys | ✅ local model | Shiri |
 
