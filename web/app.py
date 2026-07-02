@@ -18,6 +18,7 @@ from routes.checkin import checkin_bp
 from routes.dashboard import dashboard_bp
 from routes.forum import forum_bp
 from routes.history import history_bp
+from routes.messages import messages_bp
 from routes.profile import profile_bp
 
 logger = logging.getLogger(__name__)
@@ -135,7 +136,49 @@ class _DbForum(_DbStore):
         return db_module.forum_delete_post(handle, post_id, username)
 
 
-def create_app(config=Config, *, users=None, profiles=None, history=None, forum=None):
+class _DbMessages(_DbStore):
+    """Seam Lior implements: ``message_send`` / ``message_list_conversation`` /
+    ``message_list_conversations`` / ``message_mark_read`` / ``message_count_since``."""
+
+    def send(self, sender, recipient, body):
+        db_module, handle = self._resolve()
+        return db_module.message_send(handle, sender, recipient, body)
+
+    def list_conversation(self, user_a, user_b):
+        db_module, handle = self._resolve()
+        return db_module.message_list_conversation(handle, user_a, user_b)
+
+    def list_conversations(self, user):
+        db_module, handle = self._resolve()
+        return db_module.message_list_conversations(handle, user)
+
+    def mark_read(self, user, peer):
+        db_module, handle = self._resolve()
+        return db_module.message_mark_read(handle, user, peer)
+
+    def count_since(self, user, since):
+        db_module, handle = self._resolve()
+        return db_module.message_count_since(handle, user, since)
+
+
+class _DbNotifications(_DbStore):
+    """Seam Lior implements: ``notification_add`` / ``notification_list`` / ``notification_mark_read``."""
+
+    def add(self, user, ntype, actor, ref, text):
+        db_module, handle = self._resolve()
+        return db_module.notification_add(handle, user, ntype, actor, ref, text)
+
+    def list(self, user, since=None):
+        db_module, handle = self._resolve()
+        return db_module.notification_list(handle, user, since)
+
+    def mark_read(self, user, ids=None):
+        db_module, handle = self._resolve()
+        return db_module.notification_mark_read(handle, user, ids)
+
+
+def create_app(config=Config, *, users=None, profiles=None, history=None, forum=None,
+               messages=None, notifications=None):
     # Absolute template_folder + static_folder so the app renders and serves its PWA assets
     # (manifest, service worker, icons) regardless of how it's launched / imported.
     app = Flask(__name__, template_folder=_TEMPLATES, static_folder=_STATIC)
@@ -154,6 +197,8 @@ def create_app(config=Config, *, users=None, profiles=None, history=None, forum=
     app.config["PROFILES"] = profiles if profiles is not None else _DbProfiles(app)
     app.config["HISTORY"] = history if history is not None else _DbHistory(app)
     app.config["FORUM"] = forum if forum is not None else _DbForum(app)
+    app.config["MESSAGES"] = messages if messages is not None else _DbMessages(app)
+    app.config["NOTIFICATIONS"] = notifications if notifications is not None else _DbNotifications(app)
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(profile_bp)
@@ -161,6 +206,7 @@ def create_app(config=Config, *, users=None, profiles=None, history=None, forum=
     app.register_blueprint(history_bp)
     app.register_blueprint(checkin_bp)
     app.register_blueprint(forum_bp)
+    app.register_blueprint(messages_bp)
 
     # Register the timer FIRST — before CSRF — so a request short-circuited by the CSRF check (403)
     # still gets a start stamp and therefore an access-log line (before_request runs in registration

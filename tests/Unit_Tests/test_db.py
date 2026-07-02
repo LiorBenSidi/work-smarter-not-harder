@@ -69,6 +69,14 @@ class _FakeColl:
             return SimpleNamespace(matched_count=0, upserted_id="fake")
         return SimpleNamespace(matched_count=0, upserted_id=None)
 
+    def update_many(self, filt, update):
+        n = 0
+        for d in self.docs:
+            if self._match(d, filt):
+                d.update(update.get("$set", {}))
+                n += 1
+        return SimpleNamespace(matched_count=n)
+
 
 class _FakeDB:
     def __init__(self):
@@ -76,6 +84,8 @@ class _FakeDB:
         self.profiles = _FakeColl()
         self.analysis_history = _FakeColl()
         self.forum_posts = _FakeColl()
+        self.messages = _FakeColl()
+        self.notifications = _FakeColl()
         self.commands = []                       # records db.command(...) calls (ensure_schema)
 
     def command(self, command, value=None, **kwargs):
