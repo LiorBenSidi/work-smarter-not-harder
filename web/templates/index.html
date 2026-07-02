@@ -82,6 +82,11 @@
     input[type=number] { font-family:var(--font-mono); }
     input:focus, select:focus, textarea:focus { outline:none; border-color:transparent;
       box-shadow:0 0 0 3px color-mix(in srgb, var(--accent) 45%, transparent); }
+    /* Checkboxes must NOT inherit the text-field box (padding/border/focus-glow): the glow ring
+       flashing on click was the "jump/flicker". Render them as native accent-tinted controls. */
+    input[type=checkbox] { width:auto; height:auto; padding:0; margin:0; border:0; border-radius:0;
+      background:none; box-shadow:none; accent-color:var(--accent); flex:none; cursor:pointer; }
+    input[type=checkbox]:focus { box-shadow:none; border-color:transparent; }
     button { background: linear-gradient(135deg, var(--accent), color-mix(in srgb, var(--accent) 52%, var(--accent2)));
       color:var(--on-accent); border:0; border-radius:999px; padding:12px 20px; font-weight:800; font-size:15px; font-family:inherit;
       cursor:pointer; white-space:nowrap; box-shadow:0 12px 26px -14px color-mix(in srgb, var(--accent) 85%, transparent);
@@ -283,7 +288,7 @@
         </div>
 
         <form id="login-form">
-          <label for="login-username">Username</label><input id="login-username" name="username" autocomplete="username" required>
+          <label for="login-username">Username or email</label><input id="login-username" name="username" autocomplete="username" required>
           <label for="login-password">Password</label><input id="login-password" name="password" type="password" autocomplete="current-password" required>
           <div style="margin-top:16px"><button type="submit">Log in</button></div>
           <div id="login-flash" class="flash" aria-live="polite"></div>
@@ -448,6 +453,14 @@
       const res = await fetch(path, opts);
       let data = null;
       try { data = await res.json(); } catch (_) { data = null; }
+      // A 401 while signed in means the session died mid-app (expiry, revocation, restart):
+      // kick back to a clean login rather than leaving the shell up with every panel erroring.
+      // Auth endpoints are exempt — their 401s (bad password, wrong code) belong to their forms.
+      const authPaths = ["/login", "/verify-otp", "/register", "/forgot-password", "/reset-password", "/logout", "/me", "/auth/config"];
+      if (res.status === 401 && currentUser && !authPaths.includes(path)) {
+        resetAuthState(); showView("auth");
+        flash("login-flash", "Your session has ended — please log in again.");
+      }
       return { ok: res.ok, status: res.status, data };
     }
 
@@ -487,6 +500,18 @@
       $("who").hidden = view !== "app";
     }
 
+    // showView("auth") alone re-shows whatever sub-form (and values) were last on screen — e.g.
+    // the OTP form still holding the emailed code after a logout. Every transition back to the
+    // auth card must go through here: default tab, empty forms, no leftover secrets or flashes.
+    function resetAuthState() {
+      ["login-form", "register-form", "forgot-form", "reset-form", "otp-form"].forEach((id) => $(id).reset());
+      ["login-flash", "register-flash", "forgot-flash", "reset-flash", "otp-flash"].forEach((id) => flash(id, "", "ok"));
+      const hint = $("otp-devhint"); hint.textContent = ""; hint.hidden = true;
+      $("who-name").textContent = ""; $("profile-user").textContent = "";  // no username residue either
+      pendingUser = null; resetToken = null; currentUser = null;
+      showTab("login");
+    }
+
     // ---- app-shell screen navigation (bottom tab bar) ----
     function showScreen(name) {
       document.querySelectorAll(".screen").forEach((s) => { s.hidden = s.id !== "screen-" + name; });
@@ -519,6 +544,7 @@
         // second factor: show the OTP screen. In dev (no SMTP) the server surfaces the code so the
         // grader/teammates can test without a mailbox; in production it only arrives by email.
         pendingUser = r.data.username;
+        f.password.value = "";  // the password has done its job — don't keep it in the DOM
         const hint = $("otp-devhint");
         if (r.data.dev_otp) { hint.textContent = "Dev mode — your code is " + r.data.dev_otp; hint.hidden = false; }
         else { hint.textContent = ""; hint.hidden = true; }
@@ -537,6 +563,7 @@
     onSubmit("register-form", async (f) => {
       const r = await api("/register", { method: "POST", body: { username: f.username.value, password: f.password.value, email: f.email.value } });
       if (r.ok) {
+        f.reset();
         showTab("login");
         // the register form is hidden now — surface the confirmation where the user actually IS
         flash("login-flash", "Account created — you can log in now.", "ok");
@@ -544,7 +571,7 @@
       } else { flash("register-flash", (r.data && r.data.error) || "Registration failed"); }
     });
 
-    $("logout-btn").addEventListener("click", async () => { await api("/logout", { method: "POST" }); showView("auth"); });
+    $("logout-btn").addEventListener("click", async () => { await api("/logout", { method: "POST" }); resetAuthState(); showView("auth"); });
 
     // ---- Forgot / reset password ----
     let resetToken = null;
@@ -558,6 +585,7 @@
     onSubmit("reset-form", async (f) => {
       const r = await api("/reset-password", { method: "POST", body: { token: resetToken, password: f.password.value } });
       if (r.ok) {
+        f.reset();
         flash("reset-flash", "Password updated — you can log in now.", "ok");
         setTimeout(() => { history.replaceState({}, "", "/"); showTab("login"); }, 1000);
       } else { flash("reset-flash", (r.data && r.data.error) || "Could not reset your password"); }
@@ -826,9 +854,14 @@
     $("history-refresh").addEventListener("click", loadHistory);
 
     function enterApp(username) {
+      resetAuthState();  // scrub credentials/OTP state now, while the auth card is off-screen
       currentUser = username;
       $("who-name").textContent = "Hi, " + username;
       $("profile-user").textContent = "Signed in as " + username;
+      // a previous account's residue must not survive a same-browser user switch
+      ["profile-form", "checkin-form", "forum-form"].forEach((id) => $(id).reset());
+      ["profile-flash", "checkin-flash", "forum-flash"].forEach((id) => flash(id, "", "ok"));
+      closePost();
       showView("app");
       showScreen("today");
       loadProfile(); loadDashboard(); loadHistory(); loadForum();
