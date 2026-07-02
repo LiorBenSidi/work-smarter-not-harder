@@ -71,19 +71,39 @@ python -m pytest tests/Unit_Tests/test_email.py \
 
 ---
 
-## 6. Turn on real email later (optional)
+## 6. Go live with real email (Brevo — free, 300 mails/day)
 
-Set an SMTP relay in `.env` (e.g. free Brevo — 300 mails/day) and restart:
+The whole sending path is already built and tested; going live is **provider config only** — no code
+change. Brevo is the pick (300/day free, no time limit; SendGrid free is 100/day).
 
-```
-SMTP_HOST=smtp-relay.brevo.com
-SMTP_PORT=587
-SMTP_USER=<brevo-login>
-SMTP_PASS=<brevo-smtp-key>
-MAIL_FROM=Work Smarter <no-reply@yourdomain>
-```
+1. **Create a free Brevo account** at <https://www.brevo.com> (this step is yours — it needs a login).
+2. **Verify a sender:** Brevo → *Senders, Domains & Dedicated IPs → Senders → Add a sender*, then click
+   the confirmation link Brevo emails you. `MAIL_FROM` **must** be this verified address or the relay
+   rejects the send.
+3. **Get the SMTP key:** Brevo → *SMTP & API → SMTP*. Note your **login** (an email) and **Generate a new
+   SMTP key**.
+4. **Put them in `.env`** (gitignored — never commit real keys):
+   ```
+   SMTP_HOST=smtp-relay.brevo.com
+   SMTP_PORT=587
+   SMTP_USER=<your-brevo-login-email>
+   SMTP_PASS=<the-generated-smtp-key>
+   MAIL_FROM=Work Smarter <your-verified-sender@domain>
+   ```
+5. **Verify delivery with one command** (no need to run the whole app):
+   ```bash
+   docker compose up -d
+   docker compose exec web python scripts/send_test_email.py --to liortestbase@proton.me
+   # local (outside Docker): python web/scripts/send_test_email.py --to you@example.com   (with the env set)
+   ```
+   Exit `0` + a message in the inbox = you're live. Exit `1` = check the key / verified sender (the script
+   says which).
+6. **Restart the stack.** With `SMTP_HOST` set, the login OTP + reset links now go out **by email only** —
+   the dev on-screen/log surface turns itself off automatically.
 
-With `SMTP_HOST` set the code/link go out by email only — the on-screen/log surface turns itself off.
+> **Deploy note (Azure):** some clouds block outbound port **587**. If the test send hangs/fails on the VM
+> but works locally, that's the port — open 587 egress on the VM, or switch to Brevo's HTTP API (a small
+> swap in `web/services/email.py`; stdlib `requests` is already a dependency).
 
 ---
 
