@@ -94,7 +94,7 @@ not a per-line credit — see §6.
 | CI gate — ruff → bandit → pytest (+ `mongo:7` service), PR-only branch-protected `main` | ✅ | web (CI) |
 | Rate-limiting / anti-spam (flask-limiter) | ⬜ | deploy/scale |
 | Stress / load (locust) | ⬜ | deploy/scale |
-| Azure VM deploy + CI/CD auto-deploy | ⬜ | deploy/scale |
+| Azure VM deploy + CI/CD auto-deploy | 🟡 pipeline code done (PR #91: build→GHCR→SSH-deploy→Caddy HTTPS); live VM + demo TODO | web (pipeline) · deploy (live) |
 | Parallel programming — measured CPU-bound path + horizontal `ai` scaling | 🟡 (plan in DESIGN §4) | ai · deploy |
 
 **In one sentence:** the entire web tier, the whole data layer, observability, the 3-container build, and the
@@ -210,7 +210,7 @@ records each risk, its mitigation, and whether that mitigation is **built & test
 | **Malformed documents reaching the DB** | Corrupt reads, crashes | `$jsonSchema` validators on all collections (defense-in-depth behind route validation) + unique/perf indexes | ✅ built (`ensure_schema` / `ensure_indexes`), exercised by real-Mongo IT |
 | **Log files growing unbounded** | Disk exhaustion | `RotatingFileHandler` (size-capped, per-worker files); logging fully disableable via env flag | ✅ built & tested (`test_logging_config`) |
 | **Secrets committed to the repo** | Credential leak | `.env` git-ignored; `.env.example` only; a scaffold test asserts no `.env` is tracked; local AI model → no API keys shipped | ✅ built & tested (`test_scaffold`) |
-| **Deploy unavailability (single Azure VM)** | Public app down | Restart policies; horizontal scaling design; CI-gated auto-deploy on green `main` | ⬜ planned (deploy/scale plane) |
+| **Deploy unavailability (single Azure VM)** | Public app down | Restart policies (`unless-stopped`, survive reboot); horizontal scaling design; CI-gated auto-deploy on green `main` | 🟡 pipeline built (PR #91); live VM + demo pending |
 | **Wearable / smartwatch data missing** | Advanced metrics absent | Fall back to manually entered values (stretch feature; core app is independent of it) | ✅ by design (no wearable dependency in the core path) |
 
 The mitigations already **tested** cover the mandatory fault-isolation requirement for the `ai` and `db`
@@ -227,8 +227,8 @@ between planes (§1). Full detail in [`COLLABORATORS.md`](../COLLABORATORS.md) a
 | Person | Plane | Owns |
 |---|---|---|
 | **Shiri** (`shiriHaboob`) | **AI brain** | Random Forest model, real `/predict`, recommendation engine, the dataset, forum cold-seed content; AI unit tests |
-| **Lior** (`LiorBenSidi`) | **Web app + data + observability + CI** | Flask backend (API · auth/sessions · validation · ai+db orchestration) + frontend + the **whole data layer** (`db.py` CRUD, indexes, `$jsonSchema` validators, auth config, backups, seed) + Week-9 logging + the `web`/`ai` container build & compose + the CI gate; the web/data integration/system/security tests |
-| **Elad** (`EladNa1`) | **Deployment + real-time + scale** | Azure VM deploy + CI/CD auto-deploy, the test-runner service, the Forum real-time layer (notifications / DM / media), rate-limiting (flask-limiter), stress + cross-container tests |
+| **Lior** (`LiorBenSidi`) | **Web app + data + observability + CI/CD** | Flask backend (API · auth/sessions · validation · ai+db orchestration) + frontend + the **whole data layer** (`db.py` CRUD, indexes, `$jsonSchema` validators, auth config, backups, seed) + Week-9 logging + the `web`/`ai` container build & compose + the CI gate + the **CI/CD deploy pipeline** (build→GHCR→SSH-deploy→Caddy HTTPS, `docker-compose.prod.yml`); the web/data integration/system/security tests |
+| **Elad** (`EladNa1`) | **Live deployment + real-time + scale** | the **live Azure deploy** (VM secrets, GHCR-packages-public, UptimeRobot, the deploy demo — pipeline code is Lior's), the test-runner service, the Forum real-time layer (notifications / DM / media), rate-limiting (flask-limiter), stress + cross-container tests |
 
 ---
 

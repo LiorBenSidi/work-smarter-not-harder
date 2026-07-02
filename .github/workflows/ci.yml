@@ -28,9 +28,11 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements-dev.txt   # pinned ruff/bandit/pytest — identical versions to the local hooks
-          # install project requirements as they appear (root + per-container)
-          [ -f requirements.txt ] && pip install -r requirements.txt || true
-          for d in web ai; do [ -f "$d/requirements.txt" ] && pip install -r "$d/requirements.txt" || true; done
+          # install project requirements as they appear (root + per-container). A MISSING file is skipped; a real
+          # install failure now FAILS the step (no `|| true` mask) so a broken pin can't slip through to build (R2.2).
+          for f in requirements.txt web/requirements.txt ai/requirements.txt; do
+            if [ -f "$f" ]; then pip install -r "$f"; fi
+          done
 
       - name: Lint (ruff)
         run: ruff check .
@@ -57,6 +59,153 @@ jobs:
         env:
           TEST_MONGO_URI: mongodb://localhost:27017/worksmarter_test   # makes test_db_mongo.py RUN, not skip
         run: python -m pytest tests/ -q   # must pass; a suite that collects 0 tests now FAILS (no false-green)
+
+  # ---------------------------------------------------------------------------
+  # CD half (assignment R3–R10). These jobs run ONLY on push to main — a PR
+  # stops after `checks` above (R1.3), because both are gated on the push event.
+  # ---------------------------------------------------------------------------
+
+  build:
+    name: build & push image (GHCR)
+    needs: checks                       # R2.2: a failed test build never proceeds to build/push/deploy
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'   # R1.3: a PR never reaches here
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write                   # lets the built-in GITHUB_TOKEN push to THIS repo's GHCR (R4.2)
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compute image vars
+        id: vars
+        run: |
+          echo "owner=${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_OUTPUT"   # GHCR requires a lowercase owner
+          echo "sha=${GITHUB_SHA::7}"               >> "$GITHUB_OUTPUT"   # short, immutable per-commit tag (R3.2)
+
+      - name: Log in to GHCR
+        # the workflow's built-in GITHUB_TOKEN — no PAT, no registry signup (R4.2, Noam Q4).
+        # --password-stdin keeps the token out of the process list and the logs.
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: Build & push web image
+        env:
+          IMG: ghcr.io/${{ steps.vars.outputs.owner }}/work-smarter-web
+          DOCKER_BUILDKIT: "1"
+        run: |
+          docker pull "$IMG:latest" || true    # prime the layer cache from the previous build (first run misses)
+          docker build --cache-from "$IMG:latest" --build-arg BUILDKIT_INLINE_CACHE=1 \
+            -t "$IMG:latest" -t "$IMG:${{ steps.vars.outputs.sha }}" ./web   # R3.1/R3.3: from ./web/Dockerfile, repo only
+          docker push "$IMG:latest"                                          # R4.3: push BOTH tags (carry inline cache metadata)...
+          docker push "$IMG:${{ steps.vars.outputs.sha }}"                   # ...the stable one and the immutable one
+
+      - name: Build & push ai image
+        env:
+          IMG: ghcr.io/${{ steps.vars.outputs.owner }}/work-smarter-ai
+          DOCKER_BUILDKIT: "1"
+        run: |
+          docker pull "$IMG:latest" || true
+          docker build --cache-from "$IMG:latest" --build-arg BUILDKIT_INLINE_CACHE=1 \
+            -t "$IMG:latest" -t "$IMG:${{ steps.vars.outputs.sha }}" ./ai
+          docker push "$IMG:latest"
+          docker push "$IMG:${{ steps.vars.outputs.sha }}"
+
+  deploy:
+    name: deploy to Azure VM
+    needs: build
+    # Same push gate PLUS a live-VM gate: until SSH_HOST is set this job is SKIPPED (main stays green), then it
+    # activates automatically the moment the VM variable + secrets exist — no code change needed to go live.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.SSH_HOST != ''
+    concurrency:
+      group: azure-deploy-${{ github.ref }}
+      cancel-in-progress: false     # never interrupt an in-flight deploy — queue the next push instead of racing the VM
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Load the deploy SSH key
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}   # a DEDICATED deploy key, not a personal key (§10)
+        run: |
+          : "${SSH_PRIVATE_KEY:?SSH_PRIVATE_KEY secret is not set}"   # fail with a clear message here, not a cryptic ssh error later
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/deploy_key   # secret -> file; GitHub masks it in logs (R6.2)
+          chmod 600 ~/.ssh/deploy_key
+
+      - name: Render the prod .env (from GitHub secrets/vars — never committed, R6.1)
+        env:
+          APP_SECRET_KEY: ${{ secrets.APP_SECRET_KEY }}   # Flask SECRET_KEY, injected at runtime
+          # Public address for the cert + links: your own domain if set (e.g. app.worksmarternotharder.dev),
+          # else the Azure FQDN. SSH still targets SSH_HOST — the ssh host and the public URL can differ.
+          SITE_ADDRESS: ${{ vars.SITE_ADDRESS || vars.SSH_HOST }}
+          OWNER: ${{ github.repository_owner }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}   # Brevo relay login — enables real inbox delivery for OTP/reset
+          SMTP_PASS: ${{ secrets.SMTP_PASS }}   # Brevo SMTP key (secret)
+        run: |
+          : "${APP_SECRET_KEY:?APP_SECRET_KEY secret is not set}"   # fail HERE with a clear message, not later at container boot
+          {
+            echo "SECRET_KEY=${APP_SECRET_KEY}"
+            echo "SITE_ADDRESS=${SITE_ADDRESS}"                    # Caddy issues the Let's Encrypt cert for this FQDN (R10)
+            echo "IMAGE_OWNER=$(echo "$OWNER" | tr 'A-Z' 'a-z')"  # which GHCR namespace the VM pulls from
+            echo "IMAGE_TAG=${GITHUB_SHA::7}"                       # deploy the EXACT commit CI built (not a moving :latest) — reproducible + rollback-ready
+          } > prod.env
+          # Real email is self-gating: wire Brevo ONLY when the SMTP secret is present; otherwise the app safely
+          # uses the log backend (OTP written to the log) and login still works — mirrors the deploy job's own dormancy.
+          if [ -n "$SMTP_PASS" ]; then
+            {
+              echo "SMTP_HOST=smtp-relay.brevo.com"
+              echo "SMTP_PORT=587"
+              echo "SMTP_USER=${SMTP_USER}"
+              echo "SMTP_PASS=${SMTP_PASS}"
+              echo "MAIL_FROM=Work Smarter <no-reply@worksmarternotharder.dev>"
+            } >> prod.env
+          fi
+
+      - name: Ship compose + Caddyfile + env to the VM
+        env:
+          HOST: ${{ vars.SSH_HOST }}
+        run: |
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=accept-new "deploy@$HOST" "mkdir -p ~/app"
+          scp -i ~/.ssh/deploy_key -o StrictHostKeyChecking=accept-new \
+            docker-compose.prod.yml Caddyfile prod.env "deploy@$HOST:~/app/"
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=accept-new "deploy@$HOST" "mv ~/app/prod.env ~/app/.env"
+
+      - name: Deploy — the VM PULLS from GHCR and runs; record the previous SHA for rollback (R5.2)
+        id: deploy
+        env:
+          HOST: ${{ vars.SSH_HOST }}
+        run: |
+          # the last-good SHA (empty on the first deploy) — the rollback target if the health check fails
+          PREV=$(ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=accept-new "deploy@$HOST" "cat ~/app/.last_good_sha 2>/dev/null || true" || true)
+          echo "prev=$PREV" >> "$GITHUB_OUTPUT"
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=accept-new "deploy@$HOST" \
+            "cd ~/app && docker compose -f docker-compose.prod.yml pull && \
+             docker compose -f docker-compose.prod.yml up -d --remove-orphans"   # idempotent (R5.3); restart policy => reboot-safe (R5.4)
+
+      - name: Health check against the public HTTPS address (R7 — readiness, the real VM + a live DB ping)
+        env:
+          SITE: ${{ vars.SITE_ADDRESS || vars.SSH_HOST }}   # the branded domain if set, else the Azure FQDN
+        # /ready pings Mongo, so a pass proves the WHOLE stack serves (not just that web answers). --fail => non-zero on
+        # any 4xx/5xx; --retry-all-errors also retries the TLS handshake during the first cold-boot cert issuance. 15x5s.
+        run: curl --fail --retry 15 --retry-delay 5 --retry-all-errors "https://$SITE/ready"
+
+      - name: Record this SHA as the last-good deploy
+        if: success()
+        env:
+          HOST: ${{ vars.SSH_HOST }}
+        run: ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=accept-new "deploy@$HOST" "printf '%s' '${GITHUB_SHA::7}' > ~/app/.last_good_sha"
+
+      - name: Roll back to the previous SHA on an unhealthy deploy (R8.2)
+        if: failure() && steps.deploy.outputs.prev != ''
+        env:
+          HOST: ${{ vars.SSH_HOST }}
+          PREV: ${{ steps.deploy.outputs.prev }}
+        run: |
+          echo "::warning::health check failed — rolling the VM back to ${PREV}"
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=accept-new "deploy@$HOST" \
+            "cd ~/app && sed -i 's/^IMAGE_TAG=.*/IMAGE_TAG=${PREV}/' .env && \
+             docker compose -f docker-compose.prod.yml pull && \
+             docker compose -f docker-compose.prod.yml up -d --remove-orphans"
+          # the run still ends RED (the health step already failed — R8.1 intact); rollback only restores the last-good image
 
   # Stress tests (locust) run on demand, not as a merge gate — they need a running stack.
   # Add a separate job (or a manual `workflow_dispatch`) once the app is up, per the course's stress-testing lab.

@@ -20,6 +20,9 @@ ENV/
 !.env.example
 *.key
 *.pem
+prod.env          # rendered by CI at deploy time from GitHub secrets — must never be committed
+*_deploy          # the SSH deploy private key (assignment §3.1) — public .pub is fine, private never
+id_ed25519*
 
 # Large data + trained artifacts (bake the model into the image; keep big data out of git)
 data/
