@@ -1,0 +1,88 @@
+# Production stack for the Azure VM. The VM PULLS these images from GHCR (built + pushed by CI) and
+# NEVER builds them (assignment R5.2). This file is self-contained — it is the ONLY compose file the VM
+# needs (with Caddyfile + a .env holding SECRET_KEY / SITE_ADDRESS / IMAGE_OWNER, injected by CI).
+#
+#   On the VM:  docker compose -f docker-compose.prod.yml pull && docker compose -f docker-compose.prod.yml up -d
+#
+# Public surface is Caddy only (:80 + :443). web/ai/db stay on the internal network — same as dev.
+services:
+  caddy:                                   # the public edge: terminates TLS, auto Let's Encrypt, HTTP->HTTPS (R10)
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      - "80:80"                            # ACME HTTP-01 challenge + the HTTP->HTTPS redirect (R10.1/R10.4)
+      - "443:443"                          # the app over TLS (R10.2)
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS:?set SITE_ADDRESS to the VM FQDN}   # Caddy issues+renews the cert for this name
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data                   # persists the issued cert + ACME account across restarts (R10.3)
+      - caddy-config:/config
+    depends_on:
+      web: { condition: service_started }
+
+  web:                                     # NO host port now — only Caddy reaches it, over the internal network
+    image: ghcr.io/${IMAGE_OWNER:?set IMAGE_OWNER}/work-smarter-web:${IMAGE_TAG:-latest}   # CI pins the exact SHA (R5.2)
+    restart: unless-stopped                # self-heal + survive a VM reboot (R5.4)
+    environment:
+      SECRET_KEY: ${SECRET_KEY:?set SECRET_KEY}
+      MONGO_URI: ${MONGO_URI:-mongodb://db:27017/worksmarter}
+      AI_URL: http://ai:5000
+      SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-1}   # prod is HTTPS -> mark the session cookie Secure
+      ENABLE_LOGGING: ${ENABLE_LOGGING:-1}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      LOG_FILE: ${LOG_FILE:-/app/logs/web.log}
+      APP_BASE_URL: https://${SITE_ADDRESS}                # public origin for links built into emails (OTP/reset)
+      # Email (OTP + password reset). BLANK SMTP_HOST -> safe log backend (OTP in the log); CI sets these from
+      # GitHub secrets only when configured, flipping on real Brevo inbox delivery. from-domain is Brevo-authenticated.
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      MAIL_FROM: ${MAIL_FROM:-}
+    volumes:
+      - web-logs:/app/logs
+    depends_on:
+      ai: { condition: service_started }   # AI is non-critical: web boots and degrades per-request if it's down
+      db: { condition: service_healthy }   # DB is core; wait for it
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:5000/health', timeout=3).status==200 else 1)"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  ai:                                      # internal only (OWNER: Shiri) — no host port
+    image: ghcr.io/${IMAGE_OWNER:?set IMAGE_OWNER}/work-smarter-ai:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    expose:
+      - "5000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:5000/health', timeout=3).status==200 else 1)"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  db:                                      # MongoDB — internal only. Auth is env-gated (blank -> no auth).
+    image: mongo:7
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_USER:-}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD:-}
+    expose:
+      - "27017"
+    volumes:
+      - mongo-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
+
+volumes:
+  mongo-data:
+  web-logs:
+  caddy-data:
+  caddy-config:
