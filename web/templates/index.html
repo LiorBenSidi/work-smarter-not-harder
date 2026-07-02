@@ -114,12 +114,24 @@
 
     /* hero (logged-out) — the first impression */
     .hero { text-align:center; padding:34px 8px 6px; animation: rise .7s cubic-bezier(.2,.7,.2,1) both; }
-    .hero-orb { width:132px; height:132px; margin:0 auto 24px; border-radius:50%; position:relative;
-      background: radial-gradient(circle at 34% 30%, color-mix(in srgb, var(--accent) 92%, #fff), var(--accent) 40%, var(--accent2) 92%);
-      box-shadow:0 0 70px -6px color-mix(in srgb, var(--accent) 55%, transparent), inset 0 0 44px -10px rgba(255,255,255,.5);
+    /* Liquid-glass readiness orb: a <canvas> paints drifting aurora "liquid"; CSS layers the "glass"
+       (rim, specular highlight, depth). A luminous jewel that reads on both light and dark grounds. */
+    .hero-orb { width:132px; height:132px; margin:0 auto 24px; position:relative;
       animation: breathe 6s ease-in-out infinite; }
     .hero-orb::after { content:""; position:absolute; inset:-16px; border-radius:50%;
       border:1px solid color-mix(in srgb, var(--accent) 34%, transparent); animation: halo 6s ease-in-out infinite; }
+    .orb-glass { position:absolute; inset:0; border-radius:50%; overflow:hidden;
+      border:1px solid rgba(255,255,255,.16);
+      box-shadow: inset 0 2px 12px rgba(255,255,255,.22), inset 0 -14px 30px rgba(6,4,20,.5),
+                  0 30px 66px -18px color-mix(in srgb, var(--accent) 45%, transparent),
+                  0 10px 30px -10px color-mix(in srgb, var(--accent2) 50%, transparent); }
+    .orb-glass canvas { position:absolute; inset:0; width:100%; height:100%; display:block; }
+    .orb-spec { position:absolute; inset:0; border-radius:50%; pointer-events:none; mix-blend-mode:screen;
+      background: radial-gradient(44px 32px at 30% 22%, rgba(255,255,255,.46), rgba(255,255,255,0) 60%),
+                  radial-gradient(26px 16px at 70% 84%, rgba(255,255,255,.12), transparent 60%); }
+    .orb-frost { position:absolute; inset:0; border-radius:50%; pointer-events:none;
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,.10);
+      background: linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,0) 42%); }
     .hero-title { font-size:31px; font-weight:800; letter-spacing:-.02em; line-height:1.14; margin:0 0 10px; }
     .hero-sub { color:var(--muted); font-size:15px; margin:0 auto 20px; max-width:33ch; }
     .hero-title .accent { background: linear-gradient(120deg, var(--accent), var(--accent2));
@@ -255,7 +267,7 @@
     <!-- ===== Auth view ===== -->
     <section id="auth-view">
       <div class="hero">
-        <div class="hero-orb" aria-hidden="true"></div>
+        <div class="hero-orb" aria-hidden="true"><span class="orb-glass"><canvas class="orb-liquid"></canvas><span class="orb-spec"></span><span class="orb-frost"></span></span></div>
         <h1 class="hero-title">Know when to push.<br>Know when to <span class="accent">rest</span>.</h1>
         <p class="hero-sub">Your training readiness — measured each morning, in one calm signal.</p>
         <ol class="how" aria-label="How it works">
@@ -847,6 +859,39 @@
       if (t) { resetToken = t; showView("auth"); showReset(); return; }
       const r = await api("/me");
       if (r.ok && r.data && r.data.username) { enterApp(r.data.username); } else { showView("auth"); }
+    })();
+  </script>
+  <script>
+    // Liquid-glass hero orb: paint drifting aurora "liquid" into the canvas; the CSS layers the glass.
+    (function () {
+      const cvs = document.querySelector(".orb-liquid");
+      if (!cvs) return;
+      const ctx = cvs.getContext("2d"), S = 300, reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      cvs.width = S * dpr; cvs.height = S * dpr; ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      const blobs = [
+        { c: "#6ff0cf", r: 135, ax: 64, ay: 48, sx: 0.55, sy: 0.90, px: 0.0, py: 1.0 },
+        { c: "#b39bff", r: 155, ax: 58, ay: 70, sx: 0.80, sy: 0.50, px: 2.0, py: 3.0 },
+        { c: "#7cc0ff", r: 115, ax: 78, ay: 58, sx: 0.50, sy: 0.72, px: 4.0, py: 1.2 },
+        { c: "#5eead4", r: 120, ax: 52, ay: 82, sx: 0.70, sy: 0.60, px: 1.0, py: 5.0 }
+      ];
+      function paint(time) {
+        ctx.globalCompositeOperation = "source-over";
+        ctx.fillStyle = "#140d2b"; ctx.fillRect(0, 0, S, S);
+        ctx.globalCompositeOperation = "lighter";
+        for (const b of blobs) {
+          const cx = S / 2 + Math.sin(time * b.sx + b.px) * b.ax;
+          const cy = S / 2 + Math.cos(time * b.sy + b.py) * b.ay;
+          const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, b.r);
+          g.addColorStop(0, b.c + "d0"); g.addColorStop(1, b.c + "00");
+          ctx.fillStyle = g; ctx.beginPath(); ctx.arc(cx, cy, b.r, 0, Math.PI * 2); ctx.fill();
+        }
+      }
+      if (reduce) { paint(1.5); return; }                    // reduced motion: one static frame
+      (function frame(t) {
+        if (cvs.offsetParent !== null) paint(t / 1000);      // skip work while the hero is off-screen (logged in)
+        requestAnimationFrame(frame);
+      })(0);
     })();
   </script>
   <script>
