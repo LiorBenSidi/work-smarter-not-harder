@@ -33,7 +33,7 @@ monitor (R9).
 | **R8.1** any stage failing fails the whole run | `needs:` chain + default fail-fast | `ci.yml` |
 | **R8.2** *(optional)* rollback on failed health check | **implemented** — the deploy records the last-good SHA on the VM; a failed `/ready` check re-deploys it (the run still ends red) | `deploy` job |
 | **R9** external uptime monitor, ≤5 min, alert, down→up | UptimeRobot on `https://<FQDN>/health` (browser setup) | README / live |
-| **R10.1–10.5** valid auto-renewing Let's Encrypt HTTPS at the FQDN; HTTP→HTTPS | `caddy` service + `Caddyfile` (`reverse_proxy web:5000`); gunicorn stays internal | `docker-compose.prod.yml`, `Caddyfile` |
+| **R10.1–10.5** valid auto-renewing Let's Encrypt HTTPS; HTTP→HTTPS | `caddy` service + `Caddyfile` (`reverse_proxy web:5000`) issues the cert for `SITE_ADDRESS` — the Azure FQDN by default, or a custom domain CNAME'd to it (wiring steps in the README); gunicorn stays internal | `docker-compose.prod.yml`, `Caddyfile` |
 
 ## What is live now vs. what activates with the VM
 

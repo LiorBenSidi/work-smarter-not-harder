@@ -94,6 +94,27 @@ SSH via cloud-init) and gives you its FQDN. You generate a **dedicated** deploy 
 (`ssh-keygen -t ed25519 -f groupNN_deploy -N ""`), send the instructor the `.pub`, store the private key as
 `SSH_PRIVATE_KEY`, and set `SSH_HOST` to the FQDN. Idle VMs auto-stop; start yours from the Azure portal (Technion login).
 
+### Serving at a custom domain (optional)
+The app is already R10-compliant served at the **Azure FQDN** — a custom domain is optional polish. Our domain
+`worksmarternotharder.dev` plays **two independent roles**:
+
+**1 · App — the HTTPS front door** (point a subdomain at the VM; Caddy gets its cert):
+1. Pick a subdomain, e.g. `app.worksmarternotharder.dev` (the root apex can't `CNAME`).
+2. At the DNS provider (Name.com) add a **`CNAME`**: host `app` → value `<the Azure FQDN>` (`<label>.<region>.cloudapp.azure.com`).
+   `CNAME`-to-FQDN (not an `A` record to the IP) survives an Azure IP change.
+3. Set the GitHub **variable** `SITE_ADDRESS` = `app.worksmarternotharder.dev`.
+4. Push to `main` → the deploy injects `SITE_ADDRESS` into the VM's `.env` → **Caddy obtains a Let's Encrypt cert** for it
+   (HTTP-01 over :80) and serves the app there. `SSH_HOST` stays the FQDN (the SSH target); the two may differ.
+- **Skip this** → leave `SITE_ADDRESS` unset and the app serves at the Azure FQDN (still valid HTTPS, R10).
+
+**2 · Email — sender authentication** (so OTP / password-reset mail reaches real inboxes):
+1. In Brevo, **authenticate the domain** (Senders, Domains & IPs → Domains). It prints a **brevo-code `TXT`**, two
+   **DKIM `CNAME`s** (`brevo1/brevo2._domainkey`), and a **DMARC `TXT`** (`_dmarc`) — add all four at Name.com.
+2. Add a sender `no-reply@worksmarternotharder.dev` (auto-verifies once the domain is authenticated).
+3. Set the `SMTP_USER` / `SMTP_PASS` secrets (Brevo relay creds); the deploy injects them and `MAIL_FROM`
+   = `Work Smarter <no-reply@worksmarternotharder.dev>`. Unset → the app uses its log backend (login still works).
+- Email is **not** a course requirement — deliverability is an enhancement. Links inside the mail point at `SITE_ADDRESS`.
+
 ## For AI agents (any tool)
 The workflow is **enforced for every tool and human**: `main` is branch-protected, so direct pushes are
 rejected and changes land only via a PR that passes CI — no agent can bypass it, whatever it reads. For
