@@ -92,7 +92,7 @@ The only coordination points are the seams (`/predict` shape, `db.py`'s function
 | GitHub: regular commits from **all 3**, meaningful messages | 🟡 in progress | all |
 | Report (app + features×tests + **risk assessment**) | 🟡 first draft ([`REPORT.md`](REPORT.md)); regenerated as tests land | all (Elad: risk) |
 | Demo video of using the app | ⬜ | all |
-| Azure VM deploy + CI/CD auto-deploy (+10; base deploy optional) | 🟡 CI gate live; Azure auto-deploy TODO | Lior (CI) · Elad (Azure) |
+| Azure VM deploy + CI/CD auto-deploy (+10) | 🟡 pipeline code done (build→GHCR→SSH-deploy→Caddy HTTPS, PR #91); live VM provisioning + demo TODO | Lior (pipeline) · Elad (live VM + demo) |
 | Online Forum — real-time, 8 sub-features (+10) | 🟡 Lior's CRUD+UI (posts/comments/votes, anonymity, **edit/delete own**) done; real-time + seeding + DM TODO | Lior (CRUD/UI ✅) · Elad (real-time) · Shiri (seeding) |
 | Present 16 Jul (6 min) · demo by Wk 12 · final 23 Aug | ⬜ | all |
 | No shipped API keys | ✅ local model | Shiri |
