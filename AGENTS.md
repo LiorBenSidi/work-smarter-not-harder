@@ -3,8 +3,15 @@
 Instructions for AI coding agents working in this repo (a cross-tool convention; Claude Code also reads `CLAUDE.md`).
 
 Full guidance:
-- **[`CLAUDE.md`](CLAUDE.md)** — project overview, architecture, build constraints, commands.
+- **[`CLAUDE.md`](CLAUDE.md)** — project overview, architecture, build constraints, commands, **current status**.
 - **[`CONTRIBUTING.md`](CONTRIBUTING.md)** — the pull-request workflow.
+
+## Current status (2026-07-02)
+Backend built + CI-gated (all Lior): the `web` tier, the whole data layer, Week-9 logging, the 3-container build,
+the CI gate, and the **CI/CD deploy pipeline** (GHCR → Azure VM → Caddy HTTPS, auto-rollback). 332 tests, `main`
+green. **Open lanes:** *Shiri* — the real model behind `POST /predict` (`ai/` is a placeholder); *Elad* — the live
+Azure deploy + demo, Forum real-time, rate-limit, stress, the test-runner. Full breakdown: [`CLAUDE.md`](CLAUDE.md)
+→ Current status. Build **within** an open lane; don't redo the built parts.
 
 ## The rule that always applies
 **`main` is branch-protected and PR-only — never push directly to `main`.** Work on a branch
@@ -25,4 +32,4 @@ Local AI model only (no external API); **bake the trained model into the image**
 - **No `print()`** in committed code — use `logging` (L3: print is slow; L8.1: raise errors, not print). Enforced by ruff `T20` in CI + the local hooks; a deliberate one-off needs `# noqa: T201`.
 - **Hot paths → native code when it pays off (L6, native-vs-Python):** vectorize with NumPy first, then a compiled extension (Cython / a C extension / `cffi`) for a *measured* bottleneck. Measure first (L8), keep a pure-Python fallback, and build the module into the image.
 - **Local gate** (mirrors CI): `sh scripts/setup-hooks.sh` + `pip install -r requirements-dev.txt` → ruff + bandit on `git commit`, pytest on `git push`. Use `--no-verify` only in emergencies (CI still gates).
-- **Testing & TDD (course):** write tests **before/with** the code; all 5 types live in `tests/` — fill the scaffolds + remove the `skip` (see [`tests/README.md`](tests/README.md)). Test *behaviour*, not the implementation (no `assert True`); a broken test is **fixed or deleted, never commented out**; tests run on any machine. Stay within your contract — don't change a shared seam (`/predict`, the DB collections, only-`web`-exposed) without telling the team.
+- **Testing & TDD (course):** write tests **before/with** the code; all 5 types live in `tests/`. The built areas have full tests — add tests alongside any new code (see [`tests/README.md`](tests/README.md)); the suite's skips are **env-gated** (real Mongo / a live stack), not unwritten. Test *behaviour*, not the implementation (no `assert True`); a broken test is **fixed or deleted, never commented out**; tests run on any machine. Stay within your contract — don't change a shared seam (`/predict`, the DB collections, only-`web`-exposed) without telling the team.
