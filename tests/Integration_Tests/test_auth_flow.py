@@ -4,8 +4,9 @@ The real HTTP flow: register -> login -> session-gated `/me` -> logout. OWNER: L
 """
 
 
-def _register(client, username="alice", password="s3cretpw!"):
-    return client.post("/register", json={"username": username, "password": password, "email": f"{username.strip()}@example.com"})
+def _register(client, username="alice", password="s3cretpw!", email=None):
+    return client.post("/register", json={"username": username, "password": password,
+                                          "email": email or f"{username.strip()}@example.com"})
 
 
 def _login(client, username="alice", password="s3cretpw!"):
@@ -87,9 +88,27 @@ def test_get_on_post_only_route_is_405(client):
 
 
 def test_usernames_are_case_sensitive(client):
-    # intended (documented) behavior: distinct case -> distinct accounts
-    assert _register(client, "alice", "s3cretpw!").status_code == 201
-    assert _register(client, "Alice", "s3cretpw!").status_code == 201
+    # intended (documented) behavior: distinct case -> distinct accounts. Distinct emails too, since
+    # email is now unique per account (case-variant emails would otherwise collide on the shared address).
+    assert _register(client, "alice", "s3cretpw!", email="alice@example.com").status_code == 201
+    assert _register(client, "Alice", "s3cretpw!", email="alice2@example.com").status_code == 201
+
+
+def test_register_rejects_a_duplicate_email(client):
+    # one email -> one account: forgot-password looks up by email, so a shared email would make reset
+    # ambiguous. Case/whitespace-insensitive (validate_email normalizes) — "Alice@ " == "alice@".
+    assert _register(client, "alice", email="dup@example.com").status_code == 201
+    resp = _register(client, "bob", email="  DUP@Example.com ")
+    assert resp.status_code == 409
+    assert "email" in resp.get_json()["error"].lower()
+
+
+def test_login_accepts_email_as_identifier(client):
+    # F1 UX: users can sign in with their username OR the email they registered with.
+    _register(client, "carol", email="carol@example.com")
+    by_email = client.post("/login", json={"username": "Carol@Example.com", "password": "s3cretpw!"})
+    assert by_email.status_code in (200, 401)  # 200 (no OTP) or otp_required — never a 400/validation error
+    assert by_email.get_json().get("status") in ("logged in", "otp_required")
 
 
 def test_duplicate_is_detected_after_whitespace_strip(client):
