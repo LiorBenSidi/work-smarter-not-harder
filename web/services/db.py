@@ -11,6 +11,7 @@ Collections (DESIGN.md §2): ``users``, ``profiles``, ``analysis_history``, ``fo
 """
 import logging
 import threading
+import time
 import uuid
 
 from pymongo import MongoClient, ReturnDocument
@@ -37,6 +38,10 @@ def ensure_indexes(db):
     db.forum_posts.create_index("id", unique=True)
     db.profiles.create_index("username", unique=True)
     db.analysis_history.create_index("username")
+    # Social layer: threads + inbox filter on the real sender/recipient username fields; poll on user.
+    db.messages.create_index("sender")
+    db.messages.create_index("recipient")
+    db.notifications.create_index("user")
 
 
 # Document-shape validators ($jsonSchema) — defence-in-depth behind the route-layer validation: the DB
@@ -317,3 +322,84 @@ def forum_delete_post(db, post_id, username):
         return FORBIDDEN
     db.forum_posts.delete_one({"id": post_id})
     return True
+
+
+# ---- direct messages + notifications (the social layer's private channel + notification feed) ----
+# Real-time = short-interval CLIENT polling of the notification list (no new deps / no worker-model
+# change; SSE is the documented future upgrade). A "thread" between two users is simply the messages
+# whose {sender, recipient} is exactly that pair, in either direction — matched on the real username
+# fields, never a joined-string id, so two different pairs can NEVER collide (usernames may contain any
+# character, including a delimiter). The route always passes the caller as one side, so a caller can only
+# ever read a thread they are part of — that IS the DM-privacy guarantee. Inputs are type-validated first.
+
+def _message_shape(m):
+    return {"id": m["id"], "sender": m["sender"], "recipient": m["recipient"],
+            "body": m["body"], "created_at": m["created_at"], "read": m.get("read", False)}
+
+
+def message_send(db, sender, recipient, body):
+    """Store a direct message and return its public shape."""
+    msg = {"id": uuid.uuid4().hex, "sender": sender, "recipient": recipient, "body": body,
+           "created_at": time.time(), "read": False}
+    db.messages.insert_one(msg)
+    return _message_shape(msg)
+
+
+def message_list_conversation(db, user_a, user_b):
+    """Every message exchanged between two users (either direction), oldest first."""
+    msgs = (list(db.messages.find({"sender": user_a, "recipient": user_b}))
+            + list(db.messages.find({"sender": user_b, "recipient": user_a})))
+    return [_message_shape(m) for m in sorted(msgs, key=lambda m: m.get("created_at", 0))]
+
+
+def message_list_conversations(db, user):
+    """One summary row per peer the user has messaged with (latest body + unread count), newest first."""
+    mine = list(db.messages.find({"sender": user})) + list(db.messages.find({"recipient": user}))
+    convos = {}
+    for m in sorted(mine, key=lambda m: m.get("created_at", 0)):
+        peer = m["recipient"] if m["sender"] == user else m["sender"]
+        row = convos.setdefault(peer, {"peer": peer, "last_message": "", "last_at": 0, "unread": 0})
+        row["last_message"], row["last_at"] = m.get("body", ""), m.get("created_at", 0)
+        if m["recipient"] == user and not m.get("read"):
+            row["unread"] += 1
+    return sorted(convos.values(), key=lambda c: c["last_at"], reverse=True)
+
+
+def message_mark_read(db, user, peer):
+    """Mark every message `user` RECEIVED from `peer` as read (opening the thread clears it)."""
+    db.messages.update_many({"sender": peer, "recipient": user}, {"$set": {"read": True}})
+
+
+def message_count_since(db, user, since):
+    """How many messages `user` has sent at/after `since` (epoch secs) — the anti-spam counter."""
+    return sum(1 for m in db.messages.find({"sender": user}) if m.get("created_at", 0) >= since)
+
+
+def _notification_shape(n):
+    return {"id": n["id"], "type": n["type"], "actor": n["actor"], "ref": n.get("ref"),
+            "text": n["text"], "created_at": n["created_at"], "read": n.get("read", False)}
+
+
+def notification_add(db, user, ntype, actor, ref, text):
+    """Create a notification for `user` (the recipient) and return its public shape."""
+    n = {"id": uuid.uuid4().hex, "user": user, "type": ntype, "actor": actor,
+         "ref": ref, "text": text, "created_at": time.time(), "read": False}
+    db.notifications.insert_one(n)
+    return _notification_shape(n)
+
+
+def notification_list(db, user, since=None):
+    """The user's notifications, newest first; `since` (epoch secs) returns only newer ones (polling)."""
+    items = list(db.notifications.find({"user": user}))
+    if since is not None:
+        items = [n for n in items if n.get("created_at", 0) > since]
+    return [_notification_shape(n) for n in sorted(items, key=lambda n: n.get("created_at", 0), reverse=True)]
+
+
+def notification_mark_read(db, user, ids=None):
+    """Mark the user's notifications read — all of them when ids is None, or just `ids` if a list is
+    given. An empty list means "mark these zero" -> a no-op (NOT "mark everything")."""
+    target = set(ids) if ids is not None else None
+    for n in db.notifications.find({"user": user}):
+        if not n.get("read") and (target is None or n.get("id") in target):
+            db.notifications.update_one({"id": n["id"]}, {"$set": {"read": True}})
