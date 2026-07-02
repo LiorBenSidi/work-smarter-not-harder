@@ -99,6 +99,8 @@ def register():
     except ValueError as exc:
         return jsonify(error=str(exc)), 400
     try:
+        if _users().by_email(email):
+            return jsonify(error="an account with this email already exists"), 409
         created = _users().add(username, generate_password_hash(password), email)
     except Exception:
         logger.exception("user store unavailable during register")
@@ -110,11 +112,20 @@ def register():
 
 @auth_bp.post("/login")
 def login():
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify(error="expected a JSON object with username and password"), 400
+    identifier, password = data.get("username"), data.get("password")
+    # String-type gate = the NoSQL-injection defense: a {"$gt": ""} payload is rejected here, before
+    # it can reach a lookup. Login doesn't length-check the identifier (an email is longer than a
+    # username) — a bad identifier just falls through to the generic invalid-login below.
+    if not isinstance(identifier, str) or not isinstance(password, str):
+        return jsonify(error="username and password must be strings"), 400
+    identifier = identifier.strip()
+    username = identifier
     try:
-        username, password = validate_credentials(request.get_json(silent=True))
-    except ValueError as exc:
-        return jsonify(error=str(exc)), 400
-    try:
+        if "@" in identifier:                      # let users sign in with their registered email too
+            username = _users().by_email(identifier.lower()) or identifier
         user = _users().get(username)
     except Exception:
         logger.exception("user store unavailable during login")
@@ -233,15 +244,15 @@ def forgot_password():
     enumeration (a caller can't tell whether the email is registered)."""
     data = request.get_json(silent=True)
     email = data.get("email") if isinstance(data, dict) else None
-    ok = jsonify(status="if that email is registered, a reset link is on its way"), 200
+    body = {"status": "if that email is registered, a reset link is on its way"}
     if not isinstance(email, str):
-        return ok
+        return jsonify(body), 200
     email = email.strip().lower()
     try:
         username = _users().by_email(email)
     except Exception:
         logger.exception("user store unavailable during forgot-password")
-        return ok
+        return jsonify(body), 200
     if username:
         user = _users().get(username)
         token = _reset_serializer().dumps({"u": username, "h": (user.get("password_hash") or "")[-16:]})
@@ -250,7 +261,9 @@ def forgot_password():
         send_email(current_app.config, email, "Reset your Work Smarter password",
                    f"Reset your password with this link (valid {minutes} min):\n\n{link}\n\n"
                    "If you didn't request this, you can ignore this email.")
-    return ok
+    # Identical body whether or not the email was registered -> no account enumeration. The link is
+    # delivered ONLY by email (same send_email path as the login OTP); it is never returned here.
+    return jsonify(body), 200
 
 
 @auth_bp.post("/reset-password")
