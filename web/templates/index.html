@@ -630,6 +630,23 @@
   <script>
     const $ = (id) => document.getElementById(id);
 
+    // ---- gated debug tracing (Week-9: "logging has a cost" -> OFF for normal users) ----
+    // On only when a developer opts in: ?debug=1 in the URL, or localStorage["ws-debug"]="1". It traces
+    // the bug-prone async / session / SSE / auth paths so a race like the #109 cross-user stale-paint
+    // shows up in the console instead of as a silent wrong-data bug.
+    const DEBUG = (() => {
+      try { return new URLSearchParams(location.search).has("debug") || localStorage.getItem("ws-debug") === "1"; }
+      catch (_) { return false; }
+    })();
+    function dbg(...args) { if (DEBUG) console.log("%c[ws]", "color:#0eb389;font-weight:700", ...args); }
+    // True iff the session changed since `u` was snapshotted -> the async caller must BAIL rather than
+    // paint a prior user's data into the current view (the #109 race). Logs the bail when debugging.
+    function sessionChanged(u, where) {
+      if (u === currentUser) return false;
+      dbg("stale paint bailed:", where, "— snapshot", JSON.stringify(u), "!= current", JSON.stringify(currentUser));
+      return true;
+    }
+
     function getCookie(name) {
       const m = document.cookie.split("; ").find((c) => c.startsWith(name + "="));
       return m ? decodeURIComponent(m.split("=").slice(1).join("=")) : "";
@@ -639,14 +656,18 @@
       const opts = { method, headers: {}, credentials: "same-origin" };
       if (!["GET", "HEAD", "OPTIONS"].includes(method)) opts.headers["X-CSRF-Token"] = getCookie("csrf_token");
       if (body !== null) { opts.headers["Content-Type"] = "application/json"; opts.body = JSON.stringify(body); }
-      const res = await fetch(path, opts);
+      let res;
+      try { res = await fetch(path, opts); }
+      catch (e) { dbg("api NETWORK FAIL", method, path, "—", e && e.message); throw e; }   // preserve the reject; just make it visible
       let data = null;
       try { data = await res.json(); } catch (_) { data = null; }
+      if (!res.ok) dbg("api", method, path, "->", res.status, (data && data.error) || "");
       // A 401 while signed in means the session died mid-app (expiry, revocation, restart):
       // kick back to a clean login rather than leaving the shell up with every panel erroring.
       // Auth endpoints are exempt — their 401s (bad password, wrong code) belong to their forms.
       const authPaths = ["/login", "/verify-otp", "/register", "/forgot-password", "/reset-password", "/logout", "/me", "/auth/config"];
       if (res.status === 401 && currentUser && !authPaths.includes(path)) {
+        dbg("session ended (401 on", path + ") -> back to login");
         resetAuthState(); showView("auth");
         flash("login-flash", "Your session has ended — please log in again.");
       }
@@ -695,6 +716,7 @@
     // the OTP form still holding the emailed code after a logout. Every transition back to the
     // auth card must go through here: default tab, empty forms, no leftover secrets or flashes.
     function resetAuthState() {
+      dbg("resetAuthState: scrubbing session (was", JSON.stringify(currentUser) + ")");
       ["login-form", "register-form", "forgot-form", "reset-form", "otp-form"].forEach((id) => $(id).reset());
       ["login-flash", "register-flash", "forgot-flash", "reset-flash", "otp-flash"].forEach((id) => flash(id, "", "ok"));
       const hint = $("otp-devhint"); hint.textContent = ""; hint.hidden = true;
@@ -735,6 +757,7 @@
     onSubmit("login-form", async (f) => {
       const r = await api("/login", { method: "POST", body: { username: f.username.value, password: f.password.value } });
       if (r.ok && r.data && r.data.status === "otp_required") {
+        dbg("login -> OTP required for", JSON.stringify(r.data.username));
         // second factor: show the OTP screen. In dev (no SMTP) the server surfaces the code so the
         // grader/teammates can test without a mailbox; in production it only arrives by email.
         pendingUser = r.data.username;
@@ -750,7 +773,7 @@
 
     onSubmit("otp-form", async (f) => {
       const r = await api("/verify-otp", { method: "POST", body: { code: f.code.value, remember: $("otp-remember").checked } });
-      if (r.ok) { enterApp(r.data.username, r.data.display_name); }
+      if (r.ok) { dbg("OTP verified -> signing in"); enterApp(r.data.username, r.data.display_name); }
       else { flash("otp-flash", (r.data && r.data.error) || "Verification failed"); }
     });
 
@@ -866,7 +889,7 @@
     async function syncEmailConsent() {
       const u = currentUser;
       const r = await api("/me");
-      if (u !== currentUser || !r.ok || !r.data) return;               // stale session -> don't paint another user's setting
+      if (sessionChanged(u, "syncEmailConsent") || !r.ok || !r.data) return;   // stale session / failed fetch -> don't paint
       $("email-consent").checked = !!r.data.email_consent;
     }
     $("email-consent").addEventListener("change", async (e) => {
@@ -937,7 +960,7 @@
     async function loadProfile() {
       const u = currentUser;                                 // guard: a slow response must not stuff a prior user's profile into a new session
       const r = await api("/profile");
-      if (u !== currentUser) return;
+      if (sessionChanged(u, "loadProfile")) return;
       if (r.ok && r.data && r.data.profile) {
         const p = r.data.profile, f = $("profile-form");
         for (const k of ["age", "gender", "height", "weight", "goal", "training_frequency"]) {
@@ -979,7 +1002,7 @@
       const u = currentUser;
       const el = $("dashboard"); el.innerHTML = '<p class="muted">Loading…</p>';
       const r = await api("/dashboard");
-      if (u !== currentUser) return;                         // stale session -> don't paint another user's readiness
+      if (sessionChanged(u, "loadDashboard")) return;        // stale session -> don't paint another user's readiness
       if (!r.ok) { el.innerHTML = '<p class="flash error">Could not load the dashboard.</p>'; return; }
       const d = r.data;
       // keep the glanceable stats in sync with the AI's latest read
@@ -1044,7 +1067,7 @@
       const u = currentUser;
       const el = $("history"); el.innerHTML = '<p class="muted">Loading…</p>';
       const r = await api("/history");
-      if (u !== currentUser) return;                         // stale session -> don't paint another user's history
+      if (sessionChanged(u, "loadHistory")) return;          // stale session -> don't paint another user's history
       if (!r.ok) { el.innerHTML = '<p class="flash error">Could not load history.</p>'; return; }
       const items = (r.data && r.data.history) || [];
       statCheckins = items.length; renderStats();
@@ -1089,7 +1112,7 @@
       const u = currentUser;
       const el = $("forum-list"); el.innerHTML = '<p class="muted">Loading…</p>';
       const r = await api("/forum/posts");
-      if (u !== currentUser) return;                         // stale session -> don't paint another user's forum view
+      if (sessionChanged(u, "loadForum")) return;            // stale session -> don't paint another user's forum view
       if (!r.ok) { el.innerHTML = '<p class="flash error">Could not load the forum.</p>'; return; }
       const posts = (r.data && r.data.posts) || [];
       if (!posts.length) { el.innerHTML = '<p class="muted">No posts yet — start one above.</p>'; return; }
@@ -1105,7 +1128,7 @@
       const u = currentUser;
       currentPostId = id;
       const r = await api("/forum/posts/" + id);
-      if (u !== currentUser) return;                         // stale session -> don't open a post into a new user's view
+      if (sessionChanged(u, "openPost")) return;             // stale session -> don't open a post into a new user's view
       const box = $("forum-detail");
       if (!r.ok || !r.data || !r.data.post) { box.hidden = true; return; }
       const p = r.data.post;
@@ -1211,7 +1234,7 @@
       const u = currentUser;
       const el = $("dm-conversations");
       const r = await api("/conversations");
-      if (u !== currentUser) return;                         // stale session -> don't paint another user's inbox
+      if (sessionChanged(u, "loadConversations")) return;    // stale session -> don't paint another user's inbox
       if (!r.ok) { el.innerHTML = '<p class="flash error">Could not load conversations.</p>'; return; }
       const cs = (r.data && r.data.conversations) || [];
       if (!cs.length) { el.innerHTML = '<p class="muted">No conversations yet — start one above.</p>'; return; }
@@ -1236,7 +1259,7 @@
       if (!dmPeer) return;
       const u = currentUser, peer = dmPeer;                  // snapshot session + which thread
       const r = await api("/conversations/" + encodeURIComponent(dmPeer));
-      if (u !== currentUser || peer !== dmPeer) return;      // logged out / switched user or thread mid-flight -> don't paint a private thread into the wrong view
+      if (sessionChanged(u, "renderThread") || peer !== dmPeer) return;   // logged out / switched user or thread mid-flight -> don't paint a private thread into the wrong view
       const box = $("dm-thread");
       if (!r.ok) { box.innerHTML = '<p class="flash error">Could not load this conversation.</p>'; return; }
       // header shows the server-resolved display name (correct even for a brand-new thread); avatar keyed
@@ -1307,7 +1330,7 @@
     async function pollNotifications() {
       const u = currentUser;
       const r = await api("/notifications");
-      if (u !== currentUser) return;                       // session switched mid-flight -> ignore this stale reply
+      if (sessionChanged(u, "dmReply")) return;            // session switched mid-flight -> ignore this stale reply
       if (r.ok && r.data) {
         $("dm-dot").hidden = !(r.data.unread > 0);
         if (!$("screen-messages").hidden) renderActivity(r.data.notifications || []);  // live-refresh while open
@@ -1325,9 +1348,11 @@
     }
     function startEvents() {
       pollNotifications();                                         // initial pulse from the normal endpoint
-      if (typeof EventSource === "undefined") { startDmPolling(); return; }   // old browser -> poll
-      try { evtSource = new EventSource("/events"); } catch (_) { startDmPolling(); return; }
+      if (typeof EventSource === "undefined") { dbg("SSE unsupported -> polling"); startDmPolling(); return; }   // old browser -> poll
+      try { evtSource = new EventSource("/events"); } catch (_) { dbg("SSE construct failed -> polling"); startDmPolling(); return; }
       evtSource.addEventListener("notify", onRealtimeEvent);      // pushed the instant a notification lands
+      evtSource.onopen = () => dbg("SSE connected");
+      evtSource.onerror = () => dbg("SSE error — auto-reconnecting (45s poll is the backstop)");
       // EventSource auto-reconnects on a drop; a slow poll is the backstop if a proxy buffers the stream.
       clearInterval(dmPollTimer); dmPollTimer = setInterval(pollNotifications, 45000);
     }
@@ -1359,6 +1384,7 @@
     function enterApp(handle, name) {
       resetAuthState();  // scrub credentials/OTP state now, while the auth card is off-screen
       currentUser = handle;                     // the stable INTERNAL handle (identity: mine-checks, me/them)
+      dbg("enterApp: signed in as", JSON.stringify(handle));
       // a previous account's residue must not survive a same-browser user switch (reset BEFORE we
       // repopulate the display-name field below, so the reset can't wipe the fresh value)
       ["profile-form", "checkin-form", "forum-form", "dm-new-form", "password-form"].forEach((id) => $(id).reset());
