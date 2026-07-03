@@ -69,6 +69,20 @@ def validate_email(value):
     return value
 
 
+def validate_display_name(value):
+    """Return a clean (stripped) display name for a well-formed value, else raise ``ValueError``.
+
+    Same length bounds as a registration name; the string-type check is the NoSQL-injection gate (a
+    ``{"$gt": ""}`` object is rejected before it can reach a query). A display name need NOT be unique.
+    """
+    if not isinstance(value, str):
+        raise ValueError("display name must be a string")
+    value = value.strip()
+    if not USERNAME_MIN <= len(value) <= USERNAME_MAX:
+        raise ValueError(f"display name must be {USERNAME_MIN}-{USERNAME_MAX} characters")
+    return value
+
+
 def login_required(view):
     """Auth-gate: respond 401 unless a user is logged in. Reusable by /profile, /dashboard, ..."""
 
@@ -272,6 +286,61 @@ def logout():
 def me():
     handle = session["username"]
     return jsonify(username=handle, display_name=display_name(handle)), 200
+
+
+# ---- account settings (change the shown name / the password, from inside the app) ----
+@auth_bp.post("/account/display-name")
+@limiter.limit("20 per minute")   # light cap on rename churn
+@login_required
+def change_display_name():
+    """Change the caller's (non-unique) display name. The internal handle — what every collection keys
+    on — is untouched, so ownership / DM addressing / history are unaffected; only the shown name changes."""
+    data = request.get_json(silent=True)
+    try:
+        new_name = validate_display_name(data.get("display_name") if isinstance(data, dict) else None)
+    except ValueError as exc:
+        return jsonify(error=str(exc)), 400
+    try:
+        _users().set_display_name(session["username"], new_name)
+    except Exception:
+        logger.exception("user store unavailable during display-name change")
+        return jsonify(error="user store unavailable"), 503
+    return jsonify(status="display name updated", display_name=new_name), 200
+
+
+@auth_bp.post("/account/password")
+@limiter.limit("10 per minute")   # a hijacked, unlocked session must not brute-force the current password
+@login_required
+def change_password():
+    """Change the caller's password. Requires the CURRENT password, so an attacker on a hijacked session
+    can't silently take the account over. Re-hashing invalidates every 'remember this browser' cookie
+    (they embed the old hash tail) -> OTP is required again on the next login everywhere; this browser's
+    remember cookie is also dropped now. The current session stays logged in (the user just re-proved it)."""
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify(error="expected a JSON object"), 400
+    current_password, new_password = data.get("current_password"), data.get("new_password")
+    if not isinstance(current_password, str) or not isinstance(new_password, str):
+        return jsonify(error="current and new passwords must be strings"), 400
+    if not PASSWORD_MIN <= len(new_password) <= PASSWORD_MAX:
+        return jsonify(error=f"new password must be {PASSWORD_MIN}-{PASSWORD_MAX} characters"), 400
+    username = session["username"]
+    try:
+        user = _users().get(username)
+    except Exception:
+        logger.exception("user store unavailable during password change")
+        return jsonify(error="user store unavailable"), 503
+    stored_hash = user.get("password_hash") if isinstance(user, dict) else None
+    if not isinstance(stored_hash, str) or not check_password_hash(stored_hash, current_password):
+        return jsonify(error="current password is incorrect"), 403
+    try:
+        _users().set_password(username, generate_password_hash(new_password))
+    except Exception:
+        logger.exception("user store unavailable during password change")
+        return jsonify(error="user store unavailable"), 503
+    resp = jsonify(status="password updated")
+    resp.delete_cookie(REMEMBER_COOKIE)   # this browser must re-verify via OTP on its next login too
+    return resp, 200
 
 
 # ---- password reset (forgot-password) ----

@@ -169,6 +169,15 @@ def update_password(db, username, password_hash):
     return db.users.update_one({"username": username}, {"$set": {"password_hash": password_hash}}).matched_count > 0
 
 
+def update_display_name(db, username, display_name):
+    """Set a new (non-unique) display name for `username`. Returns True if a user matched.
+
+    Only the shown name changes — the stable, unique internal handle every collection keys on is
+    untouched, so ownership, DM addressing and history all survive a rename.
+    """
+    return db.users.update_one({"username": username}, {"$set": {"display_name": display_name}}).matched_count > 0
+
+
 # ---- login OTP (2-step verification) — a transient challenge stored on the user doc ----
 # The code is stored HASHED (never plaintext), with an absolute expiry and an attempt counter; all three
 # are $unset by clear_otp once used/expired. They're unconstrained extra fields under the users
