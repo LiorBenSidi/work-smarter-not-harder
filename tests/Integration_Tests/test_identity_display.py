@@ -40,6 +40,21 @@ def test_anonymous_post_hides_the_name_but_owner_still_sees_mine(forum_client):
     assert other["author"] == "Anonymous" and other["mine"] is False  # never reveals the anon author to others
 
 
+def test_suffixed_user_content_shows_display_name_never_the_handle(forum_client):
+    # The SECOND "sam" has handle "sam-2" but display name "sam" — so this exercises resolution where the
+    # handle differs from the shown name. Everything a person sees must say "sam", never the raw "sam-2".
+    _register(forum_client, "sam", "sam1@example.com")                                   # handle "sam"
+    h2 = _register(forum_client, "sam", "sam2@example.com").get_json()["username"]        # handle "sam-2"
+    assert h2 == "sam-2"
+    _login(forum_client, "sam2@example.com")                                             # the suffixed account
+    pid = forum_client.post("/forum/posts", json={"title": "t", "body": "b"}).get_json()["post"]["id"]
+    forum_client.post("/forum/posts/" + pid + "/comments", json={"body": "mine"})
+    p = forum_client.get("/forum/posts/" + pid).get_json()["post"]
+    assert p["author"] == "sam" and p["author"] != "sam-2"        # display name, not the internal handle
+    assert p["comments"][0]["author"] == "sam"                    # comment author resolved too
+    assert p["mine"] is True                                      # and the suffixed account still owns it
+
+
 def test_comment_author_shows_display_name(forum_client):
     _register(forum_client, "cara", "cara@example.com")
     _login(forum_client, "cara@example.com")

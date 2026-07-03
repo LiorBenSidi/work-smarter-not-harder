@@ -61,7 +61,7 @@ is implemented independently.
 
 ### Data model (MongoDB)
 
-`users` { username, password_hash } · `profiles` { username, age, gender, height, weight, goal,
+`users` { username *(the unique internal handle)*, display_name *(non-unique)*, email, password_hash } · `profiles` { username, age, gender, height, weight, goal,
 training_frequency } · `analysis_history` { username, metrics, assessment, calories, timestamp } ·
 `forum_posts` { id, author, title, body, anonymous, score, votes, comments }.
 

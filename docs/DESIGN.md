@@ -18,7 +18,7 @@ User → web ──┬──► ai   (POST /predict, internal)
 ```
 
 ## 2. Data model (MongoDB — PROPOSAL §9)
-- `users` — { username, password_hash }
+- `users` — { username *(unique internal handle)*, display_name *(non-unique, shown)*, email, password_hash }
 - `profiles` — { user_id, age, gender, height, weight, goal, training_frequency }
 - `programs` — { workout programs / exercise catalog }
 - `analysis_history` — { user_id, metrics, assessment, calories, timestamp }

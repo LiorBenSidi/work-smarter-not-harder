@@ -340,7 +340,8 @@
         </form>
 
         <form id="register-form" hidden>
-          <label for="reg-username">Username<span class="info" id="reg-username-info" tabindex="0" role="note" aria-label="Username requirements">i<span class="tip" aria-hidden="true" id="reg-username-tip"></span></span></label><input id="reg-username" name="username" autocomplete="username" required>
+          <label for="reg-username">Display name<span class="info" id="reg-username-info" tabindex="0" role="note" aria-label="Display name requirements">i<span class="tip" aria-hidden="true" id="reg-username-tip"></span></span></label><input id="reg-username" name="username" autocomplete="nickname" placeholder="Shown to others — can repeat" required>
+          <p class="muted" style="margin:2px 0 10px;font-size:12px">Shown to others and can repeat — you'll sign in with your email.</p>
           <label for="reg-email">Email</label><input id="reg-email" name="email" type="email" autocomplete="email" required>
           <label for="reg-password">Password<span id="reg-pw-minhint"></span><span class="info" id="reg-password-info" tabindex="0" role="note" aria-label="Password requirements">i<span class="tip" aria-hidden="true" id="reg-password-tip"></span></span></label><input id="reg-password" name="password" type="password" autocomplete="new-password" required>
           <div style="margin-top:16px"><button type="submit">Create account</button></div>
@@ -1184,7 +1185,7 @@
         $(tipId).textContent = lo + "–" + hi + " characters";
         $(infoId).setAttribute("aria-label", noun + " must be " + lo + " to " + hi + " characters");
       };
-      set("reg-username-info", "reg-username-tip", c.username_min, c.username_max, "Username");
+      set("reg-username-info", "reg-username-tip", c.username_min, c.username_max, "Display name");
       set("reg-password-info", "reg-password-tip", c.password_min, c.password_max, "Password");
       $("reg-pw-minhint").textContent = " (min " + c.password_min + " chars)";
       $("reg-username").minLength = c.username_min; $("reg-username").maxLength = c.username_max;
