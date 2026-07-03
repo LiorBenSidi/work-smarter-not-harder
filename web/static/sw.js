@@ -1,4 +1,4 @@
-/* Work Smarter — service worker. Makes the app installable + gives an offline app-shell.
+/* Work Smarter, Not Harder — service worker. Makes the app installable + gives an offline app-shell.
  * Conservative on purpose: only GET static/shell requests are cache-backed; the API + auth are
  * always network (never cache credentialed/CSRF responses), and non-GET requests are untouched.
  */

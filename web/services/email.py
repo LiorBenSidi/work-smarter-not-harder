@@ -22,7 +22,7 @@ def send_email(config, to, subject, body):
     """Send `body` to `to`. SMTP when ``SMTP_HOST`` is configured, else the log backend. Returns
     True if handed off (or logged), False if a configured SMTP send failed — never raises."""
     host = config.get("SMTP_HOST")
-    sender = config.get("MAIL_FROM") or "Work Smarter <no-reply@worksmarter.local>"
+    sender = config.get("MAIL_FROM") or "Work Smarter, Not Harder <no-reply@worksmarter.local>"
     if not host:
         logger.info("EMAIL (log backend) to=%s subject=%r\n%s", to, subject, body)
         return True

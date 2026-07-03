@@ -47,7 +47,7 @@ class Config:
     SMTP_USER = os.environ.get("SMTP_USER", "")
     SMTP_PASS = os.environ.get("SMTP_PASS", "")
     SMTP_STARTTLS = os.environ.get("SMTP_STARTTLS", "1") == "1"
-    MAIL_FROM = os.environ.get("MAIL_FROM", "Work Smarter <no-reply@worksmarter.local>")
+    MAIL_FROM = os.environ.get("MAIL_FROM", "Work Smarter, Not Harder <no-reply@worksmarter.local>")
     # Public base URL used to build the password-reset link in emails (the deploy sets its real domain).
     APP_BASE_URL = os.environ.get("APP_BASE_URL", "http://localhost:8000")
     # Signed-token lifetimes (seconds): password-reset link and (PR-C) the login OTP.

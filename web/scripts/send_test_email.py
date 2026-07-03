@@ -8,7 +8,7 @@ real mail — this is how you verify a provider (e.g. free Brevo) once its SMTP 
 In the container (reads the compose ``.env``):
     docker compose exec web python scripts/send_test_email.py --to you@example.com
 Locally:
-    SMTP_HOST=smtp-relay.brevo.com SMTP_USER=... SMTP_PASS=... MAIL_FROM='Work Smarter <you@dom>' \
+    SMTP_HOST=smtp-relay.brevo.com SMTP_USER=... SMTP_PASS=... MAIL_FROM='Work Smarter, Not Harder <you@dom>' \
         python web/scripts/send_test_email.py --to you@example.com
 
 Exit code 0 = handed off / logged, 1 = a configured SMTP send failed (check the creds + a verified sender).
@@ -37,8 +37,8 @@ def main():
     cfg = {k: getattr(Config, k) for k in dir(Config) if k.isupper()}
     backend = f"SMTP ({cfg['SMTP_HOST']})" if cfg.get("SMTP_HOST") else "log backend (no SMTP_HOST set)"
     logger.info("Backend: %s  ->  sending to %s ...", backend, args.to)
-    ok = send_email(cfg, args.to, "Work Smarter — test email",
-                    "This is a test from Work Smarter.\n\n"
+    ok = send_email(cfg, args.to, "Work Smarter, Not Harder — test email",
+                    "This is a test from Work Smarter, Not Harder.\n\n"
                     "If you received it, real email delivery works — your login codes and "
                     "password-reset links will arrive this way.")
     logger.info("Result: %s", "OK (handed off / logged)" if ok else

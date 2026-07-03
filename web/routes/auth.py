@@ -459,7 +459,7 @@ def forgot_password():
         token = _reset_serializer().dumps({"u": username, "h": (user.get("password_hash") or "")[-16:]})
         link = current_app.config["APP_BASE_URL"].rstrip("/") + "/?reset_token=" + token
         minutes = current_app.config["RESET_TOKEN_MAX_AGE"] // 60
-        send_email(current_app.config, email, "Reset your Work Smarter password",
+        send_email(current_app.config, email, "Reset your Work Smarter, Not Harder password",
                    f"Reset your password with this link (valid {minutes} min):\n\n{link}\n\n"
                    "If you didn't request this, you can ignore this email.")
     # Identical body whether or not the email was registered -> no account enumeration. The link is
@@ -519,8 +519,8 @@ def _issue_otp(username, email):
     ttl = current_app.config["OTP_TTL_SECONDS"]
     _users().set_otp(username, generate_password_hash(code), time.time() + ttl)
     minutes = max(1, ttl // 60)
-    send_email(current_app.config, email or "(no email on file)", "Your Work Smarter login code",
-               f"Your Work Smarter login code is: {code}\n\n"
+    send_email(current_app.config, email or "(no email on file)", "Your Work Smarter, Not Harder login code",
+               f"Your Work Smarter, Not Harder login code is: {code}\n\n"
                f"It expires in {minutes} min. If this wasn't you, you can ignore this email.")
     return None if current_app.config.get("SMTP_HOST") else code
 
