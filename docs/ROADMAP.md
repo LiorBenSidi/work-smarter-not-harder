@@ -93,7 +93,7 @@ The only coordination points are the seams (`/predict` shape, `db.py`'s function
 | Report (app + features×tests + **risk assessment**) | 🟡 first draft ([`REPORT.md`](REPORT.md)); regenerated as tests land | all (Elad: risk) |
 | Demo video of using the app | ⬜ | all |
 | Azure VM deploy + CI/CD auto-deploy (+10) | 🟡 pipeline code done (build→GHCR→SSH-deploy→Caddy HTTPS, PR #91); live VM provisioning + demo TODO | Lior (pipeline) · Elad (live VM + demo) |
-| Online Forum — real-time, 8 sub-features (+10) | 🟡 posts/comments/post-votes + anonymity + edit/delete-own + **P2P DM (text) + live DM notifications (polling) + vote notifications + anti-spam messaging rate-limit** done; open: media/attachments + file-size, comment votes, a received-engagement metric, fuller cold-seeding | Lior (CRUD/UI + DM + notifications + vote-notifs) · Elad (media) · Shiri (seed content) |
+| Online Forum — real-time, 8 sub-features (+10) | 🟡 posts/comments/post-votes + anonymity + edit/delete-own + **P2P DM (text) + live DM notifications (polling) + vote notifications + comment votes + anti-spam messaging rate-limit** done; open: media/attachments + file-size, a received-engagement metric, fuller cold-seeding | Lior (CRUD/UI + DM + notifications + vote-notifs + comment-votes) · Elad (media) · Shiri (seed content) |
 | Present 16 Jul (6 min) · demo by Wk 12 · final 23 Aug | ⬜ | all |
 | No shipped API keys | ✅ local model | Shiri |
 
