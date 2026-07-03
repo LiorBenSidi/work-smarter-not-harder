@@ -69,14 +69,28 @@ def test_forum_owner_edit_delete_wired(client):
 
 
 def test_async_renderers_guard_against_stale_session_paint(client):
-    # regression for the cross-user data-bleed race: every session-scoped async renderer must snapshot
-    # currentUser before its await and bail if the session changed before it paints (else a slow response
-    # from user A can overwrite user B's view after a fast logout->login).
+    # regression for the cross-user data-bleed race: every session-scoped async renderer snapshots
+    # currentUser before its await and bails (via sessionChanged) if the session changed before it
+    # paints — else a slow response from user A overwrites user B's view after a fast logout->login.
     html = client.get("/").get_data(as_text=True)
-    # loadProfile/loadDashboard/loadHistory/loadForum/openPost/loadConversations + the pre-existing pollNotifications
-    assert html.count("if (u !== currentUser) return") >= 7
+    # the guard helper still compares the snapshot against the live session (the load-bearing check)...
+    assert "function sessionChanged(u, where)" in html
+    assert "if (u === currentUser) return false" in html
+    # ...and every renderer routes its bail through it (loadProfile/Dashboard/History/Forum/openPost/
+    # loadConversations/renderThread/dmReply/syncEmailConsent).
+    assert html.count('sessionChanged(u, "') >= 8
     # renderThread additionally guards a mid-flight thread switch
-    assert "u !== currentUser || peer !== dmPeer" in html
+    assert "peer !== dmPeer" in html
+
+
+def test_debug_tracing_is_gated_off_by_default(client):
+    # a gated debug tracer (Week-9 "logging has a cost"): OFF for normal users, ON via ?debug=1 or
+    # localStorage "ws-debug" — so the bug-prone async/session/SSE paths are traceable without spamming
+    # a normal user's console. The #109 stale-paint site is instrumented.
+    html = client.get("/").get_data(as_text=True)
+    assert "function dbg(" in html and "if (DEBUG)" in html      # dbg no-ops unless the flag is set
+    assert 'localStorage.getItem("ws-debug")' in html and 'has("debug")' in html
+    assert 'dbg("stale paint bailed:' in html
 
 
 def test_daily_checkin_section_present_and_wired(client):
