@@ -68,6 +68,17 @@ def test_forum_owner_edit_delete_wired(client):
     assert "p.mine" in html  # buttons only on own posts (server-computed per-viewer flag; preserves anonymity)
 
 
+def test_async_renderers_guard_against_stale_session_paint(client):
+    # regression for the cross-user data-bleed race: every session-scoped async renderer must snapshot
+    # currentUser before its await and bail if the session changed before it paints (else a slow response
+    # from user A can overwrite user B's view after a fast logout->login).
+    html = client.get("/").get_data(as_text=True)
+    # loadProfile/loadDashboard/loadHistory/loadForum/openPost/loadConversations + the pre-existing pollNotifications
+    assert html.count("if (u !== currentUser) return") >= 7
+    # renderThread additionally guards a mid-flight thread switch
+    assert "u !== currentUser || peer !== dmPeer" in html
+
+
 def test_daily_checkin_section_present_and_wired(client):
     # the check-in form posts today's readiness metrics to /checkin.
     html = client.get("/").get_data(as_text=True)

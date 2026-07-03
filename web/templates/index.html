@@ -723,6 +723,7 @@
       const r = await api("/reset-password", { method: "POST", body: { token: resetToken, password: f.password.value } });
       if (r.ok) {
         f.reset();
+        resetToken = null;                                   // the token is single-use + now consumed — don't retain a spent secret in JS state
         flash("reset-flash", "Password updated — you can log in now.", "ok");
         setTimeout(() => { history.replaceState({}, "", "/"); showTab("login"); }, 1000);
       } else { flash("reset-flash", (r.data && r.data.error) || "Could not reset your password"); }
@@ -758,7 +759,9 @@
     });
 
     async function loadProfile() {
+      const u = currentUser;                                 // guard: a slow response must not stuff a prior user's profile into a new session
       const r = await api("/profile");
+      if (u !== currentUser) return;
       if (r.ok && r.data && r.data.profile) {
         const p = r.data.profile, f = $("profile-form");
         for (const k of ["age", "gender", "height", "weight", "goal", "training_frequency"]) {
@@ -797,8 +800,10 @@
     }
 
     async function loadDashboard() {
+      const u = currentUser;
       const el = $("dashboard"); el.innerHTML = '<p class="muted">Loading…</p>';
       const r = await api("/dashboard");
+      if (u !== currentUser) return;                         // stale session -> don't paint another user's readiness
       if (!r.ok) { el.innerHTML = '<p class="flash error">Could not load the dashboard.</p>'; return; }
       const d = r.data;
       // keep the glanceable stats in sync with the AI's latest read
@@ -860,8 +865,10 @@
 
     // ---- History ----
     async function loadHistory() {
+      const u = currentUser;
       const el = $("history"); el.innerHTML = '<p class="muted">Loading…</p>';
       const r = await api("/history");
+      if (u !== currentUser) return;                         // stale session -> don't paint another user's history
       if (!r.ok) { el.innerHTML = '<p class="flash error">Could not load history.</p>'; return; }
       const items = (r.data && r.data.history) || [];
       statCheckins = items.length; renderStats();
@@ -903,8 +910,10 @@
     let currentUser = null;
 
     async function loadForum() {
+      const u = currentUser;
       const el = $("forum-list"); el.innerHTML = '<p class="muted">Loading…</p>';
       const r = await api("/forum/posts");
+      if (u !== currentUser) return;                         // stale session -> don't paint another user's forum view
       if (!r.ok) { el.innerHTML = '<p class="flash error">Could not load the forum.</p>'; return; }
       const posts = (r.data && r.data.posts) || [];
       if (!posts.length) { el.innerHTML = '<p class="muted">No posts yet — start one above.</p>'; return; }
@@ -917,8 +926,10 @@
     }
 
     async function openPost(id) {
+      const u = currentUser;
       currentPostId = id;
       const r = await api("/forum/posts/" + id);
+      if (u !== currentUser) return;                         // stale session -> don't open a post into a new user's view
       const box = $("forum-detail");
       if (!r.ok || !r.data || !r.data.post) { box.hidden = true; return; }
       const p = r.data.post;
@@ -1021,8 +1032,10 @@
     }
 
     async function loadConversations() {
+      const u = currentUser;
       const el = $("dm-conversations");
       const r = await api("/conversations");
+      if (u !== currentUser) return;                         // stale session -> don't paint another user's inbox
       if (!r.ok) { el.innerHTML = '<p class="flash error">Could not load conversations.</p>'; return; }
       const cs = (r.data && r.data.conversations) || [];
       if (!cs.length) { el.innerHTML = '<p class="muted">No conversations yet — start one above.</p>'; return; }
@@ -1045,7 +1058,9 @@
 
     async function renderThread() {
       if (!dmPeer) return;
+      const u = currentUser, peer = dmPeer;                  // snapshot session + which thread
       const r = await api("/conversations/" + encodeURIComponent(dmPeer));
+      if (u !== currentUser || peer !== dmPeer) return;      // logged out / switched user or thread mid-flight -> don't paint a private thread into the wrong view
       const box = $("dm-thread");
       if (!r.ok) { box.innerHTML = '<p class="flash error">Could not load this conversation.</p>'; return; }
       // header shows the server-resolved display name (correct even for a brand-new thread); avatar keyed
@@ -1206,6 +1221,15 @@
         if (prefix) nameEl.value = prefix.slice(0, max);
       });
     })();
+
+    // Keep the SPA in sync with browser Back/Forward on the logged-OUT screens (OTP/reset/login): resolve
+    // the auth view from the URL. A no-op while signed in, so Back never disrupts an app session.
+    window.addEventListener("popstate", () => {
+      if (currentUser) return;
+      const t = new URLSearchParams(location.search).get("reset_token");
+      if (t) { resetToken = t; showView("auth"); showReset(); }
+      else { showView("auth"); showTab("login"); }
+    });
 
     // ---- Boot: am I already logged in? (GET /me) ----
     (async function init() {
