@@ -13,6 +13,7 @@ from flask import Flask, g, jsonify, render_template, request, send_from_directo
 from config import Config
 from csrf import init_csrf
 from perf import init_perf
+from ratelimit import init_limiter
 from routes.auth import auth_bp
 from routes.checkin import checkin_bp
 from routes.dashboard import dashboard_bp
@@ -221,6 +222,7 @@ def create_app(config=Config, *, users=None, profiles=None, history=None, forum=
         g._start = time.perf_counter()
 
     init_csrf(app)  # double-submit CSRF on all state-changing requests
+    init_limiter(app)  # anti-spam / anti-brute-force rate limits on the auth routes
 
     @app.after_request
     def _access_log(response):
