@@ -13,7 +13,7 @@ The backend is built and CI-gated; the open work is two teammates' lanes. If you
 - ✅ **Built (Lior):** the `web` tier (auth · profile · daily check-in · dashboard · history · forum CRUD+UI ·
   **direct messages + live DM notifications** (the Chat tab: conversations · threads · generative avatars · a
   polling notification pulse · an anti-spam messaging rate-limit) · **vote notifications** (an up/downvote pings
-  the post author, shown in an Activity feed) · SPA frontend + CSRF + installable PWA);
+  the post author, shown in an Activity feed) · **comment up/down-votes** · SPA frontend + CSRF + installable PWA);
   the **whole data layer** (`web/services/db.py` CRUD + Mongo indexes /
   `$jsonSchema` validators / auth config / `db/seed.py` / backup script); **Week-9 logging**; the 3-container
   Docker build with fault tolerance; the **CI gate** (ruff · bandit · pytest); and the **CI/CD deploy pipeline**
@@ -28,7 +28,7 @@ The backend is built and CI-gated; the open work is two teammates' lanes. If you
   test-runner service. See [`PERSON3.md`](PERSON3.md).
 - ℹ️ **Online Forum (§10) status:** posts · comments · anonymity · post up/down-votes · **P2P direct messages
   (text) · live DM notifications (polling) · anti-spam messaging rate-limit** are built. Still open: media
-  attachments + file-size limits · comment votes · a received-engagement profile metric ·
+  attachments + file-size limits · a received-engagement profile metric ·
   fuller cold-seeding (the seed content is Shiri's). See [`docs/FEEDBACK.md`](docs/FEEDBACK.md) §2 for the rubric.
 
 ## ⛔ Workflow — `main` is PR-only (enforced server-side)
