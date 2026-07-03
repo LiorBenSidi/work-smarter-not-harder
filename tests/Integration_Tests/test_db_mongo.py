@@ -16,7 +16,7 @@ from pathlib import Path
 import pytest
 
 WEB = Path(__file__).resolve().parents[2] / "web"
-_COLLECTIONS = ("users", "profiles", "analysis_history", "forum_posts")
+_COLLECTIONS = ("users", "profiles", "analysis_history", "forum_posts", "messages", "notifications")
 
 
 @pytest.fixture

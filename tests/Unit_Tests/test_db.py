@@ -110,7 +110,7 @@ def test_ensure_indexes_creates_unique_constraints(db_mod, db):
 def test_ensure_schema_applies_a_jsonschema_validator_to_every_collection(db_mod, db):
     db_mod.ensure_schema(db)
     targets = {value for (cmd, value, kw) in db.commands if cmd == "collMod"}
-    assert targets == {"users", "profiles", "analysis_history", "forum_posts"}
+    assert targets == {"users", "profiles", "analysis_history", "forum_posts", "messages", "notifications"}
     for (cmd, value, kw) in db.commands:
         assert "$jsonSchema" in kw["validator"]              # each carries a shape validator
 
@@ -150,7 +150,7 @@ def test_ensure_schema_creates_collection_when_namespace_absent(db_mod):
 
     db = _AbsentDB()
     db_mod.ensure_schema(db)
-    assert set(db.created) == {"users", "profiles", "analysis_history", "forum_posts"}
+    assert set(db.created) == {"users", "profiles", "analysis_history", "forum_posts", "messages", "notifications"}
 
 
 # ---- users ----
