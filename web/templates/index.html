@@ -109,7 +109,8 @@
     button:disabled { opacity:.5; cursor:not-allowed; }
     button.ghost { background:transparent; color:var(--ink); border:1px solid var(--line); box-shadow:none; font-weight:700; }
     button.ghost:hover { border-color: color-mix(in srgb, var(--accent) 55%, transparent); background:var(--field); filter:none; }
-    button.mini { padding:7px 13px; font-size:12.5px; }
+    button.mini { padding:7px 13px; font-size:12.5px; min-height:44px; min-width:44px;
+      display:inline-flex; align-items:center; justify-content:center; }  /* ≥44px tap target (WCAG 2.5.5) while staying visually compact */
     button.block { width:100%; }
 
     .row { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
@@ -227,8 +228,10 @@
     .post:hover { transform: translateY(-2px); border-color: color-mix(in srgb, var(--accent) 45%, transparent); }
     .post-top { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:4px; }
     .detail { background: color-mix(in srgb, var(--field) 60%, var(--card)); margin-top:12px; position:relative; }
-    .detail h3 { margin:0 4px 4px 0; font-size:19px; } .detail .by { margin:0 0 10px; } .detail .body { margin:0 0 14px; }
-    .detail .close { position:absolute; top:14px; right:14px; padding:6px 11px; }
+    .detail h3 { margin:0 4px 4px 0; font-size:19px; padding-right:44px; } .detail .by { margin:0 0 10px; } .detail .body { margin:0 0 14px; }
+    /* 44×44 tap target, glyph optically centered; padding-right on h3 above keeps a long title clear of it */
+    .detail .close { position:absolute; top:10px; right:10px; padding:0; min-width:44px; min-height:44px;
+      display:inline-flex; align-items:center; justify-content:center; }
     .vote-row { display:flex; align-items:center; gap:10px; margin:4px 0 2px; }
     .own-actions { margin-top:10px; display:flex; gap:8px; }
     .comments { list-style:none; padding:0; margin:8px 0 0; }
@@ -320,7 +323,7 @@
     .settings-group { border:1px solid var(--line); border-radius:14px; padding:12px 12px 8px; margin:0; }
     .settings-group legend { padding:0 6px; font-size:13px; color:var(--muted); }
     .settings-group .seg { display:inline-flex; align-items:center; gap:7px; margin:4px 8px 4px 0; padding:8px 13px;
-      border:1px solid var(--line); border-radius:999px; cursor:pointer; font-size:14px; min-height:40px; }
+      border:1px solid var(--line); border-radius:999px; cursor:pointer; font-size:14px; min-height:44px; }
     .settings-group .seg input { accent-color:var(--accent); margin:0; }
     .settings-group .seg:has(input:checked) { border-color: color-mix(in srgb, var(--accent) 60%, transparent); background:var(--field); }
     .settings-group .seg:has(input:focus-visible) { outline:2px solid var(--accent); outline-offset:2px; }
