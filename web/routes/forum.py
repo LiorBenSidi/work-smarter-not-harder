@@ -1,10 +1,13 @@
-"""Forum routes — posts / comments / votes (gated). OWNER: Lior (CRUD + UI).
+"""Forum routes — posts / comments / votes + vote notifications (gated). OWNER: Lior (CRUD + UI).
 
-Lior's slice of the Online Forum (+10); Elad owns the real-time push / notifications / media, Shiri
-the cold-seed content. Input is validated + injection-safe before any query; the forum store is
-injected (``app.config["FORUM"]`` — the web->db seam). Anonymous posts hide the author in responses.
+Lior's slice of the Online Forum (+10). A vote now pushes a live notification to the post's author
+(§2.6) through the shared notification feed (the same feed DMs use, delivered in real time by the
+SSE stream); media/attachments on posts+comments remain open, and the cold-seed content is Shiri's.
+Input is validated + injection-safe before any query; the forum + notification stores are injected
+(the web->db seam). Anonymous posts hide the author in responses (but the owner is still notified).
 """
 import logging
+import time
 
 from flask import Blueprint, current_app, jsonify, request, session
 
@@ -64,6 +67,42 @@ def _detail(post):
 
 def _forum():
     return current_app.config["FORUM"]
+
+
+def _notifications():
+    return current_app.config["NOTIFICATIONS"]
+
+
+# Anti-spam (§2.7): collapse repeated votes from the SAME voter on the SAME post into one ping per
+# window, so toggling up/down can't flood the author's feed. A genuinely later vote (past the window)
+# pings again — coalescing is time-bounded, never a permanent mute — and the bounded lookback keeps the
+# check cheap (we only scan notifications newer than the cutoff, not the author's whole history).
+VOTE_NOTIFY_COALESCE_SECONDS = 60
+
+
+def _notify_author_of_vote(post_id, voter, value):
+    """Tell a post's author their post was up/downvoted (Online-Forum §2.6, live notifications).
+
+    Best-effort: a notification hiccup must NEVER fail the vote itself (mirrors the DM-send path). A
+    self-vote is skipped, and rapid re-votes are coalesced within the window above (the score is always
+    authoritative, so the ping is just "someone engaged" — it needn't track every flip). The author is
+    read from the store, which keeps the REAL author even for an anonymous post — anonymity is a
+    display-layer projection, so the owner is still notified about their own post.
+    """
+    try:
+        post = _forum().get_post(post_id)
+        author = post.get("author") if post else None
+        if not author or author == voter:
+            return
+        cutoff = time.time() - VOTE_NOTIFY_COALESCE_SECONDS
+        recent = any(n.get("type") == "vote" and n.get("ref") == post_id and n.get("actor") == voter
+                     for n in _notifications().list(author, since=cutoff))
+        if recent:
+            return
+        verb = "upvoted" if value == 1 else "downvoted"
+        _notifications().add(author, "vote", voter, post_id, f"{voter} {verb} your post")
+    except Exception:
+        logger.warning("could not create a vote notification", exc_info=True)
 
 
 @forum_bp.get("/forum/posts")
@@ -159,15 +198,17 @@ def add_comment(post_id):
 @forum_bp.post("/forum/posts/<post_id>/vote")
 @login_required
 def vote(post_id):
+    voter = session["username"]
     data = request.get_json(silent=True)
     value = data.get("value") if isinstance(data, dict) else None
     if type(value) is not int or value not in (1, -1):  # exactly the ints +1 / -1 (no bool, no float)
         return jsonify(error="value must be 1 or -1"), 400
     try:
-        score = _forum().vote(post_id, session["username"], value)
+        score = _forum().vote(post_id, voter, value)
     except Exception:
         logger.exception("forum store unavailable")
         return jsonify(error="forum store unavailable"), 503
     if score is None:
         return jsonify(error="post not found"), 404
+    _notify_author_of_vote(post_id, voter, value)   # live push to the author; never fails the vote
     return jsonify(score=score), 200
