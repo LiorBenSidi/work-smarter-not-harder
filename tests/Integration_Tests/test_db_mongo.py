@@ -56,7 +56,19 @@ def test_users_roundtrip_and_dedupe(db_mod, real_db):
     db_mod.ensure_indexes(real_db)
     assert db_mod.create_user(real_db, "alice", "h1") is True
     assert db_mod.create_user(real_db, "alice", "h2") is False           # upsert dup -> False
-    assert db_mod.get_user(real_db, "alice") == {"username": "alice", "password_hash": "h1", "email": None}  # no _id
+    assert db_mod.get_user(real_db, "alice") == {"username": "alice", "password_hash": "h1", "email": None, "display_name": "alice"}  # no _id
+
+
+def test_create_user_stores_and_returns_the_display_name(db_mod, real_db):
+    # the identity model: the handle is unique; the display name is stored separately (need not be unique)
+    # and comes back on get_user. A second account may share the display name under a different handle.
+    db_mod.ensure_indexes(real_db)
+    assert db_mod.create_user(real_db, "alex", "h1", "alex@example.com", display_name="Alex") is True
+    assert db_mod.create_user(real_db, "alex-2", "h2", "alex2@example.com", display_name="Alex") is True
+    u1 = db_mod.get_user(real_db, "alex")
+    u2 = db_mod.get_user(real_db, "alex-2")
+    assert u1["display_name"] == "Alex" == u2["display_name"]     # same shown name
+    assert u1["username"] == "alex" and u2["username"] == "alex-2"  # distinct handles
 
 
 def test_otp_challenge_roundtrip(db_mod, real_db):
@@ -70,7 +82,7 @@ def test_otp_challenge_roundtrip(db_mod, real_db):
     assert db_mod.bump_otp_attempts(real_db, "alice") == 2
     db_mod.clear_otp(real_db, "alice")
     assert db_mod.get_otp(real_db, "alice") is None
-    assert db_mod.get_user(real_db, "alice") == {"username": "alice", "password_hash": "h1", "email": None}
+    assert db_mod.get_user(real_db, "alice") == {"username": "alice", "password_hash": "h1", "email": None, "display_name": "alice"}
 
 
 def test_profile_and_history_roundtrip(db_mod, real_db):
