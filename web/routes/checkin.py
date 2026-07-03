@@ -11,6 +11,7 @@ be determined during data exploration and may change"). To add/remove/retune a m
 """
 import datetime
 import logging
+import math
 
 from flask import Blueprint, current_app, jsonify, request, session
 
@@ -45,6 +46,8 @@ def validate_checkin(data):
         allowed = int if integer else (int, float)
         if isinstance(value, bool) or not isinstance(value, allowed):
             raise ValueError(f"{name} must be a number")
+        if not math.isfinite(value):                 # explicit: reject NaN/Infinity (don't rely on the range bound alone)
+            raise ValueError(f"{name} must be a finite number")
         if not lo <= value <= hi:
             raise ValueError(f"{name} must be between {lo} and {hi}")
         clean[name] = value
