@@ -178,6 +178,18 @@ def update_display_name(db, username, display_name):
     return db.users.update_one({"username": username}, {"$set": {"display_name": display_name}}).matched_count > 0
 
 
+def get_email_consent(db, username):
+    """Whether the user opted in to NON-ESSENTIAL email. Default False (GDPR: consent is opt-in). Security
+    email (login OTP, password reset) is transactional and is sent regardless of this flag."""
+    doc = db.users.find_one({"username": username})
+    return bool(doc.get("email_consent")) if doc else False
+
+
+def set_email_consent(db, username, consent):
+    """Record the user's opt-in/out for non-essential email. Returns True if a user matched."""
+    return db.users.update_one({"username": username}, {"$set": {"email_consent": bool(consent)}}).matched_count > 0
+
+
 # ---- login OTP (2-step verification) — a transient challenge stored on the user doc ----
 # The code is stored HASHED (never plaintext), with an absolute expiry and an attempt counter; all three
 # are $unset by clear_otp once used/expired. They're unconstrained extra fields under the users
@@ -515,3 +527,30 @@ def forum_purge_user(db, username):
                 {"id": post["id"]},
                 {"$set": {"comments": kept_comments, "votes": pvotes,
                           "score": sum(v["value"] for v in pvotes)}})
+
+
+# ---- account data export (GDPR right to data portability) — the user's own data, as JSON ----
+def forum_export_user(db, username):
+    """The user's forum footprint: posts they authored (public shape), comments they wrote (with the
+    parent post's id + title), and every vote they cast — on posts and on comments."""
+    posts, comments, votes = [], [], []
+    for post in db.forum_posts.find():
+        if post.get("author") == username:
+            posts.append(_shape(post))
+        for pv in post.get("votes", []):
+            if pv.get("user") == username:
+                votes.append({"post_id": post["id"], "value": pv.get("value")})
+        for c in post.get("comments", []):
+            if c.get("author") == username:
+                comments.append({"post_id": post["id"], "post_title": post.get("title"),
+                                 "body": c.get("body"), "score": c.get("score", 0)})
+            for cv in c.get("votes", []):
+                if cv.get("user") == username:
+                    votes.append({"post_id": post["id"], "comment_id": c.get("id"), "value": cv.get("value")})
+    return {"posts": posts, "comments": comments, "votes": votes}
+
+
+def message_export_for_user(db, username):
+    """Every DM the user sent or received, oldest first — for a data export."""
+    msgs = list(db.messages.find({"sender": username})) + list(db.messages.find({"recipient": username}))
+    return [_message_shape(m) for m in sorted(msgs, key=lambda m: m.get("created_at", 0))]

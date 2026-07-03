@@ -71,6 +71,14 @@ class _DbUsers(_DbStore):
         db_module, handle = self._resolve()
         return db_module.delete_user(handle, username)
 
+    def get_email_consent(self, username):
+        db_module, handle = self._resolve()
+        return db_module.get_email_consent(handle, username)
+
+    def set_email_consent(self, username, consent):
+        db_module, handle = self._resolve()
+        return db_module.set_email_consent(handle, username, consent)
+
     def set_otp(self, username, otp_hash, expires_at):
         db_module, handle = self._resolve()
         return db_module.set_otp(handle, username, otp_hash, expires_at)
@@ -162,6 +170,10 @@ class _DbForum(_DbStore):
         db_module, handle = self._resolve()
         db_module.forum_purge_user(handle, username)
 
+    def export_user(self, username):
+        db_module, handle = self._resolve()
+        return db_module.forum_export_user(handle, username)
+
 
 class _DbMessages(_DbStore):
     """Seam Lior implements: ``message_send`` / ``message_list_conversation`` /
@@ -190,6 +202,10 @@ class _DbMessages(_DbStore):
     def delete_for_user(self, username):
         db_module, handle = self._resolve()
         db_module.message_delete_for_user(handle, username)
+
+    def export_for_user(self, username):
+        db_module, handle = self._resolve()
+        return db_module.message_export_for_user(handle, username)
 
 
 class _DbNotifications(_DbStore):
