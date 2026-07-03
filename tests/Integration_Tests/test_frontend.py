@@ -137,6 +137,14 @@ def test_account_editing_ui_present_and_wired(client):
     assert 'autocomplete="current-password"' in html and 'autocomplete="new-password"' in html
 
 
+def test_delete_account_ui_present_and_wired(client):
+    # GDPR erasure: a two-step delete control that DELETEs /account behind a password confirmation.
+    html = client.get("/").get_data(as_text=True)
+    assert 'id="delete-reveal"' in html and 'id="delete-form"' in html
+    assert 'method: "DELETE"' in html and '"/account"' in html
+    assert 'id="delete-password"' in html
+
+
 def test_manifest_is_served_for_pwa(client):
     # the web manifest makes the app installable (name + icons + start_url), at the right mimetype.
     resp = client.get("/manifest.webmanifest")

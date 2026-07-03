@@ -68,6 +68,9 @@ class FakeUsers:
         rec["display_name"] = display_name
         return True
 
+    def delete(self, username):
+        return self._by_name.pop(username, None) is not None
+
     # ---- login-OTP challenge (mirrors db.py set_otp/get_otp/clear_otp/bump_otp_attempts) ----
     def set_otp(self, username, otp_hash, expires_at):
         rec = self._by_name.get(username)
@@ -109,6 +112,9 @@ class FakeProfiles:
     def save(self, username, profile):
         self._by_user[username] = profile
 
+    def delete(self, username):
+        self._by_user.pop(username, None)
+
 
 class FakeHistory:
     """In-memory analysis-history store — the `web -> db` seam Lior implements in db.py (.list / .add)."""
@@ -121,6 +127,9 @@ class FakeHistory:
 
     def add(self, username, entry):
         self._by_user.setdefault(username, []).append(entry)
+
+    def delete(self, username):
+        self._by_user.pop(username, None)
 
 
 class FakeForum:
@@ -190,6 +199,18 @@ class FakeForum:
         del self._posts[post_id]
         return True
 
+    def purge_user(self, username):
+        # GDPR erasure: drop the user's own posts, then strip their comments + votes (dict-keyed here)
+        # out of everyone else's posts, recomputing scores. Mirrors db.forum_purge_user.
+        self._posts = {pid: p for pid, p in self._posts.items() if p["author"] != username}
+        for p in self._posts.values():
+            p["comments"] = [c for c in p["comments"] if c.get("author") != username]
+            for c in p["comments"]:
+                c.get("votes", {}).pop(username, None)
+                c["score"] = sum(c.get("votes", {}).values())
+            p["votes"].pop(username, None)
+            p["score"] = sum(p["votes"].values())
+
 
 class FakeMessages:
     """In-memory DM store — mirrors db.py's ``message_*`` seam contract. ``created_at`` is a real epoch
@@ -233,6 +254,9 @@ class FakeMessages:
     def count_since(self, user, since):
         return sum(1 for m in self._msgs if m["sender"] == user and m["created_at"] >= since)
 
+    def delete_for_user(self, username):
+        self._msgs = [m for m in self._msgs if username not in (m["sender"], m["recipient"])]
+
 
 class FakeNotifications:
     """In-memory notification store — mirrors db.py's ``notification_*`` seam contract."""
@@ -262,6 +286,9 @@ class FakeNotifications:
         for n in self._items:
             if n["user"] == user and (target is None or n["id"] in target):
                 n["read"] = True
+
+    def delete_for_user(self, username):
+        self._items = [n for n in self._items if n["user"] != username and n.get("actor") != username]
 
 
 class _CsrfClient:

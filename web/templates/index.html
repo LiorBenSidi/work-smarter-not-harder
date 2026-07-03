@@ -112,6 +112,11 @@
     button.mini { padding:7px 13px; font-size:12.5px; min-height:44px; min-width:44px;
       display:inline-flex; align-items:center; justify-content:center; }  /* ≥44px tap target (WCAG 2.5.5) while staying visually compact */
     button.block { width:100%; }
+    /* destructive actions (delete account): an outlined-red reveal + a solid-red final confirm */
+    button.danger { background:#dc2626; color:#fff; box-shadow:0 12px 26px -14px rgba(220,38,38,.55); }
+    button.danger:hover { filter:brightness(1.06); box-shadow:0 16px 32px -14px rgba(220,38,38,.7); }
+    button.ghost.danger { background:transparent; color:var(--err); border:1px solid color-mix(in srgb, var(--err) 45%, transparent); box-shadow:none; }
+    button.ghost.danger:hover { background: color-mix(in srgb, var(--err) 12%, transparent); border-color:var(--err); filter:none; }
 
     .row { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
     .flash { font-size:13.5px; margin-top:12px; min-height:18px; font-weight:600; }
@@ -573,6 +578,20 @@
             <p id="profile-user" class="muted" style="margin:0 0 12px"></p>
             <button id="logout-btn" class="ghost block">Log out</button>
           </div>
+          <div class="card">
+            <h2><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14M10 11v6M14 11v6"/></svg><span class="grow">Delete account</span></h2>
+            <p class="muted" style="margin:-2px 0 12px">Permanently deletes your account and everything tied to it — profile, check-in history, forum posts and comments, messages, and notifications. This can't be undone.</p>
+            <button id="delete-reveal" class="ghost danger block" type="button">Delete my account…</button>
+            <form id="delete-form" hidden>
+              <label for="delete-password">Confirm your password to delete everything</label>
+              <input id="delete-password" name="password" type="password" autocomplete="current-password" required>
+              <div style="display:flex;gap:8px;margin-top:12px">
+                <button type="submit" class="danger" style="flex:1">Delete forever</button>
+                <button id="delete-cancel" type="button" class="ghost" style="flex:1">Cancel</button>
+              </div>
+              <div id="delete-flash" class="flash" aria-live="polite"></div>
+            </form>
+          </div>
         </section>
       </div>
 
@@ -826,6 +845,27 @@
       f.reset();
       if (r.ok) { flash("password-flash", "Password updated.", "ok"); }
       else { flash("password-flash", (r.data && r.data.error) || "Could not update your password"); }
+    });
+
+    // Delete account (GDPR erasure) — a two-step reveal so a single stray click can't wipe the account.
+    $("delete-reveal").addEventListener("click", () => {
+      $("delete-reveal").hidden = true; $("delete-form").hidden = false; $("delete-password").focus();
+    });
+    $("delete-cancel").addEventListener("click", () => {
+      $("delete-form").reset(); flash("delete-flash", "", "ok");
+      $("delete-form").hidden = true; $("delete-reveal").hidden = false;
+    });
+    onSubmit("delete-form", async (f) => {
+      const r = await api("/account", { method: "DELETE", body: { password: f.password.value } });
+      f.reset();
+      if (r.ok) {
+        resetAuthState();                                                 // scrub session + close the SSE stream (as on logout)
+        $("delete-form").hidden = true; $("delete-reveal").hidden = false;  // restore the card's default state
+        showView("auth");
+        flash("login-flash", "Your account and all your data were deleted.", "ok");
+      } else {
+        flash("delete-flash", (r.data && r.data.error) || "Could not delete your account");  // leave the form open to retry
+      }
     });
 
     // ---- Daily check-in ----
