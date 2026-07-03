@@ -246,6 +246,10 @@
     .dm-unread { flex:none; min-width:20px; height:20px; padding:0 6px; border-radius:999px; font-size:11px; font-weight:800;
       display:inline-flex; align-items:center; justify-content:center; color:var(--on-accent);
       background:linear-gradient(135deg,var(--accent),var(--accent2)); }
+    /* Activity rows are read-only (no thread to open): drop the pointer + hover, keep an unread accent bar */
+    .dm-row.act { cursor:default; }
+    .dm-row.act:hover { background:transparent; border-color:transparent; }
+    .dm-row.unread { box-shadow: inset 3px 0 0 var(--accent); }
     .dm-thread-head { display:flex; align-items:center; gap:12px; margin-bottom:14px; }
     .dm-peer { display:flex; align-items:center; gap:10px; font-weight:800; }
     .dm-thread { display:flex; flex-direction:column; gap:8px; max-height:52vh; overflow-y:auto; padding:4px 2px; }
@@ -437,6 +441,11 @@
               <h2><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H8l-4 4V5a2 2 0 0 1 2-2h13a2 2 0 0 1 2 2z"/></svg><span class="grow">Conversations</span>
                 <button id="dm-refresh" class="ghost mini">Refresh</button></h2>
               <div id="dm-conversations"><p class="muted">Loading…</p></div>
+            </div>
+            <div class="card">
+              <h2><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a1.9 1.9 0 0 1-3.4 0"/></svg><span class="grow">Activity</span>
+                <button id="activity-read" class="ghost mini" hidden>Mark all read</button></h2>
+              <div id="activity-list" aria-live="polite"><p class="muted">Loading…</p></div>
             </div>
           </div>
           <div id="dm-thread-view" hidden>
@@ -990,12 +999,46 @@
 
     $("dm-refresh").addEventListener("click", loadConversations);
 
+    // ---- Activity feed (non-DM notifications — e.g. someone up/downvoting your post) ----
+    function timeAgo(sec) {
+      const d = Math.max(0, Date.now() / 1000 - (sec || 0));
+      if (d < 60) return "just now";
+      if (d < 3600) return Math.floor(d / 60) + "m ago";
+      if (d < 86400) return Math.floor(d / 3600) + "h ago";
+      return Math.floor(d / 86400) + "d ago";
+    }
+    // Pure render from an already-fetched list (DMs surface in the thread list, so they're filtered out
+    // here) — the caller owns the request, so a poll tick and the initial open share one fetch.
+    function renderActivity(notifications) {
+      const el = $("activity-list"), btn = $("activity-read");
+      if (!el) return;
+      const items = (notifications || []).filter((n) => n.type !== "dm");
+      if (!items.length) { el.innerHTML = '<p class="muted">No new activity yet.</p>'; btn.hidden = true; return; }
+      el.innerHTML = items.map((n) =>
+        '<div class="dm-row act' + (n.read ? "" : " unread") + '">' + avatarHtml(n.actor || "·", 40)
+        + '<div class="dm-main"><div class="dm-name">' + escapeHtml(n.text || "") + '</div>'
+        + '<div class="dm-last">' + escapeHtml(timeAgo(n.created_at)) + '</div></div></div>'
+      ).join("");
+      btn.hidden = !items.some((n) => !n.read);
+    }
+    $("activity-read").addEventListener("click", async () => {
+      const r = await api("/notifications");
+      if (r.ok && r.data) {
+        const ids = (r.data.notifications || []).filter((n) => n.type !== "dm" && !n.read).map((n) => n.id);
+        if (ids.length) await api("/notifications/read", { method: "POST", body: { ids } });
+      }
+      pollNotifications();                                  // repaint the feed + clear the Chat-tab pulse
+    });
+
     // Poll the notification feed so the Chat tab's pulse reflects unread messages without a refresh.
     async function pollNotifications() {
       const u = currentUser;
       const r = await api("/notifications");
       if (u !== currentUser) return;                       // session switched mid-flight -> ignore this stale reply
-      if (r.ok && r.data) $("dm-dot").hidden = !(r.data.unread > 0);
+      if (r.ok && r.data) {
+        $("dm-dot").hidden = !(r.data.unread > 0);
+        if (!$("screen-messages").hidden) renderActivity(r.data.notifications || []);  // live-refresh while open
+      }
     }
     function startDmPolling() { pollNotifications(); clearInterval(dmPollTimer); dmPollTimer = setInterval(pollNotifications, 15000); }
     function stopDmPolling() { clearInterval(dmPollTimer); clearInterval(dmThreadTimer); dmPollTimer = dmThreadTimer = null; dmPeer = null; }
@@ -1028,6 +1071,7 @@
         const dmIds = notes.filter((n) => n.type === "dm" && !n.read).map((n) => n.id);
         if (dmIds.length) await api("/notifications/read", { method: "POST", body: { ids: dmIds } });
         $("dm-dot").hidden = notes.filter((n) => n.type !== "dm" && !n.read).length === 0;
+        renderActivity(notes);                             // vote interactions live in the Activity feed
       }
     }
 

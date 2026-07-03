@@ -349,8 +349,10 @@ def fake_forum():
 
 
 @pytest.fixture
-def forum_client(make_client, fake_users, fake_forum):
-    return make_client(fake_users, forum=fake_forum)
+def forum_client(make_client, fake_users, fake_forum, fake_notifications):
+    # notifications injected too: a vote now pings the post's author, so the forum flow needs a real
+    # (fake) notification store — otherwise the best-effort ping would try to resolve Mongo.
+    return make_client(fake_users, forum=fake_forum, notifications=fake_notifications)
 
 
 @pytest.fixture

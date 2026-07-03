@@ -3,10 +3,10 @@
 > Your area, the mandatory course items, and a roadmap. How you build it is your call. You own what
 > **ships, scales, and runs the app live** — taking the Azure deploy + CI/CD pipeline **live** (the pipeline
 > *code* is already in the repo — see Lior / [`docs/CICD_REPORT.md`](docs/CICD_REPORT.md)), the cross-container
-> test harness, and scaling — plus the remaining Forum **media/attachments** and vote notifications.
+> test harness, and scaling — plus the remaining Forum **media/attachments**.
 > `docker-compose.yml` is your starting point. *(P2P DM (text) + live DM notifications are already built — see
-> [`PERSON2.md`](PERSON2.md) / [`docs/ROADMAP.md`](docs/ROADMAP.md); the notification feed + polling are in place
-> for vote notifications to hook into.)*
+> [`PERSON2.md`](PERSON2.md) / [`docs/ROADMAP.md`](docs/ROADMAP.md); vote notifications are built too, so the
+> notification feed is already in place for media to hook into.)*
 
 ## Start now — unblocked on day 1
 The 3-container skeleton already runs, so you can start the Azure setup, the test-runner service, the
@@ -42,7 +42,7 @@ stress harness, and the remaining Forum media/attachments immediately — none o
   stack (your Dockerfile / how the tests mount into an image).
 - [ ] **Cross-container tests** — integration (web→ai→db) + system (register→profile→readiness) +
   **fault-isolation (stop `ai` / stop `db` → web survives)** + stress (locust).
-- [ ] **Forum:** media/attachment storage (images/video in posts, comments and DMs) + file-size limits + **upvote/downvote notifications** (hook into the existing `/notifications` feed + polling). *(P2P DM (text) + live DM notifications are built.)*
+- [ ] **Forum:** media/attachment storage (images/video in posts, comments and DMs) + file-size limits. *(P2P DM (text), live DM notifications, and vote notifications are built — see [`PERSON2.md`](PERSON2.md); the notification feed is in place for media to hook into.)*
 - [ ] **Rate limiting** — `flask-limiter` on the public routes (login/register/forum). *(Messaging already has an anti-spam rate-limit — 20/min.)*
 - [ ] **Risk assessment** — anchor the report's "what can go wrong" section (with the team's input).
 
