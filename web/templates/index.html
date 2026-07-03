@@ -583,10 +583,12 @@
             <p class="muted" style="margin:-2px 0 12px">Permanently deletes your account and everything tied to it — profile, check-in history, forum posts and comments, messages, and notifications. This can't be undone.</p>
             <button id="delete-reveal" class="ghost danger block" type="button">Delete my account…</button>
             <form id="delete-form" hidden>
-              <label for="delete-password">Confirm your password to delete everything</label>
+              <label for="delete-password">Confirm your password</label>
               <input id="delete-password" name="password" type="password" autocomplete="current-password" required>
+              <label for="delete-confirm" style="margin-top:12px">Then type <b>DELETE</b> to confirm</label>
+              <input id="delete-confirm" name="confirm" type="text" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="DELETE" required>
               <div style="display:flex;gap:8px;margin-top:12px">
-                <button type="submit" class="danger" style="flex:1">Delete forever</button>
+                <button type="submit" class="danger" style="flex:1" disabled>Delete forever</button>
                 <button id="delete-cancel" type="button" class="ghost" style="flex:1">Cancel</button>
               </div>
               <div id="delete-flash" class="flash" aria-live="polite"></div>
@@ -847,24 +849,33 @@
       else { flash("password-flash", (r.data && r.data.error) || "Could not update your password"); }
     });
 
-    // Delete account (GDPR erasure) — a two-step reveal so a single stray click can't wipe the account.
+    // Delete account (GDPR erasure) — a two-step reveal PLUS a typed "DELETE" confirmation (GitHub-style
+    // intent gate) on top of the password, so neither a stray click nor an autofilled password alone can
+    // wipe the account. The typed word is a client-side intent check; the server's real gate is still the
+    // password. "Delete forever" stays disabled until the word matches exactly.
+    function syncDeleteBtn() {
+      $("delete-form").querySelector("button[type=submit]").disabled = $("delete-confirm").value.trim() !== "DELETE";
+    }
+    function resetDeleteUI() {
+      $("delete-form").reset(); syncDeleteBtn(); flash("delete-flash", "", "ok");
+      $("delete-form").hidden = true; $("delete-reveal").hidden = false;
+    }
+    $("delete-confirm").addEventListener("input", syncDeleteBtn);
     $("delete-reveal").addEventListener("click", () => {
       $("delete-reveal").hidden = true; $("delete-form").hidden = false; $("delete-password").focus();
     });
-    $("delete-cancel").addEventListener("click", () => {
-      $("delete-form").reset(); flash("delete-flash", "", "ok");
-      $("delete-form").hidden = true; $("delete-reveal").hidden = false;
-    });
-    onSubmit("delete-form", async (f) => {
-      const r = await api("/account", { method: "DELETE", body: { password: f.password.value } });
-      f.reset();
+    $("delete-cancel").addEventListener("click", resetDeleteUI);
+    $("delete-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      e.target.querySelector("button[type=submit]").disabled = true;     // in-flight guard
+      const r = await api("/account", { method: "DELETE", body: { password: e.target.password.value } });
       if (r.ok) {
-        resetAuthState();                                                 // scrub session + close the SSE stream (as on logout)
-        $("delete-form").hidden = true; $("delete-reveal").hidden = false;  // restore the card's default state
-        showView("auth");
+        resetDeleteUI(); resetAuthState(); showView("auth");            // scrub session + close the SSE stream (as on logout)
         flash("login-flash", "Your account and all your data were deleted.", "ok");
       } else {
-        flash("delete-flash", (r.data && r.data.error) || "Could not delete your account");  // leave the form open to retry
+        e.target.password.value = ""; syncDeleteBtn();                  // clear the password; keep the typed DELETE so a retry only re-enters the password
+        flash("delete-flash", (r.data && r.data.error) || "Could not delete your account");
+        $("delete-password").focus();
       }
     });
 
@@ -1311,6 +1322,7 @@
       // repopulate the display-name field below, so the reset can't wipe the fresh value)
       ["profile-form", "checkin-form", "forum-form", "dm-new-form", "password-form"].forEach((id) => $(id).reset());
       ["profile-flash", "checkin-flash", "forum-flash", "dm-new-flash", "displayname-flash", "password-flash"].forEach((id) => flash(id, "", "ok"));
+      resetDeleteUI();                          // collapse the delete-account card + clear any typed "DELETE" from a prior session
       setShownName(name || handle);             // the non-unique DISPLAY name (what people see)
       closePost();
       $("dm-thread-view").hidden = true; $("dm-list-view").hidden = false; dmPeer = null;  // fresh DM view
