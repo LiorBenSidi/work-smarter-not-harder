@@ -340,7 +340,8 @@
         </form>
 
         <form id="register-form" hidden>
-          <label for="reg-username">Username<span class="info" id="reg-username-info" tabindex="0" role="note" aria-label="Username requirements">i<span class="tip" aria-hidden="true" id="reg-username-tip"></span></span></label><input id="reg-username" name="username" autocomplete="username" required>
+          <label for="reg-username">Display name<span class="info" id="reg-username-info" tabindex="0" role="note" aria-label="Display name requirements">i<span class="tip" aria-hidden="true" id="reg-username-tip"></span></span></label><input id="reg-username" name="username" autocomplete="nickname" placeholder="Shown to others — can repeat" required>
+          <p class="muted" style="margin:2px 0 10px;font-size:12px">Shown to others and can repeat — you'll sign in with your email.</p>
           <label for="reg-email">Email</label><input id="reg-email" name="email" type="email" autocomplete="email" required>
           <label for="reg-password">Password<span id="reg-pw-minhint"></span><span class="info" id="reg-password-info" tabindex="0" role="note" aria-label="Password requirements">i<span class="tip" aria-hidden="true" id="reg-password-tip"></span></span></label><input id="reg-password" name="password" type="password" autocomplete="new-password" required>
           <div style="margin-top:16px"><button type="submit">Create account</button></div>
@@ -641,13 +642,13 @@
         else { hint.textContent = ""; hint.hidden = true; }
         flash("otp-flash", "", "ok");
         showOtp(r.data.expires_in);
-      } else if (r.ok) { enterApp(r.data.username); }
+      } else if (r.ok) { enterApp(r.data.username, r.data.display_name); }
       else { flash("login-flash", (r.data && r.data.error) || "Login failed"); }
     });
 
     onSubmit("otp-form", async (f) => {
       const r = await api("/verify-otp", { method: "POST", body: { code: f.code.value, remember: $("otp-remember").checked } });
-      if (r.ok) { enterApp(r.data.username); }
+      if (r.ok) { enterApp(r.data.username, r.data.display_name); }
       else { flash("otp-flash", (r.data && r.data.error) || "Verification failed"); }
     });
 
@@ -931,7 +932,7 @@
         + '<p class="body">' + escapeHtml(p.body) + '</p>'
         + '<div class="vote-row"><button class="ghost" onclick="vote(1)">▲ up</button> <span class="pill">score ' + escapeHtml(p.score)
         + '</span> <button class="ghost" onclick="vote(-1)">▼ down</button></div>'
-        + (p.author === currentUser
+        + (p.mine
             ? '<div class="own-actions"><button class="ghost" onclick="editPost()">Edit</button> <button class="ghost" onclick="deletePost()">Delete</button></div>'
             : '')
         + '<h4 style="margin:14px 0 6px">Comments</h4>'
@@ -1027,7 +1028,7 @@
       if (!cs.length) { el.innerHTML = '<p class="muted">No conversations yet — start one above.</p>'; return; }
       el.innerHTML = cs.map((c) =>
         '<div class="dm-row" data-peer="' + escapeHtml(c.peer) + '">' + avatarHtml(c.peer, 40)
-        + '<div class="dm-main"><div class="dm-name">' + escapeHtml(c.peer) + '</div>'
+        + '<div class="dm-main"><div class="dm-name">' + escapeHtml(c.peer_name || c.peer) + '</div>'
         + '<div class="dm-last">' + escapeHtml(c.last_message || "") + '</div></div>'
         + (c.unread ? '<span class="dm-unread">' + escapeHtml(c.unread) + '</span>' : '') + '</div>'
       ).join("");
@@ -1037,8 +1038,7 @@
     async function openThread(peer) {
       dmPeer = peer;
       $("dm-list-view").hidden = true; $("dm-thread-view").hidden = false;
-      $("dm-thread-peer").innerHTML = avatarHtml(peer, 30) + "<span>" + escapeHtml(peer) + "</span>";
-      await renderThread();
+      await renderThread();                     // renders messages AND sets the peer header from the resolved name
       $("dm-reply").focus();
       clearInterval(dmThreadTimer); dmThreadTimer = setInterval(renderThread, 15000);  // backstop; SSE pushes replies instantly
     }
@@ -1048,6 +1048,9 @@
       const r = await api("/conversations/" + encodeURIComponent(dmPeer));
       const box = $("dm-thread");
       if (!r.ok) { box.innerHTML = '<p class="flash error">Could not load this conversation.</p>'; return; }
+      // header shows the server-resolved display name (correct even for a brand-new thread); avatar keyed
+      // on the handle so two same-named people still read as distinct.
+      $("dm-thread-peer").innerHTML = avatarHtml(dmPeer, 30) + "<span>" + escapeHtml((r.data && r.data.peer_name) || dmPeer) + "</span>";
       const nearBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 40;   // don't yank the reader up
       const msgs = (r.data && r.data.messages) || [];
       box.innerHTML = msgs.length
@@ -1154,11 +1157,12 @@
       }
     }
 
-    function enterApp(username) {
+    function enterApp(handle, name) {
       resetAuthState();  // scrub credentials/OTP state now, while the auth card is off-screen
-      currentUser = username;
-      $("who-name").textContent = "Hi, " + username;
-      $("profile-user").textContent = "Signed in as " + username;
+      currentUser = handle;                     // the stable INTERNAL handle (identity: mine-checks, me/them)
+      const shown = name || handle;             // the non-unique DISPLAY name (what people see)
+      $("who-name").textContent = "Hi, " + shown;
+      $("profile-user").textContent = "Signed in as " + shown;
       // a previous account's residue must not survive a same-browser user switch
       ["profile-form", "checkin-form", "forum-form", "dm-new-form"].forEach((id) => $(id).reset());
       ["profile-flash", "checkin-flash", "forum-flash", "dm-new-flash"].forEach((id) => flash(id, "", "ok"));
@@ -1181,12 +1185,27 @@
         $(tipId).textContent = lo + "–" + hi + " characters";
         $(infoId).setAttribute("aria-label", noun + " must be " + lo + " to " + hi + " characters");
       };
-      set("reg-username-info", "reg-username-tip", c.username_min, c.username_max, "Username");
+      set("reg-username-info", "reg-username-tip", c.username_min, c.username_max, "Display name");
       set("reg-password-info", "reg-password-tip", c.password_min, c.password_max, "Password");
       $("reg-pw-minhint").textContent = " (min " + c.password_min + " chars)";
       $("reg-username").minLength = c.username_min; $("reg-username").maxLength = c.username_max;
       $("reg-password").minLength = c.password_min; $("reg-password").maxLength = c.password_max;
     }
+
+    // New-account nicety: prefill the display name from the email's local part (before the @), until the
+    // user edits the name themselves. The display name need NOT be unique — it's just what people see.
+    (function wireDisplayNamePrefill() {
+      const nameEl = $("reg-username"), emailEl = $("reg-email");
+      if (!nameEl || !emailEl) return;
+      let touched = false;
+      nameEl.addEventListener("input", () => { touched = true; });
+      emailEl.addEventListener("input", () => {
+        if (touched) return;
+        const prefix = (emailEl.value.split("@")[0] || "").trim();
+        const max = Number(nameEl.maxLength) > 0 ? Number(nameEl.maxLength) : 64;
+        if (prefix) nameEl.value = prefix.slice(0, max);
+      });
+    })();
 
     // ---- Boot: am I already logged in? (GET /me) ----
     (async function init() {
@@ -1194,7 +1213,7 @@
       const t = new URLSearchParams(location.search).get("reset_token");
       if (t) { resetToken = t; showView("auth"); showReset(); return; }
       const r = await api("/me");
-      if (r.ok && r.data && r.data.username) { enterApp(r.data.username); } else { showView("auth"); }
+      if (r.ok && r.data && r.data.username) { enterApp(r.data.username, r.data.display_name); } else { showView("auth"); }
     })();
   </script>
   <script>

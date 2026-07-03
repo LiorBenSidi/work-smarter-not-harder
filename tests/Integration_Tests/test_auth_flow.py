@@ -121,3 +121,35 @@ def test_default_store_app_serves_health(make_client):
     resp = make_client().get("/health")
     assert resp.status_code == 200
     assert resp.get_json() == {"status": "ok", "service": "web"}
+
+
+# ---- identity model: display name is NON-unique; each account gets a unique internal handle ----
+def test_duplicate_display_name_is_allowed_with_distinct_emails(client):
+    # Two people can both be "alex" — they just get distinct accounts (distinct emails + internal handles).
+    r1 = _register(client, "alex", email="alex1@example.com")
+    r2 = _register(client, "alex", email="alex2@example.com")
+    assert r1.status_code == 201 and r2.status_code == 201
+    assert r1.get_json()["display_name"] == "alex" == r2.get_json()["display_name"]  # same shown name
+    assert r1.get_json()["username"] != r2.get_json()["username"]                    # distinct handles
+
+
+def test_handle_gets_a_suffix_on_display_name_collision(client):
+    assert _register(client, "sam", email="s1@example.com").get_json()["username"] == "sam"
+    assert _register(client, "sam", email="s2@example.com").get_json()["username"] == "sam-2"
+    assert _register(client, "sam", email="s3@example.com").get_json()["username"] == "sam-3"
+
+
+def test_me_exposes_the_display_name(client):
+    _register(client, "alex", email="alex@example.com")
+    _login(client, "alex")
+    assert client.get("/me").get_json()["display_name"] == "alex"
+
+
+def test_collided_name_account_signs_in_by_email_to_the_right_account(client):
+    # the suffixed account has a handle it never sees — it signs in by EMAIL, and lands on ITS account.
+    _register(client, "sam", email="sam1@example.com")
+    _register(client, "sam", email="sam2@example.com")             # internal handle "sam-2"
+    resp = client.post("/login", json={"username": "sam2@example.com", "password": "s3cretpw!"})
+    assert resp.status_code == 200
+    assert resp.get_json()["display_name"] == "sam"                # shown name
+    assert resp.get_json()["username"] == "sam-2"                  # the distinct handle, not the first "sam"

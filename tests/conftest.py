@@ -41,10 +41,11 @@ class FakeUsers:
     def get(self, username):
         return self._by_name.get(username)
 
-    def add(self, username, password_hash, email=None):
+    def add(self, username, password_hash, email=None, display_name=None):
         if username in self._by_name:
             return False
-        rec = {"username": username, "password_hash": password_hash}
+        rec = {"username": username, "password_hash": password_hash,
+               "display_name": display_name if display_name is not None else username}
         if email is not None:
             rec["email"] = email
         self._by_name[username] = rec

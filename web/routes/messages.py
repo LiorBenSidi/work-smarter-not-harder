@@ -18,6 +18,7 @@ import time
 from flask import Blueprint, Response, current_app, jsonify, request, session
 
 from routes.auth import login_required
+from services.identity import display_name, display_names
 
 logger = logging.getLogger(__name__)
 
@@ -78,7 +79,7 @@ def send_message():
         message = _messages().send(me, recipient, body)
         # notify the recipient (best-effort — a notification hiccup must not fail the send)
         try:
-            _notifications().add(recipient, "dm", me, me, f"New message from {me}")
+            _notifications().add(recipient, "dm", me, me, f"New message from {display_name(me)}")
         except Exception:
             logger.warning("could not create DM notification for %s", recipient, exc_info=True)
     except Exception:
@@ -92,7 +93,11 @@ def send_message():
 def list_conversations():
     me = session["username"]
     try:
-        return jsonify(conversations=_messages().list_conversations(me)), 200
+        convos = _messages().list_conversations(me)
+        names = display_names([c["peer"] for c in convos])   # resolve all peers in one pass
+        for c in convos:
+            c["peer_name"] = names.get(c["peer"], c["peer"])  # shown name; c["peer"] stays the handle (addressing)
+        return jsonify(conversations=convos), 200
     except Exception:
         logger.exception("message store unavailable during conversation list")
         return jsonify(error="messaging is unavailable right now"), 503
@@ -110,7 +115,7 @@ def get_conversation(peer):
     except Exception:
         logger.exception("message store unavailable during conversation read")
         return jsonify(error="messaging is unavailable right now"), 503
-    return jsonify(peer=peer, messages=thread), 200
+    return jsonify(peer=peer, peer_name=display_name(peer), messages=thread), 200
 
 
 @messages_bp.get("/notifications")
