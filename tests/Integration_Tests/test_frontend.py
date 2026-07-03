@@ -114,6 +114,7 @@ def test_theme_toggle_present_and_wired(client):
         assert v in html
     assert 'data-theme="light"' in html                        # the CSS overrides the OS via the forced-theme attr
     assert 'localStorage.getItem("ws-theme")' in html          # persisted + applied pre-paint in the <head> script
+    assert "theme-switching" in html                           # transitions suppressed during the swap -> no flicker
 
 
 def test_manifest_is_served_for_pwa(client):

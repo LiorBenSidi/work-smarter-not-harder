@@ -312,6 +312,10 @@
     @media (max-width: 560px) { .row { grid-template-columns:1fr; } main { padding:16px 14px 40px; } .hero-title { font-size:27px; } #who-name { display:none; }
       /* tighter hero on phones: the orb stays the signature but the auth card's action lands near the fold */
       .hero { padding-top:18px; } .hero-orb { width:104px; height:104px; margin-bottom:18px; } .hero-sub { margin-bottom:14px; } }
+    /* Kill transitions for the instant of a theme switch so the palette change is atomic — otherwise
+       each element animates its color/background at its own rate and the switch reads as a flicker. */
+    html.theme-switching, html.theme-switching *, html.theme-switching *::before, html.theme-switching *::after {
+      transition: none !important; }
     /* segmented theme control (Display & accessibility) */
     .settings-group { border:1px solid var(--line); border-radius:14px; padding:12px 12px 8px; margin:0; }
     .settings-group legend { padding:0 6px; font-size:13px; color:var(--muted); }
@@ -1281,7 +1285,10 @@
       group.addEventListener("change", (e) => {
         if (e.target.name !== "theme") return;
         try { localStorage.setItem(KEY, e.target.value); } catch (_) {}
+        const root = document.documentElement;
+        root.classList.add("theme-switching");             // atomic palette swap, no per-element transition flicker
         apply(e.target.value);
+        requestAnimationFrame(() => requestAnimationFrame(() => root.classList.remove("theme-switching")));
       });
     })();
 
