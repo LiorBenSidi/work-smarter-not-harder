@@ -105,7 +105,8 @@ class _DbHistory(_DbStore):
 class _DbForum(_DbStore):
     """Seam Lior implements: ``forum_create_post(db, author, title, body, anonymous)``,
     ``forum_list_posts(db)``, ``forum_get_post(db, post_id)``,
-    ``forum_add_comment(db, post_id, author, body)``, ``forum_vote(db, post_id, username, value)``."""
+    ``forum_add_comment(db, post_id, author, body)``, ``forum_vote(db, post_id, username, value)``,
+    ``forum_vote_comment(db, post_id, comment_id, username, value)``."""
 
     def create_post(self, author, title, body, anonymous):
         db_module, handle = self._resolve()
@@ -126,6 +127,10 @@ class _DbForum(_DbStore):
     def vote(self, post_id, username, value):
         db_module, handle = self._resolve()
         return db_module.forum_vote(handle, post_id, username, value)
+
+    def vote_comment(self, post_id, comment_id, username, value):
+        db_module, handle = self._resolve()
+        return db_module.forum_vote_comment(handle, post_id, comment_id, username, value)
 
     def update_post(self, post_id, username, title, body):
         db_module, handle = self._resolve()
