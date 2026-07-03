@@ -344,6 +344,15 @@ def test_get_user_missing_password_hash_is_treated_as_no_user(db_mod, db):
     assert db_mod.get_user(db, "corrupt") is None             # fails closed, no KeyError
 
 
+def test_update_display_name_changes_only_the_shown_name(db_mod, db):
+    db_mod.create_user(db, "alice", "h1", "alice@ex.com", display_name="Alice")
+    assert db_mod.update_display_name(db, "alice", "Alice B.") is True
+    u = db_mod.get_user(db, "alice")
+    assert u["display_name"] == "Alice B."                    # shown name updated
+    assert u["username"] == "alice" and u["password_hash"] == "h1"   # handle + credential untouched
+    assert db_mod.update_display_name(db, "ghost", "X") is False     # unknown handle -> False
+
+
 def test_get_profile_with_no_profile_field_is_none(db_mod, db):
     db.profiles.docs.append({"username": "amy"})              # row exists but has no profile blob
     assert db_mod.get_profile(db, "amy") is None
