@@ -334,7 +334,9 @@ def make_client(web_app_module):
         if notifications is not None:
             extra["notifications"] = notifications
         app = web_app_module.create_app(users=users, **extra)
-        app.config.update(SECRET_KEY="test-secret-key", TESTING=True)
+        # RATELIMIT_ENABLED=False so the suite's many rapid login/register calls aren't throttled; the
+        # dedicated rate-limit test flips it back on via the `rate_limited_client` fixture.
+        app.config.update(SECRET_KEY="test-secret-key", TESTING=True, RATELIMIT_ENABLED=False)
         return _CsrfClient(app.test_client())
 
     return _make
@@ -392,11 +394,28 @@ def make_otp_client(web_app_module):
         app = web_app_module.create_app(users=users)
         app.config.update(SECRET_KEY="test-secret-key", TESTING=False, PROPAGATE_EXCEPTIONS=True,
                           OTP_ENABLED=True, SMTP_HOST="", OTP_TTL_SECONDS=600, OTP_MAX_ATTEMPTS=5,
-                          REMEMBER_COOKIE_MAX_AGE=30 * 24 * 3600)
+                          REMEMBER_COOKIE_MAX_AGE=30 * 24 * 3600, RATELIMIT_ENABLED=False)
         app.config.update(overrides)
         return _CsrfClient(app.test_client())
 
     return _make
+
+
+@pytest.fixture
+def rate_limited_client(make_client, fake_users):
+    """A client with rate-limiting ACTIVE (make_client disables it for the rest of the suite). Resets the
+    limiter's in-memory counters first, since it's a module-level singleton whose per-IP tally would
+    otherwise carry across tests."""
+    c = make_client(fake_users)
+    app = c.raw.application
+    app.config["RATELIMIT_ENABLED"] = True
+    from ratelimit import limiter
+    with app.app_context():
+        try:
+            limiter.reset()
+        except Exception:
+            pass
+    return c
 
 
 @pytest.fixture
