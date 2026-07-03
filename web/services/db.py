@@ -61,6 +61,12 @@ _SCHEMAS = {
     "forum_posts": {"bsonType": "object", "required": ["id", "author", "title", "body"],
                     "properties": {"id": {"bsonType": "string"}, "author": {"bsonType": "string"},
                                    "title": {"bsonType": "string"}, "body": {"bsonType": "string"}}},
+    "messages": {"bsonType": "object", "required": ["id", "sender", "recipient", "body"],
+                 "properties": {"id": {"bsonType": "string"}, "sender": {"bsonType": "string"},
+                                "recipient": {"bsonType": "string"}, "body": {"bsonType": "string"}}},
+    "notifications": {"bsonType": "object", "required": ["id", "user", "type", "text"],
+                      "properties": {"id": {"bsonType": "string"}, "user": {"bsonType": "string"},
+                                     "type": {"bsonType": "string"}, "text": {"bsonType": "string"}}},
 }
 
 

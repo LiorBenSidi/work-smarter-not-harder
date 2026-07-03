@@ -130,6 +130,9 @@ def list_notifications():
     except Exception:
         logger.exception("notification store unavailable during poll")
         return jsonify(error="notifications are unavailable right now"), 503
+    names = display_names([n.get("actor") for n in items])    # resolve actors -> shown names in one pass
+    for n in items:
+        n["actor"] = names.get(n.get("actor"), n.get("actor"))  # show the display name, never the internal handle
     unread = sum(1 for n in items if not n.get("read"))
     return jsonify(notifications=items, unread=unread), 200
 
@@ -140,8 +143,8 @@ def mark_notifications_read():
     me = session["username"]
     data = request.get_json(silent=True) or {}
     ids = data.get("ids")
-    if ids is not None and not isinstance(ids, list):
-        return jsonify(error="ids must be a list"), 400
+    if ids is not None and (not isinstance(ids, list) or not all(isinstance(i, str) for i in ids)):
+        return jsonify(error="ids must be a list of strings"), 400   # a non-string element would 500 in the store
     try:
         _notifications().mark_read(me, ids)
     except Exception:

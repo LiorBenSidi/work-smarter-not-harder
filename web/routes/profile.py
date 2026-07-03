@@ -5,6 +5,7 @@ training_frequency). Input is validated + injection-safe before any query; the p
 injected (``app.config["PROFILES"]`` — the web->db seam: ``.get`` / ``.save``).
 """
 import logging
+import math
 
 from flask import Blueprint, current_app, jsonify, request, session
 
@@ -32,6 +33,8 @@ def validate_profile(data):
         allowed = int if integer else (int, float)  # bool excluded below (it is an int subclass)
         if isinstance(value, bool) or not isinstance(value, allowed):
             raise ValueError(f"{name} must be {'an integer' if integer else 'a number'}")
+        if not math.isfinite(value):                 # explicit: reject NaN/Infinity (don't rely on the range bound alone)
+            raise ValueError(f"{name} must be a finite number")
         if not lo <= value <= hi:
             raise ValueError(f"{name} must be {lo}-{hi}")
         return value
