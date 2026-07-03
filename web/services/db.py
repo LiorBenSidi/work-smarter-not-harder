@@ -231,11 +231,16 @@ def add_history(db, username, entry):
 
 
 # ---- forum (CRUD seam; the real-time push stays Elad's; the seed mechanism is db/seed.py) ----
+def _comment_public(c):
+    """Public projection of one comment — id/author/body/score, dropping the internal votes list."""
+    return {"id": c.get("id"), "author": c.get("author"), "body": c.get("body"), "score": c.get("score", 0)}
+
+
 def _shape(post):
-    """Public projection of a forum post — drops the raw _id and the internal votes list."""
+    """Public projection of a forum post — drops the raw _id and the internal votes lists (post + comments)."""
     return {"id": post["id"], "author": post["author"], "anonymous": post.get("anonymous", False),
-            "title": post["title"], "body": post["body"],
-            "score": post.get("score", 0), "comments": post.get("comments", [])}
+            "title": post["title"], "body": post["body"], "score": post.get("score", 0),
+            "comments": [_comment_public(c) for c in post.get("comments", [])]}
 
 
 def forum_create_post(db, author, title, body, anonymous):
@@ -258,10 +263,44 @@ def forum_get_post(db, post_id):
 
 
 def forum_add_comment(db, post_id, author, body):
-    """Append a comment; return it, or None if the post is unknown."""
-    comment = {"author": author, "body": body}
+    """Append a comment (with its own id + empty vote tally) and return its public shape, or None if
+    the post is unknown. The id lets a comment be up/downvoted independently of its post."""
+    comment = {"id": uuid.uuid4().hex, "author": author, "body": body, "votes": [], "score": 0}
     result = db.forum_posts.update_one({"id": post_id}, {"$push": {"comments": comment}})
-    return comment if result.matched_count else None
+    return _comment_public(comment) if result.matched_count else None
+
+
+def forum_vote_comment(db, post_id, comment_id, username, value):
+    """Record one vote per user on a comment (re-voting replaces) and return the comment's new score,
+    or None if the post or comment is unknown.
+
+    Same optimistic-concurrency guard as ``forum_vote``, but the CAS is on the post's ``comments``
+    array: the write only lands if that array is unchanged since we read it, so two concurrent comment
+    votes can't lose each other's update. A concurrent delete/edit that changes the array makes the
+    loser retry on fresh state; sustained contention exhausts the retries and raises (route -> 503).
+    Votes live as a LIST of ``{"user", "value"}`` on the comment (never a username-keyed dict — a
+    username may contain ``.``/``$``, illegal as Mongo field names).
+    """
+    for _ in range(_VOTE_RETRIES):
+        post = db.forum_posts.find_one({"id": post_id})
+        if post is None:
+            return None
+        old_comments = post.get("comments", [])
+        idx = next((i for i, c in enumerate(old_comments) if c.get("id") == comment_id), None)
+        if idx is None:
+            return None
+        new_comments = [dict(c) for c in old_comments]          # copy so old_comments stays intact for the CAS filter
+        target = new_comments[idx]
+        votes = [v for v in target.get("votes", []) if v.get("user") != username]  # drop this user's prior vote
+        votes.append({"user": username, "value": value})
+        target["votes"], target["score"] = votes, sum(v["value"] for v in votes)
+        result = db.forum_posts.update_one(
+            {"id": post_id, "comments": old_comments},          # CAS: only if the comments array is unchanged
+            {"$set": {"comments": new_comments}},
+        )
+        if result.matched_count:
+            return target["score"]
+    raise RuntimeError(f"forum_vote_comment: lost the update race on comment {comment_id} after retries")
 
 
 def forum_vote(db, post_id, username, value):
