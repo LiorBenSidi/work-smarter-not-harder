@@ -15,6 +15,7 @@ from flask import Blueprint, current_app, jsonify, request, session
 from itsdangerous import BadData, URLSafeTimedSerializer
 from werkzeug.security import check_password_hash, generate_password_hash
 
+from ratelimit import limiter
 from services.email import send_email
 
 logger = logging.getLogger(__name__)
@@ -91,6 +92,7 @@ def auth_config():
 
 
 @auth_bp.post("/register")
+@limiter.limit("10 per minute")   # anti-spam: bulk account creation from one IP
 def register():
     data = request.get_json(silent=True)
     try:
@@ -111,6 +113,7 @@ def register():
 
 
 @auth_bp.post("/login")
+@limiter.limit("20 per minute")   # anti-brute-force: password guessing from one IP
 def login():
     data = request.get_json(silent=True)
     if not isinstance(data, dict):
@@ -146,7 +149,8 @@ def login():
         except Exception:
             logger.exception("failed to issue login OTP")
             return jsonify(error="could not start verification — please try again"), 503
-        body = {"status": "otp_required", "username": username}
+        body = {"status": "otp_required", "username": username,
+                "expires_in": current_app.config["OTP_TTL_SECONDS"]}   # so the UI can count down to expiry
         if dev_code is not None:                       # no SMTP configured -> surface the code (dev/grading)
             body["dev_otp"] = dev_code
         return jsonify(body), 200
@@ -212,6 +216,27 @@ def verify_otp():
     if data.get("remember"):
         _set_remember_cookie(resp, username, stored_hash)
     return resp, 200
+
+
+@auth_bp.post("/resend-otp")
+@limiter.limit("5 per minute")   # a fresh code is rare; cap resends (the UI also gates it to 1 / 30s)
+def resend_otp():
+    """Re-issue the login code for the verification already in progress — a fresh code with a reset TTL
+    and attempt counter. The pending user comes from the SESSION (never the body), so a caller can only
+    resend a challenge they themselves started, on the browser that started it."""
+    username = session.get("pending_otp_user")
+    if not username:
+        return jsonify(error="no verification in progress — please log in again"), 400
+    try:
+        user = _users().get(username) or {}
+        dev_code = _issue_otp(username, user.get("email"))
+    except Exception:
+        logger.exception("failed to resend login OTP")
+        return jsonify(error="could not resend the code — please try again"), 503
+    body = {"status": "otp_sent", "expires_in": current_app.config["OTP_TTL_SECONDS"]}
+    if dev_code is not None:              # dev/no-SMTP: surface the fresh code like /login does
+        body["dev_otp"] = dev_code
+    return jsonify(body), 200
 
 
 @auth_bp.post("/logout")
