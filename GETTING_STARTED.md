@@ -33,7 +33,7 @@ before anything reaches GitHub.
 |---|---|---|
 | **Shiri** | [`PERSON1.md`](PERSON1.md) | the **AI** — model, `/predict`, recommendation engine, dataset |
 | **Lior** | [`PERSON2.md`](PERSON2.md) | the **web app + data + observability + CI/CD** — the Flask **backend** (auth incl. reset/OTP/email) + frontend/PWA (incl. the **direct-messages + live-DM-notifications Chat tab**) + the `db.py` CRUD & **Mongo internals** + backups + **Week-9 logging** + the `web`/`ai` **container build** + the **CI gate** + the **CI/CD deploy pipeline** |
-| **Elad** | [`PERSON3.md`](PERSON3.md) | **deployment + scale + remaining Forum media** — the **live** Azure deploy + demo (the pipeline *code* is Lior's), the remaining **Forum media/attachments + vote notifications**, stress, the test-runner |
+| **Elad** | [`PERSON3.md`](PERSON3.md) | **deployment + scale + remaining Forum media** — the **live** Azure deploy + demo (the pipeline *code* is Lior's), the remaining **Forum media/attachments**, stress, the test-runner |
 
 Your file = your area + the must-do (course) items + a roadmap. **How** you build it is your choice.
 

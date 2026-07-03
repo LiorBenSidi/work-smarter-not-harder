@@ -11,7 +11,7 @@ Backend built + CI-gated (all Lior): the `web` tier (incl. **direct messages + l
 tab), the whole data layer, Week-9 logging, the 3-container build, the CI gate, and the **CI/CD deploy pipeline**
 (GHCR → Azure VM → Caddy HTTPS, auto-rollback). `main` green. **Open lanes:** *Shiri* — the real model behind
 `POST /predict` (`ai/` is a placeholder) + the Forum cold-seed content; *Elad* — the live Azure deploy + demo, the
-remaining Forum media/attachments + upvote/downvote notifications, stress, the test-runner. Full breakdown:
+remaining Forum media/attachments, stress, the test-runner. Full breakdown:
 [`CLAUDE.md`](CLAUDE.md) → Current status. Build **within** an open lane; don't redo the built parts.
 
 ## The rule that always applies
