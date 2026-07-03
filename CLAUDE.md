@@ -12,7 +12,8 @@ The backend is built and CI-gated; the open work is two teammates' lanes. If you
 **within** an open lane below, keep `main` green (PR-only), and **don't re-do or "polish" the built parts**.
 - ✅ **Built (Lior):** the `web` tier (auth · profile · daily check-in · dashboard · history · forum CRUD+UI ·
   **direct messages + live DM notifications** (the Chat tab: conversations · threads · generative avatars · a
-  polling notification pulse · an anti-spam messaging rate-limit) · SPA frontend + CSRF + installable PWA);
+  polling notification pulse · an anti-spam messaging rate-limit) · **vote notifications** (an up/downvote pings
+  the post author, shown in an Activity feed) · SPA frontend + CSRF + installable PWA);
   the **whole data layer** (`web/services/db.py` CRUD + Mongo indexes /
   `$jsonSchema` validators / auth config / `db/seed.py` / backup script); **Week-9 logging**; the 3-container
   Docker build with fault tolerance; the **CI gate** (ruff · bandit · pytest); and the **CI/CD deploy pipeline**
@@ -22,12 +23,12 @@ The backend is built and CI-gated; the open work is two teammates' lanes. If you
 - ⏳ **Open — Shiri (`ai/`):** the real Random Forest model + recommendation engine behind `POST /predict` — it's a
   contract-shaped **placeholder** today. See [`PERSON1.md`](PERSON1.md).
 - ⏳ **Open — Elad:** the **live** Azure deploy (VM provisioning + the demo — the pipeline *code* is done); the
-  remaining Forum media/attachments (images/video in posts, comments and DMs + file-size limits) and
-  upvote/downvote notifications; `flask-limiter` on the other public routes; stress tests (locust); the
+  remaining Forum media/attachments (images/video in posts, comments and DMs + file-size limits);
+  `flask-limiter` on the other public routes; stress tests (locust); the
   test-runner service. See [`PERSON3.md`](PERSON3.md).
 - ℹ️ **Online Forum (§10) status:** posts · comments · anonymity · post up/down-votes · **P2P direct messages
   (text) · live DM notifications (polling) · anti-spam messaging rate-limit** are built. Still open: media
-  attachments + file-size limits · vote notifications · comment votes · a received-engagement profile metric ·
+  attachments + file-size limits · comment votes · a received-engagement profile metric ·
   fuller cold-seeding (the seed content is Shiri's). See [`docs/FEEDBACK.md`](docs/FEEDBACK.md) §2 for the rubric.
 
 ## ⛔ Workflow — `main` is PR-only (enforced server-side)
