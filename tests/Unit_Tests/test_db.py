@@ -403,6 +403,37 @@ def test_message_and_notification_delete_for_user(db_mod, db):
     assert len(db_mod.notification_list(db, "carol")) == 1                  # unrelated survives
 
 
+# ---- email consent + data export (GDPR) ----
+def test_email_consent_get_set(db_mod, db):
+    db_mod.create_user(db, "alice", "h1")
+    assert db_mod.get_email_consent(db, "alice") is False                # default (opt-in)
+    assert db_mod.set_email_consent(db, "alice", True) is True
+    assert db_mod.get_email_consent(db, "alice") is True
+    assert db_mod.set_email_consent(db, "alice", False) is True
+    assert db_mod.get_email_consent(db, "alice") is False
+    assert db_mod.get_email_consent(db, "ghost") is False                # unknown handle -> False
+    assert db_mod.set_email_consent(db, "ghost", True) is False
+
+
+def test_forum_export_user(db_mod, db):
+    db_mod.forum_create_post(db, "alice", "A", "a", False)
+    bp = db_mod.forum_create_post(db, "bob", "B", "b", False)["id"]
+    db_mod.forum_add_comment(db, bp, "alice", "hi")
+    db_mod.forum_vote(db, bp, "alice", 1)
+    out = db_mod.forum_export_user(db, "alice")
+    assert [p["title"] for p in out["posts"]] == ["A"]                   # own post only
+    assert [c["body"] for c in out["comments"]] == ["hi"]               # her comment on bob's post
+    assert len(out["votes"]) == 1 and out["votes"][0]["post_id"] == bp   # her post vote
+
+
+def test_message_export_for_user(db_mod, db):
+    db_mod.message_send(db, "alice", "bob", "hi")
+    db_mod.message_send(db, "bob", "alice", "yo")
+    db_mod.message_send(db, "bob", "carol", "unrelated")
+    out = db_mod.message_export_for_user(db, "alice")
+    assert [m["body"] for m in out] == ["hi", "yo"]                     # both directions, not carol's
+
+
 def test_get_profile_with_no_profile_field_is_none(db_mod, db):
     db.profiles.docs.append({"username": "amy"})              # row exists but has no profile blob
     assert db_mod.get_profile(db, "amy") is None

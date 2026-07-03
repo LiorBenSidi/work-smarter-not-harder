@@ -298,6 +298,8 @@
     :focus-visible { outline:2px solid var(--accent); outline-offset:3px; border-radius:8px; }
     [hidden] { display:none !important; }
     .sep { border:0; border-top:1px solid var(--line); margin:18px 0; }   /* thin divider between in-card sections */
+    .check-row { display:flex; align-items:flex-start; gap:10px; cursor:pointer; font-size:14px; line-height:1.4; }
+    .check-row input { margin-top:2px; }
 
     /* "How it works" 3-step on the auth hero — a genuine sequence (check-in -> signal -> action). */
     .how { list-style:none; display:flex; gap:10px; max-width:440px; margin:2px auto 0; padding:0; }
@@ -579,6 +581,17 @@
             <button id="logout-btn" class="ghost block">Log out</button>
           </div>
           <div class="card">
+            <h2><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l7 4v5c0 4-3 7-7 9-4-2-7-5-7-9V7z"/></svg><span class="grow">Privacy &amp; data</span></h2>
+            <label class="check-row" for="email-consent">
+              <input type="checkbox" id="email-consent">
+              <span>Send me occasional tips and product updates.<span class="hint" style="margin-top:3px">Your login codes and password-reset emails are always sent — this only covers non-essential email.</span></span>
+            </label>
+            <hr class="sep">
+            <p class="muted" style="margin:0 0 10px">Download a copy of everything we store about you — your profile, check-ins, forum activity, messages and notifications — as a JSON file.</p>
+            <button id="export-btn" class="ghost block" type="button">Download my data</button>
+            <div id="privacy-flash" class="flash" aria-live="polite"></div>
+          </div>
+          <div class="card">
             <h2><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14M10 11v6M14 11v6"/></svg><span class="grow">Delete account</span></h2>
             <p class="muted" style="margin:-2px 0 12px">Permanently deletes your account and everything tied to it — profile, check-in history, forum posts and comments, messages, and notifications. This can't be undone.</p>
             <button id="delete-reveal" class="ghost danger block" type="button">Delete my account…</button>
@@ -847,6 +860,34 @@
       f.reset();
       if (r.ok) { flash("password-flash", "Password updated.", "ok"); }
       else { flash("password-flash", (r.data && r.data.error) || "Could not update your password"); }
+    });
+
+    // ---- Privacy & data (GDPR: non-essential-email opt-in + a full data export) ----
+    async function syncEmailConsent() {
+      const u = currentUser;
+      const r = await api("/me");
+      if (u !== currentUser || !r.ok || !r.data) return;               // stale session -> don't paint another user's setting
+      $("email-consent").checked = !!r.data.email_consent;
+    }
+    $("email-consent").addEventListener("change", async (e) => {
+      const on = e.target.checked;
+      const r = await api("/account/email-consent", { method: "POST", body: { consent: on } });
+      if (r.ok) flash("privacy-flash", on ? "You'll get occasional updates." : "You're opted out of non-essential email.", "ok");
+      else { e.target.checked = !on; flash("privacy-flash", (r.data && r.data.error) || "Could not update your preferences"); }  // revert the toggle on failure
+    });
+    $("export-btn").addEventListener("click", async () => {
+      const btn = $("export-btn"); btn.disabled = true;
+      try {
+        const r = await api("/account/export");
+        if (!r.ok) { flash("privacy-flash", (r.data && r.data.error) || "Could not export your data"); return; }
+        const blob = new Blob([JSON.stringify(r.data, null, 2)], { type: "application/json" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url; a.download = "worksmarter-export.json";
+        document.body.appendChild(a); a.click(); a.remove();
+        URL.revokeObjectURL(url);
+        flash("privacy-flash", "Your data was downloaded.", "ok");
+      } finally { btn.disabled = false; }
     });
 
     // Delete account (GDPR erasure) — a two-step reveal PLUS a typed "DELETE" confirmation (GitHub-style
@@ -1321,9 +1362,10 @@
       // a previous account's residue must not survive a same-browser user switch (reset BEFORE we
       // repopulate the display-name field below, so the reset can't wipe the fresh value)
       ["profile-form", "checkin-form", "forum-form", "dm-new-form", "password-form"].forEach((id) => $(id).reset());
-      ["profile-flash", "checkin-flash", "forum-flash", "dm-new-flash", "displayname-flash", "password-flash"].forEach((id) => flash(id, "", "ok"));
+      ["profile-flash", "checkin-flash", "forum-flash", "dm-new-flash", "displayname-flash", "password-flash", "privacy-flash"].forEach((id) => flash(id, "", "ok"));
       resetDeleteUI();                          // collapse the delete-account card + clear any typed "DELETE" from a prior session
       setShownName(name || handle);             // the non-unique DISPLAY name (what people see)
+      syncEmailConsent();                       // reflect this user's non-essential-email preference in the toggle
       closePost();
       $("dm-thread-view").hidden = true; $("dm-list-view").hidden = false; dmPeer = null;  // fresh DM view
       showView("app");

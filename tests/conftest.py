@@ -71,6 +71,17 @@ class FakeUsers:
     def delete(self, username):
         return self._by_name.pop(username, None) is not None
 
+    def get_email_consent(self, username):
+        rec = self._by_name.get(username)
+        return bool(rec.get("email_consent")) if rec else False
+
+    def set_email_consent(self, username, consent):
+        rec = self._by_name.get(username)
+        if rec is None:
+            return False
+        rec["email_consent"] = bool(consent)
+        return True
+
     # ---- login-OTP challenge (mirrors db.py set_otp/get_otp/clear_otp/bump_otp_attempts) ----
     def set_otp(self, username, otp_hash, expires_at):
         rec = self._by_name.get(username)
@@ -211,6 +222,24 @@ class FakeForum:
             p["votes"].pop(username, None)
             p["score"] = sum(p["votes"].values())
 
+    def export_user(self, username):
+        posts, comments, votes = [], [], []
+        for p in self._posts.values():
+            if p["author"] == username:
+                posts.append({"id": p["id"], "author": p["author"], "anonymous": p.get("anonymous", False),
+                              "title": p["title"], "body": p["body"], "score": p["score"],
+                              "comments": [{"id": c["id"], "author": c["author"], "body": c["body"],
+                                            "score": c.get("score", 0)} for c in p["comments"]]})
+            if username in p.get("votes", {}):
+                votes.append({"post_id": p["id"], "value": p["votes"][username]})
+            for c in p["comments"]:
+                if c.get("author") == username:
+                    comments.append({"post_id": p["id"], "post_title": p["title"], "body": c["body"],
+                                     "score": c.get("score", 0)})
+                if username in c.get("votes", {}):
+                    votes.append({"post_id": p["id"], "comment_id": c["id"], "value": c["votes"][username]})
+        return {"posts": posts, "comments": comments, "votes": votes}
+
 
 class FakeMessages:
     """In-memory DM store — mirrors db.py's ``message_*`` seam contract. ``created_at`` is a real epoch
@@ -256,6 +285,10 @@ class FakeMessages:
 
     def delete_for_user(self, username):
         self._msgs = [m for m in self._msgs if username not in (m["sender"], m["recipient"])]
+
+    def export_for_user(self, username):
+        mine = [m for m in self._msgs if username in (m["sender"], m["recipient"])]
+        return [self._public(m) for m in sorted(mine, key=lambda m: m["created_at"])]
 
 
 class FakeNotifications:
