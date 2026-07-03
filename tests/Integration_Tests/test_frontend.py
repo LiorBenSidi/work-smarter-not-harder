@@ -65,7 +65,7 @@ def test_forum_owner_edit_delete_wired(client):
     html = client.get("/").get_data(as_text=True)
     assert "editPost()" in html and "deletePost()" in html
     assert 'method: "PATCH"' in html and 'method: "DELETE"' in html
-    assert "p.author === currentUser" in html  # buttons only on own posts
+    assert "p.mine" in html  # buttons only on own posts (server-computed per-viewer flag; preserves anonymity)
 
 
 def test_daily_checkin_section_present_and_wired(client):
