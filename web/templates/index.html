@@ -208,7 +208,10 @@
     .vote-row { display:flex; align-items:center; gap:10px; margin:4px 0 2px; }
     .own-actions { margin-top:10px; display:flex; gap:8px; }
     .comments { list-style:none; padding:0; margin:8px 0 0; }
-    .comments li { padding:9px 12px; background:var(--field); border:1px solid var(--line); border-radius:12px; margin:6px 0; font-size:14px; }
+    .comments li { display:flex; align-items:center; gap:10px; padding:9px 12px; background:var(--field); border:1px solid var(--line); border-radius:12px; margin:6px 0; font-size:14px; }
+    .c-main { flex:1; min-width:0; word-break:break-word; }
+    .c-vote { flex:none; display:flex; align-items:center; gap:4px; }
+    .c-vote .pill { min-width:26px; text-align:center; }
 
     .info { position:relative; display:inline-flex; align-items:center; justify-content:center; width:16px; height:16px; margin-left:6px;
       border-radius:50%; background:var(--accent); color:var(--on-accent); font-size:10px; font-weight:800; font-style:normal; cursor:help; vertical-align:middle; }
@@ -871,10 +874,17 @@
             : '')
         + '<h4 style="margin:14px 0 6px">Comments</h4>'
         + (p.comments.length
-            ? '<ul class="comments">' + p.comments.map((c) => '<li><strong>' + escapeHtml(c.author) + '</strong> ' + escapeHtml(c.body) + '</li>').join("") + '</ul>'
+            ? '<ul class="comments">' + p.comments.map((c) =>
+                '<li><div class="c-main"><strong>' + escapeHtml(c.author) + '</strong> ' + escapeHtml(c.body) + '</div>'
+                + '<div class="c-vote"><button class="ghost mini cvote" data-cid="' + escapeHtml(c.id) + '" data-val="1" aria-label="Upvote comment">▲</button>'
+                + '<span class="pill">' + escapeHtml(c.score) + '</span>'
+                + '<button class="ghost mini cvote" data-cid="' + escapeHtml(c.id) + '" data-val="-1" aria-label="Downvote comment">▼</button></div></li>'
+              ).join("") + '</ul>'
             : '<p class="muted">No comments yet.</p>')
         + '<form id="comment-form" style="margin-top:10px"><input name="body" placeholder="Add a comment" aria-label="Add a comment" maxlength="2000" required>'
         + '<div style="margin-top:8px"><button type="submit">Comment</button></div></form></div>';
+      box.querySelectorAll(".cvote").forEach((b) =>
+        b.addEventListener("click", () => voteComment(b.dataset.cid, Number(b.dataset.val))));
       onSubmit("comment-form", async (f) => {
         const cr = await api("/forum/posts/" + id + "/comments", { method: "POST", body: { body: f.body.value } });
         if (cr.ok) openPost(id);
@@ -913,6 +923,13 @@
       if (!currentPostId) return;
       const r = await api("/forum/posts/" + currentPostId + "/vote", { method: "POST", body: { value } });
       if (r.ok) { openPost(currentPostId); loadForum(); }
+    }
+
+    async function voteComment(commentId, value) {
+      if (!currentPostId) return;
+      const r = await api("/forum/posts/" + currentPostId + "/comments/" + encodeURIComponent(commentId) + "/vote",
+        { method: "POST", body: { value } });
+      if (r.ok) openPost(currentPostId);   // re-render to reflect the new comment score
     }
 
     onSubmit("forum-form", async (f) => {

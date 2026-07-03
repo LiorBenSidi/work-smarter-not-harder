@@ -82,11 +82,17 @@ def test_profile_and_history_roundtrip(db_mod, real_db):
 def test_forum_crud_and_problematic_username_vote(db_mod, real_db):
     pid = db_mod.forum_create_post(real_db, "alice", "T", "B", False)["id"]
     assert db_mod.forum_get_post(real_db, pid)["body"] == "B"
-    db_mod.forum_add_comment(real_db, pid, "bob", "nice")
-    assert db_mod.forum_get_post(real_db, pid)["comments"] == [{"author": "bob", "body": "nice"}]
+    cid = db_mod.forum_add_comment(real_db, pid, "bob", "nice")["id"]
+    stored = db_mod.forum_get_post(real_db, pid)["comments"]
+    assert len(stored) == 1 and stored[0]["author"] == "bob" and stored[0]["body"] == "nice"
+    assert stored[0]["score"] == 0 and "votes" not in stored[0]        # internal tally not leaked
     # the votes-as-list fix: '.'/'$' usernames must be safe real-Mongo writes (would fail as field names)
     assert db_mod.forum_vote(real_db, pid, "bob.smith", 1) == 1
     assert db_mod.forum_vote(real_db, pid, "$admin", 1) == 2
+    # comment votes use the same list-based tally, guarded by a nested-array CAS
+    assert db_mod.forum_vote_comment(real_db, pid, cid, "bob.smith", 1) == 1
+    assert db_mod.forum_vote_comment(real_db, pid, cid, "$admin", 1) == 2   # distinct users sum
+    assert db_mod.forum_vote_comment(real_db, pid, cid, "bob.smith", -1) == 0  # same user replaces
 
 
 def test_unique_index_is_actually_enforced(db_mod, real_db):
