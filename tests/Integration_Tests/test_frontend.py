@@ -117,6 +117,16 @@ def test_theme_toggle_present_and_wired(client):
     assert "theme-switching" in html                           # transitions suppressed during the swap -> no flicker
 
 
+def test_touch_targets_meet_44px_minimum(client):
+    # a11y: the compact secondary controls (Refresh / comment votes / detail close ✕ / theme segments)
+    # are enlarged to the 44px WCAG 2.5.5 tap-target minimum. Guards against a future edit silently
+    # shrinking them back below the recommended target on a touch device.
+    css = client.get("/").get_data(as_text=True)
+    assert css.count("min-height:44px") >= 3       # button.mini, .detail .close, .settings-group .seg
+    assert css.count("min-width:44px") >= 2        # button.mini (icon buttons), .detail .close
+    assert "padding-right:44px" in css             # a long post title stays clear of the absolute close ✕
+
+
 def test_manifest_is_served_for_pwa(client):
     # the web manifest makes the app installable (name + icons + start_url), at the right mimetype.
     resp = client.get("/manifest.webmanifest")
