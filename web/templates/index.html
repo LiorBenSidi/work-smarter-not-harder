@@ -117,7 +117,16 @@
     #otp-code { font-family:var(--font-mono); font-size:22px; letter-spacing:.45em; text-align:center;
       padding-left:calc(14px + .45em); }
     #otp-code:disabled { opacity:.5; }
+    #otp-expiry { border-radius:8px; }
     #otp-expiry.expired { color:#ef4444; font-weight:600; }
+    /* A fresh code was issued (Resend) — briefly wash the expiry line in the accent so the timer
+       reset is unmistakable (answers "I couldn't tell the countdown restarted"). Auto-disabled by
+       the global reduced-motion guard; the text update remains the cue for those users. */
+    @keyframes otp-reset-flash {
+      from { background: color-mix(in srgb, var(--accent) 28%, transparent); }
+      to   { background: transparent; }
+    }
+    #otp-expiry.flash-reset { animation: otp-reset-flash 1.1s ease-out; }
 
     /* hero (logged-out) — the first impression */
     .hero { text-align:center; padding:34px 8px 6px; animation: rise .7s cubic-bezier(.2,.7,.2,1) both; }
@@ -668,6 +677,12 @@
       if (rLeft > 0) { $("otp-resend-timer").textContent = "Resend code in " + fmtMMSS(rLeft); $("otp-resend-btn").hidden = true; }
       else { $("otp-resend-timer").textContent = ""; $("otp-resend-btn").hidden = false; }
     }
+    function flashOtpReset() {                     // pulse the expiry line so a resend's reset is visible
+      const el = $("otp-expiry");
+      el.classList.remove("flash-reset");
+      void el.offsetWidth;                          // force reflow -> the animation restarts every resend
+      el.classList.add("flash-reset");
+    }
     $("otp-resend-btn").addEventListener("click", async () => {
       const r = await api("/resend-otp", { method: "POST" });
       if (r.ok && r.data) {
@@ -676,6 +691,7 @@
         $("otp-code").value = "";
         flash("otp-flash", "A new code is on its way.", "ok");
         startOtpTimers(r.data.expires_in);
+        flashOtpReset();                            // highlight the refreshed countdown
         setTimeout(() => $("otp-code").focus(), 0);
       } else { flash("otp-flash", (r.data && r.data.error) || "Could not resend the code"); }
     });
