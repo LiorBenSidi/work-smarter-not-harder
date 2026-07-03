@@ -53,7 +53,7 @@ _NAMESPACE_NOT_FOUND = 26      # MongoDB OperationFailure code: the collection d
 _SCHEMAS = {
     "users": {"bsonType": "object", "required": ["username", "password_hash"],
               "properties": {"username": {"bsonType": "string"}, "password_hash": {"bsonType": "string"},
-                             "email": {"bsonType": "string"}}},
+                             "email": {"bsonType": "string"}, "display_name": {"bsonType": "string"}}},
     "profiles": {"bsonType": "object", "required": ["username", "profile"],
                  "properties": {"username": {"bsonType": "string"}, "profile": {"bsonType": "object"}}},
     "analysis_history": {"bsonType": "object", "required": ["username", "entry"],
@@ -118,26 +118,31 @@ def get_db(mongo_uri):
 
 # ---- users (auth seam) ----
 def get_user(db, username):
-    """Return ``{"username", "password_hash", "email"}`` for `username`, or None (email may be None).
+    """Return ``{"username", "password_hash", "email", "display_name"}`` for `username`, or None.
 
-    A doc missing ``password_hash`` (a partial/corrupt write, or a direct DB edit) is treated as
+    ``username`` is the stable, unique internal handle every collection keys on; ``display_name`` is the
+    (non-unique) name shown to people, defaulting to the handle for accounts created before display names
+    existed. A doc missing ``password_hash`` (a partial/corrupt write, or a direct DB edit) is treated as
     "no user" so login fails closed rather than 500-ing on a KeyError.
     """
     doc = db.users.find_one({"username": username})
     if doc is None or "password_hash" not in doc:
         return None
-    return {"username": doc["username"], "password_hash": doc["password_hash"], "email": doc.get("email")}
+    return {"username": doc["username"], "password_hash": doc["password_hash"],
+            "email": doc.get("email"), "display_name": doc.get("display_name") or doc["username"]}
 
 
-def create_user(db, username, password_hash, email=None):
-    """Create the user if absent. Return True if created, False if the username already exists.
+def create_user(db, username, password_hash, email=None, display_name=None):
+    """Create the user if absent. Return True if created, False if the handle already exists.
 
-    The upsert + unique index on ``users.username`` make this atomic: when two registrations of the
-    same username race, exactly one insert wins and the loser's upsert raises ``DuplicateKeyError`` —
-    caught here and reported as False (the user now exists), honouring the contract under concurrency.
-    ``email`` is stored when given (registration provides it; other callers may omit it).
+    ``username`` is the unique internal HANDLE; ``display_name`` is the shown name (need not be unique),
+    defaulting to the handle when omitted (seed/legacy callers). The upsert + unique index on
+    ``users.username`` make this atomic: when two registrations of the same handle race, exactly one
+    insert wins and the loser's upsert raises ``DuplicateKeyError`` — caught here and reported as False,
+    honouring the contract under concurrency. ``email`` is stored when given (registration provides it).
     """
-    doc = {"username": username, "password_hash": password_hash}
+    doc = {"username": username, "password_hash": password_hash,
+           "display_name": display_name if display_name is not None else username}
     if email is not None:
         doc["email"] = email
     try:

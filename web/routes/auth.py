@@ -17,6 +17,7 @@ from werkzeug.security import check_password_hash, generate_password_hash
 
 from ratelimit import limiter
 from services.email import send_email
+from services.identity import display_name
 
 logger = logging.getLogger(__name__)
 
@@ -91,25 +92,44 @@ def auth_config():
                    password_min=PASSWORD_MIN, password_max=PASSWORD_MAX), 200
 
 
+# The display name people choose need NOT be unique (many "Alex"es). Each account still gets a UNIQUE
+# internal handle — what every collection keys on — so identity, ownership and addressing stay
+# unambiguous. First to claim a name gets it bare; later ones get a -2/-3 suffix. The email is the
+# unique login identity; the handle is never shown (display_name is).
+HANDLE_MAX_SUFFIX = 10000
+
+
+def _allocate_handle(display, password_hash, email):
+    """Register `display` under a fresh unique handle and return it, or None if none was free.
+
+    ``_users().add`` is the atomic gate — False iff the handle is taken — so a collision just tries the
+    next suffix. The password is hashed once by the caller (not per attempt)."""
+    for suffix in range(1, HANDLE_MAX_SUFFIX + 1):
+        handle = display if suffix == 1 else f"{display}-{suffix}"
+        if _users().add(handle, password_hash, email, display_name=display):
+            return handle
+    return None
+
+
 @auth_bp.post("/register")
 @limiter.limit("10 per minute")   # anti-spam: bulk account creation from one IP
 def register():
     data = request.get_json(silent=True)
     try:
-        username, password = validate_credentials(data)
+        display, password = validate_credentials(data)   # the submitted "username" IS the display name
         email = validate_email(data.get("email") if isinstance(data, dict) else None)
     except ValueError as exc:
         return jsonify(error=str(exc)), 400
     try:
-        if _users().by_email(email):
+        if _users().by_email(email):                      # one email -> one account (login identity)
             return jsonify(error="an account with this email already exists"), 409
-        created = _users().add(username, generate_password_hash(password), email)
+        handle = _allocate_handle(display, generate_password_hash(password), email)
     except Exception:
         logger.exception("user store unavailable during register")
         return jsonify(error="user store unavailable"), 503
-    if not created:
-        return jsonify(error="username already exists"), 409
-    return jsonify(status="registered", username=username), 201
+    if handle is None:                                    # every suffix taken (pathological) -> transient
+        return jsonify(error="could not create the account — please try again"), 503
+    return jsonify(status="registered", username=handle, display_name=display), 201
 
 
 @auth_bp.post("/login")
@@ -157,7 +177,7 @@ def login():
 
     session.clear()
     session["username"] = username
-    return jsonify(status="logged in", username=username), 200
+    return jsonify(status="logged in", username=username, display_name=display_name(username)), 200
 
 
 @auth_bp.post("/verify-otp")
@@ -212,7 +232,7 @@ def verify_otp():
         stored_hash = ""
     session.clear()
     session["username"] = username
-    resp = jsonify(status="logged in", username=username)
+    resp = jsonify(status="logged in", username=username, display_name=display_name(username))
     if data.get("remember"):
         _set_remember_cookie(resp, username, stored_hash)
     return resp, 200
@@ -250,7 +270,8 @@ def logout():
 @auth_bp.get("/me")
 @login_required
 def me():
-    return jsonify(username=session["username"]), 200
+    handle = session["username"]
+    return jsonify(username=handle, display_name=display_name(handle)), 200
 
 
 # ---- password reset (forgot-password) ----

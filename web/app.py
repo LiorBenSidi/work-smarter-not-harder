@@ -50,9 +50,9 @@ class _DbUsers(_DbStore):
         db_module, handle = self._resolve()
         return db_module.get_user(handle, username)
 
-    def add(self, username, password_hash, email=None):
+    def add(self, username, password_hash, email=None, display_name=None):
         db_module, handle = self._resolve()
-        return db_module.create_user(handle, username, password_hash, email)
+        return db_module.create_user(handle, username, password_hash, email, display_name)
 
     def by_email(self, email):
         db_module, handle = self._resolve()

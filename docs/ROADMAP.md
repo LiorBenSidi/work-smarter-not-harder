@@ -106,9 +106,10 @@ gate are live — that CI already covers the **CI portion** of the deploy requir
 **Live now:** the runnable 3-container stack (`docker-compose` + healthchecks + gunicorn, only `web` exposed)
 with **fault-tolerance hardening** (restart policies, healthcheck `start_period`, `web` boots even if `ai` is
 down), the `web↔ai` glue (`ai_client`), the **F4 calorie** function (`ai/calories.py`), and the ratified split.
-The **web tier is feature-complete + polished**: auth / profile / **daily check-in (F3)** / dashboard / history /
-frontend + CSRF + responsive theming + a11y + credential-hint tooltips (`/auth/config`) + a **distinct visual
-identity**, Forum CRUD/UI **with edit/delete-your-own**. The **whole data layer** is implemented — the thin
+The **web tier is feature-complete + polished**: auth (**email is the login identity; display names are
+non-unique over a stable internal handle**, prefilled from the email prefix) / profile / **daily check-in (F3)** /
+dashboard / history / frontend + CSRF + responsive theming + a11y + credential-hint tooltips (`/auth/config`) +
+a **distinct visual identity**, Forum CRUD/UI **with edit/delete-your-own**. The **whole data layer** is implemented — the thin
 `db.py` CRUD **concurrency-hardened** (atomic dedupe, optimistic-concurrency vote, TOCTOU-safe edit/delete) plus
 the Mongo internals (`ensure_indexes` + `$jsonSchema` validators + env-gated auth + `db/seed.py` + `db/backup.sh`),
 tested (incl. votes-as-a-list and a real-Mongo integration suite that runs in CI via a `mongo:7` service).

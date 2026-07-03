@@ -12,6 +12,7 @@ import time
 from flask import Blueprint, current_app, jsonify, request, session
 
 from routes.auth import login_required
+from services.identity import display_name
 
 logger = logging.getLogger(__name__)
 
@@ -49,24 +50,36 @@ def validate_comment(data):
 
 
 def _author(post):
-    return "Anonymous" if post.get("anonymous") else post.get("author")
+    """The shown author of a post: 'Anonymous' when anonymous, else the (non-unique) display name — the
+    internal handle is NEVER surfaced to a person."""
+    return "Anonymous" if post.get("anonymous") else display_name(post.get("author"))
 
 
-def _summary(post):
+def _mine(post, me):
+    """Whether `me` (an internal handle) authored this post — the per-viewer flag that gates the
+    edit/delete controls. Read from the real handle even for an anonymous post, but returned ONLY to that
+    author (each viewer learns only about themselves), so it never reveals an anonymous author to others.
+    """
+    return post.get("author") == me
+
+
+def _summary(post, me):
     # tolerate partial/seed rows from the store: a missing score/comments degrades this row to a
     # default rather than 500-ing the whole list.
     return {"id": post.get("id"), "title": post.get("title"), "author": _author(post),
+            "mine": _mine(post, me),
             "score": post.get("score", 0), "comments": len(post.get("comments") or [])}
 
 
 def _comment(c):
-    """Public projection of one comment for API responses — id/author/body/score, never the raw votes."""
-    return {"id": c.get("id"), "author": c.get("author"), "body": c.get("body"), "score": c.get("score", 0)}
+    """Public projection of one comment — id/author(display name)/body/score, never the raw votes."""
+    return {"id": c.get("id"), "author": display_name(c.get("author")), "body": c.get("body"),
+            "score": c.get("score", 0)}
 
 
-def _detail(post):
+def _detail(post, me):
     return {"id": post.get("id"), "title": post.get("title"), "body": post.get("body"),
-            "author": _author(post), "score": post.get("score", 0),
+            "author": _author(post), "mine": _mine(post, me), "score": post.get("score", 0),
             "comments": [_comment(c) for c in (post.get("comments") or [])]}
 
 
@@ -103,7 +116,7 @@ def _notify_vote(recipient, voter, value, ref, noun):
         if recent:
             return
         verb = "upvoted" if value == 1 else "downvoted"
-        _notifications().add(recipient, "vote", voter, ref, f"{voter} {verb} your {noun}")
+        _notifications().add(recipient, "vote", voter, ref, f"{display_name(voter)} {verb} your {noun}")
     except Exception:
         logger.warning("could not create a vote notification", exc_info=True)
 
@@ -139,7 +152,7 @@ def list_posts():
     except Exception:
         logger.exception("forum store unavailable")
         return jsonify(error="forum store unavailable"), 503
-    return jsonify(posts=[_summary(p) for p in posts]), 200
+    return jsonify(posts=[_summary(p, session["username"]) for p in posts]), 200
 
 
 @forum_bp.post("/forum/posts")
@@ -154,7 +167,7 @@ def create_post():
     except Exception:
         logger.exception("forum store unavailable")
         return jsonify(error="forum store unavailable"), 503
-    return jsonify(post=_detail(post)), 201
+    return jsonify(post=_detail(post, session["username"])), 201
 
 
 @forum_bp.get("/forum/posts/<post_id>")
@@ -167,7 +180,7 @@ def get_post(post_id):
         return jsonify(error="forum store unavailable"), 503
     if post is None:
         return jsonify(error="post not found"), 404
-    return jsonify(post=_detail(post)), 200
+    return jsonify(post=_detail(post, session["username"])), 200
 
 
 @forum_bp.patch("/forum/posts/<post_id>")
@@ -186,7 +199,7 @@ def edit_post(post_id):
         return jsonify(error="post not found"), 404
     if result == "forbidden":
         return jsonify(error="you can only edit your own post"), 403
-    return jsonify(post=_detail(result)), 200
+    return jsonify(post=_detail(result, session["username"])), 200
 
 
 @forum_bp.delete("/forum/posts/<post_id>")
@@ -218,7 +231,7 @@ def add_comment(post_id):
         return jsonify(error="forum store unavailable"), 503
     if comment is None:
         return jsonify(error="post not found"), 404
-    return jsonify(comment=comment), 201
+    return jsonify(comment=_comment(comment)), 201
 
 
 @forum_bp.post("/forum/posts/<post_id>/vote")
