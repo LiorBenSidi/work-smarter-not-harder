@@ -70,13 +70,13 @@ def test_smtp_backend_transmits_the_message_over_a_socket():
     threading.Thread(target=server.serve_forever, daemon=True).start()
     try:
         cfg = {"SMTP_HOST": "127.0.0.1", "SMTP_PORT": port, "SMTP_STARTTLS": False, "SMTP_USER": "",
-               "MAIL_FROM": "Work Smarter <no-reply@worksmarter.local>"}
-        ok = email_mod.send_email(cfg, "grader@example.com", "Your Work Smarter login code",
-                                  "Your Work Smarter login code is: 123456\n")
+               "MAIL_FROM": "Work Smarter, Not Harder <no-reply@worksmarter.local>"}
+        ok = email_mod.send_email(cfg, "grader@example.com", "Your Work Smarter, Not Harder login code",
+                                  "Your Work Smarter, Not Harder login code is: 123456\n")
         assert ok is True
         assert server.messages, "the SMTP sink received no message"
         raw = server.messages[0].decode("latin1")
-        assert "Subject: Your Work Smarter login code" in raw   # headers transmitted
+        assert "Subject: Your Work Smarter, Not Harder login code" in raw   # headers transmitted
         assert "To: grader@example.com" in raw
         assert "123456" in raw                                   # the OTP body actually went over the wire
     finally:
