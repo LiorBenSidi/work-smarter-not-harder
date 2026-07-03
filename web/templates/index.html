@@ -77,6 +77,40 @@
     .brand-tag { font-size:12px; color:var(--muted); white-space:nowrap; }
     #who { display:flex; align-items:center; gap:10px; }
     #who-name { white-space:nowrap; font-weight:700; }
+    /* Corner account menu: avatar-in-header -> identity + quick actions (Wolt-style upper-corner menu) */
+    .usermenu { position:relative; }
+    .usermenu-btn { display:flex; align-items:center; gap:9px; padding:5px 10px 5px 6px; border-radius:999px;
+      background:var(--field); border:1px solid var(--line); color:var(--ink); box-shadow:none; font-weight:700; min-height:44px; }
+    .usermenu-btn:hover { filter:none; box-shadow:none;
+      border-color: color-mix(in srgb, var(--accent) 45%, transparent); background: color-mix(in srgb, var(--accent) 9%, var(--field)); }
+    .usermenu-btn:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+    .usermenu-av .avatar { box-shadow: inset 0 0 0 1px rgba(255,255,255,.14); }
+    .usermenu-name { white-space:nowrap; font-weight:700; max-width:160px; overflow:hidden; text-overflow:ellipsis; }
+    .usermenu-chev { width:16px; height:16px; flex:none; stroke:var(--muted); fill:none; stroke-width:2.4; transition: transform .18s; }
+    .usermenu-btn[aria-expanded="true"] .usermenu-chev { transform: rotate(180deg); }
+    .usermenu-panel { position:absolute; top:calc(100% + 8px); right:0; z-index:60; min-width:250px;
+      background:var(--card); border:1px solid var(--line); border-radius:18px; padding:8px; box-shadow:var(--shadow);
+      backdrop-filter: blur(18px) saturate(1.15); animation: rise .18s cubic-bezier(.2,.7,.2,1) both; }
+    .usermenu-id { display:flex; align-items:center; gap:11px; padding:9px 10px 11px; }
+    .usermenu-id-text { display:flex; flex-direction:column; min-width:0; }
+    .usermenu-id-text strong { font-size:15px; font-weight:800; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .usermenu-id-text .muted { font-size:12.5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .usermenu-sep { height:1px; background:var(--line); margin:5px 4px; }
+    .usermenu-item { display:flex; align-items:center; gap:11px; width:100%; justify-content:flex-start; text-align:left;
+      background:transparent; color:var(--ink); box-shadow:none; border:0; padding:11px 12px; border-radius:12px; font-weight:700; min-height:44px; }
+    .usermenu-item:hover { filter:none; box-shadow:none; background:var(--field); }
+    .usermenu-item svg { width:17px; height:17px; flex:none; stroke:var(--accent); fill:none; stroke-width:2; }
+    .usermenu-item.danger { color:var(--err); }
+    .usermenu-item.danger svg { stroke:var(--err); }
+    .usermenu-item.danger:hover { background: color-mix(in srgb, var(--err) 12%, transparent); }
+    .usermenu-theme { padding:8px 12px 10px; }
+    .usermenu-theme-label { display:block; font-size:12px; font-weight:800; letter-spacing:.02em; color:var(--muted); margin-bottom:7px; text-transform:uppercase; }
+    .usermenu-segs { display:flex; gap:5px; padding:4px; background:var(--field); border:1px solid var(--line); border-radius:999px; }
+    .um-seg { flex:1; background:transparent; color:var(--muted); box-shadow:none; padding:8px 6px; border-radius:999px; font-weight:800; font-size:13px; min-height:44px; }
+    .um-seg:hover { filter:none; box-shadow:none; color:var(--ink); background: color-mix(in srgb, var(--accent) 10%, transparent); }
+    .um-seg.active { background: linear-gradient(135deg, var(--accent), color-mix(in srgb, var(--accent) 55%, var(--accent2))); color:var(--on-accent); }
+    .um-seg:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+    @media (max-width: 380px) { .usermenu-name { display:none; } }
 
     main { max-width:560px; margin:0 auto; padding:22px 18px 64px; }
     .card { background:var(--card); border:1px solid var(--line); border-radius:24px; padding:22px; margin-bottom:18px;
@@ -355,7 +389,34 @@
       <span class="brand-name">Work Smarter, Not Harder</span>
       <span class="brand-tag">readiness, every morning</span>
     </a>
-    <div id="who" hidden><span id="who-name" class="muted"></span></div>
+    <div id="who" class="usermenu" hidden>
+      <button id="user-menu-btn" type="button" class="usermenu-btn" aria-haspopup="menu" aria-expanded="false" aria-controls="user-menu-panel" aria-label="Account menu">
+        <span id="user-menu-av" class="usermenu-av" aria-hidden="true"></span>
+        <span id="who-name" class="usermenu-name"></span>
+        <svg class="usermenu-chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+      </button>
+      <div id="user-menu-panel" class="usermenu-panel" role="menu" aria-label="Account" hidden>
+        <div class="usermenu-id">
+          <span id="user-menu-av-lg" class="usermenu-av" aria-hidden="true"></span>
+          <span class="usermenu-id-text"><strong id="user-menu-name"></strong><span id="user-menu-handle" class="muted"></span></span>
+        </div>
+        <div class="usermenu-sep"></div>
+        <button type="button" class="usermenu-item" role="menuitem" data-act="profile">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6 8-6s8 2 8 6"/></svg>Profile &amp; account</button>
+        <div class="usermenu-sep"></div>
+        <div class="usermenu-theme" role="group" aria-label="Theme">
+          <span class="usermenu-theme-label">Theme</span>
+          <div class="usermenu-segs">
+            <button type="button" class="um-seg" data-theme="system" aria-pressed="false">System</button>
+            <button type="button" class="um-seg" data-theme="light" aria-pressed="false">Light</button>
+            <button type="button" class="um-seg" data-theme="dark" aria-pressed="false">Dark</button>
+          </div>
+        </div>
+        <div class="usermenu-sep"></div>
+        <button type="button" class="usermenu-item danger" role="menuitem" data-act="logout">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg>Log out</button>
+      </div>
+    </div>
   </header>
 
   <main>
@@ -721,6 +782,8 @@
       ["login-flash", "register-flash", "forgot-flash", "reset-flash", "otp-flash"].forEach((id) => flash(id, "", "ok"));
       const hint = $("otp-devhint"); hint.textContent = ""; hint.hidden = true;
       $("who-name").textContent = ""; $("profile-user").textContent = "";  // no username residue either
+      $("user-menu-av").innerHTML = ""; $("user-menu-av-lg").innerHTML = "";     // clear the corner-menu identity too
+      $("user-menu-name").textContent = ""; $("user-menu-handle").textContent = ""; closeUserMenu();
       stopEvents(); $("dm-dot").hidden = true;                             // close the SSE stream + stop polling on logout
       pendingUser = null; resetToken = null; currentUser = null;
       showTab("login");
@@ -833,7 +896,8 @@
       } else { flash("register-flash", (r.data && r.data.error) || "Registration failed"); }
     });
 
-    $("logout-btn").addEventListener("click", async () => { await api("/logout", { method: "POST" }); resetAuthState(); showView("auth"); });
+    async function doLogout() { closeUserMenu(); await api("/logout", { method: "POST" }); resetAuthState(); showView("auth"); }
+    $("logout-btn").addEventListener("click", doLogout);
 
     // ---- Forgot / reset password ----
     let resetToken = null;
@@ -1379,6 +1443,13 @@
       $("who-name").textContent = "Hi, " + shown;
       $("profile-user").textContent = "Signed in as " + shown;
       $("displayname-input").value = shown;
+      // Corner account menu: deterministic avatar keyed by the STABLE handle (survives display-name edits),
+      // with the identity block showing the display name + @handle.
+      const key = currentUser || shown;
+      $("user-menu-av").innerHTML = avatarHtml(key, 26);
+      $("user-menu-av-lg").innerHTML = avatarHtml(key, 40);
+      $("user-menu-name").textContent = shown;
+      $("user-menu-handle").textContent = currentUser ? "@" + currentUser : "";
     }
 
     function enterApp(handle, name) {
@@ -1436,26 +1507,63 @@
     // ---- Theme (Display & accessibility): System / Light / Dark, persisted. The <head> script already
     // applied the saved choice pre-paint; here we sync the radio + wire changes. "system" removes the
     // override so the OS preference (prefers-color-scheme) takes over. ----
-    (function initTheme() {
-      const KEY = "ws-theme";
-      const saved = (() => { try { return localStorage.getItem(KEY); } catch (e) { return null; } })() || "system";
-      const apply = (v) => {
-        if (v === "light" || v === "dark") document.documentElement.setAttribute("data-theme", v);
-        else document.documentElement.removeAttribute("data-theme");
-      };
-      apply(saved);
+    const THEME_KEY = "ws-theme";
+    function applyTheme(v) {
+      if (v === "light" || v === "dark") document.documentElement.setAttribute("data-theme", v);
+      else document.documentElement.removeAttribute("data-theme");
+    }
+    // Keep BOTH theme controls in lockstep: the Profile radios and the corner-menu segments.
+    function syncThemeControls(v) {
       const group = $("theme-group");
-      if (!group) return;
-      const chosen = group.querySelector('input[value="' + saved + '"]') || group.querySelector('input[value="system"]');
-      if (chosen) chosen.checked = true;
-      group.addEventListener("change", (e) => {
-        if (e.target.name !== "theme") return;
-        try { localStorage.setItem(KEY, e.target.value); } catch (_) {}
-        const root = document.documentElement;
-        root.classList.add("theme-switching");             // atomic palette swap, no per-element transition flicker
-        apply(e.target.value);
-        requestAnimationFrame(() => requestAnimationFrame(() => root.classList.remove("theme-switching")));
+      if (group) { const r = group.querySelector('input[value="' + v + '"]'); if (r) r.checked = true; }
+      document.querySelectorAll("#user-menu-panel .um-seg").forEach((b) => {
+        const on = b.dataset.theme === v;
+        b.classList.toggle("active", on);
+        b.setAttribute("aria-pressed", on ? "true" : "false");
       });
+    }
+    // Single source of truth for a theme change (persist + apply + sync every control).
+    function setTheme(v) {
+      try { localStorage.setItem(THEME_KEY, v); } catch (_) {}
+      const root = document.documentElement;
+      root.classList.add("theme-switching");             // atomic palette swap, no per-element transition flicker
+      applyTheme(v);
+      requestAnimationFrame(() => requestAnimationFrame(() => root.classList.remove("theme-switching")));
+      syncThemeControls(v);
+      dbg("theme set:", v);
+    }
+    (function initTheme() {
+      const saved = (() => { try { return localStorage.getItem(THEME_KEY); } catch (e) { return null; } })() || "system";
+      applyTheme(saved);
+      syncThemeControls(saved);
+      const group = $("theme-group");
+      if (group) group.addEventListener("change", (e) => { if (e.target.name === "theme") setTheme(e.target.value); });
+    })();
+
+    // ---- Corner account menu: avatar-in-header -> identity + quick actions (Profile / Theme / Log out) ----
+    function closeUserMenu() {
+      const p = $("user-menu-panel"); if (p) p.hidden = true;
+      const b = $("user-menu-btn"); if (b) b.setAttribute("aria-expanded", "false");
+    }
+    function openUserMenu() {
+      $("user-menu-panel").hidden = false;
+      $("user-menu-btn").setAttribute("aria-expanded", "true");
+    }
+    (function initUserMenu() {
+      const btn = $("user-menu-btn"), panel = $("user-menu-panel");
+      if (!btn || !panel) return;
+      btn.addEventListener("click", (e) => { e.stopPropagation(); panel.hidden ? openUserMenu() : closeUserMenu(); });
+      panel.addEventListener("click", (e) => e.stopPropagation());   // interacting inside (e.g. theme) keeps it open
+      panel.querySelectorAll(".usermenu-item").forEach((it) => it.addEventListener("click", () => {
+        const act = it.dataset.act;
+        closeUserMenu();
+        if (act === "profile") showScreen("profile");
+        else if (act === "logout") doLogout();
+      }));
+      // inline theme segments route through the shared setTheme -> the Profile radios stay in sync
+      panel.querySelectorAll(".um-seg").forEach((seg) => seg.addEventListener("click", () => setTheme(seg.dataset.theme)));
+      document.addEventListener("click", () => { if (!panel.hidden) closeUserMenu(); });   // dismiss on outside click
+      document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !panel.hidden) { closeUserMenu(); btn.focus(); } });
     })();
 
     // Keep the SPA in sync with browser Back/Forward on the logged-OUT screens (OTP/reset/login): resolve

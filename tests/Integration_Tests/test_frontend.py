@@ -193,3 +193,23 @@ def test_index_wires_the_pwa(client):
     assert 'rel="manifest"' in html and 'name="theme-color"' in html
     assert 'rel="apple-touch-icon"' in html
     assert "serviceWorker" in html and "/sw.js" in html
+
+
+def test_account_menu_present_and_wired(client):
+    # Wolt-style corner account menu: an avatar button in the header opens a dropdown with the identity
+    # block + quick actions (Profile / Theme / Log out). The menu is an accessible popup (aria-haspopup
+    # + aria-expanded + aria-controls), and its logout routes through the shared doLogout.
+    html = client.get("/").get_data(as_text=True)
+    assert 'id="user-menu-btn"' in html and 'id="user-menu-panel"' in html
+    assert 'aria-haspopup="menu"' in html and 'aria-controls="user-menu-panel"' in html
+    assert 'data-act="profile"' in html and 'data-act="logout"' in html
+    assert "function doLogout(" in html and "closeUserMenu()" in html   # one logout path, shared with the Profile button
+
+
+def test_theme_change_has_a_single_source_of_truth(client):
+    # the corner menu's theme segments and the Profile radios must both route through setTheme, so the two
+    # controls can never drift out of sync (setTheme persists, applies, and mirrors every control).
+    html = client.get("/").get_data(as_text=True)
+    assert "function setTheme(" in html and "function syncThemeControls(" in html
+    assert 'class="um-seg"' in html and 'data-theme="system"' in html and 'data-theme="dark"' in html
+    assert "#user-menu-panel .um-seg" in html   # syncThemeControls mirrors the choice onto the menu segments
