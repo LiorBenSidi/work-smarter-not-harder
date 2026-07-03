@@ -26,7 +26,7 @@ The backend is built and CI-gated; the open work is two teammates' lanes. If you
   upvote/downvote notifications; `flask-limiter` on the other public routes; stress tests (locust); the
   test-runner service. See [`PERSON3.md`](PERSON3.md).
 - ℹ️ **Online Forum (§10) status:** posts · comments · anonymity · post up/down-votes · **P2P direct messages
-  (text) · live DM notifications (polling) · anti-spam messaging rate-limit** are built. Still open: media
+  (text) · live DM notifications (SSE push) · anti-spam messaging rate-limit** are built. Still open: media
   attachments + file-size limits · vote notifications · comment votes · a received-engagement profile metric ·
   fuller cold-seeding (the seed content is Shiri's). See [`docs/FEEDBACK.md`](docs/FEEDBACK.md) §2 for the rubric.
 
