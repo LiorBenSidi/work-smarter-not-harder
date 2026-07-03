@@ -67,6 +67,10 @@ class _DbUsers(_DbStore):
         db_module, handle = self._resolve()
         return db_module.update_display_name(handle, username, display_name)
 
+    def delete(self, username):
+        db_module, handle = self._resolve()
+        return db_module.delete_user(handle, username)
+
     def set_otp(self, username, otp_hash, expires_at):
         db_module, handle = self._resolve()
         return db_module.set_otp(handle, username, otp_hash, expires_at)
@@ -95,6 +99,10 @@ class _DbProfiles(_DbStore):
         db_module, handle = self._resolve()
         return db_module.save_profile(handle, username, profile)
 
+    def delete(self, username):
+        db_module, handle = self._resolve()
+        db_module.delete_profile(handle, username)
+
 
 class _DbHistory(_DbStore):
     """Seam fns: ``list_history(db, username) -> list`` / ``add_history(db, username, entry)``."""
@@ -106,6 +114,10 @@ class _DbHistory(_DbStore):
     def add(self, username, entry):
         db_module, handle = self._resolve()
         db_module.add_history(handle, username, entry)
+
+    def delete(self, username):
+        db_module, handle = self._resolve()
+        db_module.delete_history(handle, username)
 
 
 class _DbForum(_DbStore):
@@ -146,6 +158,10 @@ class _DbForum(_DbStore):
         db_module, handle = self._resolve()
         return db_module.forum_delete_post(handle, post_id, username)
 
+    def purge_user(self, username):
+        db_module, handle = self._resolve()
+        db_module.forum_purge_user(handle, username)
+
 
 class _DbMessages(_DbStore):
     """Seam Lior implements: ``message_send`` / ``message_list_conversation`` /
@@ -171,6 +187,10 @@ class _DbMessages(_DbStore):
         db_module, handle = self._resolve()
         return db_module.message_count_since(handle, user, since)
 
+    def delete_for_user(self, username):
+        db_module, handle = self._resolve()
+        db_module.message_delete_for_user(handle, username)
+
 
 class _DbNotifications(_DbStore):
     """Seam Lior implements: ``notification_add`` / ``notification_list`` / ``notification_mark_read``."""
@@ -186,6 +206,10 @@ class _DbNotifications(_DbStore):
     def mark_read(self, user, ids=None):
         db_module, handle = self._resolve()
         return db_module.notification_mark_read(handle, user, ids)
+
+    def delete_for_user(self, username):
+        db_module, handle = self._resolve()
+        db_module.notification_delete_for_user(handle, username)
 
 
 def create_app(config=Config, *, users=None, profiles=None, history=None, forum=None,
