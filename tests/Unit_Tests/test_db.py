@@ -226,8 +226,34 @@ def test_forum_get_missing_post_is_none(db_mod, db):
 def test_forum_add_comment(db_mod, db):
     pid = db_mod.forum_create_post(db, "alice", "T", "B", False)["id"]
     comment = db_mod.forum_add_comment(db, pid, "bob", "nice")
-    assert comment == {"author": "bob", "body": "nice"}
-    assert db_mod.forum_get_post(db, pid)["comments"] == [{"author": "bob", "body": "nice"}]
+    assert comment["author"] == "bob" and comment["body"] == "nice" and comment["score"] == 0
+    assert comment["id"] and isinstance(comment["id"], str) and "votes" not in comment
+    stored = db_mod.forum_get_post(db, pid)["comments"]
+    assert len(stored) == 1 and stored[0]["id"] == comment["id"]
+    assert stored[0]["author"] == "bob" and stored[0]["body"] == "nice" and stored[0]["score"] == 0
+    assert "votes" not in stored[0]                      # internal tally not leaked to the public shape
+
+
+def test_forum_vote_comment_sets_and_replaces(db_mod, db):
+    pid = db_mod.forum_create_post(db, "alice", "T", "B", False)["id"]
+    cid = db_mod.forum_add_comment(db, pid, "bob", "hi")["id"]
+    assert db_mod.forum_vote_comment(db, pid, cid, "carol", 1) == 1
+    assert db_mod.forum_vote_comment(db, pid, cid, "carol", -1) == -1     # one vote per user — replaces
+    assert db_mod.forum_get_post(db, pid)["comments"][0]["score"] == -1
+
+
+def test_forum_vote_comment_aggregates_across_users(db_mod, db):
+    pid = db_mod.forum_create_post(db, "alice", "T", "B", False)["id"]
+    cid = db_mod.forum_add_comment(db, pid, "bob", "hi")["id"]
+    db_mod.forum_vote_comment(db, pid, cid, "carol", 1)
+    assert db_mod.forum_vote_comment(db, pid, cid, "dave", 1) == 2        # distinct users sum
+
+
+def test_forum_vote_comment_unknown_post_or_comment_is_none(db_mod, db):
+    pid = db_mod.forum_create_post(db, "alice", "T", "B", False)["id"]
+    db_mod.forum_add_comment(db, pid, "bob", "hi")
+    assert db_mod.forum_vote_comment(db, "nope", "c1", "carol", 1) is None            # missing post
+    assert db_mod.forum_vote_comment(db, pid, "no-such-comment", "carol", 1) is None  # missing comment
 
 
 def test_forum_add_comment_on_missing_post_is_none(db_mod, db):
