@@ -59,10 +59,15 @@ def _summary(post):
             "score": post.get("score", 0), "comments": len(post.get("comments") or [])}
 
 
+def _comment(c):
+    """Public projection of one comment for API responses — id/author/body/score, never the raw votes."""
+    return {"id": c.get("id"), "author": c.get("author"), "body": c.get("body"), "score": c.get("score", 0)}
+
+
 def _detail(post):
     return {"id": post.get("id"), "title": post.get("title"), "body": post.get("body"),
             "author": _author(post), "score": post.get("score", 0),
-            "comments": post.get("comments") or []}
+            "comments": [_comment(c) for c in (post.get("comments") or [])]}
 
 
 def _forum():
@@ -73,36 +78,57 @@ def _notifications():
     return current_app.config["NOTIFICATIONS"]
 
 
-# Anti-spam (§2.7): collapse repeated votes from the SAME voter on the SAME post into one ping per
-# window, so toggling up/down can't flood the author's feed. A genuinely later vote (past the window)
-# pings again — coalescing is time-bounded, never a permanent mute — and the bounded lookback keeps the
-# check cheap (we only scan notifications newer than the cutoff, not the author's whole history).
+# Anti-spam (§2.7): collapse repeated votes from the SAME voter on the SAME target (a post OR a comment)
+# into one ping per window, so toggling up/down can't flood the author's feed. A genuinely later vote
+# (past the window) pings again — coalescing is time-bounded, never a permanent mute — and the bounded
+# lookback keeps the check cheap (we scan only notifications newer than the cutoff, not the whole history).
 VOTE_NOTIFY_COALESCE_SECONDS = 60
 
 
-def _notify_author_of_vote(post_id, voter, value):
-    """Tell a post's author their post was up/downvoted (Online-Forum §2.6, live notifications).
+def _notify_vote(recipient, voter, value, ref, noun):
+    """Push a live vote notification to a post/comment author through the shared notification feed.
 
     Best-effort: a notification hiccup must NEVER fail the vote itself (mirrors the DM-send path). A
-    self-vote is skipped, and rapid re-votes are coalesced within the window above (the score is always
-    authoritative, so the ping is just "someone engaged" — it needn't track every flip). The author is
-    read from the store, which keeps the REAL author even for an anonymous post — anonymity is a
-    display-layer projection, so the owner is still notified about their own post.
+    self-vote is skipped, and rapid re-votes are coalesced per (voter, ref) within the window above (the
+    score is always authoritative, so the ping is just "someone engaged" — it needn't track every flip).
+    ``noun`` is "post"/"comment"; ``ref`` is the coalesce key — a post id, or ``post_id:comment_id`` so a
+    comment's votes coalesce independently of its post's.
     """
+    if not recipient or recipient == voter:
+        return
     try:
-        post = _forum().get_post(post_id)
-        author = post.get("author") if post else None
-        if not author or author == voter:
-            return
         cutoff = time.time() - VOTE_NOTIFY_COALESCE_SECONDS
-        recent = any(n.get("type") == "vote" and n.get("ref") == post_id and n.get("actor") == voter
-                     for n in _notifications().list(author, since=cutoff))
+        recent = any(n.get("type") == "vote" and n.get("ref") == ref and n.get("actor") == voter
+                     for n in _notifications().list(recipient, since=cutoff))
         if recent:
             return
         verb = "upvoted" if value == 1 else "downvoted"
-        _notifications().add(author, "vote", voter, post_id, f"{voter} {verb} your post")
+        _notifications().add(recipient, "vote", voter, ref, f"{voter} {verb} your {noun}")
     except Exception:
         logger.warning("could not create a vote notification", exc_info=True)
+
+
+def _notify_author_of_vote(post_id, voter, value):
+    """Notify a post's author their post was up/downvoted (§2.6). The real author is read from the store
+    even for an anonymous post (anonymity is a display-layer projection), so the owner is still pinged."""
+    try:
+        post = _forum().get_post(post_id)
+    except Exception:
+        logger.warning("could not resolve a post author for a vote notification", exc_info=True)
+        return
+    _notify_vote(post.get("author") if post else None, voter, value, post_id, "post")
+
+
+def _notify_comment_author_of_vote(post_id, comment_id, voter, value):
+    """Notify a comment's author their comment was up/downvoted (§2.6)."""
+    try:
+        post = _forum().get_post(post_id)
+        comments = (post.get("comments") or []) if post else []
+        comment = next((c for c in comments if c.get("id") == comment_id), None)
+    except Exception:
+        logger.warning("could not resolve a comment author for a vote notification", exc_info=True)
+        return
+    _notify_vote(comment.get("author") if comment else None, voter, value, f"{post_id}:{comment_id}", "comment")
 
 
 @forum_bp.get("/forum/posts")
@@ -211,4 +237,23 @@ def vote(post_id):
     if score is None:
         return jsonify(error="post not found"), 404
     _notify_author_of_vote(post_id, voter, value)   # live push to the author; never fails the vote
+    return jsonify(score=score), 200
+
+
+@forum_bp.post("/forum/posts/<post_id>/comments/<comment_id>/vote")
+@login_required
+def vote_comment(post_id, comment_id):
+    voter = session["username"]
+    data = request.get_json(silent=True)
+    value = data.get("value") if isinstance(data, dict) else None
+    if type(value) is not int or value not in (1, -1):  # exactly the ints +1 / -1 (no bool, no float)
+        return jsonify(error="value must be 1 or -1"), 400
+    try:
+        score = _forum().vote_comment(post_id, comment_id, voter, value)
+    except Exception:
+        logger.exception("forum store unavailable")
+        return jsonify(error="forum store unavailable"), 503
+    if score is None:
+        return jsonify(error="comment not found"), 404
+    _notify_comment_author_of_vote(post_id, comment_id, voter, value)   # live push; never fails the vote
     return jsonify(score=score), 200

@@ -140,9 +140,21 @@ class FakeForum:
         post = self._posts.get(post_id)
         if post is None:
             return None
-        comment = {"author": author, "body": body}
+        self._seq += 1
+        comment = {"id": "c" + str(self._seq), "author": author, "body": body, "votes": {}, "score": 0}
         post["comments"].append(comment)
-        return comment
+        return {"id": comment["id"], "author": author, "body": body, "score": 0}   # public shape (no votes)
+
+    def vote_comment(self, post_id, comment_id, username, value):
+        post = self._posts.get(post_id)
+        if post is None:
+            return None
+        comment = next((c for c in post["comments"] if c.get("id") == comment_id), None)
+        if comment is None:
+            return None
+        comment.setdefault("votes", {})[username] = value  # one vote per user; re-voting replaces
+        comment["score"] = sum(comment["votes"].values())
+        return comment["score"]
 
     def vote(self, post_id, username, value):
         post = self._posts.get(post_id)
