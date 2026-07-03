@@ -143,3 +143,4 @@ def test_all_endpoints_require_login(messages_client):
     assert c.get("/conversations/bob").status_code == 401
     assert c.get("/notifications").status_code == 401
     assert c.post("/notifications/read", json={}).status_code == 401
+    assert c.get("/events").status_code == 401   # the SSE stream is auth-gated too (401 before streaming)
