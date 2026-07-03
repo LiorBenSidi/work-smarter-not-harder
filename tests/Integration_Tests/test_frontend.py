@@ -105,6 +105,17 @@ def test_dark_mode_and_a11y_present(client):
     assert 'for="age"' in html and 'id="age"' in html   # labels associated with their inputs
 
 
+def test_theme_toggle_present_and_wired(client):
+    # accessibility: a VISIBLE System/Light/Dark control (the OS-only theme had no in-app switch), applied
+    # before first paint (no flash) and persisted across visits.
+    html = client.get("/").get_data(as_text=True)
+    assert 'id="theme-group"' in html                          # the settings control exists in the Profile screen
+    for v in ('value="system"', 'value="light"', 'value="dark"'):
+        assert v in html
+    assert 'data-theme="light"' in html                        # the CSS overrides the OS via the forced-theme attr
+    assert 'localStorage.getItem("ws-theme")' in html          # persisted + applied pre-paint in the <head> script
+
+
 def test_manifest_is_served_for_pwa(client):
     # the web manifest makes the app installable (name + icons + start_url), at the right mimetype.
     resp = client.get("/manifest.webmanifest")
