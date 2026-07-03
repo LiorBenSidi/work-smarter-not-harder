@@ -343,6 +343,44 @@ def change_password():
     return resp, 200
 
 
+@auth_bp.delete("/account")
+@limiter.limit("5 per minute")   # destructive + irreversible -> cap attempts
+@login_required
+def delete_account():
+    """GDPR right to erasure: verify the password, then delete the user AND all their personal data
+    across every store (profile, history, forum content, DMs, notifications), end the session and drop
+    the cookies. Irreversible. The identity record is removed LAST, so a mid-cascade store failure leaves
+    a still-recoverable, retryable account rather than data orphaned under a deleted handle."""
+    data = request.get_json(silent=True)
+    password = data.get("password") if isinstance(data, dict) else None
+    if not isinstance(password, str):
+        return jsonify(error="your password is required to delete your account"), 400
+    username = session["username"]
+    cfg = current_app.config
+    try:
+        user = _users().get(username)
+    except Exception:
+        logger.exception("user store unavailable during account deletion")
+        return jsonify(error="user store unavailable"), 503
+    stored_hash = user.get("password_hash") if isinstance(user, dict) else None
+    if not isinstance(stored_hash, str) or not check_password_hash(stored_hash, password):
+        return jsonify(error="password is incorrect"), 403
+    try:
+        cfg["PROFILES"].delete(username)
+        cfg["HISTORY"].delete(username)
+        cfg["FORUM"].purge_user(username)
+        cfg["MESSAGES"].delete_for_user(username)
+        cfg["NOTIFICATIONS"].delete_for_user(username)
+        _users().delete(username)                        # remove the identity record LAST
+    except Exception:
+        logger.exception("account deletion failed mid-cascade for %s", username)
+        return jsonify(error="could not delete the account — please try again"), 503
+    session.clear()
+    resp = jsonify(status="account deleted")
+    resp.delete_cookie(REMEMBER_COOKIE)
+    return resp, 200
+
+
 # ---- password reset (forgot-password) ----
 _RESET_SALT = "pw-reset-v1"
 

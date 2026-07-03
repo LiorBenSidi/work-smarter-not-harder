@@ -80,6 +80,37 @@ def test_update_display_name_changes_the_shown_name_only(db_mod, real_db):
     assert db_mod.update_display_name(real_db, "ghost", "Nobody") is False   # unknown handle -> False
 
 
+def test_account_deletion_cascade_erases_all_user_data(db_mod, real_db):
+    # the full GDPR erasure against real Mongo: every collection + the forum-consistency recompute.
+    db_mod.ensure_indexes(real_db)
+    db_mod.create_user(real_db, "alice", "h1", "a@ex.com", display_name="Alice")
+    db_mod.save_profile(real_db, "alice", {"age": 30})
+    db_mod.add_history(real_db, "alice", {"assessment": "Ready"})
+    pa = db_mod.forum_create_post(real_db, "alice", "A", "a", False)["id"]
+    pb = db_mod.forum_create_post(real_db, "bob", "B", "b", False)["id"]
+    db_mod.forum_add_comment(real_db, pb, "alice", "hi")
+    db_mod.forum_vote(real_db, pb, "alice", 1)
+    db_mod.forum_vote(real_db, pb, "bob", 1)
+    db_mod.message_send(real_db, "alice", "bob", "hey")
+    db_mod.notification_add(real_db, "bob", "vote", "alice", None, "alice upvoted")
+    # erase (route order: dependent data first, the identity record last)
+    db_mod.delete_profile(real_db, "alice")
+    db_mod.delete_history(real_db, "alice")
+    db_mod.forum_purge_user(real_db, "alice")
+    db_mod.message_delete_for_user(real_db, "alice")
+    db_mod.notification_delete_for_user(real_db, "alice")
+    assert db_mod.delete_user(real_db, "alice") is True
+    # erased; bob's data intact with alice stripped out
+    assert db_mod.get_user(real_db, "alice") is None
+    assert db_mod.get_profile(real_db, "alice") is None
+    assert db_mod.list_history(real_db, "alice") == []
+    assert db_mod.forum_get_post(real_db, pa) is None
+    post = db_mod.forum_get_post(real_db, pb)
+    assert post["score"] == 1 and all(c["author"] != "alice" for c in post["comments"])
+    assert db_mod.message_list_conversation(real_db, "alice", "bob") == []
+    assert db_mod.notification_list(real_db, "bob") == []
+
+
 def test_otp_challenge_roundtrip(db_mod, real_db):
     # the login-OTP seam against real Mongo: set -> get -> atomic $inc -> $unset, and clearing the
     # transient fields must leave the core identity doc untouched.

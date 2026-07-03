@@ -462,3 +462,56 @@ def notification_mark_read(db, user, ids=None):
     for n in db.notifications.find({"user": user}):
         if not n.get("read") and (target is None or n.get("id") in target):
             db.notifications.update_one({"id": n["id"]}, {"$set": {"read": True}})
+
+
+# ---- account deletion (GDPR right to erasure) — remove a user + ALL their personal data ----
+def delete_user(db, username):
+    """Delete the user's identity record. Returns True if a row was removed."""
+    return db.users.delete_one({"username": username}).deleted_count > 0
+
+
+def delete_profile(db, username):
+    """Delete the user's fitness profile (a no-op if there is none)."""
+    db.profiles.delete_one({"username": username})
+
+
+def delete_history(db, username):
+    """Delete all of the user's analysis-history entries."""
+    db.analysis_history.delete_many({"username": username})
+
+
+def message_delete_for_user(db, username):
+    """Delete every DM the user SENT or RECEIVED (erases both sides of their conversations)."""
+    db.messages.delete_many({"$or": [{"sender": username}, {"recipient": username}]})
+
+
+def notification_delete_for_user(db, username):
+    """Delete the user's notification inbox AND any notification where they are the actor, so their
+    handle isn't left referenced inside someone else's feed."""
+    db.notifications.delete_many({"$or": [{"user": username}, {"actor": username}]})
+
+
+def forum_purge_user(db, username):
+    """Erase the user from the forum: delete the posts they authored, and strip their comments and
+    votes out of everyone else's posts — recomputing the affected post/comment scores so the forum
+    stays consistent for the remaining users."""
+    db.forum_posts.delete_many({"author": username})
+    for post in list(db.forum_posts.find()):
+        kept_comments, changed = [], False
+        for c in post.get("comments", []):
+            if c.get("author") == username:
+                changed = True                                   # drop the user's comment entirely
+                continue
+            cvotes = [v for v in c.get("votes", []) if v.get("user") != username]
+            if len(cvotes) != len(c.get("votes", [])):
+                c = {**c, "votes": cvotes, "score": sum(v["value"] for v in cvotes)}
+                changed = True
+            kept_comments.append(c)
+        pvotes = [v for v in post.get("votes", []) if v.get("user") != username]
+        if len(pvotes) != len(post.get("votes", [])):
+            changed = True
+        if changed:
+            db.forum_posts.update_one(
+                {"id": post["id"]},
+                {"$set": {"comments": kept_comments, "votes": pvotes,
+                          "score": sum(v["value"] for v in pvotes)}})

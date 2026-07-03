@@ -34,6 +34,8 @@ class _FakeColl:
         self.indexes.append((key, unique))
 
     def _match(self, doc, filt):
+        if "$or" in filt:
+            return any(self._match(doc, sub) for sub in filt["$or"])
         return all(doc.get(k) == v for k, v in filt.items())
 
     def find_one(self, filt):
@@ -53,6 +55,11 @@ class _FakeColl:
                 del self.docs[i]
                 return SimpleNamespace(deleted_count=1)
         return SimpleNamespace(deleted_count=0)
+
+    def delete_many(self, filt):
+        before = len(self.docs)
+        self.docs = [d for d in self.docs if not self._match(d, filt)]
+        return SimpleNamespace(deleted_count=before - len(self.docs))
 
     def update_one(self, filt, update, upsert=False):
         for d in self.docs:
@@ -351,6 +358,49 @@ def test_update_display_name_changes_only_the_shown_name(db_mod, db):
     assert u["display_name"] == "Alice B."                    # shown name updated
     assert u["username"] == "alice" and u["password_hash"] == "h1"   # handle + credential untouched
     assert db_mod.update_display_name(db, "ghost", "X") is False     # unknown handle -> False
+
+
+# ---- account deletion (GDPR erasure) ----
+def test_delete_user_profile_and_history(db_mod, db):
+    db_mod.create_user(db, "alice", "h1")
+    db_mod.save_profile(db, "alice", {"age": 30})
+    db_mod.add_history(db, "alice", {"x": 1})
+    assert db_mod.delete_user(db, "alice") is True
+    assert db_mod.get_user(db, "alice") is None
+    db_mod.delete_profile(db, "alice")
+    assert db_mod.get_profile(db, "alice") is None
+    db_mod.delete_history(db, "alice")
+    assert db_mod.list_history(db, "alice") == []
+    assert db_mod.delete_user(db, "ghost") is False              # nothing to delete -> False
+
+
+def test_forum_purge_user_strips_authored_and_voted_content(db_mod, db):
+    pa = db_mod.forum_create_post(db, "alice", "A", "a", False)["id"]
+    pb = db_mod.forum_create_post(db, "bob", "B", "b", False)["id"]
+    db_mod.forum_add_comment(db, pb, "alice", "hi")
+    db_mod.forum_vote(db, pb, "alice", 1)
+    db_mod.forum_vote(db, pb, "bob", 1)
+    db_mod.forum_purge_user(db, "alice")
+    assert db_mod.forum_get_post(db, pa) is None                 # alice's own post gone
+    post = db_mod.forum_get_post(db, pb)
+    assert post is not None and post["score"] == 1               # her vote stripped, bob's kept
+    assert all(c["author"] != "alice" for c in post["comments"]) # her comment stripped
+
+
+def test_message_and_notification_delete_for_user(db_mod, db):
+    db_mod.message_send(db, "alice", "bob", "hi")
+    db_mod.message_send(db, "bob", "alice", "yo")
+    db_mod.message_send(db, "bob", "carol", "unrelated")
+    db_mod.notification_add(db, "alice", "dm", "bob", None, "x")
+    db_mod.notification_add(db, "bob", "vote", "alice", None, "y")   # alice as actor
+    db_mod.notification_add(db, "carol", "dm", "bob", None, "z")
+    db_mod.message_delete_for_user(db, "alice")
+    db_mod.notification_delete_for_user(db, "alice")
+    assert db_mod.message_list_conversation(db, "alice", "bob") == []
+    assert len(db_mod.message_list_conversation(db, "bob", "carol")) == 1   # unrelated survives
+    assert db_mod.notification_list(db, "alice") == []
+    assert db_mod.notification_list(db, "bob") == []                        # actor=alice removed
+    assert len(db_mod.notification_list(db, "carol")) == 1                  # unrelated survives
 
 
 def test_get_profile_with_no_profile_field_is_none(db_mod, db):
