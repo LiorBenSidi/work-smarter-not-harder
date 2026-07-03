@@ -61,6 +61,13 @@ class FakeUsers:
         rec["password_hash"] = password_hash
         return True
 
+    def set_display_name(self, username, display_name):
+        rec = self._by_name.get(username)
+        if rec is None:
+            return False
+        rec["display_name"] = display_name
+        return True
+
     # ---- login-OTP challenge (mirrors db.py set_otp/get_otp/clear_otp/bump_otp_attempts) ----
     def set_otp(self, username, otp_hash, expires_at):
         rec = self._by_name.get(username)

@@ -127,6 +127,16 @@ def test_touch_targets_meet_44px_minimum(client):
     assert "padding-right:44px" in css             # a long post title stays clear of the absolute close ✕
 
 
+def test_account_editing_ui_present_and_wired(client):
+    # the Account card exposes display-name + change-password editors, wired to the /account endpoints
+    # (autocomplete tokens let a password manager fill current / suggest a new password).
+    html = client.get("/").get_data(as_text=True)
+    assert 'id="displayname-form"' in html and 'id="password-form"' in html
+    assert "/account/display-name" in html and "/account/password" in html
+    assert 'id="current-password"' in html and 'id="new-password"' in html
+    assert 'autocomplete="current-password"' in html and 'autocomplete="new-password"' in html
+
+
 def test_manifest_is_served_for_pwa(client):
     # the web manifest makes the app installable (name + icons + start_url), at the right mimetype.
     resp = client.get("/manifest.webmanifest")

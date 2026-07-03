@@ -71,6 +71,15 @@ def test_create_user_stores_and_returns_the_display_name(db_mod, real_db):
     assert u1["username"] == "alex" and u2["username"] == "alex-2"  # distinct handles
 
 
+def test_update_display_name_changes_the_shown_name_only(db_mod, real_db):
+    # renaming updates display_name and leaves the handle (and everything keyed on it) + credential intact.
+    db_mod.create_user(real_db, "alice", "h1", "alice@example.com", display_name="Alice")
+    assert db_mod.update_display_name(real_db, "alice", "Alice B.") is True
+    u = db_mod.get_user(real_db, "alice")
+    assert u == {"username": "alice", "password_hash": "h1", "email": "alice@example.com", "display_name": "Alice B."}
+    assert db_mod.update_display_name(real_db, "ghost", "Nobody") is False   # unknown handle -> False
+
+
 def test_otp_challenge_roundtrip(db_mod, real_db):
     # the login-OTP seam against real Mongo: set -> get -> atomic $inc -> $unset, and clearing the
     # transient fields must leave the core identity doc untouched.

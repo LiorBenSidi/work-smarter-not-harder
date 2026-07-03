@@ -292,6 +292,7 @@
 
     :focus-visible { outline:2px solid var(--accent); outline-offset:3px; border-radius:8px; }
     [hidden] { display:none !important; }
+    .sep { border:0; border-top:1px solid var(--line); margin:18px 0; }   /* thin divider between in-card sections */
 
     /* "How it works" 3-step on the auth hero — a genuine sequence (check-in -> signal -> action). */
     .how { list-style:none; display:flex; gap:10px; max-width:440px; margin:2px auto 0; padding:0; }
@@ -550,6 +551,25 @@
             <p class="muted" style="margin:10px 0 0;font-size:12px">Follows your device by default. Motion is reduced automatically when your device requests it.</p>
           </div>
           <div class="card">
+            <h2><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="8" cy="15" r="4"/><path d="M11 12 20 3M17 6l2 2M15 8l2 2"/></svg><span class="grow">Account</span></h2>
+            <form id="displayname-form">
+              <label for="displayname-input">Display name</label>
+              <input id="displayname-input" name="display_name" maxlength="64" autocomplete="nickname" required>
+              <span class="hint">The name others see on your posts, comments and messages — it doesn't have to be unique.</span>
+              <div style="margin-top:12px"><button type="submit" class="block">Save name</button></div>
+              <div id="displayname-flash" class="flash" aria-live="polite"></div>
+            </form>
+            <hr class="sep">
+            <form id="password-form">
+              <label for="current-password">Current password</label>
+              <input id="current-password" name="current_password" type="password" autocomplete="current-password" required>
+              <label for="new-password">New password</label>
+              <input id="new-password" name="new_password" type="password" autocomplete="new-password" minlength="8" required>
+              <span class="hint">Changing your password signs out your other devices — they'll verify by email next time.</span>
+              <div style="margin-top:12px"><button type="submit" class="block">Update password</button></div>
+              <div id="password-flash" class="flash" aria-live="polite"></div>
+            </form>
+            <hr class="sep">
             <p id="profile-user" class="muted" style="margin:0 0 12px"></p>
             <button id="logout-btn" class="ghost block">Log out</button>
           </div>
@@ -790,6 +810,22 @@
       const r = await api("/profile", { method: "POST", body });
       if (r.ok) { flash("profile-flash", "Saved.", "ok"); loadDashboard(); }
       else { flash("profile-flash", (r.data && r.data.error) || "Could not save profile"); }
+    });
+
+    // ---- Account settings (change display name / password, from inside the app) ----
+    onSubmit("displayname-form", async (f) => {
+      const r = await api("/account/display-name", { method: "POST", body: { display_name: f.display_name.value } });
+      if (r.ok) { setShownName(r.data.display_name); flash("displayname-flash", "Name updated.", "ok"); }
+      else { flash("displayname-flash", (r.data && r.data.error) || "Could not update your name"); }
+    });
+
+    onSubmit("password-form", async (f) => {
+      const r = await api("/account/password", { method: "POST",
+        body: { current_password: f.current_password.value, new_password: f.new_password.value } });
+      // clear the fields either way -> a typed password never lingers in the DOM
+      f.reset();
+      if (r.ok) { flash("password-flash", "Password updated.", "ok"); }
+      else { flash("password-flash", (r.data && r.data.error) || "Could not update your password"); }
     });
 
     // ---- Daily check-in ----
@@ -1220,15 +1256,22 @@
       }
     }
 
+    // Reflect the current DISPLAY name everywhere it shows: the header greeting, the "Signed in as"
+    // line, and the editable field in the Account card. Called on login and after a rename.
+    function setShownName(shown) {
+      $("who-name").textContent = "Hi, " + shown;
+      $("profile-user").textContent = "Signed in as " + shown;
+      $("displayname-input").value = shown;
+    }
+
     function enterApp(handle, name) {
       resetAuthState();  // scrub credentials/OTP state now, while the auth card is off-screen
       currentUser = handle;                     // the stable INTERNAL handle (identity: mine-checks, me/them)
-      const shown = name || handle;             // the non-unique DISPLAY name (what people see)
-      $("who-name").textContent = "Hi, " + shown;
-      $("profile-user").textContent = "Signed in as " + shown;
-      // a previous account's residue must not survive a same-browser user switch
-      ["profile-form", "checkin-form", "forum-form", "dm-new-form"].forEach((id) => $(id).reset());
-      ["profile-flash", "checkin-flash", "forum-flash", "dm-new-flash"].forEach((id) => flash(id, "", "ok"));
+      // a previous account's residue must not survive a same-browser user switch (reset BEFORE we
+      // repopulate the display-name field below, so the reset can't wipe the fresh value)
+      ["profile-form", "checkin-form", "forum-form", "dm-new-form", "password-form"].forEach((id) => $(id).reset());
+      ["profile-flash", "checkin-flash", "forum-flash", "dm-new-flash", "displayname-flash", "password-flash"].forEach((id) => flash(id, "", "ok"));
+      setShownName(name || handle);             // the non-unique DISPLAY name (what people see)
       closePost();
       $("dm-thread-view").hidden = true; $("dm-list-view").hidden = false; dmPeer = null;  // fresh DM view
       showView("app");
