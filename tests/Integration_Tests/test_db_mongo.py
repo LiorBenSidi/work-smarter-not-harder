@@ -111,6 +111,21 @@ def test_account_deletion_cascade_erases_all_user_data(db_mod, real_db):
     assert db_mod.notification_list(real_db, "bob") == []
 
 
+def test_email_consent_and_export_against_mongo(db_mod, real_db):
+    db_mod.create_user(real_db, "alice", "h1", "a@ex.com", display_name="Alice")
+    assert db_mod.get_email_consent(real_db, "alice") is False           # default
+    assert db_mod.set_email_consent(real_db, "alice", True) is True
+    assert db_mod.get_email_consent(real_db, "alice") is True            # persisted
+    bp = db_mod.forum_create_post(real_db, "bob", "B", "b", False)["id"]
+    cid = db_mod.forum_add_comment(real_db, bp, "alice", "hi")["id"]
+    db_mod.forum_vote(real_db, bp, "alice", 1)
+    db_mod.forum_vote_comment(real_db, bp, cid, "alice", 1)
+    db_mod.message_send(real_db, "alice", "bob", "hey")
+    fx = db_mod.forum_export_user(real_db, "alice")
+    assert fx["posts"] == [] and [c["body"] for c in fx["comments"]] == ["hi"] and len(fx["votes"]) == 2
+    assert [m["body"] for m in db_mod.message_export_for_user(real_db, "alice")] == ["hey"]
+
+
 def test_otp_challenge_roundtrip(db_mod, real_db):
     # the login-OTP seam against real Mongo: set -> get -> atomic $inc -> $unset, and clearing the
     # transient fields must leave the core identity doc untouched.

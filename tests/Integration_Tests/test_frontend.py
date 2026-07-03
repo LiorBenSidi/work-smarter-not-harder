@@ -148,6 +148,14 @@ def test_delete_account_ui_present_and_wired(client):
     assert '!== "DELETE"' in html                       # stays disabled until the exact word is typed
 
 
+def test_privacy_and_export_ui_present_and_wired(client):
+    # GDPR: an email-consent opt-in toggle + a "download my data" export button, wired to the endpoints.
+    html = client.get("/").get_data(as_text=True)
+    assert 'id="email-consent"' in html and 'id="export-btn"' in html
+    assert "/account/email-consent" in html and "/account/export" in html
+    assert "worksmarter-export.json" in html            # the export triggers a JSON file download
+
+
 def test_manifest_is_served_for_pwa(client):
     # the web manifest makes the app installable (name + icons + start_url), at the right mimetype.
     resp = client.get("/manifest.webmanifest")

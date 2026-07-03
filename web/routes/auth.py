@@ -9,6 +9,7 @@ import logging
 import re
 import secrets
 import time
+from datetime import datetime, timezone
 from functools import wraps
 
 from flask import Blueprint, current_app, jsonify, request, session
@@ -285,7 +286,8 @@ def logout():
 @login_required
 def me():
     handle = session["username"]
-    return jsonify(username=handle, display_name=display_name(handle)), 200
+    return jsonify(username=handle, display_name=display_name(handle),
+                   email_consent=_users().get_email_consent(handle)), 200
 
 
 # ---- account settings (change the shown name / the password, from inside the app) ----
@@ -340,6 +342,52 @@ def change_password():
         return jsonify(error="user store unavailable"), 503
     resp = jsonify(status="password updated")
     resp.delete_cookie(REMEMBER_COOKIE)   # this browser must re-verify via OTP on its next login too
+    return resp, 200
+
+
+@auth_bp.post("/account/email-consent")
+@limiter.limit("30 per minute")
+@login_required
+def change_email_consent():
+    """Record the caller's opt-in/out for NON-ESSENTIAL email. Security email (login OTP, password
+    reset) is transactional and unaffected by this — it is always sent."""
+    data = request.get_json(silent=True)
+    consent = data.get("consent") if isinstance(data, dict) else None
+    if not isinstance(consent, bool):
+        return jsonify(error="consent must be true or false"), 400
+    try:
+        _users().set_email_consent(session["username"], consent)
+    except Exception:
+        logger.exception("user store unavailable during email-consent change")
+        return jsonify(error="user store unavailable"), 503
+    return jsonify(status="email preferences updated", email_consent=consent), 200
+
+
+@auth_bp.get("/account/export")
+@limiter.limit("10 per minute")
+@login_required
+def export_data():
+    """GDPR data portability: return ALL of the caller's data as a JSON download — everything the app
+    holds about them, minus the password hash. Served as an attachment so the browser saves a file."""
+    username = session["username"]
+    cfg = current_app.config
+    try:
+        user = _users().get(username) or {}
+        data = {
+            "exported_at": datetime.now(timezone.utc).isoformat(),
+            "account": {"username": username, "display_name": user.get("display_name"),
+                        "email": user.get("email"), "email_consent": _users().get_email_consent(username)},
+            "profile": cfg["PROFILES"].get(username),
+            "history": cfg["HISTORY"].list(username),
+            "forum": cfg["FORUM"].export_user(username),
+            "messages": cfg["MESSAGES"].export_for_user(username),
+            "notifications": cfg["NOTIFICATIONS"].list(username),
+        }
+    except Exception:
+        logger.exception("data export failed for %s", username)
+        return jsonify(error="could not export your data — please try again"), 503
+    resp = jsonify(data)
+    resp.headers["Content-Disposition"] = 'attachment; filename="worksmarter-export.json"'
     return resp, 200
 
 
