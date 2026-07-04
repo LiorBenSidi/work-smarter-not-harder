@@ -297,3 +297,13 @@ def test_illustrated_empty_states(client):
     for title in ("No check-ins yet", "Quiet in here", "No conversations yet", "You haven't posted yet"):
         assert title in html
     assert ".empty-ico" in html and ".empty-title" in html         # the empty-state CSS is present
+
+
+def test_danger_zone_groups_destructive_actions(client):
+    # Logout + Delete are grouped in one red "Danger zone" card (Wolt-style destructive-in-red), moved out
+    # of the Account card; the IDs are unchanged so the existing wiring/handlers still bind.
+    html = client.get("/").get_data(as_text=True)
+    assert "Danger zone" in html and 'class="card danger-zone"' in html
+    assert 'id="logout-btn" class="ghost danger block"' in html     # logout is now red, inside the danger zone
+    assert 'id="delete-reveal"' in html                             # delete lives here too
+    assert ".danger-zone" in html                                   # the red-tinted card CSS

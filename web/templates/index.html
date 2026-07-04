@@ -273,6 +273,9 @@
     .empty-ico svg { width:25px; height:25px; stroke:var(--accent); fill:none; stroke-width:1.8; }
     .empty-title { font-weight:800; font-size:15px; margin:0 0 4px; }
     .empty-text { color:var(--muted); font-size:13.5px; margin:0 auto; max-width:34ch; line-height:1.4; }
+    /* Danger zone: account-exit + destructive actions grouped, with a red-tinted card + red heading icon */
+    .danger-zone { border-color: color-mix(in srgb, var(--err) 32%, var(--line)); }
+    .danger-zone h2 svg { stroke: var(--err); }
 
     /* signature: the breathing readiness orb */
     .readiness { --st: var(--muted); text-align:center; }
@@ -725,9 +728,6 @@
               <div style="margin-top:12px"><button type="submit" class="block">Update password</button></div>
               <div id="password-flash" class="flash" aria-live="polite"></div>
             </form>
-            <hr class="sep">
-            <p id="profile-user" class="muted" style="margin:0 0 12px"></p>
-            <button id="logout-btn" class="ghost block">Log out</button>
           </div>
           <div class="card">
             <h2><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l7 4v5c0 4-3 7-7 9-4-2-7-5-7-9V7z"/></svg><span class="grow">Privacy &amp; data</span></h2>
@@ -740,9 +740,12 @@
             <button id="export-btn" class="ghost block" type="button">Download my data</button>
             <div id="privacy-flash" class="flash" aria-live="polite"></div>
           </div>
-          <div class="card">
-            <h2><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14M10 11v6M14 11v6"/></svg><span class="grow">Delete account</span></h2>
-            <p class="muted" style="margin:-2px 0 12px">Permanently deletes your account and everything tied to it — profile, check-in history, forum posts and comments, messages, and notifications. This can't be undone.</p>
+          <div class="card danger-zone">
+            <h2><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10.3 4l-8 14a2 2 0 0 0 1.7 3h16a2 2 0 0 0 1.7-3l-8-14a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/></svg><span class="grow">Danger zone</span></h2>
+            <p id="profile-user" class="muted" style="margin:-2px 0 12px"></p>
+            <button id="logout-btn" class="ghost danger block">Log out</button>
+            <hr class="sep">
+            <p class="muted" style="margin:0 0 12px">Permanently deletes your account and everything tied to it — profile, check-in history, forum posts and comments, messages, and notifications. This can't be undone.</p>
             <button id="delete-reveal" class="ghost danger block" type="button">Delete my account</button>
             <form id="delete-form" hidden>
               <label for="delete-password">Confirm your password</label>
