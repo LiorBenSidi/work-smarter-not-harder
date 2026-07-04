@@ -274,3 +274,16 @@ def test_context_home_back_present_and_wired(client):
     assert '!$("forum-detail").hidden' in html and '!$("dm-thread-view").hidden' in html   # drill-in detection
     assert 'currentScreen !== "today"' in html                     # off-Today -> Home
     assert html.count("updateCtxBack()") >= 5                       # wired into showScreen + openPost/closePost + open/closeThread
+
+
+def test_filter_sort_chips_present_and_wired(client):
+    # Wolt-style filter chips: History filters by readiness (All/Ready/Moderate/Rest); Forum sorts
+    # (Recent/Top/Mine). Client-side over the cached list; the active chip is highlighted.
+    html = client.get("/").get_data(as_text=True)
+    assert 'id="history-filters"' in html and 'id="forum-sorts"' in html
+    for f in ('data-filter="all"', 'data-filter="ready"', 'data-filter="moderate"', 'data-filter="rest"'):
+        assert f in html
+    for s in ('data-sort="recent"', 'data-sort="top"', 'data-sort="mine"'):
+        assert s in html
+    assert "function renderHistoryList(" in html and "function renderForumList(" in html
+    assert "historyFilter" in html and "forumSort" in html         # the filter/sort state drives the render
