@@ -18,7 +18,7 @@ The backend is built and CI-gated; the open work is two teammates' lanes. If you
   `$jsonSchema` validators / auth config / `db/seed.py` / backup script); **Week-9 logging**; the 3-container
   Docker build with fault tolerance; the **CI gate** (ruff · bandit · pytest); and the **CI/CD deploy pipeline**
   (GHCR build/push → SSH-deploy to the Azure VM → Caddy HTTPS, `docker-compose.prod.yml`, auto-rollback, `/ready`
-  gate). 332 tests, `main` green. Deploy detail: [`docs/CICD_REPORT.md`](docs/CICD_REPORT.md) · demo run-sheet:
+  gate). Full test suite green on `main`. Deploy detail: [`docs/CICD_REPORT.md`](docs/CICD_REPORT.md) · demo run-sheet:
   [`docs/DEPLOY_DEMO.md`](docs/DEPLOY_DEMO.md).
 - ⏳ **Open — Shiri (`ai/`):** the real Random Forest model + recommendation engine behind `POST /predict` — it's a
   contract-shaped **placeholder** today. See [`PERSON1.md`](PERSON1.md).
@@ -44,7 +44,7 @@ The backend is built and CI-gated; the open work is two teammates' lanes. If you
 - **`ai/`** — Random Forest readiness classifier + recommendation engine. Internal REST (`POST /predict`).
 
 ## Auth modes & the debug panel (two dev switches)
-Full guide: [`docs/AUTH_TESTING.md`](docs/AUTH_TESTING.md). Both default **off** (mock email, desktop viewport); neither affects normal users.
+Full guide: [`docs/AUTH_TESTING.md`](docs/AUTH_TESTING.md); secrets + live-email setup (local · server · CI/CD): [`SECRETS.md`](SECRETS.md). Both default **off** (mock email, desktop viewport); neither affects normal users.
 - **Email mock ⇄ live = `SMTP_HOST`.** Unset (default) → login-OTP / signup-verify / password-reset codes are shown on screen + logged (no mailbox — what teammates + grading use); set `SMTP_*` + `MAIL_FROM` in `.env` → codes are emailed only. `docker compose up` reads `.env` and passes **every** auth-mode var (`OTP_ENABLED`, `REGISTER_VERIFY_EMAIL`, `OTP_TTL_SECONDS`, …) through to `web`, so flip any mode in `.env` alone; `curl localhost:8000/auth/config` reports `email_mode`.
 - **Viewport desktop ⇄ mobile = the `?debug=1` panel.** Append `?debug=1` → a ⚙ **Debug tools** panel (bottom-right) previews the real mobile layout in an iframe inside a desktop browser. Dev-only, gated on `?debug=1` / `localStorage ws-debug`, never shown to normal users.
 
