@@ -415,3 +415,17 @@ def test_debug_tools_panel_present_and_gated(client):
     assert 'id="debug-vp-mobile"' in html and 'id="debug-preview-frame"' in html   # the viewport preview
     assert 'location.pathname + "?preview=1"' in html              # iframe = a real narrow-viewport render
     assert 'id="debug-email-mode"' in html                         # the live/mock indicator
+
+
+def test_debug_tools_omitted_inside_preview_iframe(client):
+    # The mobile preview loads this shell as an iframe at ?preview=1. The dev-tools markup must be GONE
+    # from that render (server-side strip), so the preview can never nest its own dev tools into a
+    # preview-in-a-preview recursion (#138). The normal shell keeps the markup (gated client-side).
+    preview = client.get("/?preview=1").get_data(as_text=True)
+    assert 'id="debug-fab"' not in preview
+    assert 'id="debug-panel"' not in preview
+    assert 'id="debug-preview-frame"' not in preview
+    normal = client.get("/").get_data(as_text=True)
+    assert 'id="debug-fab"' in normal                              # still present on the real shell
+    # Belt-and-suspenders client guard: dev tools never wire up in ANY frame, not just via ?preview.
+    assert "window.top !== window.self" in normal

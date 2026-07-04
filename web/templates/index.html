@@ -113,7 +113,12 @@
     .debug-off { margin-top:12px; width:100%; }
     .debug-preview { position:fixed; inset:0; z-index:70; background:rgba(0,0,0,.62); display:flex; flex-direction:column;
       align-items:center; justify-content:center; gap:10px; }
-    .debug-preview-bar { color:#fff; font-size:13px; font-weight:600; display:flex; align-items:center; gap:12px; }
+    .debug-preview-bar { color:#fff; font-size:13px; font-weight:600; display:flex; align-items:center; gap:14px; }
+    /* Exit is the one way out of the preview — make it unmissable (solid pill, high contrast), not a ghost mini. */
+    .debug-exit { background:#fff; color:#111; border:0; border-radius:999px; padding:9px 18px; font-weight:800;
+      font-size:13px; cursor:pointer; box-shadow:0 4px 16px rgba(0,0,0,.45); }
+    .debug-exit:hover { background:#eee; }
+    .debug-exit:focus-visible { outline:2px solid #fff; outline-offset:3px; }
     #debug-preview-frame { width:390px; height:844px; max-height:84vh; border:0; border-radius:30px; background:var(--bg); box-shadow:0 24px 70px rgba(0,0,0,.55); }
     #who { display:flex; align-items:center; gap:10px; }
     #who-name { white-space:nowrap; font-weight:700; }
@@ -837,7 +842,10 @@
        the header instead of the viewport. Kept out here so `bottom:12px` is viewport-relative. -->
   <button id="ctx-back" class="ctx-back" type="button" hidden aria-label="Go to Today"></button>
 
-  <!-- Developer tools (DEBUG only, never in live mode / inside the preview iframe). See wireDebugTools(). -->
+  <!-- Developer tools (DEBUG only, never in live mode / inside the preview iframe). See wireDebugTools().
+       Omitted server-side when this shell is the mobile-preview iframe (?preview=1): the preview must
+       never contain its own dev tools, or it would nest a preview-in-a-preview (the #138 recursion). -->
+  {% if not preview %}
   <button id="debug-fab" class="debug-fab" type="button" hidden aria-label="Developer tools" aria-expanded="false">&#9881;</button>
   <div id="debug-panel" class="debug-panel" hidden role="dialog" aria-label="Developer tools">
     <div class="debug-row"><strong>Dev tools</strong><button id="debug-close" class="ghost mini" type="button" aria-label="Close">&#10005;</button></div>
@@ -855,9 +863,11 @@
     <button id="debug-off" class="ghost mini debug-off" type="button">Disable dev tools</button>
   </div>
   <div id="debug-preview" class="debug-preview" hidden>
-    <div class="debug-preview-bar">Mobile preview · 390&times;844 <button id="debug-preview-close" class="ghost mini" type="button">Exit</button></div>
+    <div class="debug-preview-bar">Mobile preview · 390&times;844
+      <button id="debug-preview-close" class="debug-exit" type="button">&#10005; Exit preview</button></div>
     <iframe id="debug-preview-frame" title="Mobile viewport preview" src="about:blank"></iframe>
   </div>
+  {% endif %}
 
   <script>
     const $ = (id) => document.getElementById(id);
@@ -875,10 +885,15 @@
     // ---- Developer tools panel (DEBUG only; never in live mode or inside the mobile-preview iframe) ----
     (function wireDebugTools() {
       const params = new URLSearchParams(location.search);
+      // Dev tools must NEVER wire up inside a frame. The mobile preview is an iframe, so this one guard
+      // makes a nested preview-in-a-preview impossible even if a stale cached bundle carried old JS
+      // (the #138 recursion). Two independent checks: any framed context, and the explicit ?preview flag.
+      try { if (window.top !== window.self) return; } catch (_) { return; }   // cross-origin access throws -> also framed
       if (params.has("preview")) return;                 // inside the preview iframe -> no nested dev tools
       if (params.has("debug")) { try { localStorage.setItem("ws-debug", "1"); } catch (_) {} }  // ?debug=1 persists
       if (!DEBUG) return;                                 // zero footprint unless a dev opted in
       const fab = $("debug-fab"), panel = $("debug-panel"), prev = $("debug-preview"), frame = $("debug-preview-frame");
+      if (!fab) return;                                  // markup stripped server-side (?preview=1) -> nothing to wire
       fab.hidden = false;
       const openPanel = (open) => { panel.hidden = !open; fab.setAttribute("aria-expanded", open ? "true" : "false"); };
       fab.addEventListener("click", () => openPanel(panel.hidden));
@@ -894,6 +909,9 @@
       $("debug-vp-mobile").addEventListener("click", () => setVp(true));
       $("debug-vp-desktop").addEventListener("click", () => setVp(false));
       $("debug-preview-close").addEventListener("click", () => setVp(false));
+      // Never a trap: also exit by clicking the dark backdrop or pressing Escape.
+      prev.addEventListener("click", (e) => { if (e.target === prev) setVp(false); });
+      document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !prev.hidden) setVp(false); });
       $("debug-off").addEventListener("click", () => { try { localStorage.removeItem("ws-debug"); } catch (_) {} location.href = location.pathname; });
       // Email-mode indicator (one source of truth: /auth/config) — live vs mock so you know where codes go.
       api("/auth/config").then((r) => {

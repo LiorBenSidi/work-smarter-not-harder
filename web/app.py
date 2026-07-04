@@ -298,8 +298,11 @@ def create_app(config=Config, *, users=None, profiles=None, history=None, forum=
     @app.get("/")
     def index():
         # Plain static shell — the SPA fetches credential bounds from /auth/config at runtime, so the
-        # served HTML carries no template placeholders that could leak raw if mis-served.
-        return render_template("index.html")
+        # served HTML carries no template placeholders that could leak raw if mis-served. The one
+        # conditional is control-flow, not data: the dev-tools markup is omitted when the shell is
+        # rendered inside the mobile-preview iframe (?preview=1), so even a stale cached bundle can
+        # never nest the dev tools recursively inside the preview (the #138 recursion).
+        return render_template("index.html", preview=bool(request.args.get("preview")))
 
     @app.get("/health")
     def health():
