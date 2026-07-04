@@ -25,9 +25,11 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__)))) 
 # as a shell script and mangles values containing `< >` (e.g. MAIL_FROM="Name <addr>"), silently corrupting the
 # sender into a bare display name and getting the send rejected (SMTP 501). python-dotenv parses such values
 # correctly and never overrides vars already in the environment, so in the container compose's env still wins.
+_ENV_STATUS = "python-dotenv not installed — using the process environment"
 try:
     from dotenv import load_dotenv
-    load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", ".env"))
+    _env_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", ".env")
+    _ENV_STATUS = f"loaded {_env_path}" if load_dotenv(_env_path) else f"no .env at {_env_path} — using the process environment"
 except ImportError:
     pass  # not installed (e.g. inside the container) -> rely on the env compose already injected
 
@@ -39,6 +41,7 @@ logger = logging.getLogger("send_test_email")
 
 def main():
     logging.basicConfig(level=logging.INFO, format="%(message)s")  # so both our lines + email.py's log show
+    logger.info("env: %s", _ENV_STATUS)   # surface WHY (missing .env is the #1 "why isn't SMTP used?" cause)
     parser = argparse.ArgumentParser(description="Send a test email via the app's configured backend.")
     parser.add_argument("--to", default="liortestbase@proton.me", help="recipient address")
     args = parser.parse_args()

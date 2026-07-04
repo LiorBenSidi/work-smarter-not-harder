@@ -19,20 +19,24 @@ from email.utils import formataddr
 logger = logging.getLogger(__name__)
 
 
+_FALLBACK_ADDR = "no-reply@worksmarter.local"   # used only if MAIL_FROM has no usable address (broken config)
+
+
 def _split_sender(raw):
-    """Split ``"Display Name <addr>"`` (or a bare ``addr``) into ``(name, addr)``.
+    """Split ``"Display Name <addr>"`` (or a bare ``addr``) into ``(name, addr)``. ``addr`` may be "".
 
     Done by hand rather than ``email.utils.parseaddr`` because a display name containing a COMMA (e.g.
     "Work Smarter, Not Harder") reads as an address-LIST separator: parseaddr returns ``('', '')`` and the
     envelope sender collapses to a bare name — which is exactly what got the SMTP send rejected (501
-    "expecting MAIL arg syntax of FROM:<address>"). Extracting the ``<addr>`` span is comma-safe.
+    "expecting MAIL arg syntax of FROM:<address>"). Extracting the ``<addr>`` span is comma-safe. The
+    ``lt < gt`` guard means an empty/backwards ``<>`` yields ``addr == ""`` (a missing address) rather than
+    silently swallowing the name — the caller substitutes a fallback address, never the raw comma string.
     """
     raw = (raw or "").strip()
-    if "<" in raw and ">" in raw:
-        addr = raw[raw.rfind("<") + 1 : raw.rfind(">")].strip()
-        name = raw[: raw.rfind("<")].strip().strip('"')
-        return name, addr
-    return "", raw
+    lt, gt = raw.rfind("<"), raw.rfind(">")             # the address lives in the LAST <...> pair
+    if 0 <= lt < gt:
+        return raw[:lt].strip().strip('"'), raw[lt + 1 : gt].strip()   # (name, addr); addr may be ""
+    return "", raw                                                     # bare address (no brackets)
 
 
 def send_email(config, to, subject, body):
@@ -45,8 +49,15 @@ def send_email(config, to, subject, body):
         return True
     try:
         name, addr = _split_sender(sender)
+        if "@" not in addr:                      # missing/malformed address -> a safe fallback, NEVER the raw
+            name, addr = name, _FALLBACK_ADDR    # comma string (which would re-break the header + envelope)
+        # Defence in depth on the OTP/reset hot path: the header setters below already reject CR/LF (the
+        # EmailMessage default policy), but the envelope args go straight to smtplib's RCPT/MAIL commands, so
+        # refuse control chars in the sender + recipient explicitly before anything reaches the wire.
+        if any(c in "\r\n" for c in addr + str(to)):
+            raise ValueError("control characters in an email address")
         msg = EmailMessage()
-        msg["From"] = formataddr((name, addr)) if addr else sender   # quotes a name with a comma/special char
+        msg["From"] = formataddr((name, addr))   # name is quoted if it has a comma/special char; addr stays clean
         msg["To"], msg["Subject"] = to, subject
         msg.set_content(body)
         with smtplib.SMTP(host, int(config.get("SMTP_PORT") or 587), timeout=10) as server:
@@ -58,7 +69,7 @@ def send_email(config, to, subject, body):
                 server.login(config["SMTP_USER"], config.get("SMTP_PASS") or "")
             # Pass the clean address as the ENVELOPE sender explicitly, so a display name (with a comma or
             # other special char) can never corrupt what smtplib would otherwise derive from the header.
-            server.send_message(msg, from_addr=addr or None, to_addrs=[to])
+            server.send_message(msg, from_addr=addr, to_addrs=[to])
         logger.info("EMAIL (smtp) sent to=%s subject=%r", to, subject)
         return True
     except Exception:

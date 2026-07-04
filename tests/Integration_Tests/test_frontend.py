@@ -311,9 +311,18 @@ def test_mobile_nav_pill_is_centered_stable_with_an_aligned_fab(client):
     assert ".ctx-back { position:fixed; left:12px;" in html                    # bottom-left floating FAB
     assert "width:56px; height:56px" in html                                   # FAB is 56px == the pill height (aligned)
     assert "gap:4px; height:56px; padding:6px" in html                         # the pill's fixed 56px height
-    assert "width: clamp(176px, 55vw, 216px)" in html                          # compact, overlap-safe pill width
+    assert "width: min(clamp(176px, 55vw, 216px), calc(100vw - 152px))" in html  # compact + capped so it never overlaps the FAB
     assert "justify-content:center" in html                                    # the pill is centered in its rail
     assert "has-ctx" not in html                                               # NO sideways shift — the pill is stable
+
+
+def test_today_screen_is_a_region_not_an_orphaned_tabpanel(client):
+    # a11y: Today is now reached via the Home button (mobile) / logo (desktop), NOT a tab. Its screen must be
+    # a `region` (like Profile), not a `tabpanel` with no controlling tab — which violates the WAI-ARIA tabs
+    # pattern (a tablist whose panel has no tab, and no selected tab on the Today view).
+    html = client.get("/").get_data(as_text=True)
+    assert 'id="screen-today" class="screen" role="region"' in html
+    assert 'id="screen-today" class="screen" role="tabpanel"' not in html
 
 
 def test_filter_sort_chips_present_and_wired(client):
