@@ -13,6 +13,8 @@ sending is rate-limited (anti-spam, Noam's Online-Forum §10). The stores are in
 """
 import logging
 import math
+import os
+import threading
 import time
 
 from flask import Blueprint, Response, current_app, jsonify, request, session
@@ -154,36 +156,64 @@ def mark_notifications_read():
 
 
 # ---- Server-Sent Events push (real-time, no polling on the client) ----
-EVENTS_MAX_SECONDS = 300      # recycle the connection every 5 min -> the browser auto-reconnects, freeing the thread
-EVENTS_TICK_SECONDS = 1.5     # how often the server checks for new notifications to push
+# Each open stream holds one gthread worker thread for its whole lifetime. To stop a burst of streams
+# from starving the pool (gunicorn 2 workers x 4 threads = 8 slots), we (a) recycle each stream after
+# EVENTS_MAX_SECONDS so slots free up, and (b) cap concurrent streams PER WORKER at EVENTS_MAX_STREAMS,
+# keeping >=1 thread per worker free for ordinary requests. Over the cap, the client is told to reconnect
+# later and rides its polling backstop -> NO thread is held, so /login, /health, etc. can never starve.
+# (gevent/eventlet workers would lift the cap, at the cost of a new dependency — not needed for the demo.)
+def _events_int_env(name, default):
+    try:
+        return max(1, int(os.environ.get(name, default)))
+    except (TypeError, ValueError):
+        return default
+
+EVENTS_MAX_SECONDS = _events_int_env("EVENTS_MAX_SECONDS", 90)   # recycle each stream; browser auto-reconnects
+EVENTS_TICK_SECONDS = 1.5                                        # how often the server checks for new notifications
+EVENTS_MAX_STREAMS = _events_int_env("EVENTS_MAX_STREAMS", 3)    # per worker; keep < gunicorn --threads (reserve >=1)
+_sse_slots = threading.BoundedSemaphore(EVENTS_MAX_STREAMS)     # bounds concurrent /events streams in THIS worker
 
 
 @messages_bp.get("/events")
 @login_required
 def events():
     """Stream a `notify` ping whenever the signed-in user gets a new notification. The client holds one
-    EventSource open and re-fetches on each ping — no client polling. Auth-gated like every other route."""
+    EventSource open and re-fetches on each ping — no client polling. Auth-gated like every other route.
+
+    Concurrency guard: take one of this worker's EVENTS_MAX_STREAMS slots first; if the worker is at
+    capacity, return immediately with a longer reconnect delay (holding NO thread) so ordinary requests
+    always keep a free thread. The client's poll backstop covers real-time while it waits to reconnect."""
     me = session["username"]
     notifications = _notifications()
 
+    if not _sse_slots.acquire(blocking=False):
+        # This worker is at its SSE cap: don't pin a thread. Tell the browser to reconnect in 60s; its
+        # poll backstop keeps notifications flowing meanwhile, and a slot frees within EVENTS_MAX_SECONDS.
+        logger.info("SSE at capacity (%d/worker) — client falls back to polling", EVENTS_MAX_STREAMS)
+        return Response("retry: 60000\n\n", mimetype="text/event-stream",
+                        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
     def stream():
-        yield "retry: 3000\n\n"                        # browser reconnect delay after a drop
-        cursor = time.time()                           # only ping on notifications created after the stream opened
-        deadline = time.time() + EVENTS_MAX_SECONDS
-        while time.time() < deadline:
-            try:
-                fresh = notifications.list(me, since=cursor)
-            except Exception:
-                logger.warning("notification store unavailable during SSE stream", exc_info=True)
-                yield ": store-unavailable\n\n"
-                time.sleep(2)
-                continue
-            if fresh:
-                cursor = max(n["created_at"] for n in fresh)
-                yield "event: notify\ndata: {}\n\n"    # a change ping; the client re-fetches via the normal endpoints
-            else:
-                yield ": keepalive\n\n"                 # comment line keeps the connection warm through proxies
-            time.sleep(EVENTS_TICK_SECONDS)
+        try:
+            yield "retry: 3000\n\n"                        # browser reconnect delay after a drop
+            cursor = time.time()                           # only ping on notifications created after the stream opened
+            deadline = time.time() + EVENTS_MAX_SECONDS
+            while time.time() < deadline:
+                try:
+                    fresh = notifications.list(me, since=cursor)
+                except Exception:
+                    logger.warning("notification store unavailable during SSE stream", exc_info=True)
+                    yield ": store-unavailable\n\n"
+                    time.sleep(2)
+                    continue
+                if fresh:
+                    cursor = max(n["created_at"] for n in fresh)
+                    yield "event: notify\ndata: {}\n\n"    # a change ping; the client re-fetches via the normal endpoints
+                else:
+                    yield ": keepalive\n\n"                 # comment line keeps the connection warm through proxies
+                time.sleep(EVENTS_TICK_SECONDS)
+        finally:
+            _sse_slots.release()                           # free the slot on completion OR client disconnect (GeneratorExit)
 
     return Response(stream(), mimetype="text/event-stream",
                     headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no", "Connection": "keep-alive"})

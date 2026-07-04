@@ -77,8 +77,9 @@ def test_async_renderers_guard_against_stale_session_paint(client):
     assert "function sessionChanged(u, where)" in html
     assert "if (u === currentUser) return false" in html
     # ...and every renderer routes its bail through it (loadProfile/Dashboard/History/Forum/openPost/
-    # loadConversations/renderThread/dmReply/syncEmailConsent).
-    assert html.count('sessionChanged(u, "') >= 8
+    # loadConversations/renderThread/dmReply/syncEmailConsent + openMessages/activity-read).
+    assert html.count('sessionChanged(u, "') >= 10
+    assert 'sessionChanged(u, "openMessages")' in html and 'sessionChanged(u, "activity-read")' in html
     # renderThread additionally guards a mid-flight thread switch
     assert "peer !== dmPeer" in html
 
