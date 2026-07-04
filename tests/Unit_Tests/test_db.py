@@ -24,12 +24,30 @@ def db_mod():
     return mod
 
 
+class _FakeCursor:
+    """Minimal pymongo-cursor stand-in: iterable + supports .limit(n). Records the applied limit on the
+    parent collection so a test can assert a read was BOUNDED (not an unlimited scan)."""
+
+    def __init__(self, rows, coll=None):
+        self._rows = rows
+        self._coll = coll
+
+    def limit(self, n):
+        if self._coll is not None:
+            self._coll.last_limit = n
+        return _FakeCursor(self._rows[:n] if n else self._rows, self._coll)
+
+    def __iter__(self):
+        return iter(self._rows)
+
+
 class _FakeColl:
     """Minimal stand-in for a pymongo collection — supports just the ops db.py calls."""
 
     def __init__(self):
         self.docs = []
         self.indexes = []
+        self.last_limit = None      # the n from the most recent find(...).limit(n), for read-bound assertions
 
     def create_index(self, key, unique=False):
         self.indexes.append((key, unique))
@@ -61,7 +79,7 @@ class _FakeColl:
         if projection:                                        # honor a 1-projection (drop _id) like pymongo
             keep = [k for k, want in projection.items() if want and k != "_id"]
             rows = [{k: d[k] for k in keep if k in d} for d in rows]
-        return rows
+        return _FakeCursor(rows, self)                        # cursor: iterable + chainable .limit()
 
     def insert_one(self, doc):
         self.docs.append(dict(doc))
@@ -257,6 +275,17 @@ def test_search_users_ignores_accounts_without_password_hash(db_mod, db):
     db.users.docs.append({"username": "ghostuser", "display_name": "Ghost"})   # partial/corrupt: no hash
     names = [r["username"] for r in db_mod.search_users(db, "user")]
     assert names == ["realuser"]
+
+
+def test_search_users_bounds_the_db_read(db_mod, db):
+    # HIGH-fix regression: an unanchored $regex is a collection scan, so search_users must .limit() the cursor
+    # rather than pull every match into memory before capping. With 50 matches the caller still gets <=8 AND
+    # the DB read was bounded (last_limit set + small). Without the .limit(), last_limit stays None -> fails.
+    for i in range(50):
+        db_mod.create_user(db, f"runner{i:02d}", "h", display_name=f"Runner {i:02d}")
+    results = db_mod.search_users(db, "runner", limit=8)
+    assert len(results) == 8
+    assert db.users.last_limit is not None and db.users.last_limit <= 8 * 4
 
 
 # ---- profiles ----
