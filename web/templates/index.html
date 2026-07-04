@@ -76,10 +76,10 @@
     .brand-home-ico { display:none; width:14px; height:14px; stroke:var(--on-accent); fill:none; stroke-width:2.4; }
     .brand-name { font-size:16px; font-weight:800; letter-spacing:.04em; white-space:nowrap; }
     .brand-tag { font-size:12px; color:var(--muted); white-space:nowrap; }
-    /* Contextual Home/Back (mobile): a floating circular button pinned to the BOTTOM-LEFT, beside the nav
-       pill — Wolt's "home button next to the search pill". Home icon off-Today, Back chevron in a drill-in,
-       hidden on Today. Desktop hides it entirely (the logo becomes the home button). Being position:fixed it
-       leaves the header flow, so the full wordmark now stays put — no need to drop it. */
+    /* Home FAB (mobile): a floating circular button pinned BOTTOM-LEFT, beside the centered nav pill —
+       Wolt's "home button next to the search pill". ALWAYS a Home icon, shown off-Today / hidden on Today.
+       Same 56px height as the pill (both bottom:12) so the two are vertically centered on one line. Desktop
+       hides it (the logo is home). Body-level element (see the note by <button id="ctx-back">). */
     .header-left { display:flex; align-items:center; gap:10px; min-width:0; }
     .ctx-back { position:fixed; left:12px; bottom:calc(12px + env(safe-area-inset-bottom)); z-index:41;
       width:56px; height:56px; border-radius:50%; display:inline-flex; align-items:center; justify-content:center;
@@ -348,16 +348,18 @@
 
     /* bottom tab bar — the app-shell navigation */
     /* Mobile bottom nav: a detached, rounded FLOATING pill (not an edge-to-edge bar). Hidden on desktop. */
-    .tabbar { position:fixed; left:12px; right:12px; bottom:calc(12px + env(safe-area-inset-bottom)); z-index:40;
-      display:flex; justify-content:center; padding:0; border:0; background:none; }
-    .tabbar-inner { display:flex; gap:4px; width:100%; max-width:440px; padding:6px; border-radius:22px;
+    /* A full-width, click-through centering rail. The pill sits centered in it and NEVER moves — the Home
+       FAB appears/disappears at the left as an independent element (Wolt), it does not shift the pill. */
+    .tabbar { position:fixed; left:0; right:0; bottom:calc(12px + env(safe-area-inset-bottom)); z-index:40;
+      display:flex; justify-content:center; padding:0; border:0; background:none; pointer-events:none; }
+    /* Compact pill, fixed height so it lines up with the 56px FAB (both bottom:12 -> centers aligned). The
+       clamp keeps it narrow enough that the left FAB never overlaps, down to small phones. */
+    .tabbar-inner { pointer-events:auto; display:flex; align-items:center; gap:4px; height:56px; padding:6px;
+      width: clamp(176px, 55vw, 216px); border-radius:22px;
       background: color-mix(in srgb, var(--card) 64%, transparent); border:1px solid color-mix(in srgb, var(--line) 70%, transparent);
       box-shadow:var(--shadow); -webkit-backdrop-filter: blur(22px) saturate(1.5); backdrop-filter: blur(22px) saturate(1.5); }
-    /* when the contextual FAB is showing (off-Today / in a drill-in), slide the pill right so the two sit
-       side by side and the pill "makes room" for it — Wolt's bottom Home-button-beside-the-pill layout */
-    body.has-ctx .tabbar { left:80px; }
-    .tab { flex:1; background:transparent; box-shadow:none; color:var(--muted); border-radius:16px; padding:8px 4px 6px;
-      display:flex; flex-direction:column; align-items:center; gap:3px; font-weight:700; font-size:11px; letter-spacing:.02em;
+    .tab { flex:1 1 0; min-width:0; background:transparent; box-shadow:none; color:var(--muted); border-radius:16px; padding:7px 4px;
+      display:flex; flex-direction:column; align-items:center; justify-content:center; gap:3px; font-weight:700; font-size:11px; letter-spacing:.02em;
       transition: color .15s, background .15s; position:relative; }
     .tab:hover { filter:none; background:var(--field); color:var(--ink); }
     .tab svg { width:23px; height:23px; stroke:currentColor; fill:none; stroke-width:1.9; }
@@ -486,7 +488,6 @@
       </a>
     </div>
     <nav id="topnav" class="topnav" role="tablist" aria-label="Sections">
-      <button class="navlink active" data-screen="today" role="tab" aria-selected="true">Today</button>
       <button class="navlink" data-screen="history" role="tab" aria-selected="false">History</button>
       <button class="navlink" data-screen="forum" role="tab" aria-selected="false">Forum</button>
       <button class="navlink" data-screen="messages" role="tab" aria-selected="false">Chat<span class="dm-dot" hidden></span></button>
@@ -792,8 +793,6 @@
 
       <nav class="tabbar" role="tablist" aria-label="Sections">
         <div class="tabbar-inner">
-          <button class="tab active" data-screen="today" role="tab" aria-selected="true" aria-controls="screen-today">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h4l2 5 4-13 2 8h6"/></svg><span>Today</span></button>
           <button class="tab" data-screen="history" role="tab" aria-selected="false" aria-controls="screen-history">
             <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><span>History</span></button>
           <button class="tab" data-screen="forum" role="tab" aria-selected="false" aria-controls="screen-forum">
@@ -809,10 +808,10 @@
     </section>
   </main>
 
-  <!-- Contextual Home/Back FAB (mobile). Deliberately a BODY-level element, NOT inside <header>: the frosted
-       header has backdrop-filter, which would make it the containing block for this position:fixed button and
-       pin it to the header instead of the viewport. Kept out here so `bottom:12px` is viewport-relative. -->
-  <button id="ctx-back" class="ctx-back" type="button" hidden aria-label="Back"></button>
+  <!-- Home FAB (mobile). Deliberately a BODY-level element, NOT inside <header>: the frosted header has
+       backdrop-filter, which would make it the containing block for this position:fixed button and pin it to
+       the header instead of the viewport. Kept out here so `bottom:12px` is viewport-relative. -->
+  <button id="ctx-back" class="ctx-back" type="button" hidden aria-label="Go to Today"></button>
 
   <script>
     const $ = (id) => document.getElementById(id);
@@ -898,7 +897,7 @@
       $("app-view").hidden = view !== "app";
       $("who").hidden = view !== "app";
       $("topnav").classList.toggle("nav-on", view === "app");   // desktop top-nav shows only when signed in
-      if (view !== "app") { $("ctx-back").hidden = true; document.body.classList.remove("has-ctx"); document.querySelector("header").classList.remove("off-home"); }  // no Home/Back on the logged-out auth screen
+      if (view !== "app") { $("ctx-back").hidden = true; document.querySelector("header").classList.remove("off-home"); }  // no Home button on the logged-out auth screen
     }
 
     // showView("auth") alone re-shows whatever sub-form (and values) were last on screen — e.g.
@@ -938,31 +937,18 @@
     // the Chat unread "pulse" now lives on both navs (mobile bottom pill + desktop top-nav) -> toggle every .dm-dot
     function setDmDot(on) { document.querySelectorAll(".dm-dot").forEach((d) => { d.hidden = !on; }); }
 
-    // ---- Contextual Home/Back: a HOME button off-Today, a BACK chevron inside a drill-in (forum post /
-    // DM thread), nothing on Today — the "home button only when not home" pattern (Wolt). ----
-    const CTX_BACK_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>';
+    // ---- Home FAB: shown off-Today, hidden on Today — the "home button only when not home" pattern (Wolt).
+    // ALWAYS a Home icon (a back chevron there read as confusing) and ALWAYS goes to Today; the drill-in
+    // "back" lives on the ✕ / ← Back inside the forum-post / DM-thread views, not here. ----
     const CTX_HOME_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11l9-8 9 8M5 10v10h5v-6h4v6h5V10"/></svg>';
-    function ctxBackTarget() {
-      if (currentScreen === "forum" && !$("forum-detail").hidden) return "post";       // viewing a forum post -> back to list
-      if (currentScreen === "messages" && !$("dm-thread-view").hidden) return "thread"; // viewing a DM thread -> back to inbox
-      if (currentScreen !== "today") return "home";        // a non-Today section -> home (Today)
-      return null;                                          // on Today (or a drill-in left open off-screen) -> nothing to go back to
-    }
     function updateCtxBack() {
-      const t = ctxBackTarget(), btn = $("ctx-back");
-      btn.hidden = !t;
-      document.body.classList.toggle("has-ctx", !!t);           // mobile: slide the nav pill over to make room for the FAB
-      if (t) { btn.innerHTML = t === "home" ? CTX_HOME_ICON : CTX_BACK_ICON; btn.setAttribute("aria-label", t === "home" ? "Go to Today" : "Back"); }
-      // Desktop: the logo shows a home icon (and becomes clickable-to-Today) whenever we're off the Today screen.
-      document.querySelector("header").classList.toggle("off-home", currentScreen !== "today");
+      const offHome = currentScreen !== "today", btn = $("ctx-back");
+      btn.hidden = !offHome;
+      if (offHome) { btn.innerHTML = CTX_HOME_ICON; btn.setAttribute("aria-label", "Go to Today"); }
+      // Desktop mirror: the logo shows a home icon (and is clickable-to-Today) whenever we're off Today.
+      document.querySelector("header").classList.toggle("off-home", offHome);
     }
-    $("ctx-back").addEventListener("click", () => {
-      const t = ctxBackTarget();
-      if (t === "post") closePost();
-      else if (t === "thread") closeThread();
-      else showScreen("today");
-      updateCtxBack();
-    });
+    $("ctx-back").addEventListener("click", () => showScreen("today"));   // the Home FAB always goes to Today
     // The logo IS the home button when signed in: go to Today in-app (no full reload). Logged out -> href="/".
     document.querySelector(".brand").addEventListener("click", (e) => {
       if (currentUser) { e.preventDefault(); showScreen("today"); }

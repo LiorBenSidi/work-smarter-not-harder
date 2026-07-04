@@ -224,8 +224,9 @@ def test_profile_lives_in_the_corner_menu_not_a_bottom_tab(client):
     assert 'data-screen="profile"' not in html          # no bottom-nav Profile tab
     assert 'data-act="profile"' in html                 # the corner menu is the single Profile entry
     assert 'showScreen("profile")' in html              # ...and it still routes to the Profile screen
-    for screen in ("today", "history", "forum", "messages"):
-        assert f'data-screen="{screen}"' in html        # the 4 frequent tabs remain
+    for screen in ("history", "forum", "messages"):
+        assert f'data-screen="{screen}"' in html        # the frequent section tabs remain
+    assert 'data-screen="today"' not in html            # Today is the Home button now, not a tab
 
 
 def test_checkin_streak_badge_present_and_wired(client):
@@ -256,8 +257,9 @@ def test_responsive_dual_nav_present(client):
     html = client.get("/").get_data(as_text=True)
     assert 'id="topnav"' in html and 'class="topnav"' in html      # the desktop top-nav
     assert 'class="tabbar"' in html                                # the mobile bottom bar still exists
-    for screen in ("today", "history", "forum", "messages"):
-        assert html.count(f'data-screen="{screen}"') >= 2          # each section in BOTH navs
+    for screen in ("history", "forum", "messages"):
+        assert html.count(f'data-screen="{screen}"') >= 2          # each section in BOTH navs (mobile pill + desktop top-nav)
+    assert html.count('data-screen="today"') == 0                  # Today dropped -> Home reached via the FAB (mobile) / logo (desktop)
     assert "@media (min-width: 860px)" in html                     # the desktop breakpoint (the Request-Desktop switch)
     assert "max-width:920px" in html                               # wider desktop content
     assert 'document.querySelectorAll("[data-screen]")' in html    # showScreen + clicks drive both navs
@@ -265,15 +267,16 @@ def test_responsive_dual_nav_present(client):
     assert ".topnav.nav-on" in html                                # top-nav appears only when signed in
 
 
-def test_context_home_back_present_and_wired(client):
-    # Wolt's 'home button only when not home': a contextual header button that shows a Home icon off-Today
-    # and a Back chevron inside a drill-in (forum post / DM thread), and is hidden on Today (nothing to go back to).
+def test_home_fab_is_always_a_home_button(client):
+    # Wolt's 'home button only when not home': the FAB is shown off-Today, hidden on Today. It is ALWAYS a
+    # Home icon (a back chevron there read as confusing) and ALWAYS goes to Today; the drill-in "back" lives
+    # on the in-view close (the ✕ in a post / the ← Back in a DM thread), not on this button.
     html = client.get("/").get_data(as_text=True)
-    assert 'id="ctx-back"' in html
-    assert "function ctxBackTarget(" in html and "function updateCtxBack(" in html
-    assert '!$("forum-detail").hidden' in html and '!$("dm-thread-view").hidden' in html   # drill-in detection
-    assert 'currentScreen !== "today"' in html                     # off-Today -> Home
-    assert html.count("updateCtxBack()") >= 5                       # wired into showScreen + openPost/closePost + open/closeThread
+    assert 'id="ctx-back"' in html and "function updateCtxBack(" in html
+    assert 'const offHome = currentScreen !== "today"' in html               # shown iff off-Today
+    assert "CTX_HOME_ICON" in html and "CTX_BACK_ICON" not in html           # always a Home icon, never a back chevron
+    assert '$("ctx-back").addEventListener("click", () => showScreen("today"))' in html   # always goes to Today
+    assert "ctxBackTarget" not in html                             # the old drill-in target logic is gone
 
 
 def test_desktop_logo_is_the_home_button(client):
@@ -284,7 +287,8 @@ def test_desktop_logo_is_the_home_button(client):
     assert 'class="brand-home-ico"' in html                        # the home icon lives inside the brand dot
     assert "header.off-home .brand-home-ico" in html               # shown on desktop when off-Today
     assert '.ctx-back { display:none; }' in html                   # ...and the separate button is gone on desktop
-    assert 'classList.toggle("off-home", currentScreen !== "today")' in html   # header flagged off-Today
+    assert 'const offHome = currentScreen !== "today"' in html     # off-Today drives both the FAB and the logo home-icon
+    assert 'classList.toggle("off-home", offHome)' in html         # header flagged off-Today
     assert "if (currentUser) { e.preventDefault(); showScreen" in html         # the logo is an in-app home link
 
 
@@ -299,15 +303,17 @@ def test_mobile_nav_pill_is_translucent_and_ios_frosted(client):
     assert "backdrop-filter: blur(22px) saturate(1.5)" in html                 # blur kept for legibility
 
 
-def test_mobile_ctx_back_is_a_bottom_floating_fab(client):
-    # Wolt's mobile layout: the contextual Home/Back is a floating circular button at the BOTTOM-LEFT, beside
-    # the nav pill (not in the top header) — and the pill slides right to make room only when the FAB is shown.
+def test_mobile_nav_pill_is_centered_stable_with_an_aligned_fab(client):
+    # Wolt's mobile layout: a compact pill that stays CENTERED in a full-width rail and NEVER shifts, plus a
+    # bottom-left Home FAB the SAME 56px height as the pill (both bottom:12) so they're vertically centered on
+    # one line. The FAB appearing/disappearing must not move the pill.
     html = client.get("/").get_data(as_text=True)
-    assert ".ctx-back { position:fixed;" in html                               # a bottom-anchored floating button
-    assert "width:56px; height:56px" in html                                   # a comfortable >=44px tap target
-    assert "body.has-ctx .tabbar { left:80px; }" in html                       # pill makes room for the FAB
-    assert 'document.body.classList.toggle("has-ctx", !!t)' in html            # driven off the Home/Back target
-    assert 'document.body.classList.remove("has-ctx")' in html                 # cleared on the logged-out auth screen
+    assert ".ctx-back { position:fixed; left:12px;" in html                    # bottom-left floating FAB
+    assert "width:56px; height:56px" in html                                   # FAB is 56px == the pill height (aligned)
+    assert "gap:4px; height:56px; padding:6px" in html                         # the pill's fixed 56px height
+    assert "width: clamp(176px, 55vw, 216px)" in html                          # compact, overlap-safe pill width
+    assert "justify-content:center" in html                                    # the pill is centered in its rail
+    assert "has-ctx" not in html                                               # NO sideways shift — the pill is stable
 
 
 def test_filter_sort_chips_present_and_wired(client):
