@@ -33,17 +33,21 @@ var too (`OTP_ENABLED`, `REGISTER_VERIFY_EMAIL`, …) — flip it there, no code
 > **Note (a real bug we hit):** keep a comma OUT of `MAIL_FROM`'s display name — `Work Smarter, Not Harder <…>`
 > reads as an address *list* to SMTP and silently breaks the send. `Work Smarter <…>` is safe.
 
-## 2. Sharing secrets safely with the team
+## 2. Sharing with the team — just send the `.env`
 
-**Never paste a secret into WhatsApp / email / a commit.** Pick one:
+Elad & Shiri are trusted collaborators, so the simplest secure way is the right one: **Lior sends them the
+`.env` file** over a **private channel** — AirDrop, or a direct DM (not a public channel or a shared Drive
+anyone can open). They drop it into their own repo root, `docker compose up --build`, and they're on live
+email, identical to Lior's.
 
-- **A shared password-manager vault** (Bitwarden is free) — Lior adds one "Work Smarter `.env`" item; you copy
-  it into your local `.env`. Easiest to keep everyone in sync.
-- **A one-time self-destructing note** (e.g. privnote) — Lior sends a link that destroys itself once you open it.
-- **Your own free Brevo account** (~5 min, 300 mails/day) — *most* secure: no shared credential at all. The only
-  difference is your sender address. Use this unless you specifically need to match Lior's sender.
+- The file is at `~/dev/work-smarter-not-harder/.env` — it's hidden; in Finder press `Cmd+Shift+.` to show it.
+- **The one rule:** never *commit* it — and it can't be, it's gitignored. (Optional hygiene: delete the DM once
+  they've saved it, so the creds don't linger in chat history.)
 
-Your `.env` never leaves your machine — it's gitignored.
+Don't want to share a credential at all? **Make your own free Brevo account** (~5 min, 300 mails/day) and put
+your own `SMTP_*` in your `.env` — same result, just a different sender. Only bother *encrypting* the transfer
+(e.g. `openssl`, a one-time note) if you don't trust the channel itself — for a private DM to a teammate that's
+overkill.
 
 ## 3. Server + CI/CD — GitHub Actions secrets & variables
 
