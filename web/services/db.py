@@ -20,8 +20,6 @@ from pymongo.errors import CollectionInvalid, DuplicateKeyError, OperationFailur
 
 logger = logging.getLogger(__name__)
 
-_VOTE_RETRIES = 8        # optimistic-concurrency retries for forum_vote (see its docstring)
-
 _client = None
 _client_lock = threading.Lock()
 
@@ -347,63 +345,68 @@ def forum_vote_comment(db, post_id, comment_id, username, value):
     """Record one vote per user on a comment (re-voting replaces) and return the comment's new score,
     or None if the post or comment is unknown.
 
-    Same optimistic-concurrency guard as ``forum_vote``, but the CAS is on the post's ``comments``
-    array: the write only lands if that array is unchanged since we read it, so two concurrent comment
-    votes can't lose each other's update. A concurrent delete/edit that changes the array makes the
-    loser retry on fresh state; sustained contention exhausts the retries and raises (route -> 503).
-    Votes live as a LIST of ``{"user", "value"}`` on the comment (never a username-keyed dict — a
-    username may contain ``.``/``$``, illegal as Mongo field names).
+    A single **atomic pipeline update** (MongoDB 4.2+) keyed on ``{id, "comments.id"}`` — so an unknown
+    post OR comment misses the filter and returns None. Server-side, ``$map`` over the comments and, for
+    the target comment only, drop this user's prior vote, append the new one, and recompute *that
+    comment's* score in one pass (a ``$let`` builds the new votes list once). One atomic write, so
+    concurrent votes on different comments of the same post can't fail each other and a valid vote never
+    spuriously 503s under load (the old whole-``comments``-array CAS serialized them and could exhaust its
+    retries). Votes stay a LIST of ``{"user", "value"}`` (never a username-keyed dict — a username may
+    contain ``.``/``$``). ``username`` is wrapped in ``$literal`` so a ``$``-prefixed handle is treated as
+    data, not an aggregation field path.
     """
-    for _ in range(_VOTE_RETRIES):
-        post = db.forum_posts.find_one({"id": post_id})
-        if post is None:
-            return None
-        old_comments = post.get("comments", [])
-        idx = next((i for i, c in enumerate(old_comments) if c.get("id") == comment_id), None)
-        if idx is None:
-            return None
-        new_comments = [dict(c) for c in old_comments]          # copy so old_comments stays intact for the CAS filter
-        target = new_comments[idx]
-        votes = [v for v in target.get("votes", []) if v.get("user") != username]  # drop this user's prior vote
-        votes.append({"user": username, "value": value})
-        target["votes"], target["score"] = votes, sum(v["value"] for v in votes)
-        result = db.forum_posts.update_one(
-            {"id": post_id, "comments": old_comments},          # CAS: only if the comments array is unchanged
-            {"$set": {"comments": new_comments}},
-        )
-        if result.matched_count:
-            return target["score"]
-    raise RuntimeError(f"forum_vote_comment: lost the update race on comment {comment_id} after retries")
+    post = db.forum_posts.find_one_and_update(
+        {"id": post_id, "comments.id": comment_id},
+        [{"$set": {"comments": {"$map": {
+            "input": "$comments", "as": "c",
+            "in": {"$cond": [
+                {"$eq": ["$$c.id", comment_id]},
+                {"$let": {
+                    "vars": {"newvotes": {"$concatArrays": [
+                        {"$filter": {"input": {"$ifNull": ["$$c.votes", []]}, "as": "v",
+                                     "cond": {"$ne": ["$$v.user", {"$literal": username}]}}},
+                        [{"user": {"$literal": username}, "value": value}],
+                    ]}},
+                    "in": {"$mergeObjects": ["$$c", {"votes": "$$newvotes",
+                                                     "score": {"$sum": "$$newvotes.value"}}]},
+                }},
+                "$$c",
+            ]},
+        }}}}],
+        return_document=ReturnDocument.AFTER,
+    )
+    if not post:
+        return None
+    target = next((c for c in post.get("comments", []) if c.get("id") == comment_id), None)
+    return target["score"] if target else None
 
 
 def forum_vote(db, post_id, username, value):
     """Record one vote per user (re-voting replaces) and return the new score, or None if unknown.
 
-    Votes are stored as a LIST of ``{"user", "value"}`` — never a dict keyed by username, since a
-    username may contain ``.`` or ``$`` (the validator only bounds length), which are illegal/fragile
-    as MongoDB field names.
+    A single **atomic pipeline update** (MongoDB 4.2+) keyed on the immutable post ``id``: server-side,
+    ``$filter`` out this user's prior vote, ``$concatArrays`` the new one, and ``$sum`` the score — one
+    write, no read-rebuild-CAS-retry. So there is no lost update AND no livelock: concurrent votes on the
+    same hot post are independent atomic updates that can't fail each other, and a valid vote never
+    spuriously returns a 503 under contention (the old whole-``votes``-array CAS could exhaust its retries).
 
-    Concurrency: the read-rebuild-write is guarded by **optimistic concurrency control** — the write
-    only lands if the post's ``votes`` array is unchanged since we read it (the array is in the update
-    filter). Two simultaneous votes can't lose each other's update: the loser's filter misses and it
-    retries on the fresh state. A concurrent *delete* makes the re-read return None -> None. Extreme
-    sustained contention exhausts the retries and raises (the route degrades it to a 503).
+    Votes are stored as a LIST of ``{"user", "value"}`` — never a dict keyed by username, since a username
+    may contain ``.`` or ``$`` (illegal/fragile as MongoDB field names). ``username`` is wrapped in
+    ``$literal`` so a ``$``-prefixed handle is treated as data, not an aggregation field path.
     """
-    for _ in range(_VOTE_RETRIES):
-        post = db.forum_posts.find_one({"id": post_id})
-        if post is None:
-            return None
-        old_votes = post.get("votes", [])
-        new_votes = [v for v in old_votes if v.get("user") != username]   # drop this user's prior vote
-        new_votes.append({"user": username, "value": value})
-        score = sum(v["value"] for v in new_votes)
-        result = db.forum_posts.update_one(
-            {"id": post_id, "votes": old_votes},                          # CAS: only if votes unchanged
-            {"$set": {"votes": new_votes, "score": score}},
-        )
-        if result.matched_count:
-            return score
-    raise RuntimeError(f"forum_vote: lost the update race on post {post_id} after retries")
+    post = db.forum_posts.find_one_and_update(
+        {"id": post_id},
+        [
+            {"$set": {"votes": {"$concatArrays": [
+                {"$filter": {"input": {"$ifNull": ["$votes", []]}, "as": "v",
+                             "cond": {"$ne": ["$$v.user", {"$literal": username}]}}},
+                [{"user": {"$literal": username}, "value": value}],
+            ]}}},
+            {"$set": {"score": {"$sum": "$votes.value"}}},
+        ],
+        return_document=ReturnDocument.AFTER,
+    )
+    return post["score"] if post else None
 
 
 # A post may only be edited/deleted by its real author (even for anonymous posts, where the displayed
