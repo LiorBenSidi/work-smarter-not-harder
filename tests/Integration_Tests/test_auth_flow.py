@@ -21,7 +21,14 @@ def test_auth_config_exposes_validator_bounds(client, auth_module):
     assert data["password_min"] == auth_module.PASSWORD_MIN
     assert data["password_max"] == auth_module.PASSWORD_MAX
     assert data["email_mode"] == "mock"                          # no SMTP in tests -> mock (codes on-screen)
-    assert "otp_login" in data and "verify_email" in data        # the modes the dev-tools panel reads
+    assert "otp_login" in data and "verify_email" in data        # the modes the debug tools panel reads
+
+
+def test_auth_config_reports_live_when_smtp_set(make_otp_client, fake_users):
+    # The mock/live switch is SMTP_HOST: with it set, /auth/config must report "live" (so the UI + the
+    # debug panel show where codes go). Locks the live branch — the mock branch is asserted above.
+    live = make_otp_client(fake_users, SMTP_HOST="smtp.example.com")
+    assert live.get("/auth/config").get_json()["email_mode"] == "live"
 
 
 def test_auth_config_follows_a_bound_change(client, auth_module, monkeypatch):
