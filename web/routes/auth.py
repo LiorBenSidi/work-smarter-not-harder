@@ -138,13 +138,74 @@ def register():
     try:
         if _users().by_email(email):                      # one email -> one account (login identity)
             return jsonify(error="an account with this email already exists"), 409
-        handle = _allocate_handle(display, generate_password_hash(password), email)
+        pw_hash = generate_password_hash(password)
+        if _register_verify_active():
+            # Don't create the account yet: email a code and only create it once the address is CONFIRMED,
+            # so a user can't register with a fake or someone else's email. The pending signup lives in the
+            # session (this browser), never in the DB, until /register/verify.
+            dev_code = _issue_reg_code(display, pw_hash, email)
+            body = {"status": "verify_required", "email": email, "expires_in": current_app.config["OTP_TTL_SECONDS"]}
+            if dev_code is not None:                       # no SMTP -> surface the code (dev/grading)
+                body["dev_code"] = dev_code
+            return jsonify(body), 200
+        handle = _allocate_handle(display, pw_hash, email)
     except Exception:
         logger.exception("user store unavailable during register")
         return jsonify(error="user store unavailable"), 503
     if handle is None:                                    # every suffix taken (pathological) -> transient
         return jsonify(error="could not create the account — please try again"), 503
     return jsonify(status="registered", username=handle, display_name=display), 201
+
+
+@auth_bp.post("/register/verify")
+@limiter.limit("10 per minute")
+def register_verify():
+    """Second registration step: confirm the emailed code, THEN create the account and log the user straight
+    in (a verified code proves email ownership). The pending signup comes from the SESSION, never the body."""
+    pending = session.get("pending_reg")
+    if not pending:
+        return jsonify(error="no registration in progress — please start again"), 400
+    data = request.get_json(silent=True) or {}
+    code = data.get("code")
+    if not isinstance(code, str):
+        return jsonify(error="enter the 6-digit code from your email"), 400
+    if time.time() > pending.get("expires", 0):
+        session.pop("pending_reg", None)
+        return jsonify(error="this code has expired — please register again"), 400
+    if pending.get("attempts", 0) >= current_app.config["OTP_MAX_ATTEMPTS"]:
+        session.pop("pending_reg", None)
+        return jsonify(error="too many attempts — please register again"), 429
+    if not check_password_hash(pending["code_hash"], code.strip()):
+        pending["attempts"] = pending.get("attempts", 0) + 1
+        session["pending_reg"] = pending                   # persist the bumped attempt count
+        return jsonify(error="that code isn't right — check your email and try again"), 400
+    try:
+        if _users().by_email(pending["email"]):            # a race: the email got registered while pending
+            session.pop("pending_reg", None)
+            return jsonify(error="an account with this email already exists"), 409
+        handle = _allocate_handle(pending["display"], pending["pw_hash"], pending["email"])
+    except Exception:
+        logger.exception("user store unavailable during register verify")
+        return jsonify(error="user store unavailable"), 503
+    if handle is None:
+        return jsonify(error="could not create the account — please try again"), 503
+    session.clear()
+    session["username"] = handle                           # verified email == proof of ownership -> sign in
+    return jsonify(status="registered", username=handle, display_name=pending["display"]), 201
+
+
+@auth_bp.post("/register/resend")
+@limiter.limit("5 per minute")
+def register_resend():
+    """Re-issue the registration code from the pending session (nothing is re-sent from the client)."""
+    pending = session.get("pending_reg")
+    if not pending:
+        return jsonify(error="no registration in progress — please start again"), 400
+    dev_code = _issue_reg_code(pending["display"], pending["pw_hash"], pending["email"])
+    body = {"status": "code_sent", "expires_in": current_app.config["OTP_TTL_SECONDS"]}
+    if dev_code is not None:
+        body["dev_code"] = dev_code
+    return jsonify(body), 200
 
 
 @auth_bp.post("/login")
@@ -514,6 +575,30 @@ def _otp_active():
     run with TESTING off + OTP on. A valid remember-this-browser cookie still skips OTP per login."""
     cfg = current_app.config
     return bool(cfg.get("OTP_ENABLED")) and not cfg.get("TESTING")
+
+
+def _register_verify_active():
+    """True when registration must confirm the email first (enabled AND not under the test harness). The
+    register-then-login test suite relies on instant creation, so ``TESTING`` turns it off; the dedicated
+    verification tests run with TESTING off + the flag on. Mirrors ``_otp_active``."""
+    cfg = current_app.config
+    return bool(cfg.get("REGISTER_VERIFY_EMAIL")) and not cfg.get("TESTING")
+
+
+def _issue_reg_code(display, pw_hash, email):
+    """Start email verification for a NEW signup: stash the pending account in the SESSION (this browser,
+    never the DB) with a hashed code + TTL, email the code, and return the plaintext ONLY when no SMTP is
+    configured (dev/grading surfacing). Reuses the OTP TTL/length."""
+    code = f"{secrets.randbelow(10 ** OTP_LENGTH):0{OTP_LENGTH}d}"
+    ttl = current_app.config["OTP_TTL_SECONDS"]
+    session["pending_reg"] = {"display": display, "email": email, "pw_hash": pw_hash,
+                              "code_hash": generate_password_hash(code), "expires": time.time() + ttl, "attempts": 0}
+    minutes = max(1, ttl // 60)
+    send_email(current_app.config, email, "Confirm your Work Smarter, Not Harder email",
+               f"Your Work Smarter, Not Harder confirmation code is: {code}\n\n"
+               f"Enter it to finish creating your account. It expires in {minutes} min.\n"
+               "If you didn't request this, you can ignore this email.")
+    return None if current_app.config.get("SMTP_HOST") else code
 
 
 def _issue_otp(username, email):

@@ -478,7 +478,8 @@ def make_otp_client(web_app_module):
     def _make(users=None, **overrides):
         app = web_app_module.create_app(users=users)
         app.config.update(SECRET_KEY="test-secret-key", TESTING=False, PROPAGATE_EXCEPTIONS=True,
-                          OTP_ENABLED=True, SMTP_HOST="", OTP_TTL_SECONDS=600, OTP_MAX_ATTEMPTS=5,
+                          OTP_ENABLED=True, REGISTER_VERIFY_EMAIL=False, SMTP_HOST="",
+                          OTP_TTL_SECONDS=600, OTP_MAX_ATTEMPTS=5,
                           REMEMBER_COOKIE_MAX_AGE=30 * 24 * 3600, RATELIMIT_ENABLED=False)
         app.config.update(overrides)
         return _CsrfClient(app.test_client())
