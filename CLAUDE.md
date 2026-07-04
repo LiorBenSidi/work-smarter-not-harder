@@ -43,6 +43,11 @@ The backend is built and CI-gated; the open work is two teammates' lanes. If you
 - **`db`** — MongoDB: users, profiles, programs, analysis_history. Internal only.
 - **`ai/`** — Random Forest readiness classifier + recommendation engine. Internal REST (`POST /predict`).
 
+## Auth modes & the debug panel (two dev switches)
+Full guide: [`docs/AUTH_TESTING.md`](docs/AUTH_TESTING.md). Both default **off** (mock email, desktop viewport); neither affects normal users.
+- **Email mock ⇄ live = `SMTP_HOST`.** Unset (default) → login-OTP / signup-verify / password-reset codes are shown on screen + logged (no mailbox — what teammates + grading use); set `SMTP_*` + `MAIL_FROM` in `.env` → codes are emailed only. `docker compose up` reads `.env` and passes **every** auth-mode var (`OTP_ENABLED`, `REGISTER_VERIFY_EMAIL`, `OTP_TTL_SECONDS`, …) through to `web`, so flip any mode in `.env` alone; `curl localhost:8000/auth/config` reports `email_mode`.
+- **Viewport desktop ⇄ mobile = the `?debug=1` panel.** Append `?debug=1` → a ⚙ **Debug tools** panel (bottom-right) previews the real mobile layout in an iframe inside a desktop browser. Dev-only, gated on `?debug=1` / `localStorage ws-debug`, never shown to normal users.
+
 ## Build constraints (from the course rubric — keep these true)
 - **Only `web` is published**; `db`/`ai` stay internal (no host ports).
 - **Local AI model**, never an external API. **Bake the trained model into the image** (`joblib.dump` → `COPY` → `joblib.load`); never train or download it at container runtime. Pin the `scikit-learn` version so the pickle loads.
