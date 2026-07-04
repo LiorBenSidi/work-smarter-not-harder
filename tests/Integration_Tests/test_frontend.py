@@ -401,3 +401,17 @@ def test_register_email_verification_reuses_the_otp_screen(client):
     assert '"/register/verify"' in html and '"/register/resend"' in html   # verify + resend branch by mode
     assert 'id="otp-remember-row"' in html and 'id="otp-submit"' in html   # toggled per mode
     assert "Verify & create account" in html                               # the register-mode CTA
+
+
+def test_debug_tools_panel_present_and_gated(client):
+    # A DEBUG-only dev-tools panel: a bottom-right floating button opening a compact panel with a
+    # desktop/mobile viewport preview (an iframe -> real narrow-viewport render) + a live/mock email
+    # indicator. Hidden unless ?debug=1 / ws-debug, suppressed inside the preview iframe, zero footprint live.
+    html = client.get("/").get_data(as_text=True)
+    assert 'id="debug-fab"' in html and 'id="debug-panel"' in html
+    assert "function wireDebugTools(" in html
+    assert "if (!DEBUG) return" in html                             # gated on the DEBUG flag
+    assert 'params.has("preview")' in html                         # not nested inside the preview iframe
+    assert 'id="debug-vp-mobile"' in html and 'id="debug-preview-frame"' in html   # the viewport preview
+    assert 'location.pathname + "?preview=1"' in html              # iframe = a real narrow-viewport render
+    assert 'id="debug-email-mode"' in html                         # the live/mock indicator

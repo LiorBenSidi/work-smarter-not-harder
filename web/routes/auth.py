@@ -102,9 +102,12 @@ def _users():
 
 @auth_bp.get("/auth/config")
 def auth_config():
-    """Public: the credential bounds, so the UI shows requirements from one source of truth (here)."""
+    """Public: credential bounds + the auth modes (email live/mock, login-OTP, signup-verify), so the UI
+    and the dev-tools panel read requirements + the current mode from one source of truth. No secrets."""
     return jsonify(username_min=USERNAME_MIN, username_max=USERNAME_MAX,
-                   password_min=PASSWORD_MIN, password_max=PASSWORD_MAX), 200
+                   password_min=PASSWORD_MIN, password_max=PASSWORD_MAX,
+                   email_mode="live" if current_app.config.get("SMTP_HOST") else "mock",
+                   otp_login=_otp_active(), verify_email=_register_verify_active()), 200
 
 
 # The display name people choose need NOT be unique (many "Alex"es). Each account still gets a UNIQUE
