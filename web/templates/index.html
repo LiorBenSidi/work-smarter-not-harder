@@ -266,6 +266,13 @@
     .chip.active { color:var(--on-accent); border-color:transparent;
       background: linear-gradient(135deg, var(--accent), color-mix(in srgb, var(--accent) 55%, var(--accent2))); }
     .chip:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+    /* Illustrated empty states: a friendly icon + guidance instead of a bare grey line (Wolt's empty cards) */
+    .empty { text-align:center; padding:24px 16px 20px; animation: rise .4s cubic-bezier(.2,.7,.2,1) both; }
+    .empty-ico { width:54px; height:54px; margin:0 auto 12px; border-radius:50%; display:inline-flex; align-items:center; justify-content:center;
+      background: color-mix(in srgb, var(--accent) 12%, var(--field)); border:1px solid color-mix(in srgb, var(--accent) 26%, var(--line)); }
+    .empty-ico svg { width:25px; height:25px; stroke:var(--accent); fill:none; stroke-width:1.8; }
+    .empty-title { font-weight:800; font-size:15px; margin:0 0 4px; }
+    .empty-text { color:var(--muted); font-size:13.5px; margin:0 auto; max-width:34ch; line-height:1.4; }
 
     /* signature: the breathing readiness orb */
     .readiness { --st: var(--muted); text-align:center; }
@@ -1219,6 +1226,20 @@
       return info;                                                       // loadHistory reuses this for the check-in-due capsule
     }
 
+    // ---- Illustrated empty states (a friendly icon + guidance, not a bare grey line) ----
+    const EMPTY_ICONS = {
+      clock: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>',
+      forum: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H8l-4 4V5a2 2 0 0 1 2-2h13a2 2 0 0 1 2 2z"/></svg>',
+      chat: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 11.5a8.5 8.5 0 0 1-12.9 7.3L3 20l1.2-5.1A8.5 8.5 0 1 1 21 11.5z"/></svg>',
+      filter: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16M7 12h10M10 19h4"/></svg>',
+      pencil: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>',
+    };
+    function emptyState(icon, title, text) {
+      return '<div class="empty"><span class="empty-ico">' + icon + "</span>"
+        + '<p class="empty-title">' + escapeHtml(title) + "</p>"
+        + '<p class="empty-text">' + escapeHtml(text) + "</p></div>";
+    }
+
     // ---- Dashboard ----
     // Map the AI's free-form state word to a readiness bucket + orb level (presentation only; the AI
     // owns the actual words, so an unknown state degrades to a neutral signal rather than miscolouring).
@@ -1312,10 +1333,10 @@
     }
     function renderHistoryList() {
       const el = $("history"); if (!el) return;
-      if (!historyItems.length) { el.innerHTML = '<p class="muted">No past analyses yet.</p>'; return; }
+      if (!historyItems.length) { el.innerHTML = emptyState(EMPTY_ICONS.clock, "No check-ins yet", "Log your first morning check-in on Today to start tracking your readiness."); return; }
       const items = historyFilter === "all" ? historyItems
         : historyItems.filter((it) => readinessClass(it && it.assessment)[0] === historyFilter);
-      if (!items.length) { el.innerHTML = '<p class="muted">No ' + escapeHtml(historyFilter) + " check-ins.</p>"; return; }
+      if (!items.length) { el.innerHTML = emptyState(EMPTY_ICONS.filter, "Nothing here", "No " + historyFilter + " days in your history yet."); return; }
       el.innerHTML = "<ul>" + items.map((it) =>
         "<li><strong>" + escapeHtml(it.assessment || "—") + "</strong> "
         + (it.calories != null ? "· " + escapeHtml(it.calories) + " kcal " : "")
@@ -1369,11 +1390,11 @@
     }
     function renderForumList() {
       const el = $("forum-list"); if (!el) return;
-      if (!forumPosts.length) { el.innerHTML = '<p class="muted">No posts yet — start one above.</p>'; return; }
+      if (!forumPosts.length) { el.innerHTML = emptyState(EMPTY_ICONS.forum, "Quiet in here", "Start the conversation — share something above."); return; }
       let list = forumPosts.slice();                         // "recent" keeps the server order (newest first)
       if (forumSort === "top") list.sort((a, b) => (b.score || 0) - (a.score || 0));
       else if (forumSort === "mine") list = list.filter((p) => p.mine);
-      if (!list.length) { el.innerHTML = '<p class="muted">You haven\'t posted yet.</p>'; return; }
+      if (!list.length) { el.innerHTML = emptyState(EMPTY_ICONS.pencil, "You haven't posted yet", "Your posts will show up here once you share something."); return; }
       el.innerHTML = list.map((p) =>
         '<div class="post" data-id="' + escapeHtml(p.id) + '">'
         + '<div class="post-top"><strong>' + escapeHtml(p.title) + '</strong><span class="pill">▲ ' + escapeHtml(p.score) + '</span></div>'
@@ -1502,7 +1523,7 @@
       if (sessionChanged(u, "loadConversations")) return;    // stale session -> don't paint another user's inbox
       if (!r.ok) { el.innerHTML = '<p class="flash error">Could not load conversations.</p>'; return; }
       const cs = (r.data && r.data.conversations) || [];
-      if (!cs.length) { el.innerHTML = '<p class="muted">No conversations yet — start one above.</p>'; return; }
+      if (!cs.length) { el.innerHTML = emptyState(EMPTY_ICONS.chat, "No conversations yet", "Send a message above to start one."); return; }
       el.innerHTML = cs.map((c) =>
         '<div class="dm-row" data-peer="' + escapeHtml(c.peer) + '">' + avatarHtml(c.peer, 40)
         + '<div class="dm-main"><div class="dm-name">' + escapeHtml(c.peer_name || c.peer) + '</div>'
