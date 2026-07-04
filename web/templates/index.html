@@ -70,9 +70,10 @@
       padding:13px 20px; border-bottom:1px solid var(--line);
       background: color-mix(in srgb, var(--bg) 58%, transparent); backdrop-filter: blur(16px) saturate(1.2); }
     .brand { display:flex; align-items:center; gap:11px; text-decoration:none; color:inherit; }
-    .brand-dot { width:26px; height:26px; border-radius:50%; flex:none;
+    .brand-dot { width:26px; height:26px; border-radius:50%; flex:none; display:flex; align-items:center; justify-content:center;
       background: radial-gradient(circle at 33% 28%, color-mix(in srgb, var(--accent) 92%, #fff), var(--accent) 42%, var(--accent2) 92%);
       box-shadow:0 0 18px color-mix(in srgb, var(--accent) 55%, transparent); animation: breathe 5.5s ease-in-out infinite; }
+    .brand-home-ico { display:none; width:14px; height:14px; stroke:var(--on-accent); fill:none; stroke-width:2.4; }
     .brand-name { font-size:16px; font-weight:800; letter-spacing:.04em; white-space:nowrap; }
     .brand-tag { font-size:12px; color:var(--muted); white-space:nowrap; }
     /* Contextual Home/Back: a circular button shown ONLY off-Today or inside a drill-in (Wolt's home-off-home) */
@@ -371,6 +372,11 @@
       .topnav.nav-on { display:flex; }          /* only when signed in (nav-on) — not on the logged-out auth screen */
       main { max-width:920px; padding:26px 26px 44px; }
       .capsule { bottom:26px; }
+      /* Desktop: NO separate Home/Back button (it shifted the whole header). Instead the LOGO becomes the
+         home button off-Today — a home icon appears inside the brand dot; clicking the brand goes to Today. */
+      .ctx-back { display:none; }
+      header.off-home .brand { cursor:pointer; }
+      header.off-home .brand-home-ico { display:block; }
     }
 
     /* Direct messages: generative avatars (deterministic aurora gradient + initial — no uploads), calm bubbles */
@@ -457,7 +463,7 @@
     <div class="header-left">
       <button id="ctx-back" class="ctx-back" type="button" hidden aria-label="Back"></button>
       <a class="brand" href="/" aria-label="Work Smarter, Not Harder — home">
-        <span class="brand-dot" aria-hidden="true"></span>
+        <span class="brand-dot" aria-hidden="true"><svg class="brand-home-ico" viewBox="0 0 24 24"><path d="M3 11l9-8 9 8M5 10v10h5v-6h4v6h5V10"/></svg></span>
         <span class="brand-name">Work Smarter, Not Harder</span>
         <span class="brand-tag">readiness, every morning</span>
       </a>
@@ -865,7 +871,7 @@
       $("app-view").hidden = view !== "app";
       $("who").hidden = view !== "app";
       $("topnav").classList.toggle("nav-on", view === "app");   // desktop top-nav shows only when signed in
-      if (view !== "app") $("ctx-back").hidden = true;          // no Home/Back on the logged-out auth screen
+      if (view !== "app") { $("ctx-back").hidden = true; document.querySelector("header").classList.remove("off-home"); }  // no Home/Back on the logged-out auth screen
     }
 
     // showView("auth") alone re-shows whatever sub-form (and values) were last on screen — e.g.
@@ -909,17 +915,17 @@
     const CTX_BACK_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>';
     const CTX_HOME_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11l9-8 9 8M5 10v10h5v-6h4v6h5V10"/></svg>';
     function ctxBackTarget() {
-      if (!$("forum-detail").hidden) return "post";        // a forum post is open -> back to the list
-      if (!$("dm-thread-view").hidden) return "thread";    // a DM thread is open -> back to conversations
+      if (currentScreen === "forum" && !$("forum-detail").hidden) return "post";       // viewing a forum post -> back to list
+      if (currentScreen === "messages" && !$("dm-thread-view").hidden) return "thread"; // viewing a DM thread -> back to inbox
       if (currentScreen !== "today") return "home";        // a non-Today section -> home (Today)
-      return null;                                          // on Today -> nothing to go back to
+      return null;                                          // on Today (or a drill-in left open off-screen) -> nothing to go back to
     }
     function updateCtxBack() {
       const t = ctxBackTarget(), btn = $("ctx-back");
       btn.hidden = !t;
-      if (!t) return;
-      btn.innerHTML = t === "home" ? CTX_HOME_ICON : CTX_BACK_ICON;
-      btn.setAttribute("aria-label", t === "home" ? "Go to Today" : "Back");
+      if (t) { btn.innerHTML = t === "home" ? CTX_HOME_ICON : CTX_BACK_ICON; btn.setAttribute("aria-label", t === "home" ? "Go to Today" : "Back"); }
+      // Desktop: the logo shows a home icon (and becomes clickable-to-Today) whenever we're off the Today screen.
+      document.querySelector("header").classList.toggle("off-home", currentScreen !== "today");
     }
     $("ctx-back").addEventListener("click", () => {
       const t = ctxBackTarget();
@@ -927,6 +933,10 @@
       else if (t === "thread") closeThread();
       else showScreen("today");
       updateCtxBack();
+    });
+    // The logo IS the home button when signed in: go to Today in-app (no full reload). Logged out -> href="/".
+    document.querySelector(".brand").addEventListener("click", (e) => {
+      if (currentUser) { e.preventDefault(); showScreen("today"); }
     });
 
     // ---- "Check-in due" capsule: a floating nudge shown ONLY when today's check-in is missing AND you're not

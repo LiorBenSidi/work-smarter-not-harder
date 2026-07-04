@@ -276,6 +276,18 @@ def test_context_home_back_present_and_wired(client):
     assert html.count("updateCtxBack()") >= 5                       # wired into showScreen + openPost/closePost + open/closeThread
 
 
+def test_desktop_logo_is_the_home_button(client):
+    # Desktop fix: the separate Home/Back button is HIDDEN on desktop (it shifted the whole header). Instead
+    # the LOGO becomes the home button off-Today — a home icon appears inside the brand dot + clicking the
+    # brand goes to Today in-app (no reload). The header is flagged .off-home to drive it. Mobile keeps ctx-back.
+    html = client.get("/").get_data(as_text=True)
+    assert 'class="brand-home-ico"' in html                        # the home icon lives inside the brand dot
+    assert "header.off-home .brand-home-ico" in html               # shown on desktop when off-Today
+    assert '.ctx-back { display:none; }' in html                   # ...and the separate button is gone on desktop
+    assert 'classList.toggle("off-home", currentScreen !== "today")' in html   # header flagged off-Today
+    assert "if (currentUser) { e.preventDefault(); showScreen" in html         # the logo is an in-app home link
+
+
 def test_filter_sort_chips_present_and_wired(client):
     # Wolt-style filter chips: History filters by readiness (All/Ready/Moderate/Rest); Forum sorts
     # (Recent/Top/Mine). Client-side over the cached list; the active chip is highlighted.
