@@ -26,12 +26,39 @@ docker compose logs -f web | grep -i EMAIL
 
 ---
 
-## 1. Register (email now required)
+## 1. Register — now with email verification
 
 1. Open http://localhost:8000 → **Register** tab.
-2. Username, **Email** (any address — it isn't verified in dev), Password → **Create account**.
+2. Display name, **Email**, Password → **Create account**.
+3. You land on a **verification code** screen — the account is **not created until you confirm the code**.
+   In **mock** mode (no SMTP) the code is shown right there (*"Dev mode — your code is 123456"*) and in the
+   logs; in **live** mode it's emailed. Enter it → the account is created and you're signed straight in.
 
-The email is stored for password-reset and for the login code. No mailbox needed in dev.
+This stops anyone registering with a fake or someone else's address. The display name can repeat; you sign
+in with your **email** (or the display handle). Turn it off for a scripted run with `REGISTER_VERIFY_EMAIL=0`.
+
+---
+
+## Mock ⇄ live, and the dev-tools panel
+
+The single switch for **every** code (login OTP, signup verification, password reset) is **`SMTP_HOST`**:
+
+| Mode | Config | Behaviour |
+|---|---|---|
+| **Mock** (default for teammates/grading) | `SMTP_HOST` **unset** (no `.env`) | Codes are **shown on screen** + logged. No mailbox needed. |
+| **Live** | `SMTP_HOST`/`SMTP_USER`/`SMTP_PASS`/`MAIL_FROM` set (in `.env`) | Codes are **emailed**; never shown or returned. |
+
+**Elad / Shiri:** just run `docker compose up --build` with **no `.env`** → mock mode, every code on-screen.
+To go live, add the four `SMTP_*` vars (see the "Real email" steps further down).
+
+**Dev-tools panel:** append **`?debug=1`** to the URL → a **⚙ button appears bottom-right** (only in debug
+mode). It opens a panel to **preview the mobile layout in a desktop browser** (Desktop/Mobile) and shows the
+current **email mode** (MOCK/LIVE). Zero footprint in normal use; "Disable dev tools" turns it off.
+
+## 1b. Password reset (dev)
+
+**Forgot your password?** → enter your email → in mock mode the reset link is **shown on screen** as
+*"open reset link (dev)"* (and logged); in live mode it's emailed. Click it → set a new password.
 
 ## 2. Log in — the 6-digit code (2-step verification)
 
