@@ -551,7 +551,7 @@
         </form>
 
         <form id="register-form" hidden>
-          <label for="reg-username">Display name<span class="info" id="reg-username-info" tabindex="0" role="note" aria-label="Display name requirements">i<span class="tip" aria-hidden="true" id="reg-username-tip"></span></span></label><input id="reg-username" name="username" autocomplete="nickname" placeholder="Shown to others — can repeat" required>
+          <label for="reg-username">Display name<span class="info" id="reg-username-info" tabindex="0" role="note" aria-label="Display name requirements">i<span class="tip" aria-hidden="true" id="reg-username-tip"></span></span></label><input id="reg-username" name="username" autocomplete="off" placeholder="Shown to others — can repeat" required>
           <p class="muted" style="margin:2px 0 10px;font-size:12px">Shown to others and can repeat — you'll sign in with your email.</p>
           <label for="reg-email">Email</label><input id="reg-email" name="email" type="email" autocomplete="email" required>
           <label for="reg-password">Password<span id="reg-pw-minhint"></span><span class="info" id="reg-password-info" tabindex="0" role="note" aria-label="Password requirements">i<span class="tip" aria-hidden="true" id="reg-password-tip"></span></span></label><input id="reg-password" name="password" type="password" autocomplete="new-password" required>
@@ -1071,6 +1071,9 @@
     onSubmit("forgot-form", async (f) => {
       const r = await api("/forgot-password", { method: "POST", body: { email: f.email.value } });
       flash("forgot-flash", (r.data && r.data.status) || "If that email is registered, a reset link is on its way.", "ok");
+      if (r.data && r.data.dev_reset_link) {   // dev/mock (no SMTP): surface the link so reset is testable with no inbox
+        $("forgot-flash").innerHTML += ' — <a href="' + escapeHtml(r.data.dev_reset_link) + '" style="text-decoration:underline">open reset link (dev)</a>';
+      }
     });
 
     onSubmit("reset-form", async (f) => {
@@ -1805,16 +1808,20 @@
     // New-account nicety: prefill the display name from the email's local part (before the @), until the
     // user edits the name themselves. The display name need NOT be unique — it's just what people see.
     (function wireDisplayNamePrefill() {
-      const nameEl = $("reg-username"), emailEl = $("reg-email");
+      const nameEl = $("reg-username"), emailEl = $("reg-email"), form = $("register-form");
       if (!nameEl || !emailEl) return;
-      let touched = false;
-      nameEl.addEventListener("input", () => { touched = true; });
+      // Keep the display name synced to the email's local part, but ONLY while the user hasn't customised it:
+      // track the last value WE filled and keep syncing as long as the name is empty or still equals it; once
+      // the user's value differs, back off. Reset on form-reset so every fresh attempt starts clean. (The old
+      // code used a sticky `touched` flag that never reset AND was falsely tripped by the browser autofilling
+      // the name field — so prefill worked once then died. The field is autocomplete="off" for the same reason.)
+      let lastAuto = "";
       emailEl.addEventListener("input", () => {
-        if (touched) return;
-        const prefix = (emailEl.value.split("@")[0] || "").trim();
         const max = Number(nameEl.maxLength) > 0 ? Number(nameEl.maxLength) : 64;
-        if (prefix) nameEl.value = prefix.slice(0, max);
+        const prefix = (emailEl.value.split("@")[0] || "").trim().slice(0, max);
+        if (nameEl.value === "" || nameEl.value === lastAuto) { nameEl.value = prefix; lastAuto = prefix; }
       });
+      if (form) form.addEventListener("reset", () => { lastAuto = ""; });
     })();
 
     // ---- Theme (Display & accessibility): System / Light / Dark, persisted. The <head> script already

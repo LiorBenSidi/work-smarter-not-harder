@@ -24,12 +24,27 @@ def test_register_requires_a_valid_email(client):
     assert _register(client).status_code == 201
 
 
-def test_forgot_password_never_enumerates_accounts(client):
+def test_forgot_password_never_enumerates_accounts(client, auth_module, monkeypatch):
+    # No-enumeration is a LIVE (SMTP) property: with real email configured, the link leaves ONLY by email, so
+    # known vs unknown are byte-identical. (In dev/log mode the link is dev-surfaced on-screen — which
+    # necessarily differs for a registered email — a local-only convenience, tested separately below.)
+    client.raw.application.config["SMTP_HOST"] = "relay.test"
+    monkeypatch.setattr(auth_module, "send_email", lambda *a, **k: True)   # don't actually connect out
     _register(client)
     known = client.post("/forgot-password", json={"email": "alice@example.com"})
     unknown = client.post("/forgot-password", json={"email": "ghost@nowhere.co"})
     assert known.status_code == unknown.status_code == 200
     assert known.get_json() == unknown.get_json()          # identical body -> no account enumeration
+
+
+def test_forgot_password_dev_surfaces_the_link_without_smtp(client):
+    # Dev/log mode (no SMTP_HOST): a registered email gets the reset link surfaced in the response so the flow
+    # is testable with no inbox; an unregistered email does NOT (and none of this is exposed once SMTP is set).
+    _register(client)
+    known = client.post("/forgot-password", json={"email": "alice@example.com"}).get_json()
+    unknown = client.post("/forgot-password", json={"email": "ghost@nowhere.co"}).get_json()
+    assert "reset_token=" in known.get("dev_reset_link", "")
+    assert "dev_reset_link" not in unknown
 
 
 def test_reset_with_a_valid_token_changes_the_password(client, auth_module, monkeypatch):

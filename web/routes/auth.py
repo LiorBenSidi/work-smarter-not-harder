@@ -466,8 +466,11 @@ def forgot_password():
         send_email(current_app.config, email, "Reset your Work Smarter, Not Harder password",
                    f"Reset your password with this link (valid {minutes} min):\n\n{link}\n\n"
                    "If you didn't request this, you can ignore this email.")
-    # Identical body whether or not the email was registered -> no account enumeration. The link is
-    # delivered ONLY by email (same send_email path as the login OTP); it is never returned here.
+        if not current_app.config.get("SMTP_HOST"):    # dev/mock (log backend): surface the link like dev_otp
+            body["dev_reset_link"] = "/?reset_token=" + token   # RELATIVE -> the click stays on the current host
+    # In real (SMTP) mode the body is IDENTICAL whether or not the email was registered -> no account
+    # enumeration, and the link goes out solely by email. `dev_reset_link` appears ONLY with the log backend
+    # (local dev / grading), where surfacing it on-screen makes the reset flow testable with no inbox.
     return jsonify(body), 200
 
 
