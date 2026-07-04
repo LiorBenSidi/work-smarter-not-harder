@@ -7,6 +7,11 @@
 The `ai/` container is standalone (no dependency on `web` or `db`), so you can build and test the model and
 `/predict` in isolation via the Flask test client — in parallel with everyone else, from the first commit.
 
+**Running the app · live email (optional):** the stack runs fully in **mock mode with zero secrets** (codes show
+on screen) — all you need for normal work. To send *real* email locally, get the `.env` from **Lior** over a
+private channel (AirDrop / DM) → drop it in your repo root → `docker compose up --build`. It's gitignored —
+never commit it. Full guide: [`SECRETS.md`](SECRETS.md).
+
 ## Your contract (fixed — the rest of the app depends on it)
 `POST /predict {features: {...}} -> {state, proba, recommendations}` (docs/DESIGN.md §3). Internal-only container.
 Changing the shape is a **sync point** — update DESIGN + tell the team.
