@@ -162,6 +162,74 @@ def test_forum_crud_and_problematic_username_vote(db_mod, real_db):
     assert db_mod.forum_vote_comment(real_db, pid, cid, "bob.smith", -1) == 0  # same user replaces
 
 
+def test_forum_vote_behaviour_against_mongo(db_mod, real_db):
+    # Vote behaviour now lives ONLY on the atomic aggregation-pipeline update (the in-memory fake can't
+    # execute a pipeline), so it's pinned here against real Mongo: set / same-user-replace / distinct-user
+    # aggregate, votes stored as a LIST of {user,value}, and unknown post/comment -> None.
+    pid = db_mod.forum_create_post(real_db, "alice", "T", "B", False)["id"]
+    assert db_mod.forum_vote(real_db, pid, "alice", 1) == 1
+    assert db_mod.forum_vote(real_db, pid, "alice", -1) == -1        # one vote per user -> replaces, not adds
+    assert db_mod.forum_vote(real_db, pid, "bob", 1) == 0            # distinct users aggregate: -1 + 1
+    raw = real_db.forum_posts.find_one({"id": pid})
+    assert isinstance(raw["votes"], list)                           # a LIST, never a username-keyed dict
+    assert {v["user"] for v in raw["votes"]} == {"alice", "bob"}
+    assert db_mod.forum_vote(real_db, "nope", "alice", 1) is None    # unknown post -> None
+    cid = db_mod.forum_add_comment(real_db, pid, "bob", "hi")["id"]
+    assert db_mod.forum_vote_comment(real_db, "nope", cid, "carol", 1) is None            # unknown post
+    assert db_mod.forum_vote_comment(real_db, pid, "no-such-comment", "carol", 1) is None  # unknown comment
+    assert db_mod.forum_vote_comment(real_db, pid, cid, "carol", 1) == 1
+    assert db_mod.forum_vote_comment(real_db, pid, cid, "carol", -1) == -1  # same user replaces on the comment too
+
+
+def test_forum_vote_is_atomic_under_concurrency(db_mod, real_db):
+    # The atomic pipeline update must let many simultaneous voters on ONE hot post all succeed with the
+    # correct final tally and NO spurious error. The old read-rebuild-CAS-retry loop could exhaust its
+    # (8) retries under this contention and raise RuntimeError -> the route surfaced a 503 for a valid
+    # vote on a perfectly healthy DB. Each write is atomic at the document level, so all N land.
+    import threading
+    pid = db_mod.forum_create_post(real_db, "author", "T", "B", False)["id"]
+    n = 24
+    barrier = threading.Barrier(n)
+    errors, lock = [], threading.Lock()
+
+    def cast(i):
+        barrier.wait()                      # release all at once -> maximal contention on the one post
+        try:
+            db_mod.forum_vote(real_db, pid, f"user{i}", 1)
+        except Exception as exc:            # noqa: BLE001 - the whole point is to catch a spurious raise
+            with lock:
+                errors.append(repr(exc))
+
+    threads = [threading.Thread(target=cast, args=(i,)) for i in range(n)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    assert not errors, f"a valid concurrent vote raised on a healthy DB: {errors[:3]}"
+    post = db_mod.forum_get_post(real_db, pid)
+    assert post["score"] == n               # every distinct voter's +1 landed -> no lost update, no livelock
+
+
+def test_forum_vote_same_user_concurrent_revote_nets_one(db_mod, real_db):
+    # The same user firing many concurrent votes must end with exactly ONE vote for them (dedup holds
+    # under contention): the pipeline drops their prior vote before appending, atomically, every time.
+    import threading
+    pid = db_mod.forum_create_post(real_db, "author", "T", "B", False)["id"]
+    barrier = threading.Barrier(16)
+
+    def cast():
+        barrier.wait()
+        db_mod.forum_vote(real_db, pid, "sam", 1)
+
+    threads = [threading.Thread(target=cast) for _ in range(16)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    assert db_mod.forum_get_post(real_db, pid)["score"] == 1   # one net vote, not 16
+
+
 def test_unique_index_is_actually_enforced(db_mod, real_db):
     from pymongo.errors import DuplicateKeyError
     db_mod.ensure_indexes(real_db)
