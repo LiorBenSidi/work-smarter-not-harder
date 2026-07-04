@@ -68,3 +68,18 @@ def test_create_app_honours_the_debug_flag(monkeypatch, web_app_module):
     app = web_app_module.create_app(config=_reload_config().Config)
     app.config.update(SECRET_KEY="test-secret-key")
     assert app.config["DEBUG"] is True
+
+
+# ---- config <-> docker-compose passthrough (a knob config.py reads MUST be forwarded to the container) ----
+def test_compose_forwards_every_auth_email_knob():
+    """docker-compose.yml promises "teammates flip any mode in .env ALONE (no compose edit)". A knob that
+    config.py reads from the environment but the web service does NOT pass through silently ignores the .env
+    value and falls back to the code default (the RESET_TOKEN_MAX_AGE gap). Guard the whole class here so a
+    newly-added auth/email knob can't be forgotten in compose.
+    """
+    compose = (WEB.parent / "docker-compose.yml").read_text()
+    knobs = ("SMTP_HOST", "SMTP_PORT", "SMTP_USER", "SMTP_PASS", "SMTP_STARTTLS", "MAIL_FROM",
+             "APP_BASE_URL", "RESET_TOKEN_MAX_AGE", "OTP_ENABLED", "OTP_TTL_SECONDS",
+             "OTP_MAX_ATTEMPTS", "REGISTER_VERIFY_EMAIL", "REMEMBER_COOKIE_MAX_AGE")
+    missing = [k for k in knobs if "${" + k not in compose]
+    assert not missing, f"config.py reads these but docker-compose.yml doesn't pass them through: {missing}"
