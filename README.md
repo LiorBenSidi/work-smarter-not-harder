@@ -43,6 +43,10 @@ cp .env.example .env            # sets SECRET_KEY (never commit .env)
 docker compose up --build       # 3 containers → open http://localhost:8000/health
 ```
 
+**Dev switches** (both default off; neither affects real users — full guide [`docs/AUTH_TESTING.md`](docs/AUTH_TESTING.md)):
+- **Email mock ⇄ live = `SMTP_HOST`** — unset → login-OTP / signup-verify / reset codes are shown on screen + logged (no mailbox; teammates + grading use this); set `SMTP_*` + `MAIL_FROM` in `.env` → codes are emailed only. Every auth-mode var (`OTP_ENABLED`, `REGISTER_VERIFY_EMAIL`, …) passes through from `.env`; `curl localhost:8000/auth/config` reports `email_mode`.
+- **Viewport desktop ⇄ mobile = the `?debug=1` panel** — append `?debug=1` → a ⚙ **Debug tools** panel previews the real mobile layout in an iframe on desktop. Dev-only, never shown to normal users.
+
 ## Run the tests
 ```sh
 python -m pytest tests/         # full suite — runs on any machine (no local paths)

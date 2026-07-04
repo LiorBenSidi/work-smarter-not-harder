@@ -24,6 +24,9 @@ remaining Forum media/attachments, stress, the test-runner. Full breakdown:
 - `db` — MongoDB (users, profiles, programs, analysis_history). Internal only.
 - `ai/` — Random Forest readiness classifier + recommendation engine. Internal REST `POST /predict`.
 
+## Dev switches (email + viewport)
+Two dev-only switches — full guide [`docs/AUTH_TESTING.md`](docs/AUTH_TESTING.md): **email mock ⇄ live = `SMTP_HOST`** (unset → login-OTP / signup-verify / reset codes shown on-screen + logged; set `SMTP_*` + `MAIL_FROM` in `.env` → emailed only — `docker compose` passes every auth-mode var through, so flip any in `.env` alone; `curl localhost:8000/auth/config` reports `email_mode`), and **viewport desktop ⇄ mobile = the `?debug=1` "Debug tools" panel** (previews the real mobile layout in an iframe on desktop; dev-only, never for normal users).
+
 ## Build constraints
 Local AI model only (no external API); **bake the trained model into the image** (no runtime download), pin
 `scikit-learn`; hash passwords; validate input + guard NoSQL injection; only `web` is published; tests live in
