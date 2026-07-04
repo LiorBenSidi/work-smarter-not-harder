@@ -49,6 +49,7 @@ One pipeline, two capabilities:
 
 ## 5. Security & fault tolerance
 - Hash passwords (werkzeug); auth-gate protected endpoints; rate-limit; validate input; defend NoSQL injection; only `web` exposed.
+- **No user-enumeration on the auth flows** — `/login` (identical body + a decoy hash on the user-missing path) and `/forgot-password` (identical 200 whether or not the email is registered) never reveal whether an account exists. *(Registration is a documented exception — the "email already exists" 409 discloses existence; kept for standard signup UX, with the deferred non-enumerating fix recorded in §8.)*
 - **Security ownership** (cross-cutting — each layer secures itself, there is no single "security owner"):
   **Lior (web backend + thin data CRUD)** — password hashing (werkzeug), auth-gate, input validation, NoSQL-**injection-safe queries** in the thin `db.py` CRUD (inputs type-validated at the route layer), the auth/login **Security_Tests**.
   **Lior (data layer)** — the Mongo **indexes + `$jsonSchema` validators + auth config + backups + seed** (`ensure_indexes`/`ensure_schema`/`db/seed.py`).
@@ -72,3 +73,4 @@ All **5 course test types** live in `tests/{Unit,Integration,System,Stress,Secur
 - **Exact training-state categories + final feature set** — during data exploration.
 - **Deploy ordering** (Azure right after MVP vs after the 80) — team decision.
 - **Forum real-time layer** (SSE vs Flask-SocketIO) — at Phase 3.
+- **Register email-enumeration** *(deferred; kept as-is for now)* — `/register` returns a `409 "an account with this email already exists"` for a taken email, distinct from the new-email response, so it discloses whether an email is registered — unlike `/login` + `/forgot-password`, which are deliberately non-enumerating (§5). **Kept for now** because it's standard signup UX (a user reusing their email should be told to log in / reset). **If we later want §5's no-enumeration to hold at registration too:** return an *identical* "check your email to continue" response whether or not the email exists, and move the branch into the emailed message — a new address gets the signup verification code, a known address gets a "you already have an account — log in or reset" notice. Scope: one route + one email template; no schema/contract impact. (Surfaced by the Round-1 adversarial review, 2026-07-04.)
