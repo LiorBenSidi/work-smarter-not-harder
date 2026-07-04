@@ -144,3 +144,40 @@ def test_all_endpoints_require_login(messages_client):
     assert c.get("/notifications").status_code == 401
     assert c.post("/notifications/read", json={}).status_code == 401
     assert c.get("/events").status_code == 401   # the SSE stream is auth-gated too (401 before streaming)
+
+
+def test_events_caps_concurrent_streams_and_reserves_a_thread(messages_client):
+    # HIGH-fix regression: /events pins one worker thread for the stream's whole lifetime, so a burst of
+    # streams could starve the gunicorn pool and hang EVERY request (login, health...). Over the per-worker
+    # cap the endpoint must return IMMEDIATELY, holding NO thread, so ordinary requests keep a free thread.
+    from routes import messages
+    c = messages_client
+    _setup(c, "alice")
+    _login(c, "alice")
+    held = [messages._sse_slots.acquire(blocking=False) for _ in range(messages.EVENTS_MAX_STREAMS)]
+    try:
+        assert all(held)                                            # every slot in this worker is now taken
+        resp = c.get("/events")                                     # over capacity -> must NOT open a stream
+        assert resp.status_code == 200 and resp.mimetype == "text/event-stream"
+        assert resp.get_data(as_text=True) == "retry: 60000\n\n"    # the degraded 'reconnect later' response
+    finally:
+        for ok in held:
+            if ok:
+                messages._sse_slots.release()
+
+
+def test_events_stream_releases_its_slot_when_it_ends(messages_client, monkeypatch):
+    # The slot MUST be freed when the stream ends (or the client disconnects) via the generator's finally,
+    # else the cap leaks and the worker slowly strangles itself. EVENTS_MAX_SECONDS=0 ends it immediately.
+    from routes import messages
+    monkeypatch.setattr(messages, "EVENTS_MAX_SECONDS", 0)
+    c = messages_client
+    _setup(c, "alice")
+    _login(c, "alice")
+    body = c.get("/events").get_data(as_text=True)                  # consuming the stream runs its finally
+    assert body.startswith("retry: 3000")                          # a real stream opened (not the degraded one)
+    regained = [messages._sse_slots.acquire(blocking=False) for _ in range(messages.EVENTS_MAX_STREAMS)]
+    for ok in regained:
+        if ok:
+            messages._sse_slots.release()
+    assert all(regained)                                            # all slots re-acquirable -> nothing leaked

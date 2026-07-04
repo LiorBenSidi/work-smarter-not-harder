@@ -1386,11 +1386,13 @@
       btn.hidden = !items.some((n) => !n.read);
     }
     $("activity-read").addEventListener("click", async () => {
+      const u = currentUser;                               // snapshot: bail if the session changes mid-await (the #109 guard)
       const r = await api("/notifications");
       if (r.ok && r.data) {
         const ids = (r.data.notifications || []).filter((n) => n.type !== "dm" && !n.read).map((n) => n.id);
         if (ids.length) await api("/notifications/read", { method: "POST", body: { ids } });
       }
+      if (sessionChanged(u, "activity-read")) return;
       pollNotifications();                                  // repaint the feed + clear the Chat-tab pulse
     });
 
@@ -1427,15 +1429,19 @@
     function stopEvents() { if (evtSource) { evtSource.close(); evtSource = null; } stopDmPolling(); }
 
     async function openMessages() {
+      const u = currentUser;                               // snapshot: bail if the session changes mid-await (the #109 guard)
       $("dm-thread-view").hidden = true; $("dm-list-view").hidden = false; dmPeer = null;
       await loadConversations();
+      if (sessionChanged(u, "openMessages")) return;
       // Opening the inbox clears only the DM notifications — other kinds (e.g. vote notifications) stay unread
       // so the pulse still reflects them. The dot then mirrors whatever non-DM unread remains.
       const r = await api("/notifications");
+      if (sessionChanged(u, "openMessages")) return;
       if (r.ok && r.data) {
         const notes = r.data.notifications || [];
         const dmIds = notes.filter((n) => n.type === "dm" && !n.read).map((n) => n.id);
         if (dmIds.length) await api("/notifications/read", { method: "POST", body: { ids: dmIds } });
+        if (sessionChanged(u, "openMessages")) return;
         $("dm-dot").hidden = notes.filter((n) => n.type !== "dm" && !n.read).length === 0;
         renderActivity(notes);                             // vote interactions live in the Activity feed
       }

@@ -286,8 +286,12 @@ def logout():
 @login_required
 def me():
     handle = session["username"]
-    return jsonify(username=handle, display_name=display_name(handle),
-                   email_consent=_users().get_email_consent(handle)), 200
+    try:
+        return jsonify(username=handle, display_name=display_name(handle),
+                       email_consent=_users().get_email_consent(handle)), 200
+    except Exception:
+        logger.exception("user store unavailable during /me")
+        return jsonify(error="user store unavailable"), 503
 
 
 # ---- account settings (change the shown name / the password, from inside the app) ----
