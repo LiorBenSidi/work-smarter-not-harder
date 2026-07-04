@@ -20,6 +20,10 @@ docker compose up --build          # ~1 min the first time (downloads + builds)
 In a browser open **http://localhost:8000/health** → you should see `{"status":"ok","service":"web"}`.
 That's the whole stack (web + ai + db) running. Stop it with **Ctrl+C** (or `docker compose down`).
 
+**Two optional dev switches** (neither affects real users — full guide: [`docs/AUTH_TESTING.md`](docs/AUTH_TESTING.md)):
+- **Preview mobile on desktop** — add **`?debug=1`** to the URL → a ⚙ **Debug tools** panel (bottom-right) toggles a real mobile-layout preview.
+- **Real email vs on-screen codes** — mock by default (codes shown on screen, no mailbox). To send *real* email locally like Lior's machine, see [`SECRETS.md`](SECRETS.md).
+
 ## 3. Turn on the quality gate (one time, per clone)
 ```sh
 sh scripts/setup-hooks.sh
