@@ -35,9 +35,7 @@ def test_smtp_failure_returns_false_and_never_raises(monkeypatch):
     assert email_mod.send_email({"SMTP_HOST": "smtp.example.com"}, "a@b.co", "s", "b") is False
 
 
-def test_smtp_backend_uses_the_configured_relay(monkeypatch):
-    seen = {}
-
+def _fake_smtp(seen):
     class FakeSMTP:
         def __init__(self, host, port, timeout=None):
             seen.update(host=host, port=port)
@@ -57,10 +55,16 @@ def test_smtp_backend_uses_the_configured_relay(monkeypatch):
         def login(self, user, pw):
             seen["login"] = (user, pw)
 
-        def send_message(self, msg):
-            seen.update(to=msg["To"], subject=msg["Subject"])
+        def send_message(self, msg, from_addr=None, to_addrs=None):
+            seen.update(to=msg["To"], subject=msg["Subject"], from_header=str(msg["From"]),
+                        envelope_from=from_addr, to_addrs=to_addrs)
 
-    monkeypatch.setattr(email_mod.smtplib, "SMTP", FakeSMTP)
+    return FakeSMTP
+
+
+def test_smtp_backend_uses_the_configured_relay(monkeypatch):
+    seen = {}
+    monkeypatch.setattr(email_mod.smtplib, "SMTP", _fake_smtp(seen))
     ok = email_mod.send_email(
         {"SMTP_HOST": "relay.test", "SMTP_PORT": 2525, "SMTP_USER": "u", "SMTP_PASS": "p",
          "SMTP_STARTTLS": True, "MAIL_FROM": "Coach <x@y.co>"},
@@ -68,3 +72,20 @@ def test_smtp_backend_uses_the_configured_relay(monkeypatch):
     assert ok is True
     assert seen["host"] == "relay.test" and seen["port"] == 2525
     assert seen["to"] == "to@z.co" and seen.get("tls") and seen["login"] == ("u", "p")
+    assert seen["envelope_from"] == "x@y.co" and seen["to_addrs"] == ["to@z.co"]   # explicit clean envelope
+
+
+def test_smtp_from_and_envelope_survive_a_comma_display_name(monkeypatch):
+    # Regression: MAIL_FROM with a COMMA in the display name (the full "Work Smarter, Not Harder" rename)
+    # made smtplib read it as an address list and collapse the envelope sender to a bare name -> SMTP 501,
+    # so OTP / reset emails silently never sent. The From header must be quoted and the envelope sender must
+    # be the clean address.
+    seen = {}
+    monkeypatch.setattr(email_mod.smtplib, "SMTP", _fake_smtp(seen))
+    ok = email_mod.send_email(
+        {"SMTP_HOST": "relay.test", "SMTP_PORT": 587,
+         "MAIL_FROM": "Work Smarter, Not Harder <no-reply@worksmarternotharder.dev>"},
+        "user@gmail.com", "Your login code", "123456")
+    assert ok is True
+    assert seen["envelope_from"] == "no-reply@worksmarternotharder.dev"            # clean address, not a name
+    assert seen["from_header"] == '"Work Smarter, Not Harder" <no-reply@worksmarternotharder.dev>'  # quoted name

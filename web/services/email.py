@@ -14,8 +14,25 @@ import logging
 import smtplib
 import ssl
 from email.message import EmailMessage
+from email.utils import formataddr
 
 logger = logging.getLogger(__name__)
+
+
+def _split_sender(raw):
+    """Split ``"Display Name <addr>"`` (or a bare ``addr``) into ``(name, addr)``.
+
+    Done by hand rather than ``email.utils.parseaddr`` because a display name containing a COMMA (e.g.
+    "Work Smarter, Not Harder") reads as an address-LIST separator: parseaddr returns ``('', '')`` and the
+    envelope sender collapses to a bare name — which is exactly what got the SMTP send rejected (501
+    "expecting MAIL arg syntax of FROM:<address>"). Extracting the ``<addr>`` span is comma-safe.
+    """
+    raw = (raw or "").strip()
+    if "<" in raw and ">" in raw:
+        addr = raw[raw.rfind("<") + 1 : raw.rfind(">")].strip()
+        name = raw[: raw.rfind("<")].strip().strip('"')
+        return name, addr
+    return "", raw
 
 
 def send_email(config, to, subject, body):
@@ -27,8 +44,10 @@ def send_email(config, to, subject, body):
         logger.info("EMAIL (log backend) to=%s subject=%r\n%s", to, subject, body)
         return True
     try:
+        name, addr = _split_sender(sender)
         msg = EmailMessage()
-        msg["From"], msg["To"], msg["Subject"] = sender, to, subject
+        msg["From"] = formataddr((name, addr)) if addr else sender   # quotes a name with a comma/special char
+        msg["To"], msg["Subject"] = to, subject
         msg.set_content(body)
         with smtplib.SMTP(host, int(config.get("SMTP_PORT") or 587), timeout=10) as server:
             server.ehlo()
@@ -37,7 +56,9 @@ def send_email(config, to, subject, body):
                 server.ehlo()
             if config.get("SMTP_USER"):
                 server.login(config["SMTP_USER"], config.get("SMTP_PASS") or "")
-            server.send_message(msg)
+            # Pass the clean address as the ENVELOPE sender explicitly, so a display name (with a comma or
+            # other special char) can never corrupt what smtplib would otherwise derive from the header.
+            server.send_message(msg, from_addr=addr or None, to_addrs=[to])
         logger.info("EMAIL (smtp) sent to=%s subject=%r", to, subject)
         return True
     except Exception:
