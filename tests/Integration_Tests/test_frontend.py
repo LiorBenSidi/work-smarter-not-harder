@@ -226,3 +226,13 @@ def test_profile_lives_in_the_corner_menu_not_a_bottom_tab(client):
     assert 'showScreen("profile")' in html              # ...and it still routes to the Profile screen
     for screen in ("today", "history", "forum", "messages"):
         assert f'data-screen="{screen}"' in html        # the 4 frequent tabs remain
+
+
+def test_checkin_streak_badge_present_and_wired(client):
+    # A consecutive-day streak badge on Today (Wolt's tenure footer -> fitness motivation), computed on
+    # the client from the loaded history and rendered whenever history loads (login + after a check-in).
+    html = client.get("/").get_data(as_text=True)
+    assert 'id="streak-badge"' in html
+    assert "function computeStreak(" in html and "function renderStreak(" in html
+    assert "renderStreak(items)" in html                 # driven from loadHistory -> updates after each check-in
+    assert "-day streak" in html                         # the badge copy
