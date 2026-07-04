@@ -138,5 +138,5 @@ clutters the repo and drifts; the README + `AGENTS.md` are the catch-all.)
 
 ## Status
 Proposal graded **100/100**. **Built:** the web tier, the whole data layer, Week-9 logging, the 3-container build,
-the CI gate, and the CI/CD deploy pipeline (`main` green, 332 tests). **In progress:** the AI model (Shiri) and the
+the CI gate, and the CI/CD deploy pipeline (`main` green, full test suite). **In progress:** the AI model (Shiri) and the
 live Azure deploy + real-time Forum (Elad). Final project due **23 Aug 2026** (demo Week 12, present 16 July).
