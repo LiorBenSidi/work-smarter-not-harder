@@ -12,6 +12,9 @@ AI-powered sports-coaching platform (WSML 00950219). Canonical guidance: [`CLAUD
 - `db` — MongoDB (internal).
 - `ai/` — Random Forest classifier + recommendation engine; internal `POST /predict`.
 
+## Dev switches
+Full guide [`../docs/AUTH_TESTING.md`](../docs/AUTH_TESTING.md). **Email mock ⇄ live = `SMTP_HOST`** (unset → login-OTP / signup-verify / reset codes shown on-screen + logged; set `SMTP_*` + `MAIL_FROM` in `.env` → emailed only; `docker compose` passes every auth-mode var through, `curl localhost:8000/auth/config` reports `email_mode`). **Viewport desktop ⇄ mobile = the `?debug=1` "Debug tools" panel** (real mobile layout in an iframe on desktop; dev-only, gated, never for normal users).
+
 ## Constraints
 Local AI model only (no external API); bake the trained model into the image (no runtime download), pin `scikit-learn`; hash passwords; validate input / guard NoSQL injection; only `web` is published; never commit `.env`; tests live in `tests/{Unit,Integration,System,Stress,Security}_Tests/`.
 

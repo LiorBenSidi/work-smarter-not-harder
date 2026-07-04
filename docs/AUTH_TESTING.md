@@ -39,21 +39,38 @@ in with your **email** (or the display handle). Turn it off for a scripted run w
 
 ---
 
-## Mock ⇄ live, and the debug tools panel
+## The two dev switches (for teammates + their AI agents)
 
-The single switch for **every** code (login OTP, signup verification, password reset) is **`SMTP_HOST`**:
+Two independent switches control dev behaviour. Both default **off** (mock email, desktop viewport) and
+neither affects normal users. This is the one place to look — copy-paste-ready.
 
-| Mode | Config | Behaviour |
+### Switch 1 — Email: **mock ⇄ live** = `SMTP_HOST`
+
+One switch flips **every** code (login OTP, signup verification, password reset):
+
+| Mode | Config (in `.env`) | Behaviour |
 |---|---|---|
-| **Mock** (default for teammates/grading) | `SMTP_HOST` **unset** (no `.env`) | Codes are **shown on screen** + logged. No mailbox needed. |
-| **Live** | `SMTP_HOST`/`SMTP_USER`/`SMTP_PASS`/`MAIL_FROM` set (in `.env`) | Codes are **emailed**; never shown or returned. |
+| **Mock** (default — teammates + grading) | `SMTP_HOST` **unset** | Codes are **shown on screen** + logged. No mailbox needed. |
+| **Live** | `SMTP_HOST` + `SMTP_USER` + `SMTP_PASS` + `MAIL_FROM` set | Codes are **emailed only** — never shown or returned. |
 
-**Elad / Shiri:** just run `docker compose up --build` with **no `.env`** → mock mode, every code on-screen.
-To go live, add the four `SMTP_*` vars (see the "Real email" steps further down).
+- `docker compose up --build` reads `.env` and passes these through to the `web` container (both compose files).
+- Confirm the active mode: **`curl localhost:8000/auth/config`** → `"email_mode": "mock"` or `"live"` (the ⚙ panel shows it too).
+- Every auth mode is a `.env` var — flip it there, no code/compose edit: `OTP_ENABLED`, `REGISTER_VERIFY_EMAIL`,
+  `OTP_TTL_SECONDS`, `OTP_MAX_ATTEMPTS`. See [`.env.example`](../.env.example). To wire real Brevo email, see
+  **§6 "Go live with real email"** below.
 
-**Debug tools panel:** append **`?debug=1`** to the URL → a **⚙ button appears bottom-right** (only in debug
-mode). It opens a panel to **preview the mobile layout in a desktop browser** (Desktop/Mobile) and shows the
-current **email mode** (MOCK/LIVE). Zero footprint in normal use; "Disable debug tools" turns it off.
+**Elad / Shiri:** run `docker compose up --build` with **no `.env`** → mock mode, every code on-screen. Nothing else to do.
+
+### Switch 2 — Viewport: **desktop ⇄ mobile** = the `?debug=1` panel (dev-only)
+
+Append **`?debug=1`** to the URL → a **⚙ button** appears bottom-right and opens the **Debug tools** panel:
+
+- **Desktop / Mobile** toggle → **Mobile** previews the *real* mobile layout in a 390-px iframe inside your
+  desktop browser (the CSS media queries fire on the iframe's width — nothing destructive, dev-only). **✕ Exit
+  preview**, **Esc**, or a **backdrop click** closes it.
+- The panel also shows the current **email mode** (MOCK / LIVE).
+- **Zero footprint for normal users:** gated on `?debug=1` (persisted via `localStorage["ws-debug"]`), never shown
+  in normal use, and never nested inside the preview iframe. **"Disable debug tools"** removes it.
 
 ## 1b. Password reset (dev)
 
