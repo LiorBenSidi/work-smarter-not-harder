@@ -73,6 +73,16 @@ def test_login_degrades_to_503_when_store_fails(make_client):
     assert resp.status_code == 503
 
 
+def test_me_degrades_to_503_when_store_fails(client, fake_users, monkeypatch):
+    # /me was an unguarded 500 on a store hiccup; it must degrade to 503 like every other route.
+    _register(client, "alice", "s3cretpw!")
+    client.post("/login", json={"username": "alice", "password": "s3cretpw!"})   # session established first
+    def boom(*a, **k):
+        raise RuntimeError("store down")
+    monkeypatch.setattr(fake_users, "get_email_consent", boom)                    # now the store hiccups
+    assert client.get("/me").status_code == 503
+
+
 def test_same_password_yields_different_hashes(client, fake_users):
     # werkzeug salts each hash -> two users with the same password must not share a hash
     _register(client, "alice", "samePassw0rd")
