@@ -12,6 +12,11 @@
 The 3-container skeleton already runs, so you can start the Azure setup, the test-runner service, the
 stress harness, and the remaining Forum media/attachments immediately — none of it waits on the features.
 
+**Running the app · live email (optional):** the stack runs fully in **mock mode with zero secrets** (codes show
+on screen) — all you need for normal work. To send *real* email locally, get the `.env` from **Lior** over a
+private channel (AirDrop / DM) → drop it in your repo root → `docker compose up --build`. It's gitignored —
+never commit it. (The GitHub-side secrets for the deploy are in [`SECRETS.md`](SECRETS.md) §3 — your lane.)
+
 ## Your contracts (fixed)
 - The 3 containers are defined in `docker-compose.yml`; you deploy + run that stack on Azure. The `db`
   service is a stock `mongo:7` — keep it reachable at `MONGO_URI` (the app reads it via `get_db()`). The

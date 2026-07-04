@@ -17,6 +17,11 @@ The course grades the **backend**, and `web` is the application backend:
 data through the `services/db.py` thin-CRUD functions (yours). So you can build the backend (auth, the API routes, the
 dashboard) against the in-memory fakes — in parallel, without waiting on the live Mongo container.
 
+**Live email for the team:** the app runs in **mock mode with zero secrets** by default (codes on screen). To
+give Elad & Shiri *real* email locally, send them your `.env` over a private channel (AirDrop / DM) → they drop
+it in their repo root → `docker compose up --build`. Never commit it (it's gitignored). Server + CI/CD secrets
+and the full guide: [`SECRETS.md`](SECRETS.md).
+
 ## Your contracts (fixed)
 - Call the AI via `services/ai_client.py` → `POST /predict`.
 - Read/write data via the `services/db.py` functions (yours — the whole data layer).

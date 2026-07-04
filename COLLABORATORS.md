@@ -38,6 +38,10 @@ step-by-step script.**
 cp .env.example .env
 docker compose up --build        # 3 containers; then open http://localhost:8000/health
 ```
+**Live email (optional):** the stack runs fully in **mock mode — zero secrets** (all codes show on screen). To
+send *real* email like Lior's, get the `.env` from **Lior** over a private channel (AirDrop / DM), drop it in
+your repo root, and `docker compose up --build`. It's gitignored — never commit it. Full guide: [`SECRETS.md`](SECRETS.md).
+
 **Status:** the **web tier is feature-complete** — auth, profile, **daily check-in**, dashboard, history, the Forum (CRUD + **edit/delete your own post**), **direct messages + live DM notifications** (the Chat tab: conversations · threads · generative avatars · a polling notification pulse · an anti-spam messaging rate-limit), the frontend (CSRF + a distinct visual identity), **Week-9 logging**, and the concurrency-hardened thin `db.py` CRUD. The 3 containers build and run (`docker compose up --build`) with **fault tolerance** (restart policies + healthcheck `start_period`; `web` boots and degrades even if `ai` is down). The whole stack is **proven live end-to-end** (a real web→ai→db request path 12/12, the real-Mongo IT 6/6, Week-9 logging emitting in-container). The `ai` `/predict` is a contract-shaped placeholder until Shiri's model lands; `db` is a stock `mongo:7` whose **data layer is Lior's** (indexes, `$jsonSchema` validators, auth config, seed). The **CI/CD deploy pipeline** (GHCR build/push → SSH-deploy to the Azure VM → Caddy HTTPS, auto-rollback; [`docs/CICD_REPORT.md`](docs/CICD_REPORT.md)) is also built (Lior). **Open lanes:** Shiri — the real model behind `/predict` + the Forum cold-seed content; Elad — the **live** Azure deploy + demo, the remaining Forum media/attachments (images/video + file-size limits), stress, the test-runner. (Online-Forum §10 status: posts/comments/anonymity/post+comment votes + P2P DM + live DM notifications + vote notifications + anti-spam messaging rate-limit built; media, a received-engagement metric and fuller cold-seeding open — see [`docs/FEEDBACK.md`](docs/FEEDBACK.md) §2.)
 
 ## Sync points (when to coordinate)
