@@ -288,6 +288,28 @@ def test_desktop_logo_is_the_home_button(client):
     assert "if (currentUser) { e.preventDefault(); showScreen" in html         # the logo is an in-app home link
 
 
+def test_mobile_nav_pill_is_translucent_and_ios_frosted(client):
+    # The mobile floating pill must be see-through (content shows behind it), not an opaque slab. That means
+    # mixing the card colour with `transparent` (a real alpha), AND shipping the -webkit- prefix so the frosted
+    # blur actually applies on iOS Safari (mobile is iOS Safari; without the prefix the blur silently no-ops).
+    html = client.get("/").get_data(as_text=True)
+    assert "color-mix(in srgb, var(--card) 64%, transparent)" in html          # translucent pill background
+    assert "var(--card) 90%, var(--bg)" not in html                            # NOT the old opaque background
+    assert html.count("-webkit-backdrop-filter") >= 2                          # the pill AND the FAB frost on iOS
+    assert "backdrop-filter: blur(22px) saturate(1.5)" in html                 # blur kept for legibility
+
+
+def test_mobile_ctx_back_is_a_bottom_floating_fab(client):
+    # Wolt's mobile layout: the contextual Home/Back is a floating circular button at the BOTTOM-LEFT, beside
+    # the nav pill (not in the top header) — and the pill slides right to make room only when the FAB is shown.
+    html = client.get("/").get_data(as_text=True)
+    assert ".ctx-back { position:fixed;" in html                               # a bottom-anchored floating button
+    assert "width:56px; height:56px" in html                                   # a comfortable >=44px tap target
+    assert "body.has-ctx .tabbar { left:80px; }" in html                       # pill makes room for the FAB
+    assert 'document.body.classList.toggle("has-ctx", !!t)' in html            # driven off the Home/Back target
+    assert 'document.body.classList.remove("has-ctx")' in html                 # cleared on the logged-out auth screen
+
+
 def test_filter_sort_chips_present_and_wired(client):
     # Wolt-style filter chips: History filters by readiness (All/Ready/Moderate/Rest); Forum sorts
     # (Recent/Top/Mine). Client-side over the cached list; the active chip is highlighted.
