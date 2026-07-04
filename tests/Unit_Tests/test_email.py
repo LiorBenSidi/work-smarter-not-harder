@@ -89,3 +89,55 @@ def test_smtp_from_and_envelope_survive_a_comma_display_name(monkeypatch):
     assert ok is True
     assert seen["envelope_from"] == "no-reply@worksmarternotharder.dev"            # clean address, not a name
     assert seen["from_header"] == '"Work Smarter, Not Harder" <no-reply@worksmarternotharder.dev>'  # quoted name
+
+
+def test_split_sender_bare_valid_and_malformed():
+    assert email_mod._split_sender("Coach <x@y.co>") == ("Coach", "x@y.co")
+    assert email_mod._split_sender("x@y.co") == ("", "x@y.co")                         # bare address
+    assert email_mod._split_sender("Work Smarter, Not Harder <a@b.co>") == ("Work Smarter, Not Harder", "a@b.co")
+    assert email_mod._split_sender("Name <>") == ("Name", "")                          # empty <> -> empty addr, keeps the name
+    assert email_mod._split_sender("A >x< <a@b.co>") == ("A >x<", "a@b.co")            # address is the LAST <...> pair
+
+
+def test_malformed_mail_from_falls_back_and_never_emits_a_bare_comma(monkeypatch):
+    # A comma display name with NO real address ("<>") must NOT reintroduce the comma bug: the envelope
+    # falls back to a clean address, and the From header keeps the (quoted) name — never a bare comma.
+    seen = {}
+    monkeypatch.setattr(email_mod.smtplib, "SMTP", _fake_smtp(seen))
+    ok = email_mod.send_email({"SMTP_HOST": "relay.test", "MAIL_FROM": "Work Smarter, Not Harder <>"},
+                              "user@gmail.com", "code", "1")
+    assert ok is True
+    assert seen["envelope_from"] == email_mod._FALLBACK_ADDR                            # clean fallback (has @)
+    assert seen["from_header"] == '"Work Smarter, Not Harder" <%s>' % email_mod._FALLBACK_ADDR
+
+
+def test_control_chars_in_recipient_abort_the_send(monkeypatch):
+    # SMTP-injection guard: a CR/LF in the recipient must abort (return False) before any SMTP command runs.
+    sent = {"connected": False}
+
+    class NoSend:
+        def __init__(self, *a, **k):
+            sent["connected"] = True
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+        def ehlo(self):
+            pass
+
+        def starttls(self, context=None):
+            pass
+
+        def login(self, u, p):
+            pass
+
+        def send_message(self, *a, **k):
+            sent["sent"] = True
+
+    monkeypatch.setattr(email_mod.smtplib, "SMTP", NoSend)
+    ok = email_mod.send_email({"SMTP_HOST": "relay.test", "MAIL_FROM": "C <c@x.co>"},
+                              "victim@x.co\r\nRCPT TO:<evil@x.co>", "s", "b")
+    assert ok is False and sent["connected"] is False   # never even opened the SMTP connection
