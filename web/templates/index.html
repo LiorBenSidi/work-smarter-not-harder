@@ -353,9 +353,10 @@
     .tabbar { position:fixed; left:0; right:0; bottom:calc(12px + env(safe-area-inset-bottom)); z-index:40;
       display:flex; justify-content:center; padding:0; border:0; background:none; pointer-events:none; }
     /* Compact pill, fixed height so it lines up with the 56px FAB (both bottom:12 -> centers aligned). The
-       clamp keeps it narrow enough that the left FAB never overlaps, down to small phones. */
+       width is capped at calc(100vw - 152px) so the CENTERED pill always keeps >=76px clear on each side —
+       enough for the left FAB (12 + 56 + 8) — so it can never overlap, at ANY width (zoom, split-screen, 280px). */
     .tabbar-inner { pointer-events:auto; display:flex; align-items:center; gap:4px; height:56px; padding:6px;
-      width: clamp(176px, 55vw, 216px); border-radius:22px;
+      width: min(clamp(176px, 55vw, 216px), calc(100vw - 152px)); border-radius:22px;
       background: color-mix(in srgb, var(--card) 64%, transparent); border:1px solid color-mix(in srgb, var(--line) 70%, transparent);
       box-shadow:var(--shadow); -webkit-backdrop-filter: blur(22px) saturate(1.5); backdrop-filter: blur(22px) saturate(1.5); }
     .tab { flex:1 1 0; min-width:0; background:transparent; box-shadow:none; color:var(--muted); border-radius:16px; padding:7px 4px;
@@ -594,7 +595,7 @@
     <section id="app-view" hidden>
       <div class="app-shell">
         <!-- Today -->
-        <section id="screen-today" class="screen" role="tabpanel" aria-label="Today">
+        <section id="screen-today" class="screen" role="region" aria-label="Today">
           <div class="screen-head"><h1 class="screen-title">Today</h1><p class="screen-sub">Your readiness, right now</p></div>
           <div id="streak-badge" class="streak" role="status" hidden></div>
           <div class="card">
