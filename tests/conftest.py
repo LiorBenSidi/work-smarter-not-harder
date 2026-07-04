@@ -505,5 +505,22 @@ def rate_limited_client(make_client, fake_users):
 
 
 @pytest.fixture
+def rate_limited_forum_client(make_client, fake_users, fake_forum, fake_notifications):
+    """Like `rate_limited_client` but wired for the ``@login_required`` forum routes: the forum +
+    notification stores are injected (the plain `rate_limited_client` injects only `fake_users`, so it
+    can't drive the forum endpoints). Limiter ON + `reset()` so the forum-flood tests see the caps."""
+    c = make_client(fake_users, forum=fake_forum, notifications=fake_notifications)
+    app = c.raw.application
+    app.config["RATELIMIT_ENABLED"] = True
+    from ratelimit import limiter
+    with app.app_context():
+        try:
+            limiter.reset()
+        except Exception:
+            pass
+    return c
+
+
+@pytest.fixture
 def otp_client(make_otp_client, fake_users):
     return make_otp_client(fake_users)
