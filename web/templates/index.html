@@ -92,7 +92,7 @@
     .ctx-back:active { transform: scale(.94); }
     .ctx-back svg { width:22px; height:22px; stroke:currentColor; fill:none; stroke-width:2.2; }
     .ctx-back:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
-    /* Developer tools (DEBUG only): a floating bottom-right button + a compact panel. Zero footprint unless
+    /* Debug tools (DEBUG only): a floating bottom-right button + a compact panel. Zero footprint unless
        a dev opts in (?debug=1 / localStorage ws-debug), and never inside the mobile-preview iframe. */
     .debug-fab { position:fixed; right:16px; bottom:calc(16px + env(safe-area-inset-bottom)); z-index:60;
       width:44px; height:44px; border-radius:50%; display:inline-flex; align-items:center; justify-content:center;
@@ -842,13 +842,13 @@
        the header instead of the viewport. Kept out here so `bottom:12px` is viewport-relative. -->
   <button id="ctx-back" class="ctx-back" type="button" hidden aria-label="Go to Today"></button>
 
-  <!-- Developer tools (DEBUG only, never in live mode / inside the preview iframe). See wireDebugTools().
+  <!-- Debug tools (DEBUG only, never in live mode / inside the preview iframe). See wireDebugTools().
        Omitted server-side when this shell is the mobile-preview iframe (?preview=1): the preview must
-       never contain its own dev tools, or it would nest a preview-in-a-preview (the #138 recursion). -->
+       never contain its own debug tools, or it would nest a preview-in-a-preview (the #138 recursion). -->
   {% if not preview %}
-  <button id="debug-fab" class="debug-fab" type="button" hidden aria-label="Developer tools" aria-expanded="false">&#9881;</button>
-  <div id="debug-panel" class="debug-panel" hidden role="dialog" aria-label="Developer tools">
-    <div class="debug-row"><strong>Dev tools</strong><button id="debug-close" class="ghost mini" type="button" aria-label="Close">&#10005;</button></div>
+  <button id="debug-fab" class="debug-fab" type="button" hidden aria-label="Debug tools" aria-expanded="false">&#9881;</button>
+  <div id="debug-panel" class="debug-panel" hidden role="dialog" aria-label="Debug tools">
+    <div class="debug-row"><strong>Debug tools</strong><button id="debug-close" class="ghost mini" type="button" aria-label="Close">&#10005;</button></div>
     <div class="debug-sect">
       <div class="debug-label">Viewport preview</div>
       <div class="debug-seg" role="group" aria-label="Viewport">
@@ -860,7 +860,7 @@
       <div class="debug-label">Email codes</div>
       <div id="debug-email-mode" class="debug-note">checking…</div>
     </div>
-    <button id="debug-off" class="ghost mini debug-off" type="button">Disable dev tools</button>
+    <button id="debug-off" class="ghost mini debug-off" type="button">Disable debug tools</button>
   </div>
   <div id="debug-preview" class="debug-preview" hidden>
     <div class="debug-preview-bar">Mobile preview · 390&times;844
@@ -882,7 +882,7 @@
     })();
     function dbg(...args) { if (DEBUG) console.log("%c[ws]", "color:#0eb389;font-weight:700", ...args); }
 
-    // ---- Developer tools panel (DEBUG only; never in live mode or inside the mobile-preview iframe) ----
+    // ---- Debug tools panel (DEBUG only; never in live mode or inside the mobile-preview iframe) ----
     (function wireDebugTools() {
       const params = new URLSearchParams(location.search);
       // Dev tools must NEVER wire up inside a frame. The mobile preview is an iframe, so this one guard
