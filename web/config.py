@@ -57,6 +57,10 @@ class Config:
     OTP_ENABLED = os.environ.get("OTP_ENABLED", "1") == "1"
     OTP_TTL_SECONDS = _int_env("OTP_TTL_SECONDS", 600)             # 10 min
     OTP_MAX_ATTEMPTS = _int_env("OTP_MAX_ATTEMPTS", 5)
+    # Email verification at registration: email a code and only create the account once it's confirmed, so a
+    # user can't register with a fake or someone else's address. On by default in real runs; TESTING turns it
+    # off (see the register route) so the existing register-then-login tests stay valid. Reuses OTP_TTL/ATTEMPTS.
+    REGISTER_VERIFY_EMAIL = os.environ.get("REGISTER_VERIFY_EMAIL", "1") == "1"
     # Opt-in "remember this browser" cookie: how long a browser stays trusted (skips the login OTP)
     # before it must re-verify. Invalidated early by a password change (embedded hash tail) or logout.
     REMEMBER_COOKIE_MAX_AGE = _int_env("REMEMBER_COOKIE_MAX_AGE", 30 * 24 * 3600)   # 30 days
