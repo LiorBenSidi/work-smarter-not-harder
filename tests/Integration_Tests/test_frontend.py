@@ -287,3 +287,13 @@ def test_filter_sort_chips_present_and_wired(client):
         assert s in html
     assert "function renderHistoryList(" in html and "function renderForumList(" in html
     assert "historyFilter" in html and "forumSort" in html         # the filter/sort state drives the render
+
+
+def test_illustrated_empty_states(client):
+    # Friendly illustrated empty states (icon + title + guidance) instead of a bare grey line, across
+    # History / Forum / DM / the filtered lists (Wolt's empty cards).
+    html = client.get("/").get_data(as_text=True)
+    assert "function emptyState(" in html and 'class="empty"' in html and "EMPTY_ICONS" in html
+    for title in ("No check-ins yet", "Quiet in here", "No conversations yet", "You haven't posted yet"):
+        assert title in html
+    assert ".empty-ico" in html and ".empty-title" in html         # the empty-state CSS is present
