@@ -193,10 +193,13 @@ def search_users(db, query, limit=8, exclude=None):
     if len(q) < SEARCH_MIN_CHARS:
         return []
     rx = {"$regex": re.escape(q), "$options": "i"}
+    # Bound the read with .limit(): an unanchored substring $regex can't use the users.username index, so
+    # this is a collection scan — without a cap it would pull EVERY matching doc into memory before we slice
+    # to `limit`. limit*4 keeps a small pool for prefix-first ranking while capping the scan + materialization.
     docs = db.users.find(
         {"password_hash": {"$exists": True}, "$or": [{"username": rx}, {"display_name": rx}]},
         {"_id": 0, "username": 1, "display_name": 1},
-    )
+    ).limit(limit * 4)
     cands = [{"username": d["username"], "display_name": d.get("display_name") or d["username"]}
              for d in docs if d.get("username") and d["username"] != exclude]
     return _rank_user_matches(cands, q, limit)

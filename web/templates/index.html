@@ -930,6 +930,7 @@
       window.scrollTo({ top: 0, behavior: "instant" });
       if (name === "messages") openMessages();
       else { clearInterval(dmThreadTimer); dmThreadTimer = null; }   // stop the 5s thread poll when leaving Chat
+      if (name === "forum") closePost();                            // re-entering Forum lands on the list, never a stale open post
       updateCheckinCapsule();                                       // capsule only shows off-Today when a check-in is due
       updateCtxBack();                                              // Home/Back button reflects the current screen
     }
@@ -1715,7 +1716,7 @@
     async function pollNotifications() {
       const u = currentUser;
       const r = await api("/notifications");
-      if (sessionChanged(u, "dmReply")) return;            // session switched mid-flight -> ignore this stale reply
+      if (sessionChanged(u, "pollNotifications")) return;  // session switched mid-flight -> ignore this stale poll
       if (r.ok && r.data) {
         setDmDot(r.data.unread > 0);
         if (!$("screen-messages").hidden) renderActivity(r.data.notifications || []);  // live-refresh while open
@@ -1789,7 +1790,7 @@
       setShownName(name || handle);             // the non-unique DISPLAY name (what people see)
       syncEmailConsent();                       // reflect this user's non-essential-email preference in the toggle
       closePost();
-      $("dm-thread-view").hidden = true; $("dm-list-view").hidden = false; dmPeer = null;  // fresh DM view
+      $("dm-thread-view").hidden = true; $("dm-list-view").hidden = false; dmPeer = null; closeDmSuggest();  // fresh DM view (drop any stale search dropdown)
       showView("app");
       showScreen("today");
       loadProfile(); loadDashboard(); loadHistory(); loadForum();

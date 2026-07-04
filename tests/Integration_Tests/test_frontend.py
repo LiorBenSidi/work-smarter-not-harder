@@ -353,3 +353,12 @@ def test_dm_recipient_search_and_pick_present_and_wired(client):
     assert "function runDmSearch(" in html and "function pickDmUser(" in html
     assert "dmSearchSeq" in html                                    # race-guard against stale keystroke responses
     assert "escapeHtml(u.username)" in html and "escapeHtml(u.display_name)" in html  # XSS-safe rendering
+
+
+def test_navigation_state_resets_on_reentry_and_switch(client):
+    # Audit fixes: (HIGH-2) re-entering the Forum tab closes any stale open post-detail (so the list shows and
+    # the FAB reads Home, not a wrong Back); (MED) switching accounts drops the DM search dropdown so a prior
+    # user's results don't linger. Both mirror how Messages already resets its view on entry/switch.
+    html = client.get("/").get_data(as_text=True)
+    assert 'if (name === "forum") closePost();' in html            # Forum tab-entry lands on the list
+    assert "dmPeer = null; closeDmSuggest();" in html              # account-switch clears the search dropdown
