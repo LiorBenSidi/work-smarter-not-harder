@@ -6,6 +6,7 @@ no real Mongo, no Docker), so these pin the *behaviour contract* the web stores 
 ``forum_*`` functions. The fake implements only the pymongo operators db.py uses.
 """
 import importlib.util
+import re
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -34,16 +35,33 @@ class _FakeColl:
         self.indexes.append((key, unique))
 
     def _match(self, doc, filt):
-        if "$or" in filt:
-            return any(self._match(doc, sub) for sub in filt["$or"])
-        return all(doc.get(k) == v for k, v in filt.items())
+        # AND every top-level key. `$or` is ANDed with its siblings (real Mongo semantics); `$exists` and
+        # `$regex`/`$options` are the operators search_users relies on. Any other value = exact equality.
+        for k, v in filt.items():
+            if k == "$or":
+                if not any(self._match(doc, sub) for sub in v):
+                    return False
+            elif isinstance(v, dict) and ("$exists" in v or "$regex" in v):
+                val = doc.get(k)
+                if "$exists" in v and (val is not None) != bool(v["$exists"]):
+                    return False
+                if "$regex" in v:
+                    flags = re.IGNORECASE if "i" in v.get("$options", "") else 0
+                    if val is None or re.search(v["$regex"], str(val), flags) is None:
+                        return False
+            elif doc.get(k) != v:
+                return False
+        return True
 
     def find_one(self, filt):
         return next((dict(d) for d in self.docs if self._match(d, filt)), None)
 
-    def find(self, filt=None):
-        filt = filt or {}
-        return [dict(d) for d in self.docs if self._match(d, filt)]
+    def find(self, filt=None, projection=None):
+        rows = [dict(d) for d in self.docs if self._match(d, filt or {})]
+        if projection:                                        # honor a 1-projection (drop _id) like pymongo
+            keep = [k for k, want in projection.items() if want and k != "_id"]
+            rows = [{k: d[k] for k in keep if k in d} for d in rows]
+        return rows
 
     def insert_one(self, doc):
         self.docs.append(dict(doc))
@@ -177,6 +195,68 @@ def test_create_duplicate_user_returns_false(db_mod, db):
 
 def test_get_missing_user_is_none(db_mod, db):
     assert db_mod.get_user(db, "nobody") is None
+
+
+# ---- users: directory search (DM picker) ----
+def _seed_search_users(db_mod, db):
+    db_mod.create_user(db, "coach_maya", "h", email="maya@x.io", display_name="Maya Coach")
+    db_mod.create_user(db, "marco_r", "h", email="marco@x.io", display_name="Marco")
+    db_mod.create_user(db, "dan", "h", email="dan@x.io", display_name="Daniela")
+
+
+def test_search_users_matches_username_and_display_name(db_mod, db):
+    _seed_search_users(db_mod, db)
+    by_user = [r["username"] for r in db_mod.search_users(db, "mar")]      # username substring
+    assert by_user == ["marco_r"]
+    by_disp = [r["username"] for r in db_mod.search_users(db, "daniela")]  # display-name substring
+    assert by_disp == ["dan"]
+
+
+def test_search_users_excludes_the_caller(db_mod, db):
+    _seed_search_users(db_mod, db)
+    names = [r["username"] for r in db_mod.search_users(db, "ma", exclude="coach_maya")]
+    assert "coach_maya" not in names and "marco_r" in names
+
+
+def test_search_users_requires_two_chars(db_mod, db):
+    _seed_search_users(db_mod, db)
+    assert db_mod.search_users(db, "m") == []
+    assert db_mod.search_users(db, "") == []
+    assert db_mod.search_users(db, " ") == []
+
+
+def test_search_users_returns_only_public_fields(db_mod, db):
+    _seed_search_users(db_mod, db)
+    for r in db_mod.search_users(db, "ma"):
+        assert set(r) == {"username", "display_name"}   # never password_hash / email / _id
+        assert "email" not in r and "password_hash" not in r
+
+
+def test_search_users_treats_regex_metacharacters_literally(db_mod, db):
+    _seed_search_users(db_mod, db)
+    assert db_mod.search_users(db, ".*") == []            # ".*" is a literal search, NOT match-everything
+    db_mod.create_user(db, "weird.*name", "h", display_name="Odd")
+    assert [r["username"] for r in db_mod.search_users(db, ".*name")] == ["weird.*name"]
+
+
+def test_search_users_caps_result_count(db_mod, db):
+    for i in range(20):
+        db_mod.create_user(db, f"runner{i:02d}", "h", display_name=f"Runner {i:02d}")
+    assert len(db_mod.search_users(db, "runner", limit=8)) == 8
+
+
+def test_search_users_ranks_prefix_matches_first(db_mod, db):
+    db_mod.create_user(db, "xander", "h", display_name="has an in the middle")  # 'an' mid-substring
+    db_mod.create_user(db, "ana", "h", display_name="Ana")                      # 'an' prefix
+    names = [r["username"] for r in db_mod.search_users(db, "an")]
+    assert names[0] == "ana"                              # prefix ranked ahead of the mid-string match
+
+
+def test_search_users_ignores_accounts_without_password_hash(db_mod, db):
+    db_mod.create_user(db, "realuser", "h", display_name="Real")
+    db.users.docs.append({"username": "ghostuser", "display_name": "Ghost"})   # partial/corrupt: no hash
+    names = [r["username"] for r in db_mod.search_users(db, "user")]
+    assert names == ["realuser"]
 
 
 # ---- profiles ----

@@ -95,6 +95,10 @@ class _DbUsers(_DbStore):
         db_module, handle = self._resolve()
         return db_module.bump_otp_attempts(handle, username)
 
+    def search(self, query, limit=8, exclude=None):
+        db_module, handle = self._resolve()
+        return db_module.search_users(handle, query, limit, exclude)
+
 
 class _DbProfiles(_DbStore):
     """Seam Lior implements: ``get_profile(db, username)`` / ``save_profile(db, username, profile)``."""

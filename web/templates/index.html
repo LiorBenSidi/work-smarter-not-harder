@@ -412,6 +412,16 @@
       background:linear-gradient(135deg,var(--accent),color-mix(in srgb,var(--accent) 60%,var(--accent2))); }
     #dm-reply-form { display:flex; gap:8px; margin-top:12px; }
     #dm-reply-form input { flex:1; } #dm-reply-form button { flex:none; }
+    /* DM recipient search-and-pick: a live autocomplete dropdown under the "To" field */
+    .dm-search { position:relative; }
+    .dm-suggest { position:absolute; left:0; right:0; top:calc(100% + 5px); z-index:30; max-height:246px; overflow-y:auto;
+      background:var(--card); border:1px solid var(--line); border-radius:14px; box-shadow:var(--shadow); padding:5px; }
+    .dm-suggest-item { display:flex; align-items:center; gap:10px; width:100%; padding:8px 9px; border-radius:10px;
+      cursor:pointer; background:transparent; border:0; text-align:left; color:var(--ink); box-shadow:none; }
+    .dm-suggest-item:hover, .dm-suggest-item.active { filter:none; background:var(--field); }
+    .dm-suggest-item .nm { font-weight:700; font-size:14px; }
+    .dm-suggest-item .hd { color:var(--muted); font-size:12.5px; }
+    .dm-suggest-empty { padding:10px 9px; color:var(--muted); font-size:13px; }
 
     :focus-visible { outline:2px solid var(--accent); outline-offset:3px; border-radius:8px; }
     [hidden] { display:none !important; }
@@ -661,7 +671,12 @@
             <div class="card">
               <h2><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span class="grow">New message</span></h2>
               <form id="dm-new-form">
-                <label for="dm-to">To</label><input id="dm-to" name="to" placeholder="username" autocomplete="off" maxlength="64" required>
+                <label for="dm-to">To</label>
+                <div class="dm-search">
+                  <input id="dm-to" name="to" placeholder="Search people…" autocomplete="off" maxlength="64" required
+                         role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="dm-suggest">
+                  <div id="dm-suggest" class="dm-suggest" role="listbox" aria-label="People" hidden></div>
+                </div>
                 <label for="dm-body">Message</label><textarea id="dm-body" name="body" placeholder="Say hi…" rows="2" maxlength="2000" required style="resize:vertical"></textarea>
                 <div style="margin-top:12px"><button type="submit" class="block">Send</button></div>
                 <div id="dm-new-flash" class="flash" aria-live="polite"></div>
@@ -1596,9 +1611,63 @@
     onSubmit("dm-new-form", async (f) => {
       const to = f.to.value.trim();
       const r = await api("/messages", { method: "POST", body: { to, body: f.body.value } });
-      if (r.ok) { f.reset(); flash("dm-new-flash", "", "ok"); openThread(to); }
+      if (r.ok) { f.reset(); closeDmSuggest(); flash("dm-new-flash", "", "ok"); openThread(to); }
       else { flash("dm-new-flash", (r.data && r.data.error) || "Could not send"); }
     });
+
+    // ---- DM recipient search-and-pick: a debounced autocomplete over GET /users/search ----
+    let dmSearchTimer = null, dmSearchSeq = 0;
+    function closeDmSuggest() {
+      const box = $("dm-suggest");
+      box.hidden = true; box.innerHTML = "";
+      $("dm-to").setAttribute("aria-expanded", "false");
+    }
+    function pickDmUser(username) {                 // choosing a result fills the handle, then jumps to the message
+      $("dm-to").value = username;
+      closeDmSuggest();
+      $("dm-body").focus();
+    }
+    async function runDmSearch(q) {
+      const seq = ++dmSearchSeq, box = $("dm-suggest");
+      let r;
+      try { r = await api("/users/search?q=" + encodeURIComponent(q)); }
+      catch (_) { return; }
+      if (seq !== dmSearchSeq) return;              // a newer keystroke already superseded this response — don't paint stale
+      if (!r.ok) { closeDmSuggest(); return; }
+      const results = (r.data && r.data.results) || [];
+      box.innerHTML = results.length
+        ? results.map((u) =>                        // every field escaped — usernames/display names are user-controlled
+            '<button type="button" class="dm-suggest-item" role="option" data-username="' + escapeHtml(u.username) + '">' +
+              avatarHtml(u.username, 30) +
+              '<span><span class="nm">' + escapeHtml(u.display_name) + '</span> <span class="hd">@' + escapeHtml(u.username) + '</span></span>' +
+            "</button>").join("")
+        : '<div class="dm-suggest-empty">No people found</div>';
+      box.hidden = false;
+      $("dm-to").setAttribute("aria-expanded", "true");
+    }
+    $("dm-to").addEventListener("input", () => {
+      const q = $("dm-to").value.trim();
+      clearTimeout(dmSearchTimer);
+      if (q.length < 2) { closeDmSuggest(); return; }         // <2 chars: nothing to search (matches the server)
+      dmSearchTimer = setTimeout(() => runDmSearch(q), 220);  // debounce: search only after a brief typing pause
+    });
+    $("dm-suggest").addEventListener("click", (e) => {
+      const item = e.target.closest(".dm-suggest-item");
+      if (item) pickDmUser(item.dataset.username);
+    });
+    $("dm-to").addEventListener("keydown", (e) => {
+      const box = $("dm-suggest");
+      if (e.key === "Escape") { closeDmSuggest(); return; }
+      const items = Array.from(box.querySelectorAll(".dm-suggest-item"));
+      if (box.hidden || !items.length) return;
+      let idx = items.findIndex((it) => it.classList.contains("active"));
+      if (e.key === "ArrowDown") { e.preventDefault(); idx = (idx + 1) % items.length; }
+      else if (e.key === "ArrowUp") { e.preventDefault(); idx = (idx - 1 + items.length) % items.length; }
+      else if (e.key === "Enter" && idx >= 0) { e.preventDefault(); pickDmUser(items[idx].dataset.username); return; }
+      else return;
+      items.forEach((it, i) => it.classList.toggle("active", i === idx));
+    });
+    document.addEventListener("click", (e) => { if (!e.target.closest(".dm-search")) closeDmSuggest(); });
 
     onSubmit("dm-reply-form", async (f) => {
       if (!dmPeer || !f.body.value.trim()) return;

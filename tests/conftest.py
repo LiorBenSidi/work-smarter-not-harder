@@ -110,6 +110,23 @@ class FakeUsers:
         rec["otp_attempts"] = rec.get("otp_attempts", 0) + 1
         return rec["otp_attempts"]
 
+    def search(self, query, limit=8, exclude=None):
+        # Mirrors db.search_users: substring match on username OR display_name (case-insensitive),
+        # prefix matches ranked first, self excluded, only real (password_hash) users, capped, min 2 chars.
+        q = (query or "").strip().lower()
+        if len(q) < 2:
+            return []
+        cands = []
+        for name, rec in self._by_name.items():
+            if name == exclude or "password_hash" not in rec:
+                continue
+            disp = rec.get("display_name") or name
+            if q in name.lower() or q in disp.lower():
+                cands.append({"username": name, "display_name": disp})
+        cands.sort(key=lambda c: (0 if (c["username"].lower().startswith(q) or c["display_name"].lower().startswith(q)) else 1,
+                                  c["display_name"].lower(), c["username"].lower()))
+        return cands[:limit]
+
 
 class FakeProfiles:
     """In-memory profile store — the `web -> db` seam Lior implements in db.py (.get / .save)."""

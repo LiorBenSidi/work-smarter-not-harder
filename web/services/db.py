@@ -10,6 +10,7 @@ Inputs are already type-validated at the route layer (NoSQL-injection defense) b
 Collections (DESIGN.md §2): ``users``, ``profiles``, ``analysis_history``, ``forum_posts``.
 """
 import logging
+import re
 import threading
 import time
 import uuid
@@ -162,6 +163,43 @@ def get_user_by_email(db, email):
     """Return the username registered to `email`, or None (used by the password-reset request)."""
     doc = db.users.find_one({"email": email})
     return doc["username"] if doc and "password_hash" in doc else None
+
+
+SEARCH_MIN_CHARS = 2
+
+
+def _rank_user_matches(cands, query, limit):
+    """Rank directory-search candidates: prefix matches (on either field) first, then A→Z, capped."""
+    ql = query.lower()
+
+    def key(c):
+        prefix = c["username"].lower().startswith(ql) or c["display_name"].lower().startswith(ql)
+        return (0 if prefix else 1, c["display_name"].lower(), c["username"].lower())
+
+    return sorted(cands, key=key)[:limit]
+
+
+def search_users(db, query, limit=8, exclude=None):
+    """Directory search for the DM picker: up to `limit` ``{"username", "display_name"}`` whose username
+    OR display name contains `query` (case-insensitive substring), ranked prefix-first.
+
+    Privacy/safety: only the two PUBLIC fields are projected — never ``password_hash`` or ``email``. The
+    caller (`exclude`) is filtered out. `query` is ``re.escape``'d before it reaches Mongo's ``$regex``,
+    so a user can't inject regex/ReDoS metacharacters (a ``.*`` searches for the literal characters). A
+    query shorter than ``SEARCH_MIN_CHARS`` returns [] — no browsing the whole directory one letter at a
+    time. Only accounts with a ``password_hash`` (real, fully-created users) are searchable.
+    """
+    q = (query or "").strip()
+    if len(q) < SEARCH_MIN_CHARS:
+        return []
+    rx = {"$regex": re.escape(q), "$options": "i"}
+    docs = db.users.find(
+        {"password_hash": {"$exists": True}, "$or": [{"username": rx}, {"display_name": rx}]},
+        {"_id": 0, "username": 1, "display_name": 1},
+    )
+    cands = [{"username": d["username"], "display_name": d.get("display_name") or d["username"]}
+             for d in docs if d.get("username") and d["username"] != exclude]
+    return _rank_user_matches(cands, q, limit)
 
 
 def update_password(db, username, password_hash):
