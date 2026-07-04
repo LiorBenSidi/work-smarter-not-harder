@@ -16,6 +16,22 @@ services:
       ENABLE_LOGGING: ${ENABLE_LOGGING:-1}                 # 0 -> suppress logging (Lab-9.1 cost toggle)
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
       LOG_FILE: ${LOG_FILE:-/app/logs/web.log}             # RotatingFileHandler target (persisted below)
+      # --- Auth modes (email delivery + 2FA login + signup verify). Passed through from .env so teammates
+      # flip any mode in .env ALONE (no compose edit). THE mock/live switch is SMTP_HOST: unset -> mock
+      # (codes logged / shown on screen); set SMTP_* + MAIL_FROM -> :8000 sends REAL email. Defaults here
+      # mirror web/config.py, so `docker compose up` with no .env keys behaves exactly like the app default.
+      SMTP_HOST: ${SMTP_HOST:-}                            # blank -> mock (log backend); set -> live email
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      SMTP_STARTTLS: ${SMTP_STARTTLS:-1}
+      MAIL_FROM: "${MAIL_FROM:-Work Smarter, Not Harder <no-reply@worksmarter.local>}"
+      APP_BASE_URL: ${APP_BASE_URL:-http://localhost:8000} # public origin baked into reset links in emails
+      OTP_ENABLED: ${OTP_ENABLED:-1}                       # 0 -> one-step login (no 2FA code)
+      OTP_TTL_SECONDS: ${OTP_TTL_SECONDS:-600}
+      OTP_MAX_ATTEMPTS: ${OTP_MAX_ATTEMPTS:-5}
+      REGISTER_VERIFY_EMAIL: ${REGISTER_VERIFY_EMAIL:-1}   # 0 -> create the account without verifying the email
+      REMEMBER_COOKIE_MAX_AGE: ${REMEMBER_COOKIE_MAX_AGE:-2592000}
     volumes:
       - web-logs:/app/logs                                 # keep the rotating log for inspection / ELK
     restart: unless-stopped           # self-heal: the only user-facing service must come back on a crash
