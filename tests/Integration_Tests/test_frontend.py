@@ -213,3 +213,15 @@ def test_theme_change_has_a_single_source_of_truth(client):
     assert "function setTheme(" in html and "function syncThemeControls(" in html
     assert 'class="um-seg"' in html and 'data-theme="system"' in html and 'data-theme="dark"' in html
     assert "#user-menu-panel .um-seg" in html   # syncThemeControls mirrors the choice onto the menu segments
+
+
+def test_profile_lives_in_the_corner_menu_not_a_bottom_tab(client):
+    # Design decision: Profile/account is reached ONLY via the corner account menu (the Wolt pattern),
+    # not via a redundant bottom-nav tab. The bottom tab bar is the 4 frequent sections; the corner
+    # avatar owns identity + account. Guards against the two-Profiles redundancy creeping back.
+    html = client.get("/").get_data(as_text=True)
+    assert 'data-screen="profile"' not in html          # no bottom-nav Profile tab
+    assert 'data-act="profile"' in html                 # the corner menu is the single Profile entry
+    assert 'showScreen("profile")' in html              # ...and it still routes to the Profile screen
+    for screen in ("today", "history", "forum", "messages"):
+        assert f'data-screen="{screen}"' in html        # the 4 frequent tabs remain
