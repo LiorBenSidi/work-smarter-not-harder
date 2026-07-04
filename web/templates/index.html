@@ -118,7 +118,7 @@
     /* Dropdown reveal: a subtle scale-pop from the button (top-right), not a generic slide. Disabled under prefers-reduced-motion via the global rule below. */
     @keyframes menuPop { from { opacity:0; transform: translateY(-6px) scale(.96); } to { opacity:1; transform: translateY(0) scale(1); } }
 
-    main { max-width:560px; margin:0 auto; padding:22px 18px 64px; }
+    main { max-width:560px; margin:0 auto; padding:22px 18px 92px; }   /* bottom clears the floating pill nav */
     .card { background:var(--card); border:1px solid var(--line); border-radius:24px; padding:22px; margin-bottom:18px;
       box-shadow:var(--shadow); backdrop-filter: blur(18px) saturate(1.15); animation: rise .6s cubic-bezier(.2,.7,.2,1) both; }
     .screen .card:nth-child(2){ animation-delay:.04s } .screen .card:nth-child(3){ animation-delay:.10s }
@@ -312,21 +312,37 @@
     .info:hover .tip, .info:focus-visible .tip, .info:focus .tip { opacity:1; }
 
     /* bottom tab bar — the app-shell navigation */
-    .tabbar { position:fixed; left:0; right:0; bottom:0; z-index:40; display:flex; justify-content:center;
-      padding:8px 12px calc(8px + env(safe-area-inset-bottom)); border-top:1px solid var(--line);
-      background: color-mix(in srgb, var(--bg) 74%, transparent); backdrop-filter: blur(22px) saturate(1.3); }
-    .tabbar-inner { display:flex; gap:4px; width:100%; max-width:560px; }
+    /* Mobile bottom nav: a detached, rounded FLOATING pill (not an edge-to-edge bar). Hidden on desktop. */
+    .tabbar { position:fixed; left:12px; right:12px; bottom:calc(12px + env(safe-area-inset-bottom)); z-index:40;
+      display:flex; justify-content:center; padding:0; border:0; background:none; }
+    .tabbar-inner { display:flex; gap:4px; width:100%; max-width:460px; padding:6px; border-radius:22px;
+      background: color-mix(in srgb, var(--card) 90%, var(--bg)); border:1px solid var(--line);
+      box-shadow:var(--shadow); backdrop-filter: blur(20px) saturate(1.3); }
     .tab { flex:1; background:transparent; box-shadow:none; color:var(--muted); border-radius:16px; padding:8px 4px 6px;
       display:flex; flex-direction:column; align-items:center; gap:3px; font-weight:700; font-size:11px; letter-spacing:.02em;
-      transition: color .15s, background .15s; }
+      transition: color .15s, background .15s; position:relative; }
     .tab:hover { filter:none; background:var(--field); color:var(--ink); }
     .tab svg { width:23px; height:23px; stroke:currentColor; fill:none; stroke-width:1.9; }
     .tab.active { color:var(--brand); background: color-mix(in srgb, var(--brand) 13%, transparent); }
     .tab.active svg { stroke:var(--brand); }
-    /* notification "pulse" on the Chat tab — a calm breathing mint dot, not a red count bubble */
-    .tab { position:relative; }
-    .tab-dot { position:absolute; top:6px; right:calc(50% - 17px); width:8px; height:8px; border-radius:50%;
-      background:var(--accent); box-shadow:0 0 8px var(--accent); animation: breathe 2.6s ease-in-out infinite; }
+    /* Desktop top-nav (>=860px): the 4 sections live in the header; the mobile pill is hidden. */
+    .topnav { display:none; gap:4px; }
+    .navlink { position:relative; background:transparent; box-shadow:none; color:var(--muted); border:0; font-weight:700;
+      font-size:14px; letter-spacing:.01em; padding:9px 15px; border-radius:999px; min-height:40px; transition: color .15s, background .15s; }
+    .navlink:hover { filter:none; color:var(--ink); background:var(--field); }
+    .navlink.active { color:var(--brand); background: color-mix(in srgb, var(--brand) 13%, transparent); }
+    .navlink:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+    /* notification "pulse" on the Chat entry (either nav) — a calm breathing mint dot, not a red count bubble */
+    .dm-dot { width:8px; height:8px; border-radius:50%; background:var(--accent); box-shadow:0 0 8px var(--accent);
+      animation: breathe 2.6s ease-in-out infinite; flex:none; }
+    .tab .dm-dot { position:absolute; top:6px; right:calc(50% - 17px); }
+    .navlink .dm-dot { position:absolute; top:7px; right:10px; }
+    @media (min-width: 860px) {
+      .tabbar { display:none; }
+      .topnav.nav-on { display:flex; }          /* only when signed in (nav-on) — not on the logged-out auth screen */
+      main { max-width:920px; padding:26px 26px 44px; }
+      .capsule { bottom:26px; }
+    }
 
     /* Direct messages: generative avatars (deterministic aurora gradient + initial — no uploads), calm bubbles */
     .avatar { display:inline-flex; align-items:center; justify-content:center; flex:none; border-radius:50%;
@@ -379,7 +395,7 @@
       50% { box-shadow:0 0 0 8px color-mix(in srgb, var(--st, var(--accent)) 4%, transparent); } }
     @keyframes rise { from { opacity:0; transform: translateY(12px); } to { opacity:1; transform:none; } }
     @media (max-width: 640px) { .brand-tag { display:none; } }
-    @media (max-width: 560px) { .row { grid-template-columns:1fr; } main { padding:16px 14px 40px; } .hero-title { font-size:27px; } #who-name { display:none; }
+    @media (max-width: 560px) { .row { grid-template-columns:1fr; } main { padding:16px 14px 92px; } .hero-title { font-size:27px; } #who-name { display:none; }
       /* tighter hero on phones: the orb stays the signature but the auth card's action lands near the fold */
       .hero { padding-top:18px; } .hero-orb { width:104px; height:104px; margin-bottom:18px; } .hero-sub { margin-bottom:14px; } }
     /* Kill transitions for the instant of a theme switch so the palette change is atomic — otherwise
@@ -414,6 +430,12 @@
       <span class="brand-name">Work Smarter, Not Harder</span>
       <span class="brand-tag">readiness, every morning</span>
     </a>
+    <nav id="topnav" class="topnav" role="tablist" aria-label="Sections">
+      <button class="navlink active" data-screen="today" role="tab" aria-selected="true">Today</button>
+      <button class="navlink" data-screen="history" role="tab" aria-selected="false">History</button>
+      <button class="navlink" data-screen="forum" role="tab" aria-selected="false">Forum</button>
+      <button class="navlink" data-screen="messages" role="tab" aria-selected="false">Chat<span class="dm-dot" hidden></span></button>
+    </nav>
     <div id="who" class="usermenu" hidden>
       <button id="user-menu-btn" type="button" class="usermenu-btn" aria-haspopup="menu" aria-expanded="false" aria-controls="user-menu-panel" aria-label="Account menu">
         <span id="user-menu-av" class="usermenu-av" aria-hidden="true"></span>
@@ -706,7 +728,7 @@
           <button class="tab" data-screen="forum" role="tab" aria-selected="false" aria-controls="screen-forum">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H8l-4 4V5a2 2 0 0 1 2-2h13a2 2 0 0 1 2 2z"/></svg><span>Forum</span></button>
           <button class="tab" data-screen="messages" role="tab" aria-selected="false" aria-controls="screen-messages">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 11.5a8.5 8.5 0 0 1-12.9 7.3L3 20l1.2-5.1A8.5 8.5 0 1 1 21 11.5z"/></svg><span>Chat</span><span class="tab-dot" id="dm-dot" hidden></span></button>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 11.5a8.5 8.5 0 0 1-12.9 7.3L3 20l1.2-5.1A8.5 8.5 0 1 1 21 11.5z"/></svg><span>Chat</span><span class="dm-dot" hidden></span></button>
         </div>
       </nav>
       <button id="checkin-capsule" class="capsule" type="button" hidden aria-label="Log today's check-in">
@@ -799,6 +821,7 @@
       $("auth-view").hidden = view !== "auth";
       $("app-view").hidden = view !== "app";
       $("who").hidden = view !== "app";
+      $("topnav").classList.toggle("nav-on", view === "app");   // desktop top-nav shows only when signed in
     }
 
     // showView("auth") alone re-shows whatever sub-form (and values) were last on screen — e.g.
@@ -812,7 +835,7 @@
       $("who-name").textContent = ""; $("profile-user").textContent = "";  // no username residue either
       $("user-menu-av").innerHTML = ""; $("user-menu-av-lg").innerHTML = "";     // clear the corner-menu identity too
       $("user-menu-name").textContent = ""; $("user-menu-handle").textContent = ""; closeUserMenu();
-      stopEvents(); $("dm-dot").hidden = true;                             // close the SSE stream + stop polling on logout
+      stopEvents(); setDmDot(false);                                       // close the SSE stream + stop polling on logout
       pendingUser = null; resetToken = null; currentUser = null;
       showTab("login");
     }
@@ -822,7 +845,7 @@
     function showScreen(name) {
       currentScreen = name;
       document.querySelectorAll(".screen").forEach((s) => { s.hidden = s.id !== "screen-" + name; });
-      document.querySelectorAll(".tab").forEach((t) => {
+      document.querySelectorAll("[data-screen]").forEach((t) => {
         const on = t.dataset.screen === name;
         t.classList.toggle("active", on);
         t.setAttribute("aria-selected", on ? "true" : "false");
@@ -832,7 +855,9 @@
       else { clearInterval(dmThreadTimer); dmThreadTimer = null; }   // stop the 5s thread poll when leaving Chat
       updateCheckinCapsule();                                       // capsule only shows off-Today when a check-in is due
     }
-    document.querySelectorAll(".tab").forEach((t) => t.addEventListener("click", () => showScreen(t.dataset.screen)));
+    document.querySelectorAll("[data-screen]").forEach((t) => t.addEventListener("click", () => showScreen(t.dataset.screen)));
+    // the Chat unread "pulse" now lives on both navs (mobile bottom pill + desktop top-nav) -> toggle every .dm-dot
+    function setDmDot(on) { document.querySelectorAll(".dm-dot").forEach((d) => { d.hidden = !on; }); }
 
     // ---- "Check-in due" capsule: a floating nudge shown ONLY when today's check-in is missing AND you're not
     // already on Today (where the form lives). Tap -> jump to the form. (Wolt's 'shown-only-when-relevant' capsule.)
@@ -1484,7 +1509,7 @@
       const r = await api("/notifications");
       if (sessionChanged(u, "dmReply")) return;            // session switched mid-flight -> ignore this stale reply
       if (r.ok && r.data) {
-        $("dm-dot").hidden = !(r.data.unread > 0);
+        setDmDot(r.data.unread > 0);
         if (!$("screen-messages").hidden) renderActivity(r.data.notifications || []);  // live-refresh while open
       }
     }
@@ -1524,7 +1549,7 @@
         const dmIds = notes.filter((n) => n.type === "dm" && !n.read).map((n) => n.id);
         if (dmIds.length) await api("/notifications/read", { method: "POST", body: { ids: dmIds } });
         if (sessionChanged(u, "openMessages")) return;
-        $("dm-dot").hidden = notes.filter((n) => n.type !== "dm" && !n.read).length === 0;
+        setDmDot(notes.filter((n) => n.type !== "dm" && !n.read).length > 0);
         renderActivity(notes);                             // vote interactions live in the Activity feed
       }
     }
