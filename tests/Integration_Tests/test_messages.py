@@ -181,3 +181,77 @@ def test_events_stream_releases_its_slot_when_it_ends(messages_client, monkeypat
         if ok:
             messages._sse_slots.release()
     assert all(regained)                                            # all slots re-acquirable -> nothing leaked
+
+
+# ---- directory search for the DM picker (GET /users/search) ----
+import pytest  # noqa: E402
+
+
+@pytest.fixture(autouse=True)
+def _reset_search_throttle(messages_client):
+    # the search throttle is module-global (per-worker); reset it each test so ordering can't leak counts.
+    # Depends on messages_client so the app (and thus `routes` in sys.modules) is built before this imports it.
+    from routes import messages
+    messages._search_hits.clear()
+    yield
+
+
+def test_user_search_finds_by_username(messages_client):
+    c = messages_client
+    _setup(c, "alice", "marco_r", "marina")
+    _login(c, "alice")
+    names = sorted(r["username"] for r in c.get("/users/search?q=mar").get_json()["results"])
+    assert names == ["marco_r", "marina"]
+
+
+def test_user_search_excludes_the_caller(messages_client):
+    c = messages_client
+    _setup(c, "maya", "marco_r")
+    _login(c, "maya")
+    names = [r["username"] for r in c.get("/users/search?q=ma").get_json()["results"]]
+    assert "maya" not in names and "marco_r" in names               # you never find yourself
+
+
+def test_user_search_too_short_is_empty_200(messages_client):
+    c = messages_client
+    _setup(c, "alice", "bob")
+    _login(c, "alice")
+    r = c.get("/users/search?q=a")
+    assert r.status_code == 200 and r.get_json()["results"] == []   # 1 char -> nothing, but not an error
+
+
+def test_user_search_requires_login(messages_client):
+    assert messages_client.get("/users/search?q=ab").status_code == 401
+
+
+def test_user_search_returns_no_pii(messages_client):
+    c = messages_client
+    _setup(c, "alice", "bob")
+    _login(c, "alice")
+    resp = c.get("/users/search?q=bo")
+    assert "@ex.com" not in resp.get_data(as_text=True)             # emails never leave the server
+    for r in resp.get_json()["results"]:
+        assert set(r) == {"username", "display_name"}
+
+
+def test_user_search_caps_results_at_eight(messages_client):
+    c = messages_client
+    _setup(c, "alice", *[f"runner{i:02d}" for i in range(12)])
+    _login(c, "alice")
+    assert len(c.get("/users/search?q=runner").get_json()["results"]) == 8
+
+
+def test_user_search_regex_metacharacters_are_literal(messages_client):
+    c = messages_client
+    _setup(c, "alice", "bob")
+    _login(c, "alice")
+    assert c.get("/users/search?q=.*").get_json()["results"] == []  # ".*" is literal, not a match-everyone wildcard
+
+
+def test_user_search_is_rate_limited(messages_client):
+    from routes import messages
+    c = messages_client
+    _setup(c, "alice", "bob")
+    _login(c, "alice")
+    codes = [c.get("/users/search?q=bo").status_code for _ in range(messages.SEARCH_RATE_MAX + 5)]
+    assert codes[0] == 200 and 429 in codes                        # a scripted flood eventually trips the throttle

@@ -16,6 +16,7 @@ import math
 import os
 import threading
 import time
+from collections import deque
 
 from flask import Blueprint, Response, current_app, jsonify, request, session
 
@@ -29,6 +30,35 @@ messages_bp = Blueprint("messages", __name__)
 BODY_MAX = 2000
 RATE_WINDOW_SECONDS = 60
 RATE_MAX_PER_WINDOW = 20        # a real person doesn't send 20 DMs a minute; a spammer does
+
+# --- directory search (DM picker) ---
+SEARCH_MIN_CHARS = 2           # no browsing the whole directory one letter at a time
+SEARCH_MAX_RESULTS = 8         # a short, capped result set — not a user dump
+SEARCH_RATE_WINDOW_SECONDS = 10.0
+SEARCH_RATE_MAX = 40           # generous for debounced typing; trips only on scripted enumeration
+_search_hits = {}              # username -> deque[timestamps]: best-effort per-WORKER anti-enumeration throttle
+_search_hits_lock = threading.Lock()
+
+
+def _search_rate_ok(user):
+    """Best-effort per-worker sliding-window throttle on directory search (blunts scripted enumeration).
+
+    Not a cross-worker guarantee — the substantive privacy guards are the >=2-char minimum, the capped
+    result set, and returning only public fields. Bounded memory: the map is cleared if it ever grows
+    past a cap (cheap, and only happens under a flood).
+    """
+    now = time.time()
+    with _search_hits_lock:
+        if len(_search_hits) > 1024:
+            _search_hits.clear()
+        dq = _search_hits.setdefault(user, deque())
+        cutoff = now - SEARCH_RATE_WINDOW_SECONDS
+        while dq and dq[0] < cutoff:
+            dq.popleft()
+        if len(dq) >= SEARCH_RATE_MAX:
+            return False
+        dq.append(now)
+        return True
 
 
 def _messages():
@@ -88,6 +118,28 @@ def send_message():
         logger.exception("message store unavailable during send")
         return jsonify(error="messaging is unavailable right now"), 503
     return jsonify(status="sent", message=message), 201
+
+
+@messages_bp.get("/users/search")
+@login_required
+def search_users_route():
+    """Directory search for the DM picker: up to ``SEARCH_MAX_RESULTS`` ``{username, display_name}`` for a
+    >=2-char query. The caller is excluded; only public fields are ever returned (never email). A too-short
+    query gets an empty list (200), not an error, so the autocomplete can call this on every keystroke.
+    """
+    me = session["username"]
+    q = request.args.get("q", "")
+    q = q.strip() if isinstance(q, str) else ""
+    if len(q) < SEARCH_MIN_CHARS:
+        return jsonify(results=[]), 200          # too short -> nothing (not an error; keystroke-driven)
+    if not _search_rate_ok(me):
+        return jsonify(error="you're searching too fast — take a breath"), 429
+    try:
+        results = _users().search(q, SEARCH_MAX_RESULTS, exclude=me)
+    except Exception:
+        logger.exception("user store unavailable during search")
+        return jsonify(error="search is unavailable right now"), 503
+    return jsonify(results=results), 200
 
 
 @messages_bp.get("/conversations")
