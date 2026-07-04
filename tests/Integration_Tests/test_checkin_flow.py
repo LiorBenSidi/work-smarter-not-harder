@@ -78,3 +78,18 @@ def test_checkin_degrades_to_503_when_history_store_fails(make_client, fake_user
     c = make_client(fake_users, fake_profiles, history=_BrokenHistory())
     _login(c)
     assert c.post("/checkin", json=_metrics()).status_code == 503
+
+
+def test_checkin_nulls_non_finite_calories(make_client, fake_users, fake_profiles, fake_history, monkeypatch):
+    # A non-finite calories from the AI must be neither persisted nor emitted as an invalid-JSON token
+    # (jsonify would write a bare Infinity/NaN that a browser's JSON.parse rejects).
+    import json
+    _set_predict(monkeypatch, {"state": "Ready", "calories": float("inf")})
+    c = _client(make_client, fake_users, fake_profiles, fake_history)
+    _login(c)
+    resp = c.post("/checkin", json=_metrics())
+    assert resp.status_code == 201
+    json.loads(resp.get_data(as_text=True),
+               parse_constant=lambda tok: (_ for _ in ()).throw(ValueError(f"non-finite JSON token: {tok}")))
+    assert resp.get_json()["entry"]["calories"] is None                      # non-finite -> null in the response
+    assert c.get("/history").get_json()["history"][0]["calories"] is None    # and never persisted to history

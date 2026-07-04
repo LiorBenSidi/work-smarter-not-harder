@@ -83,3 +83,24 @@ def test_dashboard_proba_is_none_when_absent(profile_client, monkeypatch):
     _login(profile_client)
     profile_client.post("/profile", json=_profile())
     assert profile_client.get("/dashboard").get_json()["readiness"]["proba"] is None
+
+
+def test_dashboard_drops_non_finite_ai_values_keeping_strict_json(profile_client, monkeypatch):
+    # A buggy/hostile AI returning NaN/Infinity must NOT reach the response: jsonify serialises a
+    # non-finite float as the bare tokens NaN/Infinity, which are invalid JSON that a browser's
+    # JSON.parse rejects (blanking the dashboard). Non-finite proba/calories are dropped/nulled;
+    # finite values survive; the body stays strict-valid JSON.
+    import json
+    _set_predict(monkeypatch, {"state": "Ready", "recommendations": [],
+                               "proba": {"Ready": float("nan"), "Rest": 0.4, "Hard": float("inf")},
+                               "calories": float("inf")})
+    _login(profile_client)
+    profile_client.post("/profile", json=_profile())
+    resp = profile_client.get("/dashboard")
+    assert resp.status_code == 200
+    # strict parse: parse_constant fires on any bare NaN/Infinity/-Infinity token -> raise -> test fails
+    json.loads(resp.get_data(as_text=True),
+               parse_constant=lambda tok: (_ for _ in ()).throw(ValueError(f"non-finite JSON token: {tok}")))
+    data = resp.get_json()
+    assert data["readiness"]["proba"] == {"Rest": 0.4}   # non-finite proba keys dropped, the finite one kept
+    assert data["calories"] is None                       # non-finite calories -> null
