@@ -236,6 +236,17 @@
     .streak-n { font-weight:800; color:var(--ink); white-space:nowrap; }
     .streak-cap { color:var(--muted); font-size:13px; }
     @media (max-width: 380px) { .streak-cap { display:none; } }
+    /* "Check-in due" capsule: a floating nudge shown only off-Today when today's check-in is missing */
+    .capsule { position:fixed; left:50%; bottom:82px; z-index:45; display:inline-flex; align-items:center; gap:9px;
+      padding:12px 20px; border-radius:999px; border:0; color:var(--on-accent); font-weight:800; font-size:14px; cursor:pointer;
+      background: linear-gradient(135deg, var(--accent), color-mix(in srgb, var(--accent) 55%, var(--accent2)));
+      box-shadow:0 16px 36px -10px color-mix(in srgb, var(--accent) 72%, transparent);
+      transform:translateX(-50%); animation: capsuleIn .32s cubic-bezier(.2,.9,.3,1) both; min-height:44px; }
+    .capsule svg { width:18px; height:18px; stroke:currentColor; fill:none; stroke-width:2.2; flex:none; }
+    .capsule:hover { filter:brightness(1.06); }
+    .capsule:active { transform:translateX(-50%) scale(.96); }
+    .capsule:focus-visible { outline:2px solid var(--ink); outline-offset:3px; }
+    @keyframes capsuleIn { from { opacity:0; transform:translate(-50%, 16px) scale(.94); } to { opacity:1; transform:translate(-50%, 0) scale(1); } }
 
     /* signature: the breathing readiness orb */
     .readiness { --st: var(--muted); text-align:center; }
@@ -698,6 +709,10 @@
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 11.5a8.5 8.5 0 0 1-12.9 7.3L3 20l1.2-5.1A8.5 8.5 0 1 1 21 11.5z"/></svg><span>Chat</span><span class="tab-dot" id="dm-dot" hidden></span></button>
         </div>
       </nav>
+      <button id="checkin-capsule" class="capsule" type="button" hidden aria-label="Log today's check-in">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+        <span>Check in for today</span>
+      </button>
     </section>
   </main>
 
@@ -803,7 +818,9 @@
     }
 
     // ---- app-shell screen navigation (bottom tab bar) ----
+    let checkinDue = false, currentScreen = "today";                     // state for the "check-in due" capsule
     function showScreen(name) {
+      currentScreen = name;
       document.querySelectorAll(".screen").forEach((s) => { s.hidden = s.id !== "screen-" + name; });
       document.querySelectorAll(".tab").forEach((t) => {
         const on = t.dataset.screen === name;
@@ -813,8 +830,22 @@
       window.scrollTo({ top: 0, behavior: "instant" });
       if (name === "messages") openMessages();
       else { clearInterval(dmThreadTimer); dmThreadTimer = null; }   // stop the 5s thread poll when leaving Chat
+      updateCheckinCapsule();                                       // capsule only shows off-Today when a check-in is due
     }
     document.querySelectorAll(".tab").forEach((t) => t.addEventListener("click", () => showScreen(t.dataset.screen)));
+
+    // ---- "Check-in due" capsule: a floating nudge shown ONLY when today's check-in is missing AND you're not
+    // already on Today (where the form lives). Tap -> jump to the form. (Wolt's 'shown-only-when-relevant' capsule.)
+    function updateCheckinCapsule() {
+      const el = $("checkin-capsule"); if (!el) return;
+      el.hidden = !(checkinDue && currentScreen !== "today");
+    }
+    $("checkin-capsule").addEventListener("click", () => {
+      showScreen("today");                                          // -> currentScreen="today" -> the capsule hides itself
+      const form = $("checkin-form");
+      form.scrollIntoView({ behavior: "smooth", block: "center" });
+      const first = form.querySelector("input"); if (first) setTimeout(() => first.focus(), 0);
+    });
 
     function flash(id, msg, kind = "error") { const el = $(id); el.textContent = msg || ""; el.className = "flash " + kind; }
 
@@ -1085,18 +1116,22 @@
       return { streak, loggedToday, hasHistory: days.size > 0 };
     }
     function renderStreak(items) {
-      const el = $("streak-badge"); if (!el) return;
-      const { streak, loggedToday, hasHistory } = computeStreak(items);   // streak is a number -> HTML-safe
-      if (streak >= 1) {
-        el.innerHTML = ICON.flame + '<span class="streak-n">' + streak + "-day streak</span>"
-          + '<span class="streak-cap">' + (loggedToday ? "· logged today" : "· check in to keep it") + "</span>";
-        el.hidden = false;
-      } else if (hasHistory) {
-        el.innerHTML = ICON.flame + '<span class="streak-cap">Start a new streak — check in today</span>';
-        el.hidden = false;
-      } else {
-        el.hidden = true;                                                // brand-new user: the first-check-in flow onboards
+      const info = computeStreak(items);                                 // { streak, loggedToday, hasHistory }
+      const el = $("streak-badge");
+      if (el) {
+        const { streak, loggedToday, hasHistory } = info;                // streak is a number -> HTML-safe
+        if (streak >= 1) {
+          el.innerHTML = ICON.flame + '<span class="streak-n">' + streak + "-day streak</span>"
+            + '<span class="streak-cap">' + (loggedToday ? "· logged today" : "· check in to keep it") + "</span>";
+          el.hidden = false;
+        } else if (hasHistory) {
+          el.innerHTML = ICON.flame + '<span class="streak-cap">Start a new streak — check in today</span>';
+          el.hidden = false;
+        } else {
+          el.hidden = true;                                              // brand-new user: the first-check-in flow onboards
+        }
       }
+      return info;                                                       // loadHistory reuses this for the check-in-due capsule
     }
 
     // ---- Dashboard ----
@@ -1184,7 +1219,9 @@
       const items = (r.data && r.data.history) || [];
       statCheckins = items.length; renderStats();
       renderTrend(items);
-      renderStreak(items);                                   // 🔥 consecutive-day streak badge on Today
+      const streak = renderStreak(items);                    // 🔥 consecutive-day streak badge on Today
+      checkinDue = streak.hasHistory && !streak.loggedToday; // today's check-in still open (established user) -> capsule nudge
+      updateCheckinCapsule();
       if (!items.length) { el.innerHTML = '<p class="muted">No past analyses yet.</p>'; return; }
       el.innerHTML = "<ul>" + items.map((it) =>
         "<li><strong>" + escapeHtml(it.assessment || "—") + "</strong> "
