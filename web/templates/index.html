@@ -575,13 +575,13 @@
         </form>
 
         <form id="otp-form" hidden>
-          <p class="muted" style="margin:0 0 12px">We sent a 6-digit code to your email. Enter it to finish signing in.</p>
+          <p id="otp-intro" class="muted" style="margin:0 0 12px">We sent a 6-digit code to your email. Enter it to finish signing in.</p>
           <div id="otp-devhint" class="flash warn" hidden style="margin:0 0 10px"></div>
           <label for="otp-code">Verification code</label>
           <input id="otp-code" name="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]*" maxlength="6" required>
           <p id="otp-expiry" class="muted" style="margin:8px 0 0" aria-live="polite"></p>
-          <label style="display:flex;align-items:center;gap:8px;margin-top:12px;font-weight:600"><input id="otp-remember" type="checkbox" style="width:auto"> Trust this browser for 30 days</label>
-          <div style="margin-top:16px"><button type="submit">Verify &amp; sign in</button>
+          <label id="otp-remember-row" style="display:flex;align-items:center;gap:8px;margin-top:12px;font-weight:600"><input id="otp-remember" type="checkbox" style="width:auto"> Trust this browser for 30 days</label>
+          <div style="margin-top:16px"><button type="submit" id="otp-submit">Verify &amp; sign in</button>
             <button type="button" class="ghost" onclick="showTab('login')">Back</button></div>
           <div id="otp-resend" style="margin-top:12px;display:flex;align-items:center;gap:8px;font-size:14px">
             <span id="otp-resend-timer" class="muted"></span>
@@ -884,10 +884,18 @@
       document.querySelector(".tabs").hidden = true;
     }
 
-    function showOtp(expiresIn) {
+    let otpMode = "login";                              // "login" (2FA) or "register" (email verification) — same UI
+    function showOtp(expiresIn, mode) {
+      otpMode = mode === "register" ? "register" : "login";
       ["login-form", "register-form", "forgot-form", "reset-form"].forEach((id) => { $(id).hidden = true; });
       $("otp-form").hidden = false;
       document.querySelector(".tabs").hidden = true;
+      const reg = otpMode === "register";
+      $("otp-intro").textContent = reg
+        ? "We sent a 6-digit code to your email. Enter it to finish creating your account."
+        : "We sent a 6-digit code to your email. Enter it to finish signing in.";
+      $("otp-remember-row").hidden = reg;               // "trust this browser" is a login-only option
+      $("otp-submit").textContent = reg ? "Verify & create account" : "Verify & sign in";
       $("otp-code").value = "";
       startOtpTimers(expiresIn);
       setTimeout(() => $("otp-code").focus(), 0);
@@ -1000,8 +1008,10 @@
     });
 
     onSubmit("otp-form", async (f) => {
-      const r = await api("/verify-otp", { method: "POST", body: { code: f.code.value, remember: $("otp-remember").checked } });
-      if (r.ok) { dbg("OTP verified -> signing in"); enterApp(r.data.username, r.data.display_name); }
+      const path = otpMode === "register" ? "/register/verify" : "/verify-otp";
+      const body = otpMode === "register" ? { code: f.code.value } : { code: f.code.value, remember: $("otp-remember").checked };
+      const r = await api(path, { method: "POST", body });
+      if (r.ok) { dbg(otpMode + " verified -> signing in"); enterApp(r.data.username, r.data.display_name); }
       else { flash("otp-flash", (r.data && r.data.error) || "Verification failed"); }
     });
 
@@ -1038,10 +1048,11 @@
       el.classList.add("flash-reset");
     }
     $("otp-resend-btn").addEventListener("click", async () => {
-      const r = await api("/resend-otp", { method: "POST" });
+      const r = await api(otpMode === "register" ? "/register/resend" : "/resend-otp", { method: "POST" });
       if (r.ok && r.data) {
         const hint = $("otp-devhint");
-        if (r.data.dev_otp) { hint.textContent = "Dev mode — your code is " + r.data.dev_otp; hint.hidden = false; }
+        const dev = r.data.dev_code || r.data.dev_otp;   // register uses dev_code, login uses dev_otp
+        if (dev) { hint.textContent = "Dev mode — your code is " + dev; hint.hidden = false; }
         $("otp-code").value = "";
         flash("otp-flash", "A new code is on its way.", "ok");
         startOtpTimers(r.data.expires_in);
@@ -1052,10 +1063,17 @@
 
     onSubmit("register-form", async (f) => {
       const r = await api("/register", { method: "POST", body: { username: f.username.value, password: f.password.value, email: f.email.value } });
-      if (r.ok) {
+      if (r.ok && r.data && r.data.status === "verify_required") {
+        // email verification: confirm the address BEFORE the account is created (reuses the OTP screen)
+        f.password.value = "";                  // the password is now held server-side (hashed) — drop it from the DOM
+        const hint = $("otp-devhint");
+        if (r.data.dev_code) { hint.textContent = "Dev mode — your code is " + r.data.dev_code; hint.hidden = false; }
+        else { hint.textContent = ""; hint.hidden = true; }
+        flash("otp-flash", "", "ok");
+        showOtp(r.data.expires_in, "register");
+      } else if (r.ok) {                        // instant create (verification off / TESTING)
         f.reset();
         showTab("login");
-        // the register form is hidden now — surface the confirmation where the user actually IS
         flash("login-flash", "Account created — you can log in now.", "ok");
         flash("register-flash", "", "ok");
       } else { flash("register-flash", (r.data && r.data.error) || "Registration failed"); }

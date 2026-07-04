@@ -389,3 +389,15 @@ def test_display_name_prefill_is_smart_not_sticky(client):
     assert 'form.addEventListener("reset"' in html                          # every fresh attempt starts clean
     assert 'id="reg-username" name="username" autocomplete="off"' in html   # no browser-autofill false-trip
     assert "let touched = false" not in html                                # the old buggy flag is gone
+
+
+def test_register_email_verification_reuses_the_otp_screen(client):
+    # Registration verifies the email BEFORE creating the account: a verify_required response routes to the OTP
+    # screen in "register" mode. The screen is SHARED — submit + resend branch by otpMode, the "trust this
+    # browser" row is hidden, and the CTA reads "create account".
+    html = client.get("/").get_data(as_text=True)
+    assert 'status === "verify_required"' in html                          # the register handler branches on it
+    assert 'showOtp(r.data.expires_in, "register")' in html
+    assert '"/register/verify"' in html and '"/register/resend"' in html   # verify + resend branch by mode
+    assert 'id="otp-remember-row"' in html and 'id="otp-submit"' in html   # toggled per mode
+    assert "Verify & create account" in html                               # the register-mode CTA
