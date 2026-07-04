@@ -263,3 +263,59 @@ def test_responsive_dual_nav_present(client):
     assert 'document.querySelectorAll("[data-screen]")' in html    # showScreen + clicks drive both navs
     assert "function setDmDot(" in html                            # the Chat unread pulse toggles on both navs
     assert ".topnav.nav-on" in html                                # top-nav appears only when signed in
+
+
+def test_context_home_back_present_and_wired(client):
+    # Wolt's 'home button only when not home': a contextual header button that shows a Home icon off-Today
+    # and a Back chevron inside a drill-in (forum post / DM thread), and is hidden on Today (nothing to go back to).
+    html = client.get("/").get_data(as_text=True)
+    assert 'id="ctx-back"' in html
+    assert "function ctxBackTarget(" in html and "function updateCtxBack(" in html
+    assert '!$("forum-detail").hidden' in html and '!$("dm-thread-view").hidden' in html   # drill-in detection
+    assert 'currentScreen !== "today"' in html                     # off-Today -> Home
+    assert html.count("updateCtxBack()") >= 5                       # wired into showScreen + openPost/closePost + open/closeThread
+
+
+def test_desktop_logo_is_the_home_button(client):
+    # Desktop fix: the separate Home/Back button is HIDDEN on desktop (it shifted the whole header). Instead
+    # the LOGO becomes the home button off-Today — a home icon appears inside the brand dot + clicking the
+    # brand goes to Today in-app (no reload). The header is flagged .off-home to drive it. Mobile keeps ctx-back.
+    html = client.get("/").get_data(as_text=True)
+    assert 'class="brand-home-ico"' in html                        # the home icon lives inside the brand dot
+    assert "header.off-home .brand-home-ico" in html               # shown on desktop when off-Today
+    assert '.ctx-back { display:none; }' in html                   # ...and the separate button is gone on desktop
+    assert 'classList.toggle("off-home", currentScreen !== "today")' in html   # header flagged off-Today
+    assert "if (currentUser) { e.preventDefault(); showScreen" in html         # the logo is an in-app home link
+
+
+def test_filter_sort_chips_present_and_wired(client):
+    # Wolt-style filter chips: History filters by readiness (All/Ready/Moderate/Rest); Forum sorts
+    # (Recent/Top/Mine). Client-side over the cached list; the active chip is highlighted.
+    html = client.get("/").get_data(as_text=True)
+    assert 'id="history-filters"' in html and 'id="forum-sorts"' in html
+    for f in ('data-filter="all"', 'data-filter="ready"', 'data-filter="moderate"', 'data-filter="rest"'):
+        assert f in html
+    for s in ('data-sort="recent"', 'data-sort="top"', 'data-sort="mine"'):
+        assert s in html
+    assert "function renderHistoryList(" in html and "function renderForumList(" in html
+    assert "historyFilter" in html and "forumSort" in html         # the filter/sort state drives the render
+
+
+def test_illustrated_empty_states(client):
+    # Friendly illustrated empty states (icon + title + guidance) instead of a bare grey line, across
+    # History / Forum / DM / the filtered lists (Wolt's empty cards).
+    html = client.get("/").get_data(as_text=True)
+    assert "function emptyState(" in html and 'class="empty"' in html and "EMPTY_ICONS" in html
+    for title in ("No check-ins yet", "Quiet in here", "No conversations yet", "You haven't posted yet"):
+        assert title in html
+    assert ".empty-ico" in html and ".empty-title" in html         # the empty-state CSS is present
+
+
+def test_danger_zone_groups_destructive_actions(client):
+    # Logout + Delete are grouped in one red "Danger zone" card (Wolt-style destructive-in-red), moved out
+    # of the Account card; the IDs are unchanged so the existing wiring/handlers still bind.
+    html = client.get("/").get_data(as_text=True)
+    assert "Danger zone" in html and 'class="card danger-zone"' in html
+    assert 'id="logout-btn" class="ghost danger block"' in html     # logout is now red, inside the danger zone
+    assert 'id="delete-reveal"' in html                             # delete lives here too
+    assert ".danger-zone" in html                                   # the red-tinted card CSS
