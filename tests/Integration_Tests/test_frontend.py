@@ -341,3 +341,15 @@ def test_danger_zone_groups_destructive_actions(client):
     assert 'id="logout-btn" class="ghost danger block"' in html     # logout is now red, inside the danger zone
     assert 'id="delete-reveal"' in html                             # delete lives here too
     assert ".danger-zone" in html                                   # the red-tinted card CSS
+
+
+def test_dm_recipient_search_and_pick_present_and_wired(client):
+    # The "To" field is a search-and-pick autocomplete (not a bare exact-handle box): a combobox with a
+    # listbox dropdown backed by GET /users/search, debounced, keyboard-navigable, results HTML-escaped.
+    html = client.get("/").get_data(as_text=True)
+    assert 'id="dm-suggest"' in html and 'role="listbox"' in html
+    assert 'role="combobox"' in html and 'aria-controls="dm-suggest"' in html
+    assert "/users/search?q=" in html                               # wired to the search endpoint
+    assert "function runDmSearch(" in html and "function pickDmUser(" in html
+    assert "dmSearchSeq" in html                                    # race-guard against stale keystroke responses
+    assert "escapeHtml(u.username)" in html and "escapeHtml(u.display_name)" in html  # XSS-safe rendering
