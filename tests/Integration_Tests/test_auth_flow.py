@@ -20,6 +20,8 @@ def test_auth_config_exposes_validator_bounds(client, auth_module):
     assert data["username_max"] == auth_module.USERNAME_MAX
     assert data["password_min"] == auth_module.PASSWORD_MIN
     assert data["password_max"] == auth_module.PASSWORD_MAX
+    assert data["email_mode"] == "mock"                          # no SMTP in tests -> mock (codes on-screen)
+    assert "otp_login" in data and "verify_email" in data        # the modes the dev-tools panel reads
 
 
 def test_auth_config_follows_a_bound_change(client, auth_module, monkeypatch):
