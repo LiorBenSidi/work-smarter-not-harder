@@ -247,3 +247,19 @@ def test_checkin_due_capsule_present_and_wired(client):
     assert 'checkinDue && currentScreen !== "today"' in html   # the two-part relevance gate
     assert "checkinDue = streak.hasHistory && !streak.loggedToday" in html   # driven from the streak/history
     assert 'showScreen("today")' in html and "scrollIntoView" in html        # tap -> Today + the check-in form
+
+
+def test_responsive_dual_nav_present(client):
+    # Dedicated desktop + mobile layouts from ONE responsive codebase: a desktop top-nav in the header
+    # (shown only when signed in, >=860px) AND a mobile floating bottom-pill bar (<860px). Both drive the
+    # same showScreen via [data-screen], so Safari 'Request Desktop' (a wide viewport) lands on the desktop layout.
+    html = client.get("/").get_data(as_text=True)
+    assert 'id="topnav"' in html and 'class="topnav"' in html      # the desktop top-nav
+    assert 'class="tabbar"' in html                                # the mobile bottom bar still exists
+    for screen in ("today", "history", "forum", "messages"):
+        assert html.count(f'data-screen="{screen}"') >= 2          # each section in BOTH navs
+    assert "@media (min-width: 860px)" in html                     # the desktop breakpoint (the Request-Desktop switch)
+    assert "max-width:920px" in html                               # wider desktop content
+    assert 'document.querySelectorAll("[data-screen]")' in html    # showScreen + clicks drive both navs
+    assert "function setDmDot(" in html                            # the Chat unread pulse toggles on both navs
+    assert ".topnav.nav-on" in html                                # top-nav appears only when signed in
