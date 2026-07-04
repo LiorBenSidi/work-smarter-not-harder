@@ -92,6 +92,29 @@
     .ctx-back:active { transform: scale(.94); }
     .ctx-back svg { width:22px; height:22px; stroke:currentColor; fill:none; stroke-width:2.2; }
     .ctx-back:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+    /* Developer tools (DEBUG only): a floating bottom-right button + a compact panel. Zero footprint unless
+       a dev opts in (?debug=1 / localStorage ws-debug), and never inside the mobile-preview iframe. */
+    .debug-fab { position:fixed; right:16px; bottom:calc(16px + env(safe-area-inset-bottom)); z-index:60;
+      width:44px; height:44px; border-radius:50%; display:inline-flex; align-items:center; justify-content:center;
+      font-size:19px; line-height:1; color:var(--ink); box-shadow:var(--shadow); cursor:pointer;
+      background: color-mix(in srgb, var(--card) 82%, transparent); border:1px solid var(--line);
+      -webkit-backdrop-filter: blur(18px); backdrop-filter: blur(18px); }
+    .debug-fab:hover { border-color: color-mix(in srgb, var(--accent) 45%, transparent); }
+    .debug-fab:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+    .debug-panel { position:fixed; right:16px; bottom:calc(70px + env(safe-area-inset-bottom)); z-index:60; width:236px;
+      background:var(--card); border:1px solid var(--line); border-radius:16px; box-shadow:var(--shadow); padding:12px; font-size:13px; }
+    .debug-row { display:flex; align-items:center; justify-content:space-between; margin-bottom:6px; }
+    .debug-sect { margin-top:11px; }
+    .debug-label { font-size:11px; text-transform:uppercase; letter-spacing:.04em; color:var(--muted); margin-bottom:6px; }
+    .debug-seg { display:flex; gap:4px; background:var(--field); border-radius:10px; padding:3px; }
+    .debug-seg-btn { flex:1; background:transparent; box-shadow:none; border:0; border-radius:8px; padding:6px; font-weight:700; font-size:12px; color:var(--muted); }
+    .debug-seg-btn.active { background:var(--card); color:var(--brand); box-shadow:var(--shadow); }
+    .debug-note { color:var(--muted); font-size:12px; line-height:1.4; }
+    .debug-off { margin-top:12px; width:100%; }
+    .debug-preview { position:fixed; inset:0; z-index:70; background:rgba(0,0,0,.62); display:flex; flex-direction:column;
+      align-items:center; justify-content:center; gap:10px; }
+    .debug-preview-bar { color:#fff; font-size:13px; font-weight:600; display:flex; align-items:center; gap:12px; }
+    #debug-preview-frame { width:390px; height:844px; max-height:84vh; border:0; border-radius:30px; background:var(--bg); box-shadow:0 24px 70px rgba(0,0,0,.55); }
     #who { display:flex; align-items:center; gap:10px; }
     #who-name { white-space:nowrap; font-weight:700; }
     /* Corner account menu: avatar-in-header -> identity + quick actions (Wolt-style upper-corner menu) */
@@ -814,6 +837,28 @@
        the header instead of the viewport. Kept out here so `bottom:12px` is viewport-relative. -->
   <button id="ctx-back" class="ctx-back" type="button" hidden aria-label="Go to Today"></button>
 
+  <!-- Developer tools (DEBUG only, never in live mode / inside the preview iframe). See wireDebugTools(). -->
+  <button id="debug-fab" class="debug-fab" type="button" hidden aria-label="Developer tools" aria-expanded="false">&#9881;</button>
+  <div id="debug-panel" class="debug-panel" hidden role="dialog" aria-label="Developer tools">
+    <div class="debug-row"><strong>Dev tools</strong><button id="debug-close" class="ghost mini" type="button" aria-label="Close">&#10005;</button></div>
+    <div class="debug-sect">
+      <div class="debug-label">Viewport preview</div>
+      <div class="debug-seg" role="group" aria-label="Viewport">
+        <button id="debug-vp-desktop" class="debug-seg-btn active" type="button">Desktop</button>
+        <button id="debug-vp-mobile" class="debug-seg-btn" type="button">Mobile</button>
+      </div>
+    </div>
+    <div class="debug-sect">
+      <div class="debug-label">Email codes</div>
+      <div id="debug-email-mode" class="debug-note">checking…</div>
+    </div>
+    <button id="debug-off" class="ghost mini debug-off" type="button">Disable dev tools</button>
+  </div>
+  <div id="debug-preview" class="debug-preview" hidden>
+    <div class="debug-preview-bar">Mobile preview · 390&times;844 <button id="debug-preview-close" class="ghost mini" type="button">Exit</button></div>
+    <iframe id="debug-preview-frame" title="Mobile viewport preview" src="about:blank"></iframe>
+  </div>
+
   <script>
     const $ = (id) => document.getElementById(id);
 
@@ -826,6 +871,38 @@
       catch (_) { return false; }
     })();
     function dbg(...args) { if (DEBUG) console.log("%c[ws]", "color:#0eb389;font-weight:700", ...args); }
+
+    // ---- Developer tools panel (DEBUG only; never in live mode or inside the mobile-preview iframe) ----
+    (function wireDebugTools() {
+      const params = new URLSearchParams(location.search);
+      if (params.has("preview")) return;                 // inside the preview iframe -> no nested dev tools
+      if (params.has("debug")) { try { localStorage.setItem("ws-debug", "1"); } catch (_) {} }  // ?debug=1 persists
+      if (!DEBUG) return;                                 // zero footprint unless a dev opted in
+      const fab = $("debug-fab"), panel = $("debug-panel"), prev = $("debug-preview"), frame = $("debug-preview-frame");
+      fab.hidden = false;
+      const openPanel = (open) => { panel.hidden = !open; fab.setAttribute("aria-expanded", open ? "true" : "false"); };
+      fab.addEventListener("click", () => openPanel(panel.hidden));
+      $("debug-close").addEventListener("click", () => openPanel(false));
+      // Viewport preview: an iframe has its OWN narrow viewport, so the REAL mobile layout renders inside it
+      // in a desktop browser (the media queries fire on the iframe width) — no CSS override, nothing destructive.
+      const setVp = (mobile) => {
+        $("debug-vp-mobile").classList.toggle("active", mobile);
+        $("debug-vp-desktop").classList.toggle("active", !mobile);
+        if (mobile) { frame.src = location.pathname + "?preview=1"; prev.hidden = false; }
+        else { prev.hidden = true; frame.src = "about:blank"; }
+      };
+      $("debug-vp-mobile").addEventListener("click", () => setVp(true));
+      $("debug-vp-desktop").addEventListener("click", () => setVp(false));
+      $("debug-preview-close").addEventListener("click", () => setVp(false));
+      $("debug-off").addEventListener("click", () => { try { localStorage.removeItem("ws-debug"); } catch (_) {} location.href = location.pathname; });
+      // Email-mode indicator (one source of truth: /auth/config) — live vs mock so you know where codes go.
+      api("/auth/config").then((r) => {
+        if (!r.ok || !r.data) return;
+        const live = r.data.email_mode === "live";
+        $("debug-email-mode").textContent = (live ? "LIVE — codes are emailed" : "MOCK — codes shown on-screen")
+          + (r.data.verify_email ? " · verify at signup" : "") + (r.data.otp_login ? " · 2FA login" : "");
+      }).catch(() => {});
+    })();
     // True iff the session changed since `u` was snapshotted -> the async caller must BAIL rather than
     // paint a prior user's data into the current view (the #109 race). Logs the bail when debugging.
     function sessionChanged(u, where) {
