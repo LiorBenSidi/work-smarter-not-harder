@@ -377,3 +377,15 @@ def test_navigation_state_resets_on_reentry_and_switch(client):
     html = client.get("/").get_data(as_text=True)
     assert 'if (name === "forum") closePost();' in html            # Forum tab-entry lands on the list
     assert "dmPeer = null; closeDmSuggest();" in html              # account-switch clears the search dropdown
+
+
+def test_display_name_prefill_is_smart_not_sticky(client):
+    # The email -> display-name prefill keeps syncing until the user customises the name (tracks the last auto
+    # value; resets on form-reset), and the field is autocomplete=off so the browser can't falsely freeze it
+    # (the old sticky `touched` flag made it work once then die — reproduced live).
+    html = client.get("/").get_data(as_text=True)
+    assert "function wireDisplayNamePrefill(" in html
+    assert "let lastAuto" in html and "nameEl.value === lastAuto" in html    # smart tracking, not a sticky flag
+    assert 'form.addEventListener("reset"' in html                          # every fresh attempt starts clean
+    assert 'id="reg-username" name="username" autocomplete="off"' in html   # no browser-autofill false-trip
+    assert "let touched = false" not in html                                # the old buggy flag is gone
