@@ -39,7 +39,7 @@ in with your **email** (or the display handle). Turn it off for a scripted run w
 
 ---
 
-## Mock ⇄ live, and the dev-tools panel
+## Mock ⇄ live, and the debug tools panel
 
 The single switch for **every** code (login OTP, signup verification, password reset) is **`SMTP_HOST`**:
 
@@ -51,9 +51,9 @@ The single switch for **every** code (login OTP, signup verification, password r
 **Elad / Shiri:** just run `docker compose up --build` with **no `.env`** → mock mode, every code on-screen.
 To go live, add the four `SMTP_*` vars (see the "Real email" steps further down).
 
-**Dev-tools panel:** append **`?debug=1`** to the URL → a **⚙ button appears bottom-right** (only in debug
+**Debug tools panel:** append **`?debug=1`** to the URL → a **⚙ button appears bottom-right** (only in debug
 mode). It opens a panel to **preview the mobile layout in a desktop browser** (Desktop/Mobile) and shows the
-current **email mode** (MOCK/LIVE). Zero footprint in normal use; "Disable dev tools" turns it off.
+current **email mode** (MOCK/LIVE). Zero footprint in normal use; "Disable debug tools" turns it off.
 
 ## 1b. Password reset (dev)
 
