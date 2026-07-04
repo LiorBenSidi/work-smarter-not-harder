@@ -20,7 +20,18 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))  # web/ on path for local runs
 
-from config import Config              # noqa: E402  (after the sys.path shim above)
+# Load the repo-root .env BEFORE importing Config (Config reads os.environ at import time). This makes a plain
+# `python web/scripts/send_test_email.py --to ...` work on the host with NO `source .env` — which runs the file
+# as a shell script and mangles values containing `< >` (e.g. MAIL_FROM="Name <addr>"), silently corrupting the
+# sender into a bare display name and getting the send rejected (SMTP 501). python-dotenv parses such values
+# correctly and never overrides vars already in the environment, so in the container compose's env still wins.
+try:
+    from dotenv import load_dotenv
+    load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", ".env"))
+except ImportError:
+    pass  # not installed (e.g. inside the container) -> rely on the env compose already injected
+
+from config import Config              # noqa: E402  (after the sys.path + dotenv shim above)
 from services.email import send_email  # noqa: E402
 
 logger = logging.getLogger("send_test_email")
