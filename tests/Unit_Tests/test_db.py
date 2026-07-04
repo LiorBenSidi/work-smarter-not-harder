@@ -326,6 +326,22 @@ def test_add_history_then_list_roundtrip(db_mod, db):
 
 
 # ---- forum ----
+# NOTE: forum_vote / forum_vote_comment now use an atomic aggregation-pipeline update (find_one_and_update
+# with a [$set ...] pipeline) that eliminated the old CAS-retry livelock. The in-memory fake can't execute a
+# pipeline, so their behaviour (set / replace / aggregate / unknown -> None / list-storage / '.'/'$'
+# usernames) AND concurrency-safety are pinned against REAL Mongo in
+# tests/Integration_Tests/test_db_mongo.py (which runs in CI with a mongo:7 service). Everything else in the
+# thin CRUD stays fake-tested here.
+def _seed_vote(db, post_id, user, value):
+    """Seed a vote straight into the fake post doc — so purge/export tests that just need pre-existing vote
+    data don't have to go through forum_vote (which is now real-Mongo-only, per the note above)."""
+    for d in db.forum_posts.docs:
+        if d.get("id") == post_id:
+            d.setdefault("votes", []).append({"user": user, "value": value})
+            d["score"] = sum(v["value"] for v in d["votes"])
+            return
+
+
 def test_forum_create_then_get_and_list(db_mod, db):
     post = db_mod.forum_create_post(db, "alice", "Title", "Body", False)
     assert post["id"] and isinstance(post["id"], str)
@@ -350,46 +366,8 @@ def test_forum_add_comment(db_mod, db):
     assert "votes" not in stored[0]                      # internal tally not leaked to the public shape
 
 
-def test_forum_vote_comment_sets_and_replaces(db_mod, db):
-    pid = db_mod.forum_create_post(db, "alice", "T", "B", False)["id"]
-    cid = db_mod.forum_add_comment(db, pid, "bob", "hi")["id"]
-    assert db_mod.forum_vote_comment(db, pid, cid, "carol", 1) == 1
-    assert db_mod.forum_vote_comment(db, pid, cid, "carol", -1) == -1     # one vote per user — replaces
-    assert db_mod.forum_get_post(db, pid)["comments"][0]["score"] == -1
-
-
-def test_forum_vote_comment_aggregates_across_users(db_mod, db):
-    pid = db_mod.forum_create_post(db, "alice", "T", "B", False)["id"]
-    cid = db_mod.forum_add_comment(db, pid, "bob", "hi")["id"]
-    db_mod.forum_vote_comment(db, pid, cid, "carol", 1)
-    assert db_mod.forum_vote_comment(db, pid, cid, "dave", 1) == 2        # distinct users sum
-
-
-def test_forum_vote_comment_unknown_post_or_comment_is_none(db_mod, db):
-    pid = db_mod.forum_create_post(db, "alice", "T", "B", False)["id"]
-    db_mod.forum_add_comment(db, pid, "bob", "hi")
-    assert db_mod.forum_vote_comment(db, "nope", "c1", "carol", 1) is None            # missing post
-    assert db_mod.forum_vote_comment(db, pid, "no-such-comment", "carol", 1) is None  # missing comment
-
-
 def test_forum_add_comment_on_missing_post_is_none(db_mod, db):
     assert db_mod.forum_add_comment(db, "nope", "bob", "x") is None
-
-
-def test_forum_vote_sets_and_replaces_score(db_mod, db):
-    pid = db_mod.forum_create_post(db, "alice", "T", "B", False)["id"]
-    assert db_mod.forum_vote(db, pid, "alice", 1) == 1
-    assert db_mod.forum_vote(db, pid, "alice", -1) == -1  # one vote per user — replaces, not adds
-
-
-def test_forum_votes_aggregate_across_users(db_mod, db):
-    pid = db_mod.forum_create_post(db, "alice", "T", "B", False)["id"]
-    db_mod.forum_vote(db, pid, "alice", 1)
-    assert db_mod.forum_vote(db, pid, "bob", 1) == 2  # distinct users sum
-
-
-def test_forum_vote_on_missing_post_is_none(db_mod, db):
-    assert db_mod.forum_vote(db, "nope", "alice", 1) is None
 
 
 def test_forum_update_post_by_author(db_mod, db):
@@ -423,23 +401,6 @@ def test_forum_delete_post_by_non_author_is_forbidden(db_mod, db):
 
 def test_forum_delete_missing_post_is_none(db_mod, db):
     assert db_mod.forum_delete_post(db, "nope", "alice") is None
-
-
-def test_votes_are_stored_as_a_list_not_keyed_by_username(db_mod, db):
-    # votes must be a list of {user, value} — NOT a dict keyed by username (usernames can contain
-    # '.'/'$', which are illegal/fragile MongoDB field names). Catches a regression to the dict form.
-    pid = db_mod.forum_create_post(db, "alice", "T", "B", False)["id"]
-    db_mod.forum_vote(db, pid, "bob.smith", 1)
-    raw = db.forum_posts.find_one({"id": pid})
-    assert isinstance(raw["votes"], list)
-    assert raw["votes"] == [{"user": "bob.smith", "value": 1}]
-
-
-def test_forum_vote_handles_dotted_or_dollar_usernames(db_mod, db):
-    pid = db_mod.forum_create_post(db, "alice", "T", "B", False)["id"]
-    assert db_mod.forum_vote(db, pid, "bob.smith", 1) == 1
-    assert db_mod.forum_vote(db, pid, "$admin", 1) == 2        # distinct users sum
-    assert db_mod.forum_vote(db, pid, "bob.smith", -1) == 0    # same user replaces (1 -> -1)
 
 
 # ---- robustness fixes (from the adversarial review) ----
@@ -487,8 +448,8 @@ def test_forum_purge_user_strips_authored_and_voted_content(db_mod, db):
     pa = db_mod.forum_create_post(db, "alice", "A", "a", False)["id"]
     pb = db_mod.forum_create_post(db, "bob", "B", "b", False)["id"]
     db_mod.forum_add_comment(db, pb, "alice", "hi")
-    db_mod.forum_vote(db, pb, "alice", 1)
-    db_mod.forum_vote(db, pb, "bob", 1)
+    _seed_vote(db, pb, "alice", 1)          # seed votes directly: forum_vote itself is now real-Mongo-only
+    _seed_vote(db, pb, "bob", 1)
     db_mod.forum_purge_user(db, "alice")
     assert db_mod.forum_get_post(db, pa) is None                 # alice's own post gone
     post = db_mod.forum_get_post(db, pb)
@@ -528,7 +489,7 @@ def test_forum_export_user(db_mod, db):
     db_mod.forum_create_post(db, "alice", "A", "a", False)
     bp = db_mod.forum_create_post(db, "bob", "B", "b", False)["id"]
     db_mod.forum_add_comment(db, bp, "alice", "hi")
-    db_mod.forum_vote(db, bp, "alice", 1)
+    _seed_vote(db, bp, "alice", 1)          # seed the vote directly (forum_vote is now real-Mongo-only)
     out = db_mod.forum_export_user(db, "alice")
     assert [p["title"] for p in out["posts"]] == ["A"]                   # own post only
     assert [c["body"] for c in out["comments"]] == ["hi"]               # her comment on bob's post
@@ -552,40 +513,6 @@ def test_list_history_skips_rows_without_entry(db_mod, db):
     db.analysis_history.docs.append({"username": "alice", "entry": {"assessment": "Ready"}})
     db.analysis_history.docs.append({"username": "alice"})    # malformed: no entry -> skipped, not raised
     assert db_mod.list_history(db, "alice") == [{"assessment": "Ready"}]
-
-
-def test_forum_vote_write_is_guarded_by_the_votes_cas_filter(db_mod, db):
-    pid = db_mod.forum_create_post(db, "alice", "T", "b", False)["id"]
-    captured = {}
-    real_update = db.forum_posts.update_one
-
-    def _spy(filt, update, **k):
-        captured["filt"] = filt
-        return real_update(filt, update, **k)
-
-    db.forum_posts.update_one = _spy
-    db_mod.forum_vote(db, pid, "bob", 1)
-    assert captured["filt"]["votes"] == []                    # first vote is conditional on the prior (empty) array
-
-
-def test_forum_vote_returns_none_if_post_deleted_during_cas(db_mod, db):
-    pid = db_mod.forum_create_post(db, "alice", "T", "b", False)["id"]
-    real_find, calls = db.forum_posts.find_one, {"n": 0}
-
-    def _flaky_find(filt):
-        calls["n"] += 1
-        return real_find(filt) if calls["n"] == 1 else None   # "deleted" right after the first read
-
-    db.forum_posts.find_one = _flaky_find
-    db.forum_posts.update_one = lambda *a, **k: SimpleNamespace(matched_count=0)  # CAS miss
-    assert db_mod.forum_vote(db, pid, "alice", 1) is None
-
-
-def test_forum_vote_raises_after_exhausting_retries(db_mod, db):
-    pid = db_mod.forum_create_post(db, "alice", "T", "b", False)["id"]
-    db.forum_posts.update_one = lambda *a, **k: SimpleNamespace(matched_count=0)  # write never lands
-    with pytest.raises(RuntimeError):
-        db_mod.forum_vote(db, pid, "alice", 1)
 
 
 def test_forum_update_post_returns_none_if_deleted_during_write(db_mod, db):
