@@ -76,17 +76,22 @@
     .brand-home-ico { display:none; width:14px; height:14px; stroke:var(--on-accent); fill:none; stroke-width:2.4; }
     .brand-name { font-size:16px; font-weight:800; letter-spacing:.04em; white-space:nowrap; }
     .brand-tag { font-size:12px; color:var(--muted); white-space:nowrap; }
-    /* Contextual Home/Back: a circular button shown ONLY off-Today or inside a drill-in (Wolt's home-off-home) */
+    /* Contextual Home/Back (mobile): a floating circular button pinned to the BOTTOM-LEFT, beside the nav
+       pill — Wolt's "home button next to the search pill". Home icon off-Today, Back chevron in a drill-in,
+       hidden on Today. Desktop hides it entirely (the logo becomes the home button). Being position:fixed it
+       leaves the header flow, so the full wordmark now stays put — no need to drop it. */
     .header-left { display:flex; align-items:center; gap:10px; min-width:0; }
-    .ctx-back { flex:none; width:40px; height:40px; border-radius:50%; display:inline-flex; align-items:center; justify-content:center;
-      background:var(--field); border:1px solid var(--line); color:var(--ink); box-shadow:none; padding:0;
-      animation: rise .2s cubic-bezier(.2,.7,.2,1) both; }
-    .ctx-back:hover { filter:none; box-shadow:none;
-      border-color: color-mix(in srgb, var(--accent) 45%, transparent); background: color-mix(in srgb, var(--accent) 9%, var(--field)); }
-    .ctx-back svg { width:20px; height:20px; stroke:currentColor; fill:none; stroke-width:2.2; }
+    .ctx-back { position:fixed; left:12px; bottom:calc(12px + env(safe-area-inset-bottom)); z-index:41;
+      width:56px; height:56px; border-radius:50%; display:inline-flex; align-items:center; justify-content:center;
+      color:var(--ink); padding:0; box-shadow:var(--shadow);
+      background: color-mix(in srgb, var(--card) 76%, transparent); border:1px solid color-mix(in srgb, var(--line) 70%, transparent);
+      -webkit-backdrop-filter: blur(22px) saturate(1.5); backdrop-filter: blur(22px) saturate(1.5);
+      animation: rise .22s cubic-bezier(.2,.7,.2,1) both; }
+    .ctx-back:hover { border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+      background: color-mix(in srgb, var(--accent) 14%, var(--card)); }
+    .ctx-back:active { transform: scale(.94); }
+    .ctx-back svg { width:22px; height:22px; stroke:currentColor; fill:none; stroke-width:2.2; }
     .ctx-back:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
-    /* on a phone, free up room when the back button is present by dropping the long wordmark (the dot stays) */
-    @media (max-width: 560px) { .ctx-back:not([hidden]) ~ .brand .brand-name { display:none; } }
     #who { display:flex; align-items:center; gap:10px; }
     #who-name { white-space:nowrap; font-weight:700; }
     /* Corner account menu: avatar-in-header -> identity + quick actions (Wolt-style upper-corner menu) */
@@ -345,9 +350,12 @@
     /* Mobile bottom nav: a detached, rounded FLOATING pill (not an edge-to-edge bar). Hidden on desktop. */
     .tabbar { position:fixed; left:12px; right:12px; bottom:calc(12px + env(safe-area-inset-bottom)); z-index:40;
       display:flex; justify-content:center; padding:0; border:0; background:none; }
-    .tabbar-inner { display:flex; gap:4px; width:100%; max-width:460px; padding:6px; border-radius:22px;
-      background: color-mix(in srgb, var(--card) 90%, var(--bg)); border:1px solid var(--line);
-      box-shadow:var(--shadow); backdrop-filter: blur(20px) saturate(1.3); }
+    .tabbar-inner { display:flex; gap:4px; width:100%; max-width:440px; padding:6px; border-radius:22px;
+      background: color-mix(in srgb, var(--card) 64%, transparent); border:1px solid color-mix(in srgb, var(--line) 70%, transparent);
+      box-shadow:var(--shadow); -webkit-backdrop-filter: blur(22px) saturate(1.5); backdrop-filter: blur(22px) saturate(1.5); }
+    /* when the contextual FAB is showing (off-Today / in a drill-in), slide the pill right so the two sit
+       side by side and the pill "makes room" for it — Wolt's bottom Home-button-beside-the-pill layout */
+    body.has-ctx .tabbar { left:80px; }
     .tab { flex:1; background:transparent; box-shadow:none; color:var(--muted); border-radius:16px; padding:8px 4px 6px;
       display:flex; flex-direction:column; align-items:center; gap:3px; font-weight:700; font-size:11px; letter-spacing:.02em;
       transition: color .15s, background .15s; position:relative; }
@@ -461,7 +469,6 @@
 <body>
   <header>
     <div class="header-left">
-      <button id="ctx-back" class="ctx-back" type="button" hidden aria-label="Back"></button>
       <a class="brand" href="/" aria-label="Work Smarter, Not Harder — home">
         <span class="brand-dot" aria-hidden="true"><svg class="brand-home-ico" viewBox="0 0 24 24"><path d="M3 11l9-8 9 8M5 10v10h5v-6h4v6h5V10"/></svg></span>
         <span class="brand-name">Work Smarter, Not Harder</span>
@@ -787,6 +794,11 @@
     </section>
   </main>
 
+  <!-- Contextual Home/Back FAB (mobile). Deliberately a BODY-level element, NOT inside <header>: the frosted
+       header has backdrop-filter, which would make it the containing block for this position:fixed button and
+       pin it to the header instead of the viewport. Kept out here so `bottom:12px` is viewport-relative. -->
+  <button id="ctx-back" class="ctx-back" type="button" hidden aria-label="Back"></button>
+
   <script>
     const $ = (id) => document.getElementById(id);
 
@@ -871,7 +883,7 @@
       $("app-view").hidden = view !== "app";
       $("who").hidden = view !== "app";
       $("topnav").classList.toggle("nav-on", view === "app");   // desktop top-nav shows only when signed in
-      if (view !== "app") { $("ctx-back").hidden = true; document.querySelector("header").classList.remove("off-home"); }  // no Home/Back on the logged-out auth screen
+      if (view !== "app") { $("ctx-back").hidden = true; document.body.classList.remove("has-ctx"); document.querySelector("header").classList.remove("off-home"); }  // no Home/Back on the logged-out auth screen
     }
 
     // showView("auth") alone re-shows whatever sub-form (and values) were last on screen — e.g.
@@ -923,6 +935,7 @@
     function updateCtxBack() {
       const t = ctxBackTarget(), btn = $("ctx-back");
       btn.hidden = !t;
+      document.body.classList.toggle("has-ctx", !!t);           // mobile: slide the nav pill over to make room for the FAB
       if (t) { btn.innerHTML = t === "home" ? CTX_HOME_ICON : CTX_BACK_ICON; btn.setAttribute("aria-label", t === "home" ? "Go to Today" : "Back"); }
       // Desktop: the logo shows a home icon (and becomes clickable-to-Today) whenever we're off the Today screen.
       document.querySelector("header").classList.toggle("off-home", currentScreen !== "today");
