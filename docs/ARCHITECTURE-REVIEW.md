@@ -1,11 +1,11 @@
 # Architecture Review — Work Smarter, Not Harder
 
-**Type:** design validation (pre-build) · **Date:** 2026-06-27 · **Status:** advisory — changes **no** contract.
+**Type:** design validation (pre-build) · **Date:** 2026-06-27 *(refreshed 2026-07-04 — owner tags corrected + deploy status updated)* · **Status:** advisory — changes **no** contract.
 **Lenses:** system-design · architecture (ADR) · code-review · testing-strategy.
 **Validated against:** [`PROPOSAL.md`](PROPOSAL.md) (graded 100/100 — the contract) · [`PROPOSAL-v2.md`](PROPOSAL-v2.md) (intent) ·
 Noam's rubric [`FEEDBACK.md`](FEEDBACK.md) (80 + 10 + 10) · the WSML course rules · the live skeleton (`docker-compose.yml`, `web/`, `ai/`, `tests/`).
 
-**Resolution (2026-06-27):** findings **3, 4, 5, 6** are fixed in the follow-up PR — scaling story corrected to replicas + workers; auth-scale note added; the `/predict` shape pinned (`recommendations` is a list, key is `state`); the contract test made behavioural. **1, 2** remain open *decisions* (Forum transport/storage ADR; Injury-Risk pending the Noam email). **7, 8** are later phases (deploy job; `/predict` 400-vs-5xx when the model lands).
+**Resolution (2026-06-27):** findings **3, 4, 5, 6** are fixed in the follow-up PR — scaling story corrected to replicas + workers; auth-scale note added; the `/predict` shape pinned (`recommendations` is a list, key is `state`); the contract test made behavioural. **1, 2** remain open *decisions* (Forum transport/storage ADR; Injury-Risk pending the Noam email). **7** is now **built** — the deploy job (GHCR build/push → SSH-deploy-to-Azure → Caddy HTTPS + auto-rollback) is in `ci.yml`, dormant until the live VM (Elad's go-live step); **8** (`/predict` 400-vs-5xx) lands with the model.
 
 ## Verdict
 The 3-container design is **sound for the 80-point app and the CI half of the deploy +10** — the seams are real,
@@ -41,9 +41,9 @@ Separately, one proposal-scope item — **cutting the 5 readiness classes to ~3 
 | 2 | 🔴 | AI / scope | `PROPOSAL §5` (the **graded** contract) names **5** classes incl. **"Injury Risk"**; PMData has **no injury label** and ~3 natural classes (`ai/README.md:24-26`). Shipping 3 + dropping a named class = "removing something from the proposal" → needs Noam's OK (`FEEDBACK.md:46`), exactly like F6+F7. | Lowest-risk: **keep "Injury Risk" as a rule-based label** (threshold, not ML) → all 5 delivered, **no permission needed**. Otherwise fold "5 → ~3 / drop Injury-Risk" into the **same Noam email** as F6+F7. |
 | 3 | 🟠 | Scaling | "**multiprocessing** for inference" is the stated scaling story (`DESIGN.md:41`), but a single Random-Forest `.predict()` is sub-millisecond — a per-request process pool costs *more* than it saves; the TA's "measure, don't guess" (L8) would flag it. | Make the **headline** story **gunicorn `--workers` + `ai` replicas** (`docker compose up --scale ai=N`; `web`→`ai` service-DNS round-robins — already wired via `AI_URL=http://ai:5000`). Prove it with the locust stress test. Keep multiprocessing only for genuinely CPU-heavy, **measured** work (batch scoring, training, an L6 hot loop). |
 | 4 | 🟠 | Auth × scale | `DESIGN.md:29` says "session/token" undifferentiated. In-memory Flask sessions break when `web` scales to N replicas (rubric: "scale easily"); the same multi-replica problem hits a Forum WebSocket/SSE layer. | Pick **stateless auth** (signed token, or a DB/Redis-backed session) so `web` scales horizontally — like the big-HW PictureServer's Bearer tokens. Decide now; cheap at the seam, expensive to retrofit. |
-| 5 | 🟠 | Contract drift | `recommendations` is an **object** in the doc (`DESIGN.md:33`) but a **list** `[]` in the code (`ai/app.py:33`). The contract test only checks the *key name*, so the drift passed CI. | Pin **one** shape in `DESIGN §3` + the placeholder. (AI owner's call — it's Lior's contract.) |
+| 5 | 🟠 | Contract drift | `recommendations` is an **object** in the doc (`DESIGN.md:33`) but a **list** `[]` in the code (`ai/app.py:33`). The contract test only checks the *key name*, so the drift passed CI. | Pin **one** shape in `DESIGN §3` + the placeholder. (AI owner's call — it's Shiri's contract.) |
 | 6 | 🟠 | Test quality | `test_ai_predict_returns_the_contract_keys` greps `ai/app.py` **source** for `state=` etc. — that's *mechanism, not behaviour* (the anti-pattern the repo's own `CLAUDE.md` forbids). A valid `jsonify({"state":…})` would fail it. | Rewrite as a **behavioural** test: `create_app().test_client().post("/predict", json=…)` → assert the JSON has the keys. Stronger and non-brittle. |
-| 7 | 🟡 | Deploy (+10) | CI gate exists (the CI portion of the deploy requirement); **no deploy job** + no Azure yet; stress tests aren't wired (they need a running stack). | Expected — it's the next phase. The architecture (only-`web`-exposed + env config) already supports a clean deploy job on green `main`. |
+| 7 | 🟢 | Deploy (+10) | CI gate + the **deploy job now exist** in `ci.yml` (GHCR build/push → SSH-deploy-to-Azure → Caddy HTTPS + auto-rollback), gated on `vars.SSH_HOST`; the remaining steps are the **live VM go-live** (Elad) + wiring the stress tests (they need a running stack). | Built (was "next phase"). The only-`web`-exposed + env-config architecture supported the clean deploy job on green `main`, as designed. |
 | 8 | 🟡 | `/predict` errors | No error/timeout/version semantics; `ai_client` treats any non-2xx as "down → `None`", so a malformed-feature bug looks like an outage (silent-failure smell). | When the model lands, give `/predict` a **400 vs 5xx** distinction so bad input ≠ AI-down. Low priority. |
 
 ## Rubric coverage — does the architecture reach 100?
@@ -51,14 +51,14 @@ Separately, one proposal-scope item — **cutting the 5 readiness classes to ~3 
 |---|---|---|---|
 | Whole app F1–F9 on Docker | 80 | **Yes** — containers, contracts, data model map to every feature | Finding 2 (Injury-Risk) + the F6+F7 merge need Noam's OK |
 | Online Forum (real-time, 8 sub-features) | 10 | **Not yet** | Finding 1 — decide transport + blob storage before Phase 3 |
-| Azure deploy + CI/CD auto-deploy | 10 | **Half** (CI = 5) | Finding 7 (deploy job) + Finding 4 (stateless auth for "scale easily") |
+| Azure deploy + CI/CD auto-deploy | 10 | **Pipeline built** (CI + deploy job + auto-rollback) | Live VM go-live (Elad) + Finding 4 (stateless auth for "scale easily") |
 
 ## Decisions needing a team / Noam call
 1. **Noam email** — keep "Injury Risk" rule-based (no permission needed) **or** bundle "5 → ~3 classes / drop Injury-Risk" into the F6+F7 email. *(team → Noam)*
 2. **Forum real-time transport** — SSE vs Flask-SocketIO (changes the `web` worker class). *(team)*
 3. **Forum media storage** — GridFS vs volume vs object store (16 MB BSON limit). *(Elad)*
-4. **Auth statefulness** — stateless token vs server session, given `web` scales. *(Shiri; architecture-level)*
-5. **`recommendations` shape** — object vs array; pin the `/predict` seam. *(Lior)*
+4. **Auth statefulness** — stateless token vs server session, given `web` scales. *(Lior; architecture-level)*
+5. **`recommendations` shape** — object vs array; pin the `/predict` seam. *(Shiri)*
 
 ## Cheap fixes worth doing before building (non-architectural)
 - Findings **5** (pin `recommendations` shape) and **6** (behavioural contract test) are small and high-value — can ship as a follow-up PR.

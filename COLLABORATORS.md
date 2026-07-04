@@ -3,7 +3,7 @@
 > **Read this before writing code.** Who owns what, how the pieces connect (the contracts = the only
 > fixed things), the workflow, and how to run the stack. Your detailed per-person roadmap is in `PERSON1/2/3.md`.
 
-## Team
+## Team — *Git Push & Pray*
 | Person | GitHub | Owns | Roadmap |
 |---|---|---|---|
 | **Shiri** | `shiriHaboob` | **AI brain** — model, `/predict`, recommendation engine, the dataset, the Forum cold-seed generator | [PERSON1.md](PERSON1.md) |
