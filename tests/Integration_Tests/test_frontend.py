@@ -236,3 +236,14 @@ def test_checkin_streak_badge_present_and_wired(client):
     assert "function computeStreak(" in html and "function renderStreak(" in html
     assert "renderStreak(items)" in html                 # driven from loadHistory -> updates after each check-in
     assert "-day streak" in html                         # the badge copy
+
+
+def test_checkin_due_capsule_present_and_wired(client):
+    # Wolt's 'shown-only-when-relevant' capsule: a floating nudge that appears ONLY when today's check-in
+    # is missing AND you're not already on Today (where the form lives). Tapping it jumps to the form.
+    html = client.get("/").get_data(as_text=True)
+    assert 'id="checkin-capsule"' in html
+    assert "function updateCheckinCapsule(" in html
+    assert 'checkinDue && currentScreen !== "today"' in html   # the two-part relevance gate
+    assert "checkinDue = streak.hasHistory && !streak.loggedToday" in html   # driven from the streak/history
+    assert 'showScreen("today")' in html and "scrollIntoView" in html        # tap -> Today + the check-in form
