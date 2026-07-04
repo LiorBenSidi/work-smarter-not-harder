@@ -39,6 +39,9 @@ node_modules/
 dist/
 build/
 
+# Personal per-developer AI instructions — never commit (team CLAUDE.md is shared)
+CLAUDE.local.md
+
 # OS / editor junk
 .DS_Store
 Thumbs.db
@@ -46,3 +49,6 @@ Thumbs.db
 .vscode/
 .claude/
 *.swp
+
+# Personal PERSON3 action plan — never commit (working doc, like CLAUDE.local.md)
+PERSON3_PLAN.md
