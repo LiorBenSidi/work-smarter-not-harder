@@ -258,6 +258,14 @@
     .capsule:active { transform:translateX(-50%) scale(.96); }
     .capsule:focus-visible { outline:2px solid var(--ink); outline-offset:3px; }
     @keyframes capsuleIn { from { opacity:0; transform:translate(-50%, 16px) scale(.94); } to { opacity:1; transform:translate(-50%, 0) scale(1); } }
+    /* Filter/sort chips (History + Forum) — capsule buttons, the active one highlighted (Wolt's filter chips) */
+    .chips { display:flex; flex-wrap:wrap; gap:7px; margin:0 0 14px; }
+    .chip { background:var(--field); border:1px solid var(--line); color:var(--muted); box-shadow:none; font-weight:700;
+      font-size:13px; padding:7px 14px; border-radius:999px; min-height:36px; transition: color .15s, background .15s, border-color .15s; }
+    .chip:hover { filter:none; box-shadow:none; color:var(--ink); border-color: color-mix(in srgb, var(--accent) 40%, transparent); }
+    .chip.active { color:var(--on-accent); border-color:transparent;
+      background: linear-gradient(135deg, var(--accent), color-mix(in srgb, var(--accent) 55%, var(--accent2))); }
+    .chip:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
 
     /* signature: the breathing readiness orb */
     .readiness { --st: var(--muted); text-align:center; }
@@ -589,6 +597,12 @@
             <h2><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><span class="grow">Past analyses</span>
               <button id="history-refresh" class="ghost mini">Refresh</button></h2>
             <div id="history-trend" class="trend"></div>
+            <div id="history-filters" class="chips" role="group" aria-label="Filter by readiness">
+              <button class="chip active" type="button" data-filter="all">All</button>
+              <button class="chip" type="button" data-filter="ready">Ready</button>
+              <button class="chip" type="button" data-filter="moderate">Moderate</button>
+              <button class="chip" type="button" data-filter="rest">Rest</button>
+            </div>
             <div id="history"><p class="muted">Loading…</p></div>
           </div>
         </section>
@@ -606,6 +620,11 @@
               <div style="margin-top:10px"><button type="submit" class="block">Post</button></div>
               <div id="forum-flash" class="flash" aria-live="polite"></div>
             </form>
+          </div>
+          <div id="forum-sorts" class="chips" role="group" aria-label="Sort posts">
+            <button class="chip active" type="button" data-sort="recent">Recent</button>
+            <button class="chip" type="button" data-sort="top">Top</button>
+            <button class="chip" type="button" data-sort="mine">Mine</button>
           </div>
           <div id="forum-list"><p class="muted">Loading…</p></div>
           <div id="forum-detail" hidden></div>
@@ -1276,25 +1295,39 @@
     }
 
     // ---- History ----
+    let historyItems = [], historyFilter = "all";
     async function loadHistory() {
       const u = currentUser;
       const el = $("history"); el.innerHTML = '<p class="muted">Loading…</p>';
       const r = await api("/history");
       if (sessionChanged(u, "loadHistory")) return;          // stale session -> don't paint another user's history
       if (!r.ok) { el.innerHTML = '<p class="flash error">Could not load history.</p>'; return; }
-      const items = (r.data && r.data.history) || [];
-      statCheckins = items.length; renderStats();
-      renderTrend(items);
-      const streak = renderStreak(items);                    // 🔥 consecutive-day streak badge on Today
+      historyItems = (r.data && r.data.history) || [];
+      statCheckins = historyItems.length; renderStats();
+      renderTrend(historyItems);                             // trend + streak + capsule use the FULL set
+      const streak = renderStreak(historyItems);             // 🔥 consecutive-day streak badge on Today
       checkinDue = streak.hasHistory && !streak.loggedToday; // today's check-in still open (established user) -> capsule nudge
       updateCheckinCapsule();
-      if (!items.length) { el.innerHTML = '<p class="muted">No past analyses yet.</p>'; return; }
+      renderHistoryList();                                   // the visible list applies the active readiness filter
+    }
+    function renderHistoryList() {
+      const el = $("history"); if (!el) return;
+      if (!historyItems.length) { el.innerHTML = '<p class="muted">No past analyses yet.</p>'; return; }
+      const items = historyFilter === "all" ? historyItems
+        : historyItems.filter((it) => readinessClass(it && it.assessment)[0] === historyFilter);
+      if (!items.length) { el.innerHTML = '<p class="muted">No ' + escapeHtml(historyFilter) + " check-ins.</p>"; return; }
       el.innerHTML = "<ul>" + items.map((it) =>
         "<li><strong>" + escapeHtml(it.assessment || "—") + "</strong> "
         + (it.calories != null ? "· " + escapeHtml(it.calories) + " kcal " : "")
         + '<span class="muted">' + escapeHtml(it.timestamp || "") + "</span></li>"
       ).join("") + "</ul>";
     }
+    $("history-filters").addEventListener("click", (e) => {
+      const chip = e.target.closest(".chip"); if (!chip) return;
+      historyFilter = chip.dataset.filter;
+      $("history-filters").querySelectorAll(".chip").forEach((c) => c.classList.toggle("active", c === chip));
+      renderHistoryList();
+    });
 
     // Sparkline of the readiness assessments over time (Ready=3 / Moderate=2 / Rest=1). Coordinates are
     // computed from numbers only (no innerHTML injection), colored by the latest state.
@@ -1324,21 +1357,36 @@
     let currentPost = null;
     let currentUser = null;
 
+    let forumPosts = [], forumSort = "recent";
     async function loadForum() {
       const u = currentUser;
       const el = $("forum-list"); el.innerHTML = '<p class="muted">Loading…</p>';
       const r = await api("/forum/posts");
       if (sessionChanged(u, "loadForum")) return;            // stale session -> don't paint another user's forum view
       if (!r.ok) { el.innerHTML = '<p class="flash error">Could not load the forum.</p>'; return; }
-      const posts = (r.data && r.data.posts) || [];
-      if (!posts.length) { el.innerHTML = '<p class="muted">No posts yet — start one above.</p>'; return; }
-      el.innerHTML = posts.map((p) =>
+      forumPosts = (r.data && r.data.posts) || [];
+      renderForumList();                                     // the visible list applies the active sort/filter
+    }
+    function renderForumList() {
+      const el = $("forum-list"); if (!el) return;
+      if (!forumPosts.length) { el.innerHTML = '<p class="muted">No posts yet — start one above.</p>'; return; }
+      let list = forumPosts.slice();                         // "recent" keeps the server order (newest first)
+      if (forumSort === "top") list.sort((a, b) => (b.score || 0) - (a.score || 0));
+      else if (forumSort === "mine") list = list.filter((p) => p.mine);
+      if (!list.length) { el.innerHTML = '<p class="muted">You haven\'t posted yet.</p>'; return; }
+      el.innerHTML = list.map((p) =>
         '<div class="post" data-id="' + escapeHtml(p.id) + '">'
         + '<div class="post-top"><strong>' + escapeHtml(p.title) + '</strong><span class="pill">▲ ' + escapeHtml(p.score) + '</span></div>'
         + '<span class="muted">by ' + escapeHtml(p.author) + ' · ' + escapeHtml(p.comments) + ' comment' + (p.comments === 1 ? '' : 's') + '</span></div>'
       ).join("");
       el.querySelectorAll(".post").forEach((d) => d.addEventListener("click", () => openPost(d.dataset.id)));
     }
+    $("forum-sorts").addEventListener("click", (e) => {
+      const chip = e.target.closest(".chip"); if (!chip) return;
+      forumSort = chip.dataset.sort;
+      $("forum-sorts").querySelectorAll(".chip").forEach((c) => c.classList.toggle("active", c === chip));
+      renderForumList();
+    });
 
     async function openPost(id) {
       const u = currentUser;
