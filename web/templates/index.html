@@ -75,6 +75,17 @@
       box-shadow:0 0 18px color-mix(in srgb, var(--accent) 55%, transparent); animation: breathe 5.5s ease-in-out infinite; }
     .brand-name { font-size:16px; font-weight:800; letter-spacing:.04em; white-space:nowrap; }
     .brand-tag { font-size:12px; color:var(--muted); white-space:nowrap; }
+    /* Contextual Home/Back: a circular button shown ONLY off-Today or inside a drill-in (Wolt's home-off-home) */
+    .header-left { display:flex; align-items:center; gap:10px; min-width:0; }
+    .ctx-back { flex:none; width:40px; height:40px; border-radius:50%; display:inline-flex; align-items:center; justify-content:center;
+      background:var(--field); border:1px solid var(--line); color:var(--ink); box-shadow:none; padding:0;
+      animation: rise .2s cubic-bezier(.2,.7,.2,1) both; }
+    .ctx-back:hover { filter:none; box-shadow:none;
+      border-color: color-mix(in srgb, var(--accent) 45%, transparent); background: color-mix(in srgb, var(--accent) 9%, var(--field)); }
+    .ctx-back svg { width:20px; height:20px; stroke:currentColor; fill:none; stroke-width:2.2; }
+    .ctx-back:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+    /* on a phone, free up room when the back button is present by dropping the long wordmark (the dot stays) */
+    @media (max-width: 560px) { .ctx-back:not([hidden]) ~ .brand .brand-name { display:none; } }
     #who { display:flex; align-items:center; gap:10px; }
     #who-name { white-space:nowrap; font-weight:700; }
     /* Corner account menu: avatar-in-header -> identity + quick actions (Wolt-style upper-corner menu) */
@@ -425,11 +436,14 @@
 </head>
 <body>
   <header>
-    <a class="brand" href="/" aria-label="Work Smarter, Not Harder — home">
-      <span class="brand-dot" aria-hidden="true"></span>
-      <span class="brand-name">Work Smarter, Not Harder</span>
-      <span class="brand-tag">readiness, every morning</span>
-    </a>
+    <div class="header-left">
+      <button id="ctx-back" class="ctx-back" type="button" hidden aria-label="Back"></button>
+      <a class="brand" href="/" aria-label="Work Smarter, Not Harder — home">
+        <span class="brand-dot" aria-hidden="true"></span>
+        <span class="brand-name">Work Smarter, Not Harder</span>
+        <span class="brand-tag">readiness, every morning</span>
+      </a>
+    </div>
     <nav id="topnav" class="topnav" role="tablist" aria-label="Sections">
       <button class="navlink active" data-screen="today" role="tab" aria-selected="true">Today</button>
       <button class="navlink" data-screen="history" role="tab" aria-selected="false">History</button>
@@ -822,6 +836,7 @@
       $("app-view").hidden = view !== "app";
       $("who").hidden = view !== "app";
       $("topnav").classList.toggle("nav-on", view === "app");   // desktop top-nav shows only when signed in
+      if (view !== "app") $("ctx-back").hidden = true;          // no Home/Back on the logged-out auth screen
     }
 
     // showView("auth") alone re-shows whatever sub-form (and values) were last on screen — e.g.
@@ -854,10 +869,36 @@
       if (name === "messages") openMessages();
       else { clearInterval(dmThreadTimer); dmThreadTimer = null; }   // stop the 5s thread poll when leaving Chat
       updateCheckinCapsule();                                       // capsule only shows off-Today when a check-in is due
+      updateCtxBack();                                              // Home/Back button reflects the current screen
     }
     document.querySelectorAll("[data-screen]").forEach((t) => t.addEventListener("click", () => showScreen(t.dataset.screen)));
     // the Chat unread "pulse" now lives on both navs (mobile bottom pill + desktop top-nav) -> toggle every .dm-dot
     function setDmDot(on) { document.querySelectorAll(".dm-dot").forEach((d) => { d.hidden = !on; }); }
+
+    // ---- Contextual Home/Back: a HOME button off-Today, a BACK chevron inside a drill-in (forum post /
+    // DM thread), nothing on Today — the "home button only when not home" pattern (Wolt). ----
+    const CTX_BACK_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>';
+    const CTX_HOME_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11l9-8 9 8M5 10v10h5v-6h4v6h5V10"/></svg>';
+    function ctxBackTarget() {
+      if (!$("forum-detail").hidden) return "post";        // a forum post is open -> back to the list
+      if (!$("dm-thread-view").hidden) return "thread";    // a DM thread is open -> back to conversations
+      if (currentScreen !== "today") return "home";        // a non-Today section -> home (Today)
+      return null;                                          // on Today -> nothing to go back to
+    }
+    function updateCtxBack() {
+      const t = ctxBackTarget(), btn = $("ctx-back");
+      btn.hidden = !t;
+      if (!t) return;
+      btn.innerHTML = t === "home" ? CTX_HOME_ICON : CTX_BACK_ICON;
+      btn.setAttribute("aria-label", t === "home" ? "Go to Today" : "Back");
+    }
+    $("ctx-back").addEventListener("click", () => {
+      const t = ctxBackTarget();
+      if (t === "post") closePost();
+      else if (t === "thread") closeThread();
+      else showScreen("today");
+      updateCtxBack();
+    });
 
     // ---- "Check-in due" capsule: a floating nudge shown ONLY when today's check-in is missing AND you're not
     // already on Today (where the form lives). Tap -> jump to the form. (Wolt's 'shown-only-when-relevant' capsule.)
@@ -1309,6 +1350,7 @@
       const p = r.data.post;
       currentPost = p;
       box.hidden = false;
+      updateCtxBack();                                       // a post is open -> show the Back chevron
       box.innerHTML =
         '<div class="card detail">'
         + '<button class="ghost close" onclick="closePost()" aria-label="Close">✕</button>'
@@ -1339,7 +1381,7 @@
       });
     }
 
-    function closePost() { $("forum-detail").hidden = true; currentPostId = null; currentPost = null; }
+    function closePost() { $("forum-detail").hidden = true; currentPostId = null; currentPost = null; updateCtxBack(); }
 
     async function deletePost() {
       if (!currentPost) return;
@@ -1425,6 +1467,7 @@
     async function openThread(peer) {
       dmPeer = peer;
       $("dm-list-view").hidden = true; $("dm-thread-view").hidden = false;
+      updateCtxBack();                                       // a thread is open -> show the Back chevron
       await renderThread();                     // renders messages AND sets the peer header from the resolved name
       $("dm-reply").focus();
       clearInterval(dmThreadTimer); dmThreadTimer = setInterval(renderThread, 15000);  // backstop; SSE pushes replies instantly
@@ -1452,6 +1495,7 @@
       clearInterval(dmThreadTimer); dmThreadTimer = null; dmPeer = null;
       $("dm-thread-view").hidden = true; $("dm-list-view").hidden = false;
       loadConversations();
+      updateCtxBack();                                       // back out of the thread -> Home button (or hidden)
     }
 
     onSubmit("dm-new-form", async (f) => {

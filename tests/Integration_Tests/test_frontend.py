@@ -263,3 +263,14 @@ def test_responsive_dual_nav_present(client):
     assert 'document.querySelectorAll("[data-screen]")' in html    # showScreen + clicks drive both navs
     assert "function setDmDot(" in html                            # the Chat unread pulse toggles on both navs
     assert ".topnav.nav-on" in html                                # top-nav appears only when signed in
+
+
+def test_context_home_back_present_and_wired(client):
+    # Wolt's 'home button only when not home': a contextual header button that shows a Home icon off-Today
+    # and a Back chevron inside a drill-in (forum post / DM thread), and is hidden on Today (nothing to go back to).
+    html = client.get("/").get_data(as_text=True)
+    assert 'id="ctx-back"' in html
+    assert "function ctxBackTarget(" in html and "function updateCtxBack(" in html
+    assert '!$("forum-detail").hidden' in html and '!$("dm-thread-view").hidden' in html   # drill-in detection
+    assert 'currentScreen !== "today"' in html                     # off-Today -> Home
+    assert html.count("updateCtxBack()") >= 5                       # wired into showScreen + openPost/closePost + open/closeThread
