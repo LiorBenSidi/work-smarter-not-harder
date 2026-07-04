@@ -27,6 +27,7 @@ services:
       SMTP_STARTTLS: ${SMTP_STARTTLS:-1}
       MAIL_FROM: "${MAIL_FROM:-Work Smarter, Not Harder <no-reply@worksmarter.local>}"
       APP_BASE_URL: ${APP_BASE_URL:-http://localhost:8000} # public origin baked into reset links in emails
+      RESET_TOKEN_MAX_AGE: ${RESET_TOKEN_MAX_AGE:-1800}    # password-reset link lifetime (seconds; default 30 min)
       OTP_ENABLED: ${OTP_ENABLED:-1}                       # 0 -> one-step login (no 2FA code)
       OTP_TTL_SECONDS: ${OTP_TTL_SECONDS:-600}
       OTP_MAX_ATTEMPTS: ${OTP_MAX_ATTEMPTS:-5}
