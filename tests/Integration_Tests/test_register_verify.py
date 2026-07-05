@@ -63,3 +63,20 @@ def test_register_resend_reissues_a_working_code(verify_client):
     body = verify_client.post("/register/resend", json={}).get_json()
     assert body["status"] == "code_sent" and "dev_code" in body
     assert verify_client.post("/register/verify", json={"code": body["dev_code"]}).status_code == 201
+
+
+def test_register_409_when_email_race_beats_the_by_email_check(make_client, auth_module):
+    # The by_email pre-check can MISS under a race; the users.email unique index then rejects the insert and
+    # create_user raises DuplicateEmailError. The route must turn that into a 409 (not a 503, not a retry
+    # loop). Modelled with a store whose by_email misses but whose add raises — exactly the real race.
+    class _RaceUsers:
+        def by_email(self, email):
+            return None                                          # the pre-check misses (the race)
+
+        def add(self, *a, **k):
+            raise auth_module.DuplicateEmailError("x@e.com")     # the unique index rejects the second insert
+
+    c = make_client(_RaceUsers())
+    r = c.post("/register", json={"username": "alex", "password": PW, "email": "x@e.com"})
+    assert r.status_code == 409
+    assert "already exists" in r.get_json()["error"]

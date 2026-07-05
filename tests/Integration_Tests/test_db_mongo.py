@@ -59,6 +59,22 @@ def test_users_roundtrip_and_dedupe(db_mod, real_db):
     assert db_mod.get_user(real_db, "alice") == {"username": "alice", "password_hash": "h1", "email": None, "display_name": "alice"}  # no _id
 
 
+def test_email_is_unique_across_handles(db_mod, real_db):
+    # One email = one account (login identity): a DIFFERENT handle claiming an already-registered email is
+    # rejected by the partial-unique users.email index -> create_user raises DuplicateEmailError (so the
+    # route 409s once instead of the handle loop hammering every suffix against the same taken email).
+    db_mod.ensure_indexes(real_db)
+    assert db_mod.create_user(real_db, "alex", "h1", "x@e.com") is True
+    with pytest.raises(db_mod.DuplicateEmailError):
+        db_mod.create_user(real_db, "alex-2", "h2", "x@e.com")           # same email, new handle -> rejected
+    assert db_mod.create_user(real_db, "dana", "h3", "y@e.com") is True  # a different email is fine
+    # PARTIAL filter: multiple emailless accounts don't collide on a "missing" email
+    assert db_mod.create_user(real_db, "noemail1", "h4") is True
+    assert db_mod.create_user(real_db, "noemail2", "h5") is True
+    # a duplicate HANDLE is still the plain False contract (not the email path)
+    assert db_mod.create_user(real_db, "alex", "h9", "z@e.com") is False
+
+
 def test_create_user_stores_and_returns_the_display_name(db_mod, real_db):
     # the identity model: the handle is unique; the display name is stored separately (need not be unique)
     # and comes back on get_user. A second account may share the display name under a different handle.

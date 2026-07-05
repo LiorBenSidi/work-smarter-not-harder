@@ -17,6 +17,7 @@ from itsdangerous import BadData, URLSafeTimedSerializer
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from ratelimit import limiter
+from services.db import DuplicateEmailError
 from services.email import send_email
 from services.identity import display_name
 
@@ -152,6 +153,8 @@ def register():
                 body["dev_code"] = dev_code
             return jsonify(body), 200
         handle = _allocate_handle(display, pw_hash, email)
+    except DuplicateEmailError:                            # a race beat the by_email check to the insert
+        return jsonify(error="an account with this email already exists"), 409
     except Exception:
         logger.exception("user store unavailable during register")
         return jsonify(error="user store unavailable"), 503
@@ -187,6 +190,9 @@ def register_verify():
             session.pop("pending_reg", None)
             return jsonify(error="an account with this email already exists"), 409
         handle = _allocate_handle(pending["display"], pending["pw_hash"], pending["email"])
+    except DuplicateEmailError:                            # a race registered the email during the pending window
+        session.pop("pending_reg", None)
+        return jsonify(error="an account with this email already exists"), 409
     except Exception:
         logger.exception("user store unavailable during register verify")
         return jsonify(error="user store unavailable"), 503
