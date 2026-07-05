@@ -49,7 +49,7 @@ class _FakeColl:
         self.indexes = []
         self.last_limit = None      # the n from the most recent find(...).limit(n), for read-bound assertions
 
-    def create_index(self, key, unique=False):
+    def create_index(self, key, unique=False, **kwargs):   # **kwargs tolerates partialFilterExpression etc.
         self.indexes.append((key, unique))
 
     def _match(self, doc, filt):
@@ -145,6 +145,7 @@ def db():
 def test_ensure_indexes_creates_unique_constraints(db_mod, db):
     db_mod.ensure_indexes(db)
     assert ("username", True) in db.users.indexes            # unique username
+    assert ("email", True) in db.users.indexes               # unique email (partial) — one account per email
     assert ("id", True) in db.forum_posts.indexes            # unique forum post id
     assert ("username", True) in db.profiles.indexes         # one profile per user
     assert ("username", False) in db.analysis_history.indexes  # perf (non-unique) per-user history scan

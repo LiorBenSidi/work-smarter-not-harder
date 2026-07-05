@@ -24,6 +24,18 @@ _client = None
 _client_lock = threading.Lock()
 
 
+class DuplicateEmailError(Exception):
+    """The email is already registered to a DIFFERENT handle — the ``users.email`` unique index rejected
+    the insert. Distinct from a handle collision (which just tries the next suffix), so the register route
+    turns it into a 409 instead of retrying. See ``ensure_indexes`` + ``create_user``."""
+
+
+def _dup_key_is_email(exc):
+    """True iff a ``DuplicateKeyError`` came from the ``users.email`` unique index (vs the username one)."""
+    key = (getattr(exc, "details", None) or {}).get("keyPattern") or {}
+    return "email" in key
+
+
 def ensure_indexes(db):
     """Create the indexes the CRUD relies on (idempotent — safe to call repeatedly).
 
@@ -34,6 +46,11 @@ def ensure_indexes(db):
     a full-collection scan as history grows.
     """
     db.users.create_index("username", unique=True)
+    # One account per email (the login identity). PARTIAL so the seed/legacy users WITHOUT an email don't
+    # all collide on a shared "missing" value — only real emails are constrained. This is what makes the
+    # register `by_email` check hold under a race: two simultaneous signups for the same email can't both
+    # insert (the loser's insert raises -> create_user surfaces DuplicateEmailError -> the route 409s).
+    db.users.create_index("email", unique=True, partialFilterExpression={"email": {"$exists": True}})
     db.forum_posts.create_index("id", unique=True)
     db.profiles.create_index("username", unique=True)
     db.analysis_history.create_index("username")
@@ -144,7 +161,10 @@ def create_user(db, username, password_hash, email=None, display_name=None):
     defaulting to the handle when omitted (seed/legacy callers). The upsert + unique index on
     ``users.username`` make this atomic: when two registrations of the same handle race, exactly one
     insert wins and the loser's upsert raises ``DuplicateKeyError`` — caught here and reported as False,
-    honouring the contract under concurrency. ``email`` is stored when given (registration provides it).
+    honouring the contract under concurrency. ``email`` is stored when given (registration provides it); if
+    a DIFFERENT handle already owns that email, the ``users.email`` unique index rejects the insert and this
+    raises ``DuplicateEmailError`` (so the caller 409s once instead of the handle loop retrying every suffix
+    against the same taken email).
     """
     doc = {"username": username, "password_hash": password_hash,
            "display_name": display_name if display_name is not None else username}
@@ -152,8 +172,10 @@ def create_user(db, username, password_hash, email=None, display_name=None):
         doc["email"] = email
     try:
         result = db.users.update_one({"username": username}, {"$setOnInsert": doc}, upsert=True)
-    except DuplicateKeyError:
-        return False
+    except DuplicateKeyError as exc:
+        if email is not None and _dup_key_is_email(exc):
+            raise DuplicateEmailError(email)      # email taken by another handle -> 409, don't retry suffixes
+        return False                              # a handle collision -> the caller tries the next suffix
     return result.upserted_id is not None
 
 
