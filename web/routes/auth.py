@@ -17,6 +17,7 @@ from itsdangerous import BadData, URLSafeTimedSerializer
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from ratelimit import limiter
+from services.db import DuplicateEmailError
 from services.email import send_email
 from services.identity import display_name
 
@@ -152,6 +153,8 @@ def register():
                 body["dev_code"] = dev_code
             return jsonify(body), 200
         handle = _allocate_handle(display, pw_hash, email)
+    except DuplicateEmailError:                            # a race beat the by_email check to the insert
+        return jsonify(error="an account with this email already exists"), 409
     except Exception:
         logger.exception("user store unavailable during register")
         return jsonify(error="user store unavailable"), 503
@@ -166,27 +169,32 @@ def register_verify():
     """Second registration step: confirm the emailed code, THEN create the account and log the user straight
     in (a verified code proves email ownership). The pending signup comes from the SESSION, never the body."""
     pending = session.get("pending_reg")
+    # `restart=True` marks a TERMINAL response (the pending signup is gone) so the client routes back to the
+    # register tab instead of stranding the user on a dead code form; its absence = recoverable (stay + retry).
     if not pending:
-        return jsonify(error="no registration in progress — please start again"), 400
+        return jsonify(error="no registration in progress — please start again", restart=True), 400
     data = request.get_json(silent=True) or {}
     code = data.get("code")
     if not isinstance(code, str):
         return jsonify(error="enter the 6-digit code from your email"), 400
     if time.time() > pending.get("expires", 0):
         session.pop("pending_reg", None)
-        return jsonify(error="this code has expired — please register again"), 400
+        return jsonify(error="this code has expired — please register again", restart=True), 400
     if pending.get("attempts", 0) >= current_app.config["OTP_MAX_ATTEMPTS"]:
         session.pop("pending_reg", None)
-        return jsonify(error="too many attempts — please register again"), 429
+        return jsonify(error="too many attempts — please register again", restart=True), 429
     if not check_password_hash(pending["code_hash"], code.strip()):
         pending["attempts"] = pending.get("attempts", 0) + 1
-        session["pending_reg"] = pending                   # persist the bumped attempt count
+        session["pending_reg"] = pending                   # persist the bumped attempt count (recoverable — stay)
         return jsonify(error="that code isn't right — check your email and try again"), 400
     try:
         if _users().by_email(pending["email"]):            # a race: the email got registered while pending
             session.pop("pending_reg", None)
-            return jsonify(error="an account with this email already exists"), 409
+            return jsonify(error="an account with this email already exists", restart=True), 409
         handle = _allocate_handle(pending["display"], pending["pw_hash"], pending["email"])
+    except DuplicateEmailError:                            # a race registered the email during the pending window
+        session.pop("pending_reg", None)
+        return jsonify(error="an account with this email already exists", restart=True), 409
     except Exception:
         logger.exception("user store unavailable during register verify")
         return jsonify(error="user store unavailable"), 503
@@ -203,7 +211,7 @@ def register_resend():
     """Re-issue the registration code from the pending session (nothing is re-sent from the client)."""
     pending = session.get("pending_reg")
     if not pending:
-        return jsonify(error="no registration in progress — please start again"), 400
+        return jsonify(error="no registration in progress — please start again", restart=True), 400
     dev_code = _issue_reg_code(pending["display"], pending["pw_hash"], pending["email"])
     body = {"status": "code_sent", "expires_in": current_app.config["OTP_TTL_SECONDS"]}
     if dev_code is not None:
@@ -270,8 +278,10 @@ def verify_otp():
     signed 'remember this browser' cookie is set so the next login skips OTP.
     """
     username = session.get("pending_otp_user")
+    # `restart=True` marks a TERMINAL response (the challenge is gone) so the client routes back to the login
+    # tab instead of stranding the user on a dead code form; its absence = recoverable (stay + retry / resend).
     if not username:
-        return jsonify(error="no verification in progress — please log in again"), 400
+        return jsonify(error="no verification in progress — please log in again", restart=True), 400
     data = request.get_json(silent=True) or {}
     code = data.get("code")
     if not isinstance(code, str):
@@ -286,21 +296,21 @@ def verify_otp():
         return jsonify(error="user store unavailable"), 503
     if not challenge:
         session.pop("pending_otp_user", None)
-        return jsonify(error="no verification in progress — please log in again"), 400
+        return jsonify(error="no verification in progress — please log in again", restart=True), 400
     if time.time() > challenge["expires_at"]:
         _users().clear_otp(username)
         session.pop("pending_otp_user", None)
-        return jsonify(error="that code has expired — please log in again"), 400
+        return jsonify(error="that code has expired — please log in again", restart=True), 400
     if challenge["attempts"] >= max_attempts:
         _users().clear_otp(username)
         session.pop("pending_otp_user", None)
-        return jsonify(error="too many attempts — please log in again"), 429
+        return jsonify(error="too many attempts — please log in again", restart=True), 429
     if not check_password_hash(challenge["otp_hash"], code):
         attempts = _users().bump_otp_attempts(username)
         if attempts >= max_attempts:
             _users().clear_otp(username)
             session.pop("pending_otp_user", None)
-            return jsonify(error="too many attempts — please log in again"), 429
+            return jsonify(error="too many attempts — please log in again", restart=True), 429
         return jsonify(error="incorrect code", attempts_left=max(0, max_attempts - attempts)), 401
 
     # Correct — consume the one-time challenge and promote the pending session to a real login.
@@ -325,7 +335,7 @@ def resend_otp():
     resend a challenge they themselves started, on the browser that started it."""
     username = session.get("pending_otp_user")
     if not username:
-        return jsonify(error="no verification in progress — please log in again"), 400
+        return jsonify(error="no verification in progress — please log in again", restart=True), 400
     try:
         user = _users().get(username) or {}
         dev_code = _issue_otp(username, user.get("email"))

@@ -1102,12 +1102,32 @@
       else { flash("login-flash", (r.data && r.data.error) || "Login failed"); }
     });
 
+    // On a verify/resend FAILURE: if the server ENDED this verification (restart:true — code expired, locked
+    // out, email now taken, or the session is gone), route back to the register/login tab instead of stranding
+    // the user on a dead code form whose Resend would just 400. Otherwise (a wrong code, a transient store
+    // error) stay on the code form and let them retry / resend.
+    function otpVerifyFailed(r) {
+      const msg = (r.data && r.data.error) || "Something went wrong — please try again.";
+      if (r.data && r.data.restart) {
+        stopOtpTimers();
+        const tab = otpMode === "register" ? "register" : "login";
+        showTab(tab);
+        flash(tab + "-flash", msg, "error");
+      } else {
+        // Surface the server's attempts_left countdown (a wrong login code) so the user gets a heads-up
+        // before the account locks out, instead of a bare "incorrect code" then a sudden lockout.
+        const left = r.data && r.data.attempts_left;
+        const full = typeof left === "number" ? msg + " — " + left + (left === 1 ? " try" : " tries") + " left" : msg;
+        flash("otp-flash", full);
+      }
+    }
+
     onSubmit("otp-form", async (f) => {
       const path = otpMode === "register" ? "/register/verify" : "/verify-otp";
       const body = otpMode === "register" ? { code: f.code.value } : { code: f.code.value, remember: $("otp-remember").checked };
       const r = await api(path, { method: "POST", body });
       if (r.ok) { dbg(otpMode + " verified -> signing in"); enterApp(r.data.username, r.data.display_name); }
-      else { flash("otp-flash", (r.data && r.data.error) || "Verification failed"); }
+      else { otpVerifyFailed(r); }
     });
 
     // ---- OTP: live countdown to code-expiry + Resend unlocked after 30s (like a real service) ----
@@ -1153,7 +1173,7 @@
         startOtpTimers(r.data.expires_in);
         flashOtpReset();                            // highlight the refreshed countdown
         setTimeout(() => $("otp-code").focus(), 0);
-      } else { flash("otp-flash", (r.data && r.data.error) || "Could not resend the code"); }
+      } else { otpVerifyFailed(r); }                // no pending session (restart) -> route back, don't strand
     });
 
     onSubmit("register-form", async (f) => {
@@ -1524,11 +1544,15 @@
     let currentUser = null;
 
     let forumPosts = [], forumSort = "recent";
+    // Supersede-guards: a slower OLDER re-render must not overwrite a newer one. vote()/voteComment() fire
+    // openPost()+loadForum() un-awaited, so rapid up/down clicks launch overlapping fetches whose responses
+    // can arrive out of order and momentarily paint a stale score (#SPA3). The latest call always wins.
+    let openPostSeq = 0, forumLoadSeq = 0;
     async function loadForum() {
-      const u = currentUser;
+      const u = currentUser, seq = ++forumLoadSeq;
       const el = $("forum-list"); el.innerHTML = '<p class="muted">Loading…</p>';
       const r = await api("/forum/posts");
-      if (sessionChanged(u, "loadForum")) return;            // stale session -> don't paint another user's forum view
+      if (sessionChanged(u, "loadForum") || seq !== forumLoadSeq) return;   // stale session OR superseded -> don't paint
       if (!r.ok) { el.innerHTML = '<p class="flash error">Could not load the forum.</p>'; return; }
       forumPosts = (r.data && r.data.posts) || [];
       renderForumList();                                     // the visible list applies the active sort/filter
@@ -1555,10 +1579,10 @@
     });
 
     async function openPost(id) {
-      const u = currentUser;
+      const u = currentUser, seq = ++openPostSeq;
       currentPostId = id;
       const r = await api("/forum/posts/" + id);
-      if (sessionChanged(u, "openPost")) return;             // stale session -> don't open a post into a new user's view
+      if (sessionChanged(u, "openPost") || seq !== openPostSeq) return;   // stale session OR a newer open/vote superseded this
       const box = $("forum-detail");
       if (!r.ok || !r.data || !r.data.post) { box.hidden = true; return; }
       const p = r.data.post;
@@ -1799,7 +1823,9 @@
       if (!items.length) { el.innerHTML = '<p class="muted">No new activity yet.</p>'; btn.hidden = true; return; }
       el.innerHTML = items.map((n) =>
         '<div class="dm-row act' + (n.read ? "" : " unread") + '">' + avatarHtml(n.actor || "·", 40)
-        + '<div class="dm-main"><div class="dm-name">' + escapeHtml(n.text || "") + '</div>'
+        // compose "{live actor} {text}" — the actor is re-resolved to the current display name each list,
+        // and the stored text is name-less, so a rename never leaves a stale name (F1).
+        + '<div class="dm-main"><div class="dm-name">' + escapeHtml(((n.actor ? n.actor + " " : "") + (n.text || "")).trim()) + '</div>'
         + '<div class="dm-last">' + escapeHtml(timeAgo(n.created_at)) + '</div></div></div>'
       ).join("");
       btn.hidden = !items.some((n) => !n.read);
