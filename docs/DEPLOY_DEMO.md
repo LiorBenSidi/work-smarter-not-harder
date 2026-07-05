@@ -80,9 +80,9 @@ the VM (instructor's cloud-init, R6.3); we use a dedicated deploy key, not a per
 
 **H — the monitor's down→up.** Trigger it live:
 ```bash
-ssh -i ~/.ssh/deploy_key deploy@$SSH_HOST "cd ~/app && docker compose -f docker-compose.prod.yml stop web"
+ssh -i ~/.ssh/deploy_key azureuser@$SSH_HOST "cd ~/app && docker compose -f docker-compose.prod.yml stop web"
 #   → within one interval UptimeRobot flips DOWN + emails you
-ssh -i ~/.ssh/deploy_key deploy@$SSH_HOST "cd ~/app && docker compose -f docker-compose.prod.yml start web"
+ssh -i ~/.ssh/deploy_key azureuser@$SSH_HOST "cd ~/app && docker compose -f docker-compose.prod.yml start web"
 #   → it recovers to UP
 ```
 Show the UptimeRobot status page + the alert email (H).

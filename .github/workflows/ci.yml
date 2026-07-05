@@ -119,6 +119,10 @@ jobs:
       group: azure-deploy-${{ github.ref }}
       cancel-in-progress: false     # never interrupt an in-flight deploy — queue the next push instead of racing the VM
     runs-on: ubuntu-latest
+    env:
+      # The VM login user. The instructor's Azure VMs use `azureuser` (it replaced the old `deploy` name);
+      # overridable via a repo variable if a future VM differs — same pattern as SSH_HOST / SITE_ADDRESS.
+      DEPLOY_USER: ${{ vars.SSH_USER || 'azureuser' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -164,10 +168,10 @@ jobs:
         env:
           HOST: ${{ vars.SSH_HOST }}
         run: |
-          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=accept-new "deploy@$HOST" "mkdir -p ~/app"
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=accept-new "$DEPLOY_USER@$HOST" "mkdir -p ~/app"
           scp -i ~/.ssh/deploy_key -o StrictHostKeyChecking=accept-new \
-            docker-compose.prod.yml Caddyfile prod.env "deploy@$HOST:~/app/"
-          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=accept-new "deploy@$HOST" "mv ~/app/prod.env ~/app/.env"
+            docker-compose.prod.yml Caddyfile prod.env "$DEPLOY_USER@$HOST:~/app/"
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=accept-new "$DEPLOY_USER@$HOST" "mv ~/app/prod.env ~/app/.env"
 
       - name: Deploy — the VM PULLS from GHCR and runs; record the previous SHA for rollback (R5.2)
         id: deploy
@@ -175,9 +179,9 @@ jobs:
           HOST: ${{ vars.SSH_HOST }}
         run: |
           # the last-good SHA (empty on the first deploy) — the rollback target if the health check fails
-          PREV=$(ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=accept-new "deploy@$HOST" "cat ~/app/.last_good_sha 2>/dev/null || true" || true)
+          PREV=$(ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=accept-new "$DEPLOY_USER@$HOST" "cat ~/app/.last_good_sha 2>/dev/null || true" || true)
           echo "prev=$PREV" >> "$GITHUB_OUTPUT"
-          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=accept-new "deploy@$HOST" \
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=accept-new "$DEPLOY_USER@$HOST" \
             "cd ~/app && docker compose -f docker-compose.prod.yml pull && \
              docker compose -f docker-compose.prod.yml up -d --remove-orphans"   # idempotent (R5.3); restart policy => reboot-safe (R5.4)
 
@@ -192,7 +196,7 @@ jobs:
         if: success()
         env:
           HOST: ${{ vars.SSH_HOST }}
-        run: ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=accept-new "deploy@$HOST" "printf '%s' '${GITHUB_SHA::7}' > ~/app/.last_good_sha"
+        run: ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=accept-new "$DEPLOY_USER@$HOST" "printf '%s' '${GITHUB_SHA::7}' > ~/app/.last_good_sha"
 
       - name: Roll back to the previous SHA on an unhealthy deploy (R8.2)
         if: failure() && steps.deploy.outputs.prev != ''
@@ -201,7 +205,7 @@ jobs:
           PREV: ${{ steps.deploy.outputs.prev }}
         run: |
           echo "::warning::health check failed — rolling the VM back to ${PREV}"
-          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=accept-new "deploy@$HOST" \
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=accept-new "$DEPLOY_USER@$HOST" \
             "cd ~/app && sed -i 's/^IMAGE_TAG=.*/IMAGE_TAG=${PREV}/' .env && \
              docker compose -f docker-compose.prod.yml pull && \
              docker compose -f docker-compose.prod.yml up -d --remove-orphans"
