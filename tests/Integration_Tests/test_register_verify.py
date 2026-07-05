@@ -80,3 +80,17 @@ def test_register_409_when_email_race_beats_the_by_email_check(make_client, auth
     r = c.post("/register", json={"username": "alex", "password": PW, "email": "x@e.com"})
     assert r.status_code == 409
     assert "already exists" in r.get_json()["error"]
+
+
+def test_register_verify_terminal_errors_signal_restart(verify_client):
+    # A wrong code is recoverable (400, no restart -> stay); a lockout and a missing pending registration are
+    # TERMINAL (restart -> the client routes back to register instead of stranding a dead code form).
+    _start(verify_client)
+    wrong = verify_client.post("/register/verify", json={"code": "000000"})
+    assert wrong.status_code == 400 and not wrong.get_json().get("restart")           # recoverable -> stay
+    for _ in range(4):
+        verify_client.post("/register/verify", json={"code": "000000"})
+    locked = verify_client.post("/register/verify", json={"code": "000000"})
+    assert locked.status_code == 429 and locked.get_json().get("restart") is True     # terminal -> route back
+    gone = verify_client.post("/register/verify", json={"code": "000000"})            # pending now cleared
+    assert gone.status_code == 400 and gone.get_json().get("restart") is True
