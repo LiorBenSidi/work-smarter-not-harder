@@ -140,3 +140,21 @@ def test_otp_is_off_under_testing(client):
     client.post("/register", json={"username": "alice", "password": PW, "email": "alice@example.com"})
     r = client.post("/login", json={"username": "alice", "password": PW}).get_json()
     assert r["status"] == "logged in" and "dev_otp" not in r
+
+
+def test_verify_otp_terminal_errors_signal_restart(otp_client):
+    # A wrong code is recoverable (401, no restart -> the client stays on the code form); a lockout is
+    # TERMINAL (429, restart -> the client routes back to login instead of stranding a dead code form).
+    _register(otp_client)
+    _login(otp_client)
+    wrong = otp_client.post("/verify-otp", json={"code": "000000"})
+    assert wrong.status_code == 401 and not wrong.get_json().get("restart")          # recoverable -> stay
+    for _ in range(3):
+        otp_client.post("/verify-otp", json={"code": "000000"})
+    locked = otp_client.post("/verify-otp", json={"code": "000000"})
+    assert locked.status_code == 429 and locked.get_json().get("restart") is True    # terminal -> route back
+
+
+def test_verify_otp_without_a_pending_login_signals_restart(otp_client):
+    r = otp_client.post("/verify-otp", json={"code": "000000"})                       # no pending challenge
+    assert r.status_code == 400 and r.get_json().get("restart") is True

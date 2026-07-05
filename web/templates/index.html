@@ -1102,12 +1102,28 @@
       else { flash("login-flash", (r.data && r.data.error) || "Login failed"); }
     });
 
+    // On a verify/resend FAILURE: if the server ENDED this verification (restart:true — code expired, locked
+    // out, email now taken, or the session is gone), route back to the register/login tab instead of stranding
+    // the user on a dead code form whose Resend would just 400. Otherwise (a wrong code, a transient store
+    // error) stay on the code form and let them retry / resend.
+    function otpVerifyFailed(r) {
+      const msg = (r.data && r.data.error) || "Something went wrong — please try again.";
+      if (r.data && r.data.restart) {
+        stopOtpTimers();
+        const tab = otpMode === "register" ? "register" : "login";
+        showTab(tab);
+        flash(tab + "-flash", msg, "error");
+      } else {
+        flash("otp-flash", msg);
+      }
+    }
+
     onSubmit("otp-form", async (f) => {
       const path = otpMode === "register" ? "/register/verify" : "/verify-otp";
       const body = otpMode === "register" ? { code: f.code.value } : { code: f.code.value, remember: $("otp-remember").checked };
       const r = await api(path, { method: "POST", body });
       if (r.ok) { dbg(otpMode + " verified -> signing in"); enterApp(r.data.username, r.data.display_name); }
-      else { flash("otp-flash", (r.data && r.data.error) || "Verification failed"); }
+      else { otpVerifyFailed(r); }
     });
 
     // ---- OTP: live countdown to code-expiry + Resend unlocked after 30s (like a real service) ----
@@ -1153,7 +1169,7 @@
         startOtpTimers(r.data.expires_in);
         flashOtpReset();                            // highlight the refreshed countdown
         setTimeout(() => $("otp-code").focus(), 0);
-      } else { flash("otp-flash", (r.data && r.data.error) || "Could not resend the code"); }
+      } else { otpVerifyFailed(r); }                // no pending session (restart) -> route back, don't strand
     });
 
     onSubmit("register-form", async (f) => {
