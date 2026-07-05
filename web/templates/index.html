@@ -1544,11 +1544,15 @@
     let currentUser = null;
 
     let forumPosts = [], forumSort = "recent";
+    // Supersede-guards: a slower OLDER re-render must not overwrite a newer one. vote()/voteComment() fire
+    // openPost()+loadForum() un-awaited, so rapid up/down clicks launch overlapping fetches whose responses
+    // can arrive out of order and momentarily paint a stale score (#SPA3). The latest call always wins.
+    let openPostSeq = 0, forumLoadSeq = 0;
     async function loadForum() {
-      const u = currentUser;
+      const u = currentUser, seq = ++forumLoadSeq;
       const el = $("forum-list"); el.innerHTML = '<p class="muted">Loading…</p>';
       const r = await api("/forum/posts");
-      if (sessionChanged(u, "loadForum")) return;            // stale session -> don't paint another user's forum view
+      if (sessionChanged(u, "loadForum") || seq !== forumLoadSeq) return;   // stale session OR superseded -> don't paint
       if (!r.ok) { el.innerHTML = '<p class="flash error">Could not load the forum.</p>'; return; }
       forumPosts = (r.data && r.data.posts) || [];
       renderForumList();                                     // the visible list applies the active sort/filter
@@ -1575,10 +1579,10 @@
     });
 
     async function openPost(id) {
-      const u = currentUser;
+      const u = currentUser, seq = ++openPostSeq;
       currentPostId = id;
       const r = await api("/forum/posts/" + id);
-      if (sessionChanged(u, "openPost")) return;             // stale session -> don't open a post into a new user's view
+      if (sessionChanged(u, "openPost") || seq !== openPostSeq) return;   // stale session OR a newer open/vote superseded this
       const box = $("forum-detail");
       if (!r.ok || !r.data || !r.data.post) { box.hidden = true; return; }
       const p = r.data.post;
