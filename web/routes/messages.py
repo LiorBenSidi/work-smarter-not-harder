@@ -111,7 +111,7 @@ def send_message():
         message = _messages().send(me, recipient, body)
         # notify the recipient (best-effort — a notification hiccup must not fail the send)
         try:
-            _notifications().add(recipient, "dm", me, me, f"New message from {display_name(me)}")
+            _notifications().add(recipient, "dm", me, me, "sent you a message")   # name-less (see forum._notify_vote)
         except Exception:
             logger.warning("could not create DM notification for %s", recipient, exc_info=True)
     except Exception:
