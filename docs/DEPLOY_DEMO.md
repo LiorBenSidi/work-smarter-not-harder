@@ -8,6 +8,20 @@ in the [README](../README.md#deployment-cicd--azure). This file is the **run-she
 
 ---
 
+## 🔀 Deploy on/off switch — how to control deploys
+
+The `deploy` job runs **only** when the `DEPLOY_ENABLED` repo variable is `'true'` **and** `SSH_HOST` is set (the VM FQDN — leave it set permanently). Toggle deploys without ever touching `SSH_HOST`:
+
+| Mode | Command | Effect |
+|---|---|---|
+| **off** (dev) | `gh variable set DEPLOY_ENABLED --body false` | pushes to `main` skip deploy → `main` stays green |
+| **on** (live) | `gh variable set DEPLOY_ENABLED --body true` | pushes to `main` auto-deploy as `azureuser` |
+| **check current mode** | `gh variable list` | shows the current `DEPLOY_ENABLED` value |
+
+`build` still runs on every `main` push (images stay current); only `deploy` is gated by the switch. To go live: flip `DEPLOY_ENABLED` to `true`, then push any change to `main` (or re-run the latest `main` Actions run — it re-reads the variable). Going live also requires the deploy key's **public** half in `azureuser`'s `~/.ssh/authorized_keys` on the instructor-provisioned VM (checklist below).
+
+---
+
 ## 0 · Pre-demo checklist (every box must be ✓)
 - [ ] GH **secrets** `SSH_PRIVATE_KEY`, `APP_SECRET_KEY` set; **variables** `SSH_HOST` (the FQDN) **and `DEPLOY_ENABLED`
       = `true`** (the deploy on/off switch — leave `false`/unset to keep `main` green during dev) — and, for the custom
