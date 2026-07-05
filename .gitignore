@@ -20,9 +20,16 @@ ENV/
 !.env.example
 *.key
 *.pem
-prod.env          # rendered by CI at deploy time from GitHub secrets — must never be committed
-*_deploy          # the SSH deploy private key (assignment §3.1) — public .pub is fine, private never
+# NOTE: .gitignore has NO inline comments — a trailing "# ..." becomes part of the pattern. Keep comments on their own line.
+# prod.env is rendered by CI at deploy time from GitHub secrets — must never be committed
+prod.env
+# the SSH deploy private key (assignment §3.1) — public .pub is fine, private never
+*_deploy
 id_ed25519*
+# any file with 'private_key' in the name (e.g. deploy_private_key.txt) — the .txt name dodges *.key / *_deploy
+*private_key*
+# never track a local .ssh/ dir accidentally dropped inside the repo
+.ssh/
 
 # Large data + trained artifacts (bake the model into the image; keep big data out of git)
 data/
