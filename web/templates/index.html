@@ -1815,7 +1815,9 @@
       if (!items.length) { el.innerHTML = '<p class="muted">No new activity yet.</p>'; btn.hidden = true; return; }
       el.innerHTML = items.map((n) =>
         '<div class="dm-row act' + (n.read ? "" : " unread") + '">' + avatarHtml(n.actor || "·", 40)
-        + '<div class="dm-main"><div class="dm-name">' + escapeHtml(n.text || "") + '</div>'
+        // compose "{live actor} {text}" — the actor is re-resolved to the current display name each list,
+        // and the stored text is name-less, so a rename never leaves a stale name (F1).
+        + '<div class="dm-main"><div class="dm-name">' + escapeHtml(((n.actor ? n.actor + " " : "") + (n.text || "")).trim()) + '</div>'
         + '<div class="dm-last">' + escapeHtml(timeAgo(n.created_at)) + '</div></div></div>'
       ).join("");
       btn.hidden = !items.some((n) => !n.read);

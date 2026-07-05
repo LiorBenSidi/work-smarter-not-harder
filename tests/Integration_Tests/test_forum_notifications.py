@@ -133,3 +133,18 @@ def test_vote_succeeds_even_if_the_notification_store_is_down(make_client, fake_
     c.post("/logout")
     _login(c, "alice")
     assert _vote(c, pid, 1).get_json()["score"] == 1  # vote still lands despite the dead notification store
+
+
+def test_vote_notification_text_is_name_less_and_survives_a_rename(forum_client):
+    # F1: the stored notification text must NOT freeze the voter's display name — a rename would desync it
+    # from the re-resolved actor. The text is name-less; the actor re-resolves to the CURRENT display name.
+    pid = _post_as(forum_client, "bob")
+    _login(forum_client, "alice")
+    _vote(forum_client, pid, 1)
+    forum_client.post("/account/display-name", json={"display_name": "Alexandra"})   # alice renames AFTER voting
+    forum_client.post("/logout")
+    _login(forum_client, "bob")
+    note = _vote_notes(forum_client)[0]
+    assert note["text"] == "upvoted your post"      # name-less (no frozen "alice")
+    assert "alice" not in note["text"].lower()
+    assert note["actor"] == "Alexandra"             # re-resolved to alice's CURRENT display name -> no desync
