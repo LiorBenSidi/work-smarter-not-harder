@@ -1114,7 +1114,11 @@
         showTab(tab);
         flash(tab + "-flash", msg, "error");
       } else {
-        flash("otp-flash", msg);
+        // Surface the server's attempts_left countdown (a wrong login code) so the user gets a heads-up
+        // before the account locks out, instead of a bare "incorrect code" then a sudden lockout.
+        const left = r.data && r.data.attempts_left;
+        const full = typeof left === "number" ? msg + " — " + left + (left === 1 ? " try" : " tries") + " left" : msg;
+        flash("otp-flash", full);
       }
     }
 
