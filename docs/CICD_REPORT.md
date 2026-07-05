@@ -23,7 +23,7 @@ monitor (R9).
 | **R3.2** tag `latest` **and** an immutable short-SHA | `-t $IMG:latest -t $IMG:<short-sha>` (`${GITHUB_SHA::7}`) | `build` job |
 | **R4.1/4.3** push to GHCR, both tags | `docker push` of both tags to `ghcr.io/<owner>/work-smarter-{web,ai}` | `build` job |
 | **R4.2** auth via built-in token, no hard-coded creds | `docker login ghcr.io` with `GITHUB_TOKEN` + `permissions: packages: write` | `build` job |
-| **R5.1** deploy over SSH after a successful push | `deploy` job: `ssh deploy@$SSH_HOST` | `deploy` job |
+| **R5.1** deploy over SSH after a successful push | `deploy` job: `ssh azureuser@$SSH_HOST` (the VM login user, via the `SSH_USER` var, default `azureuser`) | `deploy` job |
 | **R5.2** VM **pulls** the image, never builds | `docker compose -f docker-compose.prod.yml pull && up -d`; prod compose uses `image:`, no `build:`, pinned to the commit SHA via `IMAGE_TAG` (reproducible, not a moving `:latest`). *Precondition:* the GHCR packages must be **public** (see caveats) so the VM pulls without a host credential | `deploy` job, `docker-compose.prod.yml` |
 | **R5.3** idempotent redeploy | `pull && up -d` converges to the same state | `deploy` job |
 | **R5.4** survives a VM reboot | `restart: unless-stopped` on every service | `docker-compose.prod.yml` |
@@ -40,9 +40,10 @@ monitor (R9).
 
 - **Live on the next push to `main` (no external setup):** `checks` → `build` → **GHCR push** (R1–R4). GHCR needs only
   the repo's own `GITHUB_TOKEN`, so R3/R4 are demonstrable immediately.
-- **Dormant until the VM is provisioned:** the `deploy` job is **skipped** while the `SSH_HOST` variable is unset
-  (keeps `main` green), and activates automatically once the VM FQDN + `SSH_PRIVATE_KEY` + `APP_SECRET_KEY` are set.
-  R5, R7, R9, R10 then go live with no code change.
+- **Gated behind an explicit switch:** the `deploy` job is **skipped** unless BOTH `SSH_HOST` (the VM FQDN) is set
+  **and** the `DEPLOY_ENABLED` variable equals `'true'`. So `main` stays green during development (deploy off), and you
+  go live by flipping one variable — `gh variable set DEPLOY_ENABLED --body true` — with no code change (the VM FQDN +
+  `SSH_PRIVATE_KEY` + `APP_SECRET_KEY` must also be set). R5, R7, R9, R10 activate then; set it back to `false` to stop.
 
 ## Honest caveats / documented gaps
 
