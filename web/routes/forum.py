@@ -116,7 +116,10 @@ def _notify_vote(recipient, voter, value, ref, noun):
         if recent:
             return
         verb = "upvoted" if value == 1 else "downvoted"
-        _notifications().add(recipient, "vote", voter, ref, f"{display_name(voter)} {verb} your {noun}")
+        # Name-LESS text: the client composes "{live actor} {text}" at render, and the actor is re-resolved
+        # to the current display name on every list — so a voter's later rename can't leave a stale name
+        # frozen in the stored text (the F1 cross-feature desync).
+        _notifications().add(recipient, "vote", voter, ref, f"{verb} your {noun}")
     except Exception:
         logger.warning("could not create a vote notification", exc_info=True)
 

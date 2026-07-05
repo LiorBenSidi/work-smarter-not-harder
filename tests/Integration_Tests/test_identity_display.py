@@ -75,7 +75,10 @@ def test_dm_conversation_and_thread_expose_the_peer_display_name(messages_client
     assert thread["peer_name"] == "eve"
 
 
-def test_vote_notification_text_uses_the_voters_display_name(forum_client):
+def test_vote_notification_carries_the_display_name_in_the_actor_not_the_text(forum_client):
+    # The voter's identity lives in the ACTOR field (re-resolved to the current display name on every list),
+    # and the text is name-LESS — so a rename can't leave a stale name frozen in the stored text (F1). The
+    # client composes "{actor} {text}" at render.
     _register(forum_client, "poster", "poster@example.com")
     _register(forum_client, "voter", "voter@example.com")
     _login(forum_client, "poster@example.com")
@@ -84,4 +87,5 @@ def test_vote_notification_text_uses_the_voters_display_name(forum_client):
     forum_client.post("/forum/posts/" + pid + "/vote", json={"value": 1})
     _login(forum_client, "poster@example.com")
     votes = [n for n in forum_client.get("/notifications").get_json()["notifications"] if n["type"] == "vote"]
-    assert votes and votes[0]["text"] == "voter upvoted your post"
+    assert votes and votes[0]["text"] == "upvoted your post"   # name-less
+    assert votes[0]["actor"] == "voter"                        # identity in the actor (live-resolved display name)
