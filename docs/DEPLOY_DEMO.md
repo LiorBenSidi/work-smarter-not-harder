@@ -9,8 +9,9 @@ in the [README](../README.md#deployment-cicd--azure). This file is the **run-she
 ---
 
 ## 0 · Pre-demo checklist (every box must be ✓)
-- [ ] GH **secrets** `SSH_PRIVATE_KEY`, `APP_SECRET_KEY` set; **variables** `SSH_HOST` (the FQDN) — and, for the
-      custom domain, `SITE_ADDRESS` = `app.worksmarternotharder.dev`. *(Email: optional `SMTP_USER`/`SMTP_PASS`.)*
+- [ ] GH **secrets** `SSH_PRIVATE_KEY`, `APP_SECRET_KEY` set; **variables** `SSH_HOST` (the FQDN) **and `DEPLOY_ENABLED`
+      = `true`** (the deploy on/off switch — leave `false`/unset to keep `main` green during dev) — and, for the custom
+      domain, `SITE_ADDRESS` = `app.worksmarternotharder.dev`. *(Email: optional `SMTP_USER`/`SMTP_PASS`.)*
 - [ ] The deploy key's `.pub` is on the VM's `azureuser` account (sent to the instructor; `azureuser` replaced the old `deploy` name).
 - [ ] Name.com: `CNAME app → <the FQDN>` added (only if using the custom domain).
 - [x] Both GHCR packages **public** (`work-smarter-web`, `work-smarter-ai`). ✅ done.

@@ -40,9 +40,10 @@ monitor (R9).
 
 - **Live on the next push to `main` (no external setup):** `checks` → `build` → **GHCR push** (R1–R4). GHCR needs only
   the repo's own `GITHUB_TOKEN`, so R3/R4 are demonstrable immediately.
-- **Dormant until the VM is provisioned:** the `deploy` job is **skipped** while the `SSH_HOST` variable is unset
-  (keeps `main` green), and activates automatically once the VM FQDN + `SSH_PRIVATE_KEY` + `APP_SECRET_KEY` are set.
-  R5, R7, R9, R10 then go live with no code change.
+- **Gated behind an explicit switch:** the `deploy` job is **skipped** unless BOTH `SSH_HOST` (the VM FQDN) is set
+  **and** the `DEPLOY_ENABLED` variable equals `'true'`. So `main` stays green during development (deploy off), and you
+  go live by flipping one variable — `gh variable set DEPLOY_ENABLED --body true` — with no code change (the VM FQDN +
+  `SSH_PRIVATE_KEY` + `APP_SECRET_KEY` must also be set). R5, R7, R9, R10 activate then; set it back to `false` to stop.
 
 ## Honest caveats / documented gaps
 
