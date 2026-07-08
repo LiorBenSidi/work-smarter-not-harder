@@ -67,7 +67,12 @@
     @keyframes drift { from { transform: translate3d(-3%, -1%, 0) scale(1); } to { transform: translate3d(4%, 2%, 0) scale(1.08); } }
 
     header { position:sticky; top:0; z-index:30; display:flex; align-items:center; justify-content:space-between; gap:12px;
-      padding:13px 20px; border-bottom:1px solid var(--line);
+      /* Pad the sticky header for the device safe area so it never renders UNDER the status bar / notch /
+         Dynamic Island (iOS `black-translucent` overlays it; Android display cutouts do too). env(...) is 0
+         on non-notched devices, so desktop + notchless phones are unchanged. Horizontal insets cover a
+         landscape notch. Requires viewport-fit=cover (set in <head>). */
+      padding:calc(13px + env(safe-area-inset-top)) calc(20px + env(safe-area-inset-right)) 13px calc(20px + env(safe-area-inset-left));
+      border-bottom:1px solid var(--line);
       background: color-mix(in srgb, var(--bg) 58%, transparent); backdrop-filter: blur(16px) saturate(1.2); }
     .brand { display:flex; align-items:center; gap:11px; text-decoration:none; color:inherit; }
     .brand-dot { width:26px; height:26px; border-radius:50%; flex:none; display:flex; align-items:center; justify-content:center;
