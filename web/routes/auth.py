@@ -108,6 +108,8 @@ def auth_config():
     return jsonify(username_min=USERNAME_MIN, username_max=USERNAME_MAX,
                    password_min=PASSWORD_MIN, password_max=PASSWORD_MAX,
                    email_mode="live" if current_app.config.get("SMTP_HOST") else "mock",
+                   email_debug_toggle=bool(current_app.config.get("AUTH_DEBUG_EMAIL"))
+                   and not current_app.config.get("TESTING"),
                    otp_login=_otp_active(), verify_email=_register_verify_active()), 200
 
 
@@ -537,10 +539,11 @@ def forgot_password():
         token = _reset_serializer().dumps({"u": username, "h": (user.get("password_hash") or "")[-16:]})
         link = current_app.config["APP_BASE_URL"].rstrip("/") + "/?reset_token=" + token
         minutes = current_app.config["RESET_TOKEN_MAX_AGE"] // 60
+        mock = _debug_email_mock()
         send_email(current_app.config, email, "Reset your Work Smarter, Not Harder password",
                    f"Reset your password with this link (valid {minutes} min):\n\n{link}\n\n"
-                   "If you didn't request this, you can ignore this email.")
-        if not current_app.config.get("SMTP_HOST"):    # dev/mock (log backend): surface the link like dev_otp
+                   "If you didn't request this, you can ignore this email.", force_mock=mock)
+        if mock or not current_app.config.get("SMTP_HOST"):   # dev/mock (log backend): surface the link like dev_otp
             body["dev_reset_link"] = "/?reset_token=" + token   # RELATIVE -> the click stays on the current host
     # In real (SMTP) mode the body is IDENTICAL whether or not the email was registered -> no account
     # enumeration, and the link goes out solely by email. `dev_reset_link` appears ONLY with the log backend
@@ -598,6 +601,22 @@ def _register_verify_active():
     return bool(cfg.get("REGISTER_VERIFY_EMAIL")) and not cfg.get("TESTING")
 
 
+def _debug_email_mock():
+    """True iff this request may use — and asked for — the DEV email-mock override. BOTH must hold: the
+    server opted in (``AUTH_DEBUG_EMAIL`` set, and not under the test harness) AND the caller sent the
+    header ``X-Debug-Email: mock``. When true the auth code is logged + returned in the response instead
+    of emailed. Gated by the server flag so the header is inert on any deploy that hasn't opted in — it
+    can never turn a public deployment into an OTP leak."""
+    cfg = current_app.config
+    if not cfg.get("AUTH_DEBUG_EMAIL") or cfg.get("TESTING"):
+        return False
+    if request.headers.get("X-Debug-Email", "").strip().lower() == "mock":
+        logger.warning("AUTH_DEBUG_EMAIL override active: auth code returned in the response, not emailed "
+                       "(dev-only; must be OFF on any public deploy)")
+        return True
+    return False
+
+
 def _issue_reg_code(display, pw_hash, email):
     """Start email verification for a NEW signup: stash the pending account in the SESSION (this browser,
     never the DB) with a hashed code + TTL, email the code, and return the plaintext ONLY when no SMTP is
@@ -607,11 +626,12 @@ def _issue_reg_code(display, pw_hash, email):
     session["pending_reg"] = {"display": display, "email": email, "pw_hash": pw_hash,
                               "code_hash": generate_password_hash(code), "expires": time.time() + ttl, "attempts": 0}
     minutes = max(1, ttl // 60)
+    mock = _debug_email_mock()
     send_email(current_app.config, email, "Confirm your Work Smarter, Not Harder email",
                f"Your Work Smarter, Not Harder confirmation code is: {code}\n\n"
                f"Enter it to finish creating your account. It expires in {minutes} min.\n"
-               "If you didn't request this, you can ignore this email.")
-    return None if current_app.config.get("SMTP_HOST") else code
+               "If you didn't request this, you can ignore this email.", force_mock=mock)
+    return code if (mock or not current_app.config.get("SMTP_HOST")) else None
 
 
 def _issue_otp(username, email):
@@ -624,10 +644,11 @@ def _issue_otp(username, email):
     ttl = current_app.config["OTP_TTL_SECONDS"]
     _users().set_otp(username, generate_password_hash(code), time.time() + ttl)
     minutes = max(1, ttl // 60)
+    mock = _debug_email_mock()
     send_email(current_app.config, email or "(no email on file)", "Your Work Smarter, Not Harder login code",
                f"Your Work Smarter, Not Harder login code is: {code}\n\n"
-               f"It expires in {minutes} min. If this wasn't you, you can ignore this email.")
-    return None if current_app.config.get("SMTP_HOST") else code
+               f"It expires in {minutes} min. If this wasn't you, you can ignore this email.", force_mock=mock)
+    return code if (mock or not current_app.config.get("SMTP_HOST")) else None
 
 
 def _remember_serializer():

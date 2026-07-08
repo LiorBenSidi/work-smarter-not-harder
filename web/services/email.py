@@ -39,10 +39,14 @@ def _split_sender(raw):
     return "", raw                                                     # bare address (no brackets)
 
 
-def send_email(config, to, subject, body):
+def send_email(config, to, subject, body, force_mock=False):
     """Send `body` to `to`. SMTP when ``SMTP_HOST`` is configured, else the log backend. Returns
-    True if handed off (or logged), False if a configured SMTP send failed — never raises."""
-    host = config.get("SMTP_HOST")
+    True if handed off (or logged), False if a configured SMTP send failed — never raises.
+
+    ``force_mock`` (the gated dev email-mock override) forces the log backend even where SMTP is
+    configured: nothing is sent, the message (incl. the code) is only logged. The caller then returns
+    the code in its response. Off by default; the auth layer sets it only behind ``AUTH_DEBUG_EMAIL``."""
+    host = None if force_mock else config.get("SMTP_HOST")
     sender = config.get("MAIL_FROM") or "Work Smarter, Not Harder <no-reply@worksmarter.local>"
     if not host:
         logger.info("EMAIL (log backend) to=%s subject=%r\n%s", to, subject, body)
