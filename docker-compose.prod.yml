@@ -5,6 +5,10 @@
 #   On the VM:  docker compose -f docker-compose.prod.yml pull && docker compose -f docker-compose.prod.yml up -d
 #
 # Public surface is Caddy only (:80 + :443). web/ai/db stay on the internal network — same as dev.
+#
+# MEMORY (student VM ~1 GB RAM): web + ai run ONE gunicorn worker each in prod (overridden below) so the whole
+# stack fits; the images' default is 2 workers for dev/CI. The VM should ALSO have swap (see DEPLOY_DEMO.md §"VM
+# memory") — without headroom the ai worker (ML libs) OOMs, mongo's healthcheck times out, and web/caddy never start.
 services:
   caddy:                                   # the public edge: terminates TLS, auto Let's Encrypt, HTTP->HTTPS (R10)
     image: caddy:2
@@ -24,6 +28,9 @@ services:
   web:                                     # NO host port now — only Caddy reaches it, over the internal network
     image: ghcr.io/${IMAGE_OWNER:?set IMAGE_OWNER}/work-smarter-web:${IMAGE_TAG:-latest}   # CI pins the exact SHA (R5.2)
     restart: unless-stopped                # self-heal + survive a VM reboot (R5.4)
+    # PROD override: 1 gunicorn worker (image default is 2) to fit the ~1 GB VM. gthread keeps concurrency
+    # (1 worker x 4 threads = 4 concurrent I/O-bound requests) at ~half the memory. Dev/CI keep the 2-worker default.
+    command: ["gunicorn", "--bind", "0.0.0.0:5000", "--worker-class", "gthread", "--workers", "1", "--threads", "4", "--max-requests", "1000", "--max-requests-jitter", "100", "wsgi:app"]
     environment:
       SECRET_KEY: ${SECRET_KEY:?set SECRET_KEY}
       MONGO_URI: ${MONGO_URI:-mongodb://db:27017/worksmarter}
@@ -55,6 +62,10 @@ services:
   ai:                                      # internal only (OWNER: Shiri) — no host port
     image: ghcr.io/${IMAGE_OWNER:?set IMAGE_OWNER}/work-smarter-ai:${IMAGE_TAG:-latest}
     restart: unless-stopped
+    # PROD override: 1 gunicorn worker (image default is 2). Each worker loads a full copy of the ML model +
+    # scikit-learn, so 2 workers doubled the memory and OOM-killed on the ~1 GB VM. --timeout 60 tolerates a
+    # slow first inference. Shiri's image/Dockerfile is unchanged — this only overrides how prod RUNS it.
+    command: ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "1", "--timeout", "60", "app:create_app()"]
     expose:
       - "5000"
     healthcheck:
@@ -75,11 +86,13 @@ services:
     volumes:
       - mongo-data:/data/db
     healthcheck:
+      # mongosh is a heavy Node.js process; on a small VM run it less often + allow more time so transient
+      # memory pressure doesn't flap the container to "unhealthy" (which would block web from ever starting).
       test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
-      interval: 10s
-      timeout: 5s
+      interval: 30s
+      timeout: 10s
       retries: 5
-      start_period: 40s
+      start_period: 60s
 
 volumes:
   mongo-data:
