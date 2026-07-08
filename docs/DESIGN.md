@@ -38,10 +38,11 @@ One pipeline, two capabilities:
 2. **Recommendation generation** — combines the assessment + goals + program + recovery → action plan / workout / program adjustments / calories.
 
 - **Baked into the `ai` image** (`joblib.dump` → `COPY` → `joblib.load`; **pin sklearn** so the pickle loads). Never train/download at runtime.
-- **Parallelism & scaling (L7 — required; *not* a queue):**
+- **Parallelism & scaling (L7 — required):**
   - *Parallel programming in the code:* a **measured `multiprocessing`** path for a genuinely CPU-bound batch in `ai` — candidates: the recommendation engine searching many candidate plans, batch scoring, or collaborative-filtering similarity over many athletes. Processes, not threads (the GIL); plus NumPy **vectorization** in the feature pipeline. A single-row `.predict()` is sub-ms — don't pool *that*; pick a real CPU-bound task and measure before/after (MiniHW4).
   - *Horizontal scaling:* stateless containers → `docker compose up --scale ai=N` + gunicorn `--workers`; `web`→`ai` round-robins by service DNS (`AI_URL`).
-  - *Multiple machines:* containers hold no in-process state, so they scale across hosts via a **Docker Swarm overlay** (`docker stack deploy`) **or** `ai` replicas on the **Azure VM** reached over the network — **no task queue** (the TA explicitly bans Q-based scaling).
+  - *Multiple machines:* containers hold no in-process state, so they scale across hosts via a **Docker Swarm overlay** (`docker stack deploy`) **or** `ai` replicas on the **Azure VM** reached over the network.
+  - *Job queue (+5 — required by the current TA guidelines; owner: Elad):* a queue in front of the `ai` model so many users' `/predict` calls are accepted and processed in parallel. This supersedes the earlier no-queue guidance — the TA's `WSNH_Guidelines.pdf` now explicitly requires it (see [`GUIDELINES.md`](GUIDELINES.md)).
   - *Concurrency (I/O-bound — the "async" half of the PDF's "async + parallel programming"):* the web tier serves many simultaneous clients via gunicorn workers (async workers optional), and the Forum's real-time layer (SSE/WebSocket) is async.
   - *Proof:* a **locust** run before/after `--scale ai=2` shows throughput rising.
 - Trained on wellness + program-catalog data; any synthetic augmentation (bootstrapping / class-balancing) documented.
