@@ -50,6 +50,13 @@ class Config:
     MAIL_FROM = os.environ.get("MAIL_FROM", "Work Smarter, Not Harder <no-reply@worksmarter.local>")
     # Public base URL used to build the password-reset link in emails (the deploy sets its real domain).
     APP_BASE_URL = os.environ.get("APP_BASE_URL", "http://localhost:8000")
+    # DEV-ONLY email-mock override. When ON, a request carrying `X-Debug-Email: mock` is served the log
+    # backend even where SMTP is configured: the auth code is RETURNED in the JSON response instead of
+    # emailed, so a developer can test signup/login/reset on a live-SMTP deploy without a real inbox
+    # (driven by the gated toggle in the debug-tools panel). OFF by default and IGNORED under TESTING.
+    # NEVER enable on a public deployment — it lets any caller pull the OTP for any address (account
+    # takeover). Flip it on only while YOU personally test, then off for the demo.
+    AUTH_DEBUG_EMAIL = os.environ.get("AUTH_DEBUG_EMAIL", "0") == "1"
     # Signed-token lifetimes (seconds): password-reset link and (PR-C) the login OTP.
     RESET_TOKEN_MAX_AGE = _int_env("RESET_TOKEN_MAX_AGE", 1800)     # 30 min
     # 2-step verification (email OTP on login). On by default in real runs; the test suite turns it off
