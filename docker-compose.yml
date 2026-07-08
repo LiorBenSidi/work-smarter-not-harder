@@ -35,6 +35,7 @@ services:
       REMEMBER_COOKIE_MAX_AGE: ${REMEMBER_COOKIE_MAX_AGE:-2592000}
     volumes:
       - web-logs:/app/logs                                 # keep the rotating log for inspection / ELK
+      - media-data:/app/media                              # Forum/DM attachment bytes (only web mounts it)
     restart: unless-stopped           # self-heal: the only user-facing service must come back on a crash
     depends_on:
       ai: { condition: service_started }   # AI is non-critical: web boots and degrades per-request if it's down
@@ -78,3 +79,4 @@ services:
 volumes:
   mongo-data:
   web-logs:
+  media-data:

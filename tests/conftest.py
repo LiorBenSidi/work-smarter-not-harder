@@ -341,6 +341,33 @@ class FakeNotifications:
         self._items = [n for n in self._items if n["user"] != username and n.get("actor") != username]
 
 
+class FakeMedia:
+    """In-memory media index — mirrors ``web/services/media_store.py``'s ``DbMedia`` contract
+    (add / get / bind / list_for_target), so the media routes run without Mongo."""
+
+    def __init__(self):
+        self._by_id = {}
+
+    def add(self, media_id, owner, mime, size):
+        self._by_id[media_id] = {"id": media_id, "owner": owner, "mime": mime, "size": int(size),
+                                 "target_type": None, "target_id": None, "peers": None}
+
+    def get(self, media_id):
+        rec = self._by_id.get(media_id)
+        return dict(rec) if rec else None
+
+    def bind(self, media_id, owner, target_type, target_id, peers=None):
+        rec = self._by_id.get(media_id)
+        if rec is None or rec["owner"] != owner:   # can only attach a blob you uploaded
+            return False
+        rec.update(target_type=target_type, target_id=target_id, peers=list(peers) if peers else None)
+        return True
+
+    def list_for_target(self, target_type, target_id):
+        return [dict(r) for r in self._by_id.values()
+                if r["target_type"] == target_type and r["target_id"] == target_id]
+
+
 class _CsrfClient:
     """Wraps the Flask test client: seeds the double-submit CSRF cookie (one GET) and auto-sends the
     matching X-CSRF-Token header on unsafe requests, so feature tests don't repeat CSRF plumbing.
@@ -406,7 +433,8 @@ def fake_history():
 def make_client(web_app_module):
     """Factory: build a web test client with given user/profile/history stores (None -> prod default)."""
 
-    def _make(users=None, profiles=None, history=None, forum=None, messages=None, notifications=None):
+    def _make(users=None, profiles=None, history=None, forum=None, messages=None, notifications=None,
+              media=None):
         extra = {}
         if profiles is not None:
             extra["profiles"] = profiles
@@ -418,6 +446,8 @@ def make_client(web_app_module):
             extra["messages"] = messages
         if notifications is not None:
             extra["notifications"] = notifications
+        if media is not None:
+            extra["media"] = media
         app = web_app_module.create_app(users=users, **extra)
         # RATELIMIT_ENABLED=False so the suite's many rapid login/register calls aren't throttled; the
         # dedicated rate-limit test flips it back on via the `rate_limited_client` fixture.
@@ -470,6 +500,21 @@ def messages_client(make_client, fake_users, fake_messages, fake_notifications):
 
 
 @pytest.fixture
+def fake_media():
+    return FakeMedia()
+
+
+@pytest.fixture
+def media_client(make_client, fake_users, fake_forum, fake_messages, fake_media, fake_notifications, tmp_path):
+    # Wired for the media routes plus the forum/DM attach endpoints; MEDIA_ROOT points at a throwaway
+    # pytest tmp dir so uploads never touch the real /app/media volume.
+    c = make_client(fake_users, forum=fake_forum, messages=fake_messages, media=fake_media,
+                    notifications=fake_notifications)
+    c.raw.application.config["MEDIA_ROOT"] = str(tmp_path / "media")
+    return c
+
+
+@pytest.fixture
 def make_otp_client(web_app_module):
     """Like make_client but with 2-step login OTP ACTIVE (OTP_ENABLED on, TESTING off — the gate the
     login route reads). SMTP is left unset so the code is dev-surfaced in the /login response, which is
@@ -493,6 +538,23 @@ def rate_limited_client(make_client, fake_users):
     limiter's in-memory counters first, since it's a module-level singleton whose per-IP tally would
     otherwise carry across tests."""
     c = make_client(fake_users)
+    app = c.raw.application
+    app.config["RATELIMIT_ENABLED"] = True
+    from ratelimit import limiter
+    with app.app_context():
+        try:
+            limiter.reset()
+        except Exception:
+            pass
+    return c
+
+
+@pytest.fixture
+def rate_limited_forum_client(make_client, fake_users, fake_forum, fake_notifications):
+    """Like `rate_limited_client` but wired for the ``@login_required`` forum routes: the forum +
+    notification stores are injected (the plain `rate_limited_client` injects only `fake_users`, so it
+    can't drive the forum endpoints). Limiter ON + `reset()` so the forum-flood tests see the caps."""
+    c = make_client(fake_users, forum=fake_forum, notifications=fake_notifications)
     app = c.raw.application
     app.config["RATELIMIT_ENABLED"] = True
     from ratelimit import limiter
