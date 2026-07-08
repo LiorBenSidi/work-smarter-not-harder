@@ -10,7 +10,7 @@
 	# Security headers (defence in depth; the app is HTTPS-only behind this proxy):
 	#   HSTS         -> force HTTPS for a year (browsers refuse plain HTTP to this host),
 	#   nosniff      -> no MIME-type sniffing (blocks content-type confusion),
-	#   frame denial -> no framing of the app (clickjacking) — X-Frame-Options for old UAs + CSP for new,
+	#   frame denial -> only same-origin framing allowed (blocks cross-origin clickjacking; permits the ?preview iframe) — X-Frame-Options for old UAs + CSP for new,
 	#   Referrer     -> don't leak full URLs cross-origin,
 	#   -Server      -> drop the "Server: Caddy" banner (less version fingerprinting).
 	# No script/style CSP directives: the SPA is intentionally inline-heavy, so a strict CSP would break it;
@@ -18,8 +18,8 @@
 	header {
 		Strict-Transport-Security "max-age=31536000; includeSubDomains"
 		X-Content-Type-Options "nosniff"
-		X-Frame-Options "DENY"
-		Content-Security-Policy "frame-ancestors 'none'"
+		X-Frame-Options "SAMEORIGIN"
+		Content-Security-Policy "frame-ancestors 'self'"
 		Referrer-Policy "strict-origin-when-cross-origin"
 		-Server
 	}
