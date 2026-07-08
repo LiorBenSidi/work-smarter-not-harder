@@ -13,8 +13,10 @@ COPY tests/requirements.txt tests/requirements.txt
 RUN pip install --no-cache-dir -r tests/requirements.txt
 
 # web/ is copied because the real-Mongo integration test loads web/services/db.py off disk (the data
-# layer under test). tests/ carries the suites + conftest. Nothing else from the repo is needed.
+# layer under test), and db/ because the same suite exec's db/seed.py to prove seeding is idempotent.
+# tests/ carries the suites + conftest. Nothing else from the repo is needed.
 COPY web/ web/
+COPY db/ db/
 COPY tests/ tests/
 
 # Overridden by docker-compose.test.yml; this default makes `docker run` on the image do the right thing.

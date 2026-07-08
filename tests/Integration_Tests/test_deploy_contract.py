@@ -91,6 +91,16 @@ def test_test_stack_defines_a_test_runner(test_stack):
     assert (ROOT / "tests" / "Dockerfile").is_file(), "tests/Dockerfile is missing"
 
 
+def test_test_runner_image_carries_every_path_its_suites_load_off_disk():
+    """The runner's suites exec source files by path (`web/services/db.py`, `db/seed.py`). Those dirs
+    must be COPYd into the image, or the suite dies with FileNotFoundError *inside the container* —
+    a failure the host's in-process pytest can never reproduce (it reads them straight from the repo).
+    """
+    dockerfile = _strip_comments((ROOT / "tests" / "Dockerfile").read_text())
+    for needed in ("web/", "db/", "tests/"):
+        assert f"COPY {needed}" in dockerfile, f"the runner image must COPY {needed} (a suite loads it by path)"
+
+
 def test_test_runner_drives_the_live_stack_not_the_in_process_app(test_stack):
     # E2E_BASE_URL un-skips tests/System_Tests; TEST_MONGO_URI un-skips the real-Mongo data-layer suite.
     assert "E2E_BASE_URL: http://web:5000" in test_stack, "the runner must target the live web container"
