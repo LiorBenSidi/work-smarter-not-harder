@@ -47,6 +47,10 @@ services:
       SMTP_USER: ${SMTP_USER:-}
       SMTP_PASS: ${SMTP_PASS:-}
       MAIL_FROM: ${MAIL_FROM:-}
+      # DEV email-mock override (default OFF). Set AUTH_DEBUG_EMAIL=1 (in the VM .env, then `up -d web`) to
+      # let the debug panel's Live/Mock switch pull auth codes ON-SCREEN instead of emailing. NEVER leave it
+      # on for the public demo — while on, anyone could read any account's OTP/reset code (see config.py).
+      AUTH_DEBUG_EMAIL: ${AUTH_DEBUG_EMAIL:-}
     volumes:
       - web-logs:/app/logs
     depends_on:
