@@ -8,10 +8,25 @@ in the [README](../README.md#deployment-cicd--azure). This file is the **run-she
 
 ---
 
+## 🔀 Deploy on/off switch — how to control deploys
+
+The `deploy` job runs **only** when the `DEPLOY_ENABLED` repo variable is `'true'` **and** `SSH_HOST` is set (the VM FQDN — leave it set permanently). Toggle deploys without ever touching `SSH_HOST`:
+
+| Mode | Command | Effect |
+|---|---|---|
+| **off** (dev) | `gh variable set DEPLOY_ENABLED --body false` | pushes to `main` skip deploy → `main` stays green |
+| **on** (live) | `gh variable set DEPLOY_ENABLED --body true` | pushes to `main` auto-deploy as `azureuser` |
+| **check current mode** | `gh variable list` | shows the current `DEPLOY_ENABLED` value |
+
+`build` still runs on every `main` push (images stay current); only `deploy` is gated by the switch. To go live: flip `DEPLOY_ENABLED` to `true`, then push any change to `main` (or re-run the latest `main` Actions run — it re-reads the variable). Going live also requires the deploy key's **public** half in `azureuser`'s `~/.ssh/authorized_keys` on the instructor-provisioned VM (checklist below).
+
+---
+
 ## 0 · Pre-demo checklist (every box must be ✓)
-- [ ] GH **secrets** `SSH_PRIVATE_KEY`, `APP_SECRET_KEY` set; **variables** `SSH_HOST` (the FQDN) — and, for the
-      custom domain, `SITE_ADDRESS` = `app.worksmarternotharder.dev`. *(Email: optional `SMTP_USER`/`SMTP_PASS`.)*
-- [ ] The deploy key's `.pub` is on the VM's `deploy` user (sent to the instructor).
+- [ ] GH **secrets** `SSH_PRIVATE_KEY`, `APP_SECRET_KEY` set; **variables** `SSH_HOST` (the FQDN) **and `DEPLOY_ENABLED`
+      = `true`** (the deploy on/off switch — leave `false`/unset to keep `main` green during dev) — and, for the custom
+      domain, `SITE_ADDRESS` = `app.worksmarternotharder.dev`. *(Email: optional `SMTP_USER`/`SMTP_PASS`.)*
+- [ ] The deploy key's `.pub` is on the VM's `azureuser` account (sent to the instructor; `azureuser` replaced the old `deploy` name).
 - [ ] Name.com: `CNAME app → <the FQDN>` added (only if using the custom domain).
 - [x] Both GHCR packages **public** (`work-smarter-web`, `work-smarter-ai`). ✅ done.
 - [ ] The VM is **started** (Azure portal → your VM → Start — idle VMs auto-stop).
@@ -80,9 +95,9 @@ the VM (instructor's cloud-init, R6.3); we use a dedicated deploy key, not a per
 
 **H — the monitor's down→up.** Trigger it live:
 ```bash
-ssh -i ~/.ssh/deploy_key deploy@$SSH_HOST "cd ~/app && docker compose -f docker-compose.prod.yml stop web"
+ssh -i ~/.ssh/deploy_key azureuser@$SSH_HOST "cd ~/app && docker compose -f docker-compose.prod.yml stop web"
 #   → within one interval UptimeRobot flips DOWN + emails you
-ssh -i ~/.ssh/deploy_key deploy@$SSH_HOST "cd ~/app && docker compose -f docker-compose.prod.yml start web"
+ssh -i ~/.ssh/deploy_key azureuser@$SSH_HOST "cd ~/app && docker compose -f docker-compose.prod.yml start web"
 #   → it recovers to UP
 ```
 Show the UptimeRobot status page + the alert email (H).
