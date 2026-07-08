@@ -331,8 +331,11 @@ def create_app(config=Config, *, users=None, profiles=None, history=None, forum=
             db_module.get_db(app.config["MONGO_URI"]).command("ping")
         except Exception:
             logger.warning("readiness check failed: database not reachable", exc_info=True)
-            return jsonify(status="degraded", db="down"), 503
-        return jsonify(status="ready", db="up"), 200
+            # The 503 status CODE is the readiness signal the deploy gate + external monitor consume; the
+            # component detail (which dependency is down) stays server-side in the log, not in the public
+            # body, so an anonymous caller can't fingerprint internal state.
+            return jsonify(status="degraded"), 503
+        return jsonify(status="ready"), 200
 
     @app.get("/manifest.webmanifest")
     def manifest():

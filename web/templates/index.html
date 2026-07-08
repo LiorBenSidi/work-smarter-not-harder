@@ -902,6 +902,16 @@
       catch (_) {}
     }
 
+    // Skip an innerHTML rewrite when the markup is byte-identical to what's already shown. The DM thread,
+    // conversation list and activity feed all repaint on a 15s poll / SSE tick; rewriting unchanged markup
+    // tears the nodes down and repaints them every time — a visible flash that also drops focus/selection.
+    // Returns true only when it actually wrote, so callers re-bind listeners only then (unchanged nodes
+    // keep the handlers they already have).
+    function setHtmlIfChanged(el, html) {
+      if (!el || el.__lastHtml === html) return false;
+      el.innerHTML = html; el.__lastHtml = html; return true;
+    }
+
     // ---- Debug tools panel (DEBUG only; never in live mode or inside the mobile-preview iframe) ----
     (function wireDebugTools() {
       const params = new URLSearchParams(location.search);
@@ -1731,14 +1741,14 @@
       if (sessionChanged(u, "loadConversations")) return;    // stale session -> don't paint another user's inbox
       if (!r.ok) { el.innerHTML = '<p class="flash error">Could not load conversations.</p>'; return; }
       const cs = (r.data && r.data.conversations) || [];
-      if (!cs.length) { el.innerHTML = emptyState(EMPTY_ICONS.chat, "No conversations yet", "Send a message above to start one."); return; }
-      el.innerHTML = cs.map((c) =>
+      if (!cs.length) { setHtmlIfChanged(el, emptyState(EMPTY_ICONS.chat, "No conversations yet", "Send a message above to start one.")); return; }
+      const changed = setHtmlIfChanged(el, cs.map((c) =>
         '<div class="dm-row" data-peer="' + escapeHtml(c.peer) + '">' + avatarHtml(c.peer, 40)
         + '<div class="dm-main"><div class="dm-name">' + escapeHtml(c.peer_name || c.peer) + '</div>'
         + '<div class="dm-last">' + escapeHtml(c.last_message || "") + '</div></div>'
         + (c.unread ? '<span class="dm-unread">' + escapeHtml(c.unread) + '</span>' : '') + '</div>'
-      ).join("");
-      el.querySelectorAll(".dm-row").forEach((d) => d.addEventListener("click", () => openThread(d.dataset.peer)));
+      ).join(""));
+      if (changed) el.querySelectorAll(".dm-row").forEach((d) => d.addEventListener("click", () => openThread(d.dataset.peer)));
     }
 
     async function openThread(peer) {
@@ -1759,13 +1769,13 @@
       if (!r.ok) { box.innerHTML = '<p class="flash error">Could not load this conversation.</p>'; return; }
       // header shows the server-resolved display name (correct even for a brand-new thread); avatar keyed
       // on the handle so two same-named people still read as distinct.
-      $("dm-thread-peer").innerHTML = avatarHtml(dmPeer, 30) + "<span>" + escapeHtml((r.data && r.data.peer_name) || dmPeer) + "</span>";
+      setHtmlIfChanged($("dm-thread-peer"), avatarHtml(dmPeer, 30) + "<span>" + escapeHtml((r.data && r.data.peer_name) || dmPeer) + "</span>");
       const nearBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 40;   // don't yank the reader up
       const msgs = (r.data && r.data.messages) || [];
-      box.innerHTML = msgs.length
+      const changed = setHtmlIfChanged(box, msgs.length
         ? msgs.map((m) => '<div class="bubble ' + (m.sender === currentUser ? "me" : "them") + '">' + escapeHtml(m.body) + "</div>").join("")
-        : '<p class="muted">No messages yet — say hi.</p>';
-      if (nearBottom) box.scrollTop = box.scrollHeight;
+        : '<p class="muted">No messages yet — say hi.</p>');
+      if (changed && nearBottom) box.scrollTop = box.scrollHeight;   // only re-anchor when the thread actually changed (poll no-op -> no flash)
     }
 
     function closeThread() {
@@ -1859,14 +1869,14 @@
       const el = $("activity-list"), btn = $("activity-read");
       if (!el) return;
       const items = (notifications || []).filter((n) => n.type !== "dm");
-      if (!items.length) { el.innerHTML = '<p class="muted">No new activity yet.</p>'; btn.hidden = true; return; }
-      el.innerHTML = items.map((n) =>
+      if (!items.length) { setHtmlIfChanged(el, '<p class="muted">No new activity yet.</p>'); btn.hidden = true; return; }
+      setHtmlIfChanged(el, items.map((n) =>
         '<div class="dm-row act' + (n.read ? "" : " unread") + '">' + avatarHtml(n.actor || "·", 40)
         // compose "{live actor} {text}" — the actor is re-resolved to the current display name each list,
         // and the stored text is name-less, so a rename never leaves a stale name (F1).
         + '<div class="dm-main"><div class="dm-name">' + escapeHtml(((n.actor ? n.actor + " " : "") + (n.text || "")).trim()) + '</div>'
         + '<div class="dm-last">' + escapeHtml(timeAgo(n.created_at)) + '</div></div></div>'
-      ).join("");
+      ).join(""));
       btn.hidden = !items.some((n) => !n.read);
     }
     $("activity-read").addEventListener("click", async () => {

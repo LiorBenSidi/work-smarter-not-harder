@@ -46,9 +46,28 @@ def test_register_verify_without_a_pending_registration_is_rejected(verify_clien
     assert verify_client.post("/register/verify", json={"code": "123456"}).status_code == 400
 
 
-def test_register_rejects_a_duplicate_email_before_verifying(verify_client, fake_users):
+def test_register_duplicate_email_is_enumeration_safe(make_otp_client, fake_users, auth_module, monkeypatch):
+    # A duplicate email must NOT be distinguishable from a fresh one in the register response — no 409 that
+    # leaks "this email is registered". With SMTP configured (prod), neither surfaces a code, so the two
+    # responses match on every enumeration-relevant field. The existing account is left untouched (no code
+    # is issued for the duplicate; a notice email goes to the owner instead).
+    monkeypatch.setattr(auth_module, "send_email", lambda *a, **k: True)      # no network; swallows code + notice
     fake_users.add("existing", "hash", email="taken@example.com")
-    assert _start(verify_client, email="taken@example.com").status_code == 409   # caught up front, no code sent
+    client = make_otp_client(fake_users, REGISTER_VERIFY_EMAIL=True, SMTP_HOST="smtp.example.com")
+    dup = client.post("/register", json={"username": "Bob", "password": PW, "email": "taken@example.com"})
+    fresh = client.post("/register", json={"username": "Carol", "password": PW, "email": "new@example.com"})
+    assert dup.status_code == fresh.status_code == 200                        # NOT 409 for the duplicate
+    assert dup.get_json()["status"] == fresh.get_json()["status"] == "verify_required"
+    assert "dev_code" not in dup.get_json() and "dev_code" not in fresh.get_json()   # SMTP set -> never surfaced
+    assert "error" not in dup.get_json()                                      # nothing that reveals "taken"
+
+
+def test_register_duplicate_still_409_when_verification_is_off(client, fake_users):
+    # With verify OFF (the default TESTING path), there is no verify_required cover, so a duplicate email is
+    # still a plain 409 — this path is dev/tests only (prod runs verify ON, which is enumeration-safe above).
+    fake_users.add("existing", "hash", email="taken@example.com")
+    assert client.post("/register", json={"username": "Bob", "password": PW, "email": "taken@example.com"}
+                       ).status_code == 409
 
 
 def test_register_verify_locks_out_after_max_attempts(verify_client):

@@ -142,20 +142,27 @@ def register():
     except ValueError as exc:
         return jsonify(error=str(exc)), 400
     try:
-        if _users().by_email(email):                      # one email -> one account (login identity)
-            return jsonify(error="an account with this email already exists"), 409
         pw_hash = generate_password_hash(password)
+        exists = _users().by_email(email)                  # one email -> one account (login identity)
         if _register_verify_active():
-            # Don't create the account yet: email a code and only create it once the address is CONFIRMED,
-            # so a user can't register with a fake or someone else's email. The pending signup lives in the
-            # session (this browser), never in the DB, until /register/verify.
-            dev_code = _issue_reg_code(display, pw_hash, email)
+            # Verify-first: email a code and only create the account once the address is CONFIRMED, so a
+            # user can't register with a fake or someone else's email. The pending signup lives in the
+            # session (this browser), never the DB, until /register/verify.
+            # ENUMERATION-SAFE: an already-registered email gets the IDENTICAL response as a fresh one — but
+            # no pending signup is stashed (so no code can ever complete it) and we email the owner a notice
+            # instead of a code. An attacker who doesn't control the address can't tell "taken" from "free".
             body = {"status": "verify_required", "email": email, "expires_in": current_app.config["OTP_TTL_SECONDS"]}
-            if dev_code is not None:                       # no SMTP -> surface the code (dev/grading)
-                body["dev_code"] = dev_code
+            if exists:
+                _notify_existing_account(email)
+            else:
+                dev_code = _issue_reg_code(display, pw_hash, email)
+                if dev_code is not None:                   # no SMTP -> surface the code (dev/grading)
+                    body["dev_code"] = dev_code
             return jsonify(body), 200
+        if exists:                                         # verify OFF (dev/tests): a duplicate is a plain 409
+            return jsonify(error="an account with this email already exists"), 409
         handle = _allocate_handle(display, pw_hash, email)
-    except DuplicateEmailError:                            # a race beat the by_email check to the insert
+    except DuplicateEmailError:                            # a race beat the check to the insert
         return jsonify(error="an account with this email already exists"), 409
     except Exception:
         logger.exception("user store unavailable during register")
@@ -599,6 +606,15 @@ def _register_verify_active():
     verification tests run with TESTING off + the flag on. Mirrors ``_otp_active``."""
     cfg = current_app.config
     return bool(cfg.get("REGISTER_VERIFY_EMAIL")) and not cfg.get("TESTING")
+
+
+def _notify_existing_account(email):
+    """Enumeration-safe duplicate-signup path: rather than leak "email taken" in the register response,
+    email the address owner that an account already exists. Best-effort; ``send_email`` never raises."""
+    send_email(current_app.config, email, "You already have a Work Smarter, Not Harder account",
+               "Someone just tried to sign up with this email. If it was you, you already have an "
+               "account — try logging in, or reset your password if you forgot it.\n\n"
+               "If this wasn't you, you can safely ignore this email.")
 
 
 def _debug_email_mock():
