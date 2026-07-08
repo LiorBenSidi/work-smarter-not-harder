@@ -32,6 +32,7 @@ services:
       OTP_TTL_SECONDS: ${OTP_TTL_SECONDS:-600}
       OTP_MAX_ATTEMPTS: ${OTP_MAX_ATTEMPTS:-5}
       REGISTER_VERIFY_EMAIL: ${REGISTER_VERIFY_EMAIL:-1}   # 0 -> create the account without verifying the email
+      AUTH_DEBUG_EMAIL: ${AUTH_DEBUG_EMAIL:-}              # 1 -> debug panel's Live/Mock switch can pull codes on-screen (dev)
       REMEMBER_COOKIE_MAX_AGE: ${REMEMBER_COOKIE_MAX_AGE:-2592000}
     volumes:
       - web-logs:/app/logs                                 # keep the rotating log for inspection / ELK
