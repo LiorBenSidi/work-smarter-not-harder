@@ -19,8 +19,10 @@ from routes.checkin import checkin_bp
 from routes.dashboard import dashboard_bp
 from routes.forum import forum_bp
 from routes.history import history_bp
+from routes.media import media_bp
 from routes.messages import messages_bp
 from routes.profile import profile_bp
+from services.media_store import DbMedia
 
 logger = logging.getLogger(__name__)
 
@@ -233,7 +235,7 @@ class _DbNotifications(_DbStore):
 
 
 def create_app(config=Config, *, users=None, profiles=None, history=None, forum=None,
-               messages=None, notifications=None):
+               messages=None, notifications=None, media=None):
     # Absolute template_folder + static_folder so the app renders and serves its PWA assets
     # (manifest, service worker, icons) regardless of how it's launched / imported.
     app = Flask(__name__, template_folder=_TEMPLATES, static_folder=_STATIC)
@@ -254,6 +256,7 @@ def create_app(config=Config, *, users=None, profiles=None, history=None, forum=
     app.config["FORUM"] = forum if forum is not None else _DbForum(app)
     app.config["MESSAGES"] = messages if messages is not None else _DbMessages(app)
     app.config["NOTIFICATIONS"] = notifications if notifications is not None else _DbNotifications(app)
+    app.config["MEDIA"] = media if media is not None else DbMedia(app)
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(profile_bp)
@@ -262,6 +265,7 @@ def create_app(config=Config, *, users=None, profiles=None, history=None, forum=
     app.register_blueprint(checkin_bp)
     app.register_blueprint(forum_bp)
     app.register_blueprint(messages_bp)
+    app.register_blueprint(media_bp)
 
     # Register the timer FIRST — before CSRF — so a request short-circuited by the CSRF check (403)
     # still gets a start stamp and therefore an access-log line (before_request runs in registration

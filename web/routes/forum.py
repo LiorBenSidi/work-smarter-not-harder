@@ -11,6 +11,7 @@ import time
 
 from flask import Blueprint, current_app, jsonify, request, session
 
+from ratelimit import limiter
 from routes.auth import login_required
 from services.identity import display_name
 
@@ -159,6 +160,7 @@ def list_posts():
 
 
 @forum_bp.post("/forum/posts")
+@limiter.limit("10 per minute")   # anti-spam: bulk post creation from one IP
 @login_required
 def create_post():
     try:
@@ -187,6 +189,7 @@ def get_post(post_id):
 
 
 @forum_bp.patch("/forum/posts/<post_id>")
+@limiter.limit("20 per minute")   # light cap on edit churn
 @login_required
 def edit_post(post_id):
     try:
@@ -206,6 +209,7 @@ def edit_post(post_id):
 
 
 @forum_bp.delete("/forum/posts/<post_id>")
+@limiter.limit("20 per minute")   # light cap on delete churn
 @login_required
 def delete_post(post_id):
     try:
@@ -221,6 +225,7 @@ def delete_post(post_id):
 
 
 @forum_bp.post("/forum/posts/<post_id>/comments")
+@limiter.limit("20 per minute")   # anti-spam: comment flooding from one IP
 @login_required
 def add_comment(post_id):
     try:
@@ -238,6 +243,7 @@ def add_comment(post_id):
 
 
 @forum_bp.post("/forum/posts/<post_id>/vote")
+@limiter.limit("60 per minute")   # cap vote toggling from one IP (score stays authoritative)
 @login_required
 def vote(post_id):
     voter = session["username"]
@@ -257,6 +263,7 @@ def vote(post_id):
 
 
 @forum_bp.post("/forum/posts/<post_id>/comments/<comment_id>/vote")
+@limiter.limit("60 per minute")   # cap comment-vote toggling from one IP
 @login_required
 def vote_comment(post_id, comment_id):
     voter = session["username"]

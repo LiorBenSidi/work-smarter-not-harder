@@ -64,3 +64,11 @@ class Config:
     # Opt-in "remember this browser" cookie: how long a browser stays trusted (skips the login OTP)
     # before it must re-verify. Invalidated early by a password change (embedded hash tail) or logout.
     REMEMBER_COOKIE_MAX_AGE = _int_env("REMEMBER_COOKIE_MAX_AGE", 30 * 24 * 3600)   # 30 days
+
+    # Forum/DM media attachments (OWNER: Elad). Bytes are stored on a web-mounted volume at MEDIA_ROOT;
+    # MEDIA_MAX_BYTES caps a single upload (enforced per-request in the media route, so the small
+    # MAX_CONTENT_LENGTH above still guards the JSON routes); only the allowlisted MIME types are accepted.
+    MEDIA_ROOT = os.environ.get("MEDIA_ROOT", "/app/media")
+    MEDIA_MAX_BYTES = _int_env("MEDIA_MAX_BYTES", 10 * 1024 * 1024)   # 10 MB per file
+    MEDIA_ALLOWED_MIME = os.environ.get(
+        "MEDIA_ALLOWED_MIME", "image/png,image/jpeg,image/webp,image/gif,video/mp4")

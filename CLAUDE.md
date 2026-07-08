@@ -35,6 +35,7 @@ The backend is built and CI-gated; the open work is two teammates' lanes. If you
 - **Never push to `main`.** It's branch-protected — direct pushes are rejected for everyone, including admins.
 - Every change: **branch → commit → push → open a PR → CI green → self-merge.** No peer approval required — own your scope + tests; CI is the gate.
 - Branch names: `feat/…` · `fix/…` · `test/…` · `docs/…` · `chore/…`.
+- **Never use `git ... --force` (no `push --force`, no force-merge)** — especially when a PR shows conflicts or the merge won't go through. A force-push can silently overwrite a teammate's work. Instead: open the PR on GitHub, review **each conflict individually**, and **tell the teammate you conflict with** before resolving — so nobody overwrites anyone else's changes without both sides agreeing. (Team rule from Lior.)
 - Full flow + commands: [`CONTRIBUTING.md`](CONTRIBUTING.md).
 - **Local gate before you commit** (same checks as CI): `git commit` runs ruff (incl. the no-`print()` rule) + bandit; `git push` runs pytest. Enable once: `sh scripts/setup-hooks.sh` + `pip install -r requirements-dev.txt`.
 
@@ -62,6 +63,7 @@ Full guide: [`docs/AUTH_TESTING.md`](docs/AUTH_TESTING.md); secrets + live-email
 ## Testing & TDD (course-graded — this is how we test)
 - **TDD-first.** Write the test before/with the code (Red → Green → Refactor). The built areas (web + data) already carry full tests; for new code, add its tests alongside it (see [`tests/README.md`](tests/README.md) — the feature×test matrix). The suite's skipped tests are **env-gated** (real Mongo via `TEST_MONGO_URI`, a live stack via `E2E_BASE_URL`) — not unwritten scaffolds; CI runs them with a `mongo:7` service.
 - **All 5 test types** live in `tests/{Unit,Integration,System,Stress,Security}_Tests/`. CI runs the whole suite on every PR; the pre-push hook runs it locally.
+- **How the web suite runs with no Mongo / no Docker** (read `tests/conftest.py`): it execs `web/app.py` off disk and injects in-memory fakes (`FakeUsers` · `FakeProfiles` · `FakeHistory` · `FakeForum` · `FakeMessages` · `FakeNotifications`) into `create_app(users=…, profiles=…, …)`. The `web→db` seam is just `.get/.add/.save/.list`, so the fakes mirror `web/services/db.py`'s contract — keep them in sync when you change that seam. Use the ready-made fixtures (`client`, `profile_client`, `forum_client`, `messages_client`, `otp_client`, `rate_limited_client`); the `_CsrfClient` wrapper auto-sends the double-submit CSRF token so feature tests don't replumb it.
 - **No AI-slop tests** (course L3): test *behaviour*, not the implementation. Never write a test that passes trivially (`assert True`) or just mirrors the code — a test must be able to fail for a real reason.
 - **A broken test gets fixed or deleted — never commented out** (L8.1; the TA reads test code).
 - **Tests run on any machine** — env vars, no local/absolute paths; honour the `TESTING` flag.
@@ -72,7 +74,17 @@ Full guide: [`docs/AUTH_TESTING.md`](docs/AUTH_TESTING.md); secrets + live-email
 sh scripts/setup-hooks.sh       # one-time: enable the local pre-commit / pre-push hooks
 pip install -r requirements-dev.txt  # one-time: pinned dev tools (ruff, bandit, pytest)
 docker compose up --build       # run the full stack (web/db/ai)
-python -m pytest tests/         # run the test suite
+python -m pytest tests/         # run the whole suite (what CI + the pre-push hook run)
+
+# Narrower runs (same interpreter, no Docker needed for the web/data tests):
+python -m pytest tests/Unit_Tests tests/Security_Tests            # one or more suites
+python -m pytest tests/Unit_Tests/test_db.py                      # one file
+python -m pytest tests/Unit_Tests/test_db.py::test_add_is_idempotent  # one test
+python -m pytest -k forum                                         # by keyword across the suite
+
+# Opt into the env-gated tests that are otherwise skipped (see Testing note below):
+TEST_MONGO_URI=mongodb://localhost:27017 python -m pytest tests/Integration_Tests/test_db_mongo.py  # real Mongo
+E2E_BASE_URL=http://localhost:8000 python -m pytest tests/System_Tests                               # live stack
 ```
 
 ## Where things are
