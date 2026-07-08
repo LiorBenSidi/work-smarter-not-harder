@@ -13,7 +13,7 @@ def _register(client, username="alice", password="s3cretpw!", email="alice@examp
 def _capture_reset(client, auth_module, monkeypatch, email="alice@example.com"):
     box = {}
     monkeypatch.setattr(auth_module, "send_email",
-                        lambda cfg, to, subj, body: box.update(to=to, body=body) or True)
+                        lambda cfg, to, subj, body, **kw: box.update(to=to, body=body) or True)
     client.post("/forgot-password", json={"email": email})
     return box
 

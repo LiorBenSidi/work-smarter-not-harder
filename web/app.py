@@ -9,6 +9,7 @@ import secrets
 import time
 
 from flask import Flask, g, jsonify, render_template, request, send_from_directory
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 from config import Config
 from csrf import init_csrf
@@ -240,6 +241,14 @@ def create_app(config=Config, *, users=None, profiles=None, history=None, forum=
     # (manifest, service worker, icons) regardless of how it's launched / imported.
     app = Flask(__name__, template_folder=_TEMPLATES, static_folder=_STATIC)
     app.config.from_object(config)
+
+    # Behind Caddy (prod) the real client IP arrives in X-Forwarded-For; trust ONE proxy hop so the rate
+    # limiter + logs key on the actual client, not Caddy's internal container IP (which would put every
+    # external client in one shared bucket — brute-force isolation gone, and a single attacker could lock
+    # everyone out). Safe: the web container is never published directly (only Caddy is public), so the
+    # forwarded header can't be spoofed. A no-op when there's no proxy (local dev / the test client send
+    # no X-Forwarded-For), so remote_addr is used unchanged there.
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1)
 
     if not app.config.get("SECRET_KEY"):
         # Dev/test fallback so the app boots without a configured secret. Production sets a real

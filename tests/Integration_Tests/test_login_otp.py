@@ -42,7 +42,7 @@ def test_dev_otp_surfaced_without_smtp_and_verifies(otp_client):
 def test_otp_not_surfaced_when_smtp_configured(make_otp_client, fake_users, auth_module, monkeypatch):
     sent = {}
     monkeypatch.setattr(auth_module, "send_email",
-                        lambda cfg, to, subject, body: sent.update(to=to, body=body) or True)
+                        lambda cfg, to, subject, body, **kw: sent.update(to=to, body=body) or True)
     client = make_otp_client(fake_users, SMTP_HOST="smtp.example.com")
     _register(client)
     body = _login(client).get_json()
