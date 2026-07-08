@@ -20,6 +20,38 @@ The `deploy` job runs **only** when the `DEPLOY_ENABLED` repo variable is `'true
 
 `build` still runs on every `main` push (images stay current); only `deploy` is gated by the switch. To go live: flip `DEPLOY_ENABLED` to `true`, then push any change to `main` (or re-run the latest `main` Actions run — it re-reads the variable). Going live also requires the deploy key's **public** half in `azureuser`'s `~/.ssh/authorized_keys` on the instructor-provisioned VM (checklist below).
 
+## 🧪 Test MOCK email on the live deploy (`AUTH_DEBUG_EMAIL`)
+
+The site sends **real** email by default (OTP / signup-verify / password-reset). To exercise those flows
+**without** sending real mail — read the code on-screen — the web app has a **gated** email-mock override.
+It is **OFF by default (fail-closed)** and, on a PUBLIC deploy, must stay off for the demo: while on, anyone
+who opens `/?debug=1` could read any account's code (account takeover). **Enable it only while YOU test.**
+
+**Enable (on the VM):**
+```bash
+cd ~/app && (grep -q '^AUTH_DEBUG_EMAIL=' .env && sed -i 's/^AUTH_DEBUG_EMAIL=.*/AUTH_DEBUG_EMAIL=1/' .env || echo 'AUTH_DEBUG_EMAIL=1' >> .env)
+docker compose -f docker-compose.prod.yml up -d web
+```
+Then open `https://<site>/?debug=1` → the **Email codes** box shows a **Live / Mock** switch + the current
+mode. Click **Mock** → codes show on-screen (per-browser, instant, no restart); click **Live** → real email
+again.
+
+**Disable (before the demo):**
+```bash
+cd ~/app && sed -i '/^AUTH_DEBUG_EMAIL=/d' .env && docker compose -f docker-compose.prod.yml up -d web
+```
+Why it's safe: the client header `X-Debug-Email: mock` is **inert** unless this server flag is set (the
+browser can't self-enable it), it's ignored under `TESTING`, every use logs a WARNING, and a redeploy resets
+`.env` so it can't silently persist. The flag reaches the container via `docker-compose.prod.yml`.
+
+## 🔁 Deploy resilience — GHCR push retry
+
+The image-push step retries the GHCR upload (**4×, 10 s apart**): GHCR intermittently returns a transient
+`unknown blob` mid-upload (a registry flake, not a build error), so the retry lets it self-recover instead of
+failing the run. And nothing is destructive if it *does* fail: a build/push failure happens **before** the
+deploy step, so the live site is **never touched** (the previous version keeps serving), and an unhealthy
+deploy **auto-rolls-back** to the last-good image (see the run-sheet). Re-running a failed run is always safe.
+
 ---
 
 ## 0 · Pre-demo checklist (every box must be ✓)
@@ -63,7 +95,7 @@ being down. If you'd prefer a pure "is the site up" monitor with fewer false ala
 Pick a string **no test pins** (see the ⚠️ below), commit, push to `main`:
 ```bash
 # safe target: add/bump a field on /ready (tests only assert its "status" key).
-# in web/app.py, /ready success branch:  return jsonify(status="ready", db="up", version="demo-2"), 200
+# in web/app.py, /ready success branch:  return jsonify(status="ready", version="demo-2"), 200
 git commit -am "demo: bump /ready version string" && git push
 ```
 GitHub → **Actions** → watch `checks → build → deploy` run end-to-end with **no manual intervention** (B).
