@@ -37,7 +37,7 @@
       --bg:#eef0fb; --bg2:#e7e4fb; --ink:#1a1f3a; --muted:#5c6486;
       --card: color-mix(in srgb, #ffffff 78%, transparent); --field: rgba(20,26,60,.05); --line: rgba(30,36,80,.12);
       --accent:#0eb389; --accent2:#7c5cff; --on-accent:#ffffff;
-      --ok:#0eb389; --warn:#b5730c; --err:#d5477a; --ready:#0eb389; --moderate:#b5730c; --rest:#d5477a; --brand:#7c5cff;
+      --ok:#0eb389; --warn:#b5730c; --err:#c02a54; --ready:#0eb389; --moderate:#b5730c; --rest:#d5477a; --brand:#7c5cff;
       --shadow:0 30px 60px -34px rgba(60,60,120,.30);
       --glow-a: rgba(14,179,137,.16); --glow-b: rgba(124,92,255,.16); --glow-c: rgba(96,150,255,.12); }
     :root[data-theme="dark"] { color-scheme: dark; }   /* dark vars come from :root; just pin native controls */
@@ -46,7 +46,7 @@
         --bg:#eef0fb; --bg2:#e7e4fb; --ink:#1a1f3a; --muted:#5c6486;
         --card: color-mix(in srgb, #ffffff 78%, transparent); --field: rgba(20,26,60,.05); --line: rgba(30,36,80,.12);
         --accent:#0eb389; --accent2:#7c5cff; --on-accent:#ffffff;
-        --ok:#0eb389; --warn:#b5730c; --err:#d5477a; --ready:#0eb389; --moderate:#b5730c; --rest:#d5477a; --brand:#7c5cff;
+        --ok:#0eb389; --warn:#b5730c; --err:#c02a54; --ready:#0eb389; --moderate:#b5730c; --rest:#d5477a; --brand:#7c5cff;
         --shadow:0 30px 60px -34px rgba(60,60,120,.30);
         --glow-a: rgba(14,179,137,.16); --glow-b: rgba(124,92,255,.16); --glow-c: rgba(96,150,255,.12); }
     }
@@ -858,6 +858,10 @@
     </div>
     <div class="debug-sect">
       <div class="debug-label">Email codes</div>
+      <div id="debug-email-seg" class="debug-seg" role="group" aria-label="Email delivery" hidden>
+        <button id="debug-email-live" class="debug-seg-btn active" type="button">Live</button>
+        <button id="debug-email-mock" class="debug-seg-btn" type="button">Mock</button>
+      </div>
       <div id="debug-email-mode" class="debug-note">checking…</div>
     </div>
     <button id="debug-off" class="ghost mini debug-off" type="button">Disable debug tools</button>
@@ -881,6 +885,16 @@
       catch (_) { return false; }
     })();
     function dbg(...args) { if (DEBUG) console.log("%c[ws]", "color:#0eb389;font-weight:700", ...args); }
+
+    // DEV email-mock override (gated server-side by AUTH_DEBUG_EMAIL; wired in the debug-tools panel). When
+    // on, auth requests carry `X-Debug-Email: mock` so the server returns the code in the JSON instead of
+    // emailing it. Persisted so it survives reloads; the server IGNORES the header unless it opted in, and
+    // the panel forces this back off when the deploy hasn't (`email_debug_toggle` false).
+    let emailDebugMock = (() => { try { return localStorage.getItem("ws-debug-email") === "mock"; } catch (_) { return false; } })();
+    function persistEmailMode() {
+      try { emailDebugMock ? localStorage.setItem("ws-debug-email", "mock") : localStorage.removeItem("ws-debug-email"); }
+      catch (_) {}
+    }
 
     // ---- Debug tools panel (DEBUG only; never in live mode or inside the mobile-preview iframe) ----
     (function wireDebugTools() {
@@ -913,12 +927,30 @@
       prev.addEventListener("click", (e) => { if (e.target === prev) setVp(false); });
       document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !prev.hidden) setVp(false); });
       $("debug-off").addEventListener("click", () => { try { localStorage.removeItem("ws-debug"); } catch (_) {} location.href = location.pathname; });
-      // Email-mode indicator (one source of truth: /auth/config) — live vs mock so you know where codes go.
+      // Email-mode panel (one source of truth: /auth/config). Shows where codes go, and — only where the
+      // server opted in (email_debug_toggle) — a Live/Mock switch. Mock makes api() send `X-Debug-Email:
+      // mock` so the server returns the code on-screen instead of emailing. When the deploy hasn't opted
+      // in, the switch stays hidden and any stale client flag is forced off (so it can't keep sending).
       api("/auth/config").then((r) => {
         if (!r.ok || !r.data) return;
-        const live = r.data.email_mode === "live";
-        $("debug-email-mode").textContent = (live ? "LIVE — codes are emailed" : "MOCK — codes shown on-screen")
-          + (r.data.verify_email ? " · verify at signup" : "") + (r.data.otp_login ? " · 2FA login" : "");
+        const baseLive = r.data.email_mode === "live", canToggle = !!r.data.email_debug_toggle;
+        const seg = $("debug-email-seg"), note = $("debug-email-mode");
+        const suffix = (r.data.verify_email ? " · verify at signup" : "") + (r.data.otp_login ? " · 2FA login" : "");
+        function render() {
+          const mock = canToggle && emailDebugMock;                    // effective mode for this browser
+          $("debug-email-live").classList.toggle("active", !mock);
+          $("debug-email-mock").classList.toggle("active", mock);
+          note.textContent = ((mock || !baseLive) ? "MOCK — codes shown on-screen" : "LIVE — codes are emailed")
+            + suffix + (mock && baseLive ? " · debug override" : "");
+        }
+        if (canToggle) {
+          seg.hidden = false;
+          $("debug-email-live").addEventListener("click", () => { emailDebugMock = false; persistEmailMode(); render(); });
+          $("debug-email-mock").addEventListener("click", () => { emailDebugMock = true; persistEmailMode(); render(); });
+        } else if (emailDebugMock) {
+          emailDebugMock = false; persistEmailMode();                  // deploy didn't opt in -> drop the stale flag
+        }
+        render();
       }).catch(() => {});
     })();
     // True iff the session changed since `u` was snapshotted -> the async caller must BAIL rather than
@@ -938,6 +970,7 @@
       const opts = { method, headers: {}, credentials: "same-origin" };
       if (!["GET", "HEAD", "OPTIONS"].includes(method)) opts.headers["X-CSRF-Token"] = getCookie("csrf_token");
       if (body !== null) { opts.headers["Content-Type"] = "application/json"; opts.body = JSON.stringify(body); }
+      if (emailDebugMock) opts.headers["X-Debug-Email"] = "mock";   // gated dev override; server ignores unless opted in
       let res;
       try { res = await fetch(path, opts); }
       catch (e) { dbg("api NETWORK FAIL", method, path, "—", e && e.message); throw e; }   // preserve the reject; just make it visible
@@ -1985,9 +2018,15 @@
     function setTheme(v) {
       try { localStorage.setItem(THEME_KEY, v); } catch (_) {}
       const root = document.documentElement;
-      root.classList.add("theme-switching");             // atomic palette swap, no per-element transition flicker
+      root.classList.add("theme-switching");             // freeze per-element transitions so the palette swaps atomically
       applyTheme(v);
-      requestAnimationFrame(() => requestAnimationFrame(() => root.classList.remove("theme-switching")));
+      // Hold the freeze for a fixed window, not just two rAFs: on mobile (and with the page's heavy
+      // backdrop-filter layers) the repaint often isn't finished after 2 frames, so re-enabling transitions
+      // that early lets elements animate mid-repaint — which reads as the flicker. ~180ms clears the paint
+      // on both desktop and mobile; the new palette is already fully applied the whole time. clearTimeout
+      // collapses rapid re-clicks into one freeze window.
+      clearTimeout(setTheme._t);
+      setTheme._t = setTimeout(() => root.classList.remove("theme-switching"), 180);
       syncThemeControls(v);
       dbg("theme set:", v);
     }
