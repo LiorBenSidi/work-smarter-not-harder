@@ -95,8 +95,13 @@ jobs:
           docker pull "$IMG:latest" || true    # prime the layer cache from the previous build (first run misses)
           docker build --cache-from "$IMG:latest" --build-arg BUILDKIT_INLINE_CACHE=1 \
             -t "$IMG:latest" -t "$IMG:${{ steps.vars.outputs.sha }}" ./web   # R3.1/R3.3: from ./web/Dockerfile, repo only
-          docker push "$IMG:latest"                                          # R4.3: push BOTH tags (carry inline cache metadata)...
-          docker push "$IMG:${{ steps.vars.outputs.sha }}"                   # ...the stable one and the immutable one
+          # R4.3: push BOTH tags (the stable :latest carrying inline-cache metadata + the immutable :sha).
+          # Retry each: GHCR intermittently returns a transient "unknown blob" mid-upload (a registry flake,
+          # not a build error) — a retry clears it so a hiccup can't fail the whole deploy and leave the site
+          # on the old image. Up to 4 attempts, 10s apart.
+          for tag in latest "${{ steps.vars.outputs.sha }}"; do
+            n=0; until docker push "$IMG:$tag"; do n=$((n+1)); [ "$n" -ge 4 ] && exit 1; echo "push $IMG:$tag failed (attempt $n) — retrying in 10s"; sleep 10; done
+          done
 
       - name: Build & push ai image
         env:
@@ -106,8 +111,9 @@ jobs:
           docker pull "$IMG:latest" || true
           docker build --cache-from "$IMG:latest" --build-arg BUILDKIT_INLINE_CACHE=1 \
             -t "$IMG:latest" -t "$IMG:${{ steps.vars.outputs.sha }}" ./ai
-          docker push "$IMG:latest"
-          docker push "$IMG:${{ steps.vars.outputs.sha }}"
+          for tag in latest "${{ steps.vars.outputs.sha }}"; do   # same transient-flake retry as the web push
+            n=0; until docker push "$IMG:$tag"; do n=$((n+1)); [ "$n" -ge 4 ] && exit 1; echo "push $IMG:$tag failed (attempt $n) — retrying in 10s"; sleep 10; done
+          done
 
   deploy:
     name: deploy to Azure VM
