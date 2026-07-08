@@ -42,13 +42,16 @@ never commit it. (The GitHub-side secrets for the deploy are in [`SECRETS.md`](S
   + the run-sheet [`docs/DEPLOY_DEMO.md`](docs/DEPLOY_DEMO.md).
 - [ ] **Scaling** — horizontal scale (`ai` replicas + gunicorn workers) + the **multi-machine path**
   (Docker Swarm overlay, or `ai` replicas on a second machine; **queue-free**) + a locust before/after.
-- [ ] **Cross-container test harness** — `docker-compose.test.yml` is **scaffolded** (TESTING=1 + a
-  throwaway `worksmarter_test` DB); add the **test-runner service** that runs `pytest` against the live
-  stack (your Dockerfile / how the tests mount into an image).
-- [ ] **Cross-container tests** — integration (web→ai→db) + system (register→profile→readiness) +
-  **fault-isolation (stop `ai` / stop `db` → web survives)** + stress (locust).
-- [ ] **Forum:** media/attachment storage (images/video in posts, comments and DMs) + file-size limits. *(P2P DM (text), live DM notifications, and vote notifications are built — see [`PERSON2.md`](PERSON2.md); the notification feed is in place for media to hook into.)*
-- [ ] **Rate limiting** — `flask-limiter` on the public routes (login/register/forum). *(Messaging already has an anti-spam rate-limit — 20/min.)*
+- [x] **Cross-container test harness** — `docker-compose.test.yml` now runs a **test-runner service**
+  (`tests/Dockerfile`): it waits for `web`+`db` healthy, then drives the live stack over HTTP
+  (`E2E_BASE_URL=http://web:5000`) and the throwaway Mongo (`TEST_MONGO_URI`). CI job `compose-e2e`
+  runs it on every PR, and `build`→`deploy` depend on it.
+- [x] **Cross-container tests** — system (`test_e2e.py`, register→profile→readiness over real HTTP) +
+  **fault-isolation** (`System_Tests/test_fault_isolation.py`: stop `ai` / stop `db` → web survives,
+  `/ready` degrades to 503) + stress (`Stress_Tests/locustfile.py` + a dependency-free burst in
+  `test_load.py`). Deploy/harness invariants are locked by `Integration_Tests/test_deploy_contract.py`.
+- [x] **Forum:** media/attachment storage (images/video in posts, comments and DMs) + file-size limits (PR #160).
+- [x] **Rate limiting** — `flask-limiter` on the public routes (login/register/forum) (PR #160). *(Messaging already has an anti-spam rate-limit — 20/min.)*
 - [ ] **Risk assessment** — anchor the report's "what can go wrong" section (with the team's input).
 
 ## You own the decisions

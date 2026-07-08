@@ -22,10 +22,11 @@ The backend is built and CI-gated; the open work is two teammates' lanes. If you
   [`docs/DEPLOY_DEMO.md`](docs/DEPLOY_DEMO.md).
 - ⏳ **Open — Shiri (`ai/`):** the real Random Forest model + recommendation engine behind `POST /predict` — it's a
   contract-shaped **placeholder** today. See [`PERSON1.md`](PERSON1.md).
-- ⏳ **Open — Elad:** the **live** Azure deploy (VM provisioning + the demo — the pipeline *code* is done); the
-  remaining Forum media/attachments (images/video in posts, comments and DMs + file-size limits);
-  `flask-limiter` on the other public routes; stress tests (locust); the
-  test-runner service. See [`PERSON3.md`](PERSON3.md).
+- ⏳ **Open — Elad:** the **live** Azure deploy (VM provisioning + the demo — the pipeline *code* is done);
+  scaling (`ai` replicas / gunicorn workers + a locust before/after) and the risk-assessment section.
+  *Done:* Forum/DM media + `flask-limiter` on the public routes (#160); the **cross-container test-runner**
+  (`docker-compose.test.yml` + `tests/Dockerfile`, CI job `compose-e2e` gating `build`→`deploy`), the
+  **fault-isolation** + **locust stress** suites, and the deploy-contract guard tests. See [`PERSON3.md`](PERSON3.md).
 - ℹ️ **Online Forum (§10) status:** posts · comments · anonymity · post up/down-votes · **P2P direct messages
   (text) · live DM notifications (SSE push) · anti-spam messaging rate-limit** are built. Still open: media
   attachments + file-size limits · a received-engagement profile metric ·
@@ -85,6 +86,13 @@ python -m pytest -k forum                                         # by keyword a
 # Opt into the env-gated tests that are otherwise skipped (see Testing note below):
 TEST_MONGO_URI=mongodb://localhost:27017 python -m pytest tests/Integration_Tests/test_db_mongo.py  # real Mongo
 E2E_BASE_URL=http://localhost:8000 python -m pytest tests/System_Tests                               # live stack
+
+# Cross-container harness — boots the 3 containers + the test-runner, exits with the runner's code (CI: `compose-e2e`):
+docker compose -f docker-compose.yml -f docker-compose.test.yml up --build --exit-code-from tests
+
+# Destructive fault-isolation (stops ai/db, restarts them) + the stress burst — need a stack already up:
+FAULT_TEST=1 E2E_BASE_URL=http://localhost:8000 python -m pytest tests/System_Tests/test_fault_isolation.py
+E2E_BASE_URL=http://localhost:8000 python -m pytest tests/Stress_Tests   # locust: see tests/Stress_Tests/locustfile.py
 ```
 
 ## Where things are

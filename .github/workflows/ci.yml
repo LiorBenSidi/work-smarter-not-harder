@@ -7,6 +7,7 @@ on:
     branches: [main]
   push:
     branches: [main]
+  workflow_dispatch:        # manual trigger for the on-demand stress job (locust needs a live stack)
 
 jobs:
   checks:
@@ -61,13 +62,45 @@ jobs:
         run: python -m pytest tests/ -q   # must pass; a suite that collects 0 tests now FAILS (no false-green)
 
   # ---------------------------------------------------------------------------
+  # Cross-container gate (OWNER: Elad). `checks` runs the suite IN-PROCESS with injected fakes; this
+  # job boots the REAL 3-container stack and runs the containerized test-runner against it, so the
+  # web -> ai -> db wire path (HTTP, gunicorn, a real Mongo) is proven before anything is published.
+  # It runs on PRs too: a teammate's change that breaks the stack goes red on the PR, not after merge.
+  # ---------------------------------------------------------------------------
+  compose-e2e:
+    name: cross-container stack (test-runner)
+    needs: checks                       # don't spend 3 minutes booting Docker if the fast suite is red
+    if: github.event_name != 'workflow_dispatch'   # the manual run is for the stress job below
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Render a throwaway .env (compose requires SECRET_KEY; never a real secret here)
+        run: echo "SECRET_KEY=ci-only-not-a-real-secret-$RANDOM" > .env
+
+      - name: Boot the stack and run the test-runner against it
+        # --exit-code-from tests: the job's result IS the runner's exit code (it also implies
+        # --abort-on-container-exit, so web/ai/db are torn down as soon as the suite finishes).
+        run: docker compose -f docker-compose.yml -f docker-compose.test.yml up --build --exit-code-from tests
+
+      - name: Dump container logs on failure (so a red run is debuggable without a local repro)
+        if: failure()
+        run: docker compose -f docker-compose.yml -f docker-compose.test.yml logs --no-color --tail 200
+
+      - name: Tear down (volumes too — the throwaway DB must not leak into a rerun)
+        if: always()
+        run: docker compose -f docker-compose.yml -f docker-compose.test.yml down -v --remove-orphans
+
+  # ---------------------------------------------------------------------------
   # CD half (assignment R3–R10). These jobs run ONLY on push to main — a PR
   # stops after `checks` above (R1.3), because both are gated on the push event.
   # ---------------------------------------------------------------------------
 
   build:
     name: build & push image (GHCR)
-    needs: checks                       # R2.2: a failed test build never proceeds to build/push/deploy
+    # R2.2: a failed test build never proceeds to build/push/deploy — and neither does a stack whose
+    # cross-container path is broken (compose-e2e), which unit tests with injected fakes cannot catch.
+    needs: [checks, compose-e2e]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'   # R1.3: a PR never reaches here
     runs-on: ubuntu-latest
     permissions:
@@ -218,5 +251,54 @@ jobs:
              docker compose -f docker-compose.prod.yml up -d --remove-orphans"
           # the run still ends RED (the health step already failed — R8.1 intact); rollback only restores the last-good image
 
-  # Stress tests (locust) run on demand, not as a merge gate — they need a running stack.
-  # Add a separate job (or a manual `workflow_dispatch`) once the app is up, per the course's stress-testing lab.
+  # ---------------------------------------------------------------------------
+  # Stress tests (locust) — ON DEMAND only (OWNER: Elad). They need a running stack and minutes of
+  # runtime, so they are NOT a merge gate: `Actions -> CI -> Run workflow`. Also the harness used for
+  # the before/after scaling numbers (`--scale ai=N`, gunicorn workers).
+  # ---------------------------------------------------------------------------
+  stress:
+    name: stress (locust, on demand)
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install the stress tooling
+        run: pip install locust==2.32.4 requests==2.32.3 pytest==8.4.2
+
+      - name: Render a throwaway .env
+        run: echo "SECRET_KEY=ci-only-not-a-real-secret-$RANDOM" > .env
+
+      - name: Boot the stack (detached) and wait for it to serve
+        run: |
+          docker compose up --build -d
+          curl --fail --retry 30 --retry-delay 2 --retry-all-errors http://localhost:8000/ready
+
+      - name: Concurrency burst (pytest) — 5xx = fail, 429 = the rate-limit defending
+        env:
+          E2E_BASE_URL: http://localhost:8000
+        run: python -m pytest tests/Stress_Tests -q
+
+      - name: Ramped load (locust, headless) — 50 users, 1 minute
+        # --exit-code-on-error 1: any request the scenario marks as a failure (a 5xx, a dropped
+        # connection) fails the job. A 429 is scored as a success — see the locustfile's rationale.
+        run: |
+          locust -f tests/Stress_Tests/locustfile.py --headless \
+            -u 50 -r 10 -t 1m --host http://localhost:8000 \
+            --exit-code-on-error 1 --csv stress-report
+
+      - name: Upload the locust report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: locust-report
+          path: stress-report*.csv
+          if-no-files-found: ignore
+
+      - name: Tear down
+        if: always()
+        run: docker compose down -v --remove-orphans

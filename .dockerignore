@@ -1,0 +1,22 @@
+# Build context for the repo ROOT — used only by tests/Dockerfile (the cross-container test-runner).
+# `web/` and `ai/` build from their own contexts and keep their own .dockerignore.
+#
+# Keeps the runner's context small and, above all, keeps SECRETS out of it: a `.env` copied into an
+# image layer is readable by anyone who can pull that image.
+.env
+.env.*
+!.env.example
+
+.git/
+.github/
+.githooks/
+
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+.venv/
+venv/
+
+docs/
+*.md
