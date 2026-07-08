@@ -494,6 +494,12 @@
     .settings-group .seg input { accent-color:var(--accent); margin:0; }
     .settings-group .seg:has(input:checked) { border-color: color-mix(in srgb, var(--accent) 60%, transparent); background:var(--field); }
     .settings-group .seg:has(input:focus-visible) { outline:2px solid var(--accent); outline-offset:2px; }
+    /* Entry animations (`rise`) are a first-load flourish, not a per-navigation effect. Switching screens
+       toggles display:none->block, which RESTARTS a CSS animation — so the fade+slide replays on every tab
+       change and (stacked with the backdrop-filter repaint) reads as flicker. `html.nav-ready` (set shortly
+       after first paint) freezes the replay while keeping the first impression animated. */
+    html.nav-ready .hero, html.nav-ready .screen, html.nav-ready .card, html.nav-ready .stat,
+    html.nav-ready .streak, html.nav-ready .empty, html.nav-ready .ctx-back { animation: none !important; }
     @media (prefers-reduced-motion: reduce) { *, ::before, ::after { animation:none !important; transition:none !important; } }
   </style>
   <script>
@@ -2120,6 +2126,15 @@
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", () => navigator.serviceWorker.register("/sw.js").catch(() => {}));
     }
+
+    // Freeze the `rise` entry animations once first paint is done (see the html.nav-ready CSS): the initial
+    // screen animates in, then in-app navigation is instant instead of replaying the fade+slide (the
+    // flicker). ~900ms clears the longest entry animation (.hero .7s) before locking.
+    (function lockEntryAnimations() {
+      const done = () => document.documentElement.classList.add("nav-ready");
+      if (document.readyState === "complete") setTimeout(done, 900);
+      else window.addEventListener("load", () => setTimeout(done, 900));
+    })();
   </script>
 </body>
 </html>
