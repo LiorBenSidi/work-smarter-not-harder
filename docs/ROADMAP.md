@@ -3,8 +3,9 @@
 Phased so we always have a viable product (per Noam's feedback). **Every phase is independently shippable:**
 tested, Dockerized, and — once the deploy milestone lands — auto-deployed to Azure on green CI.
 
-**Driving spec:** the submitted [`PROPOSAL.md`](PROPOSAL.md) + Noam's rubric ([`FEEDBACK.md`](FEEDBACK.md)):
-**80** = the whole app (F1–F9, no stretch goals) on Docker · **+10** real-time Forum · **+10** Azure deploy + CI/CD.
+**Driving spec:** the submitted [`PROPOSAL.md`](PROPOSAL.md) + the TA's rubric ([`GUIDELINES.md`](GUIDELINES.md),
+which supersedes [`FEEDBACK.md`](FEEDBACK.md)):
+**75** = the whole app (F1–F9, no stretch goals) on Docker · **+5** Job Queue (parallel AI request handling) · **+10** real-time Forum · **+10** Azure deploy + CI/CD.
 Penalties: −5 / bug, −5 / week late. Partial credit per feature; you needn't do it all (this is the bar for a perfect 100).
 
 ## Scope decision — pending Noam's OK
@@ -24,7 +25,7 @@ CI green; first real tests in all five dirs; the feature×test matrix is started
 
 > **Phase 0 vs the proposal's §15 MVP:** Phase 0 is a thin architecture-proving slice. With F4 added it now covers the proposal's §15 "Minimum Working Version" **except the heavier Workout-generator (F5)**, which lands first in *Complete the 80* below — so the full §15 MVP is done by the end of that workstream. **Nothing in the proposal is dropped.**
 
-## After Phase 0 — three workstreams
+## After Phase 0 — the workstreams
 Order is **open** (recommended as written below; final sequencing TBD). The only hard constraint: **Deploy can't
 start until Phase 0 exists** — you can't auto-deploy nothing.
 
@@ -42,6 +43,13 @@ defense across all endpoints.
 **Done when:** the whole proposal (minus stretch) runs on Docker; the feature×test matrix is complete; the risk
 report is concrete. **= the 80.**
 
+### Job Queue (+5) — Elad
+**Goal:** the `ai` container handles many concurrent users' requests in parallel, not one at a time.
+**Scope:** a **job queue** in front of the model so incoming `/predict` calls are queued and processed in
+parallel (worker pool / replicas), rather than serialized per request.
+**Done when:** many simultaneous `/predict` calls are accepted and worked in parallel through the queue.
+*Banks the +5. This is the new parallelization requirement in [`GUIDELINES.md`](GUIDELINES.md).*
+
 ### Forum (+10) — *built last, in 3 cuttable slices; partial credit accrues per slice*
 Same stack as the app (Flask + Mongo + Docker) **plus a real-time layer** — SSE needs no new dependency and
 covers one-way feeds/notifications; Flask-SocketIO adds true bidirectional sockets for DM (a dependency →
@@ -53,7 +61,7 @@ audit-then-`!`-install when you reach it). All 8 sub-features are needed for the
 - **3c — Messaging** (hardest, most cuttable): secure **P2P DM** (text/image/video) · **live notifications** for new DMs + votes (reuses 3b's real-time layer). → ships real-time DM + notifications.
 
 **Tests (each slice):** unit (vote tally · anonymity · size-limit) · integration (post→comment→notify) · security (rate-limit blocks a flood · oversized upload rejected · DM auth-gated + private) · stress (post/vote flood → 429, not a crash).
-**Done when:** the slices you ship are integrated, tested, auto-deployed. **Cut line:** if time runs short, 3a (+3b) alone still banks most of the +10 — the app stays a viable 80+10 product without 3c.
+**Done when:** the slices you ship are integrated, tested, auto-deployed. **Cut line:** if time runs short, 3a (+3b) alone still banks most of the +10 — the app stays a viable 75+10 product without 3c.
 
 ## Engineering standards (every phase)
 - **TDD-first**; all 5 test types + a feature×test matrix; a broken test is **deleted, not commented out**; tests
@@ -87,7 +95,7 @@ The only coordination points are the seams (`/predict` shape, `db.py`'s function
 | Rate-limit / anti-spam | 🟡 messaging has an anti-spam rate-limit (20/min, Lior); `flask-limiter` on the other public routes TODO | Lior (messaging) · Elad (other routes) |
 | Fault tolerance + **isolation tested** (stop ai/db → web survives) | 🟡 `ai_client` degrades + compose hardening (restart/`start_period`, `web` boots if `ai` down); kill-container isolation tests TODO | Lior (degrade/compose) · Elad (kill tests) |
 | Observability — Week-9 logging (named loggers, handlers, levels, access log) | ✅ web | Lior |
-| Parallel programming + scaling — multiprocessing batch · replicas/workers · multi-machine (Swarm / Azure VM) · **queue-free** | 🟡 concrete plan | Shiri (parallel code) · Elad (scaling) |
+| Parallel programming + scaling — multiprocessing batch · replicas/workers · multi-machine (Swarm / Azure VM) · **job queue for parallel AI requests (+5)** | 🟡 concrete plan | Shiri (parallel code) · Elad (scaling + job queue) |
 | Stress tests (decide what can crash) | ⬜ | Elad |
 | GitHub: regular commits from **all 3**, meaningful messages | 🟡 in progress | all |
 | Report (app + features×tests + **risk assessment**) | 🟡 first draft ([`REPORT.md`](REPORT.md)); regenerated as tests land | all (Elad: risk) |
