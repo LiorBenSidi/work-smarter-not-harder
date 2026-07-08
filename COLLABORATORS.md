@@ -8,7 +8,7 @@
 |---|---|---|---|
 | **Shiri** | `shiriHaboob` | **AI brain** — model, `/predict`, recommendation engine, the dataset, the Forum cold-seed generator | [PERSON1.md](PERSON1.md) |
 | **Lior** | `LiorBenSidi` | **Web app + data + observability + CI/CD** — the Flask **backend** (API · auth/sessions · validation · orchestration of ai+db) + the frontend (incl. the **direct-messages + live-DM-notifications Chat tab**) + the **whole data layer** (`services/db.py` CRUD, the Mongo indexes / `$jsonSchema` validators / auth config / backups / `db/seed.py`) + **Week-9 logging/observability** + the **`web`/`ai` container build & compose** + the **CI gate** (ruff → bandit → pytest) + the **CI/CD deploy pipeline** (GHCR build/push → SSH-deploy-to-Azure → Caddy HTTPS + `docker-compose.prod.yml`; dormant until the VM lands) | [PERSON2.md](PERSON2.md) |
-| **Elad** | `EladNa1` | **Live deployment + scale + remaining Forum media** — the **live Azure deploy** (provision the VM + its GitHub secrets, make the GHCR packages public, UptimeRobot monitor, run the deploy demo — the pipeline *code* is in the repo, see Lior) + the test-runner service, the remaining **Forum media/attachments** (images/video + file-size limits), `flask-limiter` on the other public routes, stress / cross-container tests | [PERSON3.md](PERSON3.md) |
+| **Elad** | `EladNa1` | **Live deployment + scale + remaining Forum media** — the **live Azure deploy** (provision the VM + its GitHub secrets, make the GHCR packages public, UptimeRobot monitor, run the deploy demo — the pipeline *code* is in the repo, see Lior) + the test-runner service, the remaining **Forum media/attachments** (images/video + file-size limits), `flask-limiter` on the other public routes, stress / cross-container tests, the **job queue** in front of the model (+5, parallel `/predict` handling) | [PERSON3.md](PERSON3.md) |
 | **Shared** | all three | **Tests** — **Lior wrote the web + data integration / system / security tests** (auth · profile · check-in · dashboard · history · forum flows · the real-Mongo IT · the web→ai→db e2e) **and the CI gate**; each owner adds their plane's unit tests (Shiri = AI). **Elad owns the live cross-container test-runner + stress (locust).** | — |
 
 Roles are **containers/aspects**, not a rigid feature list — see "Freedom" below.
@@ -51,4 +51,4 @@ your repo root, and `docker compose up --build`. It's gitignored — never commi
 4. **Pre-submit** (before 23 Aug) — freeze, full test suite, report + video.
 
 ## Plan & rubric
-Phased build plan: [`docs/ROADMAP.md`](docs/ROADMAP.md). Grading rubric (80 + 10 + 10): [`docs/FEEDBACK.md`](docs/FEEDBACK.md).
+Phased build plan: [`docs/ROADMAP.md`](docs/ROADMAP.md). Grading rubric (75 + 5 (Job Queue) + 10 + 10): [`docs/GUIDELINES.md`](docs/GUIDELINES.md) (supersedes [`docs/FEEDBACK.md`](docs/FEEDBACK.md)).

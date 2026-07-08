@@ -41,7 +41,9 @@ never commit it. (The GitHub-side secrets for the deploy are in [`SECRETS.md`](S
   domain, add UptimeRobot (R9), and run the live deploy demo. Steps: [`docs/CICD_REPORT.md`](docs/CICD_REPORT.md)
   + the run-sheet [`docs/DEPLOY_DEMO.md`](docs/DEPLOY_DEMO.md).
 - [ ] **Scaling** — horizontal scale (`ai` replicas + gunicorn workers) + the **multi-machine path**
-  (Docker Swarm overlay, or `ai` replicas on a second machine; **queue-free**) + a locust before/after.
+  (Docker Swarm overlay, or `ai` replicas on a second machine) + a locust before/after.
+- [ ] **Job Queue (+5)** — a job queue in front of the model so the `ai` container handles many users'
+  `/predict` calls at once, processed in parallel (the new parallelization requirement — [`docs/GUIDELINES.md`](docs/GUIDELINES.md)).
 - [ ] **Cross-container test harness** — `docker-compose.test.yml` is **scaffolded** (TESTING=1 + a
   throwaway `worksmarter_test` DB); add the **test-runner service** that runs `pytest` against the live
   stack (your Dockerfile / how the tests mount into an image).
