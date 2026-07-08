@@ -186,7 +186,11 @@ jobs:
           echo "prev=$PREV" >> "$GITHUB_OUTPUT"
           ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=accept-new "$DEPLOY_USER@$HOST" \
             "cd ~/app && docker compose -f docker-compose.prod.yml pull && \
-             docker compose -f docker-compose.prod.yml up -d --remove-orphans"   # idempotent (R5.3); restart policy => reboot-safe (R5.4)
+             docker compose -f docker-compose.prod.yml up -d --remove-orphans && \
+             { docker compose -f docker-compose.prod.yml exec -T caddy caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile || docker compose -f docker-compose.prod.yml restart caddy ; }"
+          # 'up -d' recreates only services whose compose definition changed, so a bind-mounted Caddyfile edit
+          # (e.g. new security headers) never restarts Caddy on its own -> reload it explicitly (restart = fallback).
+          # idempotent (R5.3); restart policy => reboot-safe (R5.4)
 
       - name: Health check against the public HTTPS address (R7 — readiness, the real VM + a live DB ping)
         env:
