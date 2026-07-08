@@ -1,3 +1,5 @@
+> ⚠️ SUPERSEDED by the TA's WSNH_Guidelines.pdf (8 Jul 2026) — see docs/GUIDELINES.md. Kept for history. The rubric is now 75 + 5 (Job Queue) + 10 + 10, not 80 + 10 + 10.
+
 # Noam's feedback — final-project grading spec
 
 > _Source: Noam's feedback on our submitted proposal (Moodle, 25 Jun 2026) — `feedback.md` in the course's

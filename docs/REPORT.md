@@ -7,8 +7,8 @@
 > This is the living project report — the 23.08 deliverable required by the guidelines: an explanation of
 > the app, a **feature × tests matrix drawn from the real suite**, and a **risk assessment**. It is kept
 > in-repo and updated as the build progresses. Spec sources: the submitted [`PROPOSAL.md`](PROPOSAL.md)
-> (graded 100/100 — the contract) and the rubric in [`FEEDBACK.md`](FEEDBACK.md) (80 build · +10 Forum ·
-> +10 Azure deploy + CI/CD). Architecture detail lives in [`DESIGN.md`](DESIGN.md); the phased plan in
+> (graded 100/100 — the contract) and the rubric in [`GUIDELINES.md`](GUIDELINES.md) (75 build · +5 Job Queue · +10 Forum ·
+> +10 Azure deploy + CI/CD; supersedes [`FEEDBACK.md`](FEEDBACK.md)). Architecture detail lives in [`DESIGN.md`](DESIGN.md); the phased plan in
 > [`ROADMAP.md`](ROADMAP.md).
 >
 > **Last updated:** 2026-07-01 · **Suite at this snapshot:** 292 tests, 282 passing / 10 environment-gated.
