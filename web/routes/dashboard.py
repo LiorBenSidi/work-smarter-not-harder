@@ -43,7 +43,8 @@ def dashboard():
         return jsonify(profile=None, readiness=None, calories=None,
                        ai_status="skipped", needs_profile=True), 200
 
-    prediction = ai_client.predict(current_app.config["AI_URL"], profile)
+    prediction = ai_client.predict(current_app.config["AI_URL"], profile,
+                                   timeout=current_app.config["AI_CLIENT_TIMEOUT"])
     if not isinstance(prediction, dict):
         # ai unreachable (None) or a malformed non-object response -> degrade gracefully, never crash
         return jsonify(profile=profile, readiness=None, calories=None, ai_status="unavailable"), 200

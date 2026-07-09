@@ -22,6 +22,10 @@ class Config:
     SECRET_KEY = os.environ.get("SECRET_KEY", "")          # required in real runs (set via .env)
     MONGO_URI = os.environ.get("MONGO_URI", "mongodb://db:27017/worksmarter")
     AI_URL = os.environ.get("AI_URL", "http://ai:5000")
+    # How long web waits for ai `/predict` before degrading. INTERIM value: must stay >= the ai queue's
+    # AI_PREDICT_TIMEOUT_SECONDS (default 30) so web doesn't give up on — and discard — a result ai is
+    # still computing. Re-tune (likely down) once the real model's predict-time is measured (PERSON1.md).
+    AI_CLIENT_TIMEOUT = _int_env("AI_CLIENT_TIMEOUT_SECONDS", 33)
     DEBUG = os.environ.get("FLASK_DEBUG", "0") == "1"
     TESTING = os.environ.get("TESTING", "0") == "1"
 
