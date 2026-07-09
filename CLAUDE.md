@@ -22,8 +22,9 @@ The backend is built and CI-gated; the open work is two teammates' lanes. If you
   [`docs/DEPLOY_DEMO.md`](docs/DEPLOY_DEMO.md).
 - ⏳ **Open — Shiri (`ai/`):** the real Random Forest model + recommendation engine behind `POST /predict` — it's a
   contract-shaped **placeholder** today. See [`PERSON1.md`](PERSON1.md).
-- ⏳ **Open — Elad:** the live-deploy **demo** and the risk-assessment section.
-  *Done:* the Azure deploy is **live** (`https://app.worksmarternotharder.dev`, auto-deploy on green `main`);
+- ⏳ **Open — Elad:** the live-deploy **demo** (the run itself; everything it needs is wired) + the UptimeRobot monitor.
+  *Done:* the **risk assessment** ([`docs/REPORT.md`](docs/REPORT.md) §5); the Azure deploy is **live**
+  (`https://app.worksmarternotharder.dev`, auto-deploy on green `main`);
   the **AI job queue** (`ai/jobqueue.py` — bounded queue + `ProcessPoolExecutor` in front of
   `inference.predict_one`; `/predict` unchanged, `/jobs` + `/queue/stats` additive; GUIDELINES §2, +5);
   **scaling, measured** ([`docs/SCALING_REPORT.md`](docs/SCALING_REPORT.md) — pool 1→4 = 2.86×,
@@ -31,10 +32,11 @@ The backend is built and CI-gated; the open work is two teammates' lanes. If you
   Forum/DM media + `flask-limiter` on the public routes (#160); the **cross-container test-runner**
   (`docker-compose.test.yml` + `tests/Dockerfile`, CI job `compose-e2e` gating `build`→`deploy`), the
   **fault-isolation** + **locust stress** suites, and the deploy-contract guard tests. See [`PERSON3.md`](PERSON3.md).
-- ℹ️ **Online Forum (§10) status:** posts · comments · anonymity · post up/down-votes · **P2P direct messages
-  (text) · live DM notifications (SSE push) · anti-spam messaging rate-limit** are built. Still open: media
-  attachments + file-size limits · a received-engagement profile metric ·
-  fuller cold-seeding (the seed content is Shiri's). See [`docs/FEEDBACK.md`](docs/FEEDBACK.md) §2 for the rubric.
+- ℹ️ **Online Forum (§10) status:** posts · comments · anonymity · post **and comment** up/down-votes ·
+  **P2P direct messages (text) · live DM notifications (SSE push) · vote notifications · anti-spam messaging
+  rate-limit** are built (Lior), and **media attachments + file-size limits** are built (Elad, #160). Still
+  open: a received-engagement profile metric · fuller cold-seeding (the seed content is Shiri's).
+  Rubric: [`docs/GUIDELINES.md`](docs/GUIDELINES.md) §3 (it superseded `FEEDBACK.md` on 8 Jul).
 
 ## ⛔ Workflow — `main` is PR-only (enforced server-side)
 - **Never push to `main`.** It's branch-protected — direct pushes are rejected for everyone, including admins.

@@ -5,7 +5,7 @@
 **Validated against:** [`PROPOSAL.md`](PROPOSAL.md) (graded 100/100 — the contract) · [`PROPOSAL-v2.md`](PROPOSAL-v2.md) (intent) ·
 the rubric [`GUIDELINES.md`](GUIDELINES.md) (75 + 5 (Job Queue) + 10 + 10; supersedes [`FEEDBACK.md`](FEEDBACK.md)) · the WSML course rules · the live skeleton (`docker-compose.yml`, `web/`, `ai/`, `tests/`).
 
-**Resolution (2026-06-27):** findings **3, 4, 5, 6** are fixed in the follow-up PR — scaling story corrected to replicas + workers; auth-scale note added; the `/predict` shape pinned (`recommendations` is a list, key is `state`); the contract test made behavioural. **1, 2** remain open *decisions* (Forum transport/storage ADR; Injury-Risk pending the Noam email). **7** is now **built** — the deploy job (GHCR build/push → SSH-deploy-to-Azure → Caddy HTTPS + auto-rollback) is in `ci.yml`, dormant until the live VM (Elad's go-live step); **8** (`/predict` 400-vs-5xx) lands with the model.
+**Resolution (2026-06-27):** findings **3, 4, 5, 6** are fixed in the follow-up PR — scaling story corrected to replicas + workers; auth-scale note added; the `/predict` shape pinned (`recommendations` is a list, key is `state`); the contract test made behavioural. **1, 2** remain open *decisions* (Forum transport/storage ADR; Injury-Risk pending the Noam email). **7** is now **live** — the deploy job (GHCR build/push → SSH-deploy-to-Azure → Caddy HTTPS + auto-rollback) is in `ci.yml` and auto-deploys every green `main` to `app.worksmarternotharder.dev` (Elad's go-live step, done; the graded demo run remains); **8** (`/predict` 400-vs-5xx) lands with the model.
 
 ## Verdict
 The 3-container design is **sound for the 80-point app and the CI half of the deploy +10** — the seams are real,
