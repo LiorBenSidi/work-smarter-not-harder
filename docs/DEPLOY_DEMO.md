@@ -62,10 +62,11 @@ deploy **auto-rolls-back** to the last-good image (see the run-sheet). Re-runnin
 - [ ] Name.com: `CNAME app → <the FQDN>` added (only if using the custom domain).
 - [x] Both GHCR packages **public** (`work-smarter-web`, `work-smarter-ai`). ✅ done.
 - [ ] The VM is **started** (Azure portal → your VM → Start — idle VMs auto-stop).
-- [ ] **The VM has swap enabled (≥ 2 GB).** The ~1 GB student VM OOMs bringing up all 4 containers (the `ai`
-      worker loads the ML model) — without headroom mongo's healthcheck times out → `web`/`caddy` never start.
-      One-time: `sudo fallocate -l 4G /swapfile && sudo chmod 600 /swapfile && sudo mkswap /swapfile && sudo swapon /swapfile && echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab`.
-      *(The prod compose also runs 1 gunicorn worker per app so the stack fits; swap is the safety margin.)*
+- [ ] **Swap (optional now).** The VM is a **Standard E4ads v5 (4 vCPU / 32 GiB)** — the stack fits in RAM, so
+      swap is no longer required (it was mandatory on the old 1 GB B1s). Keep any existing swap as a safety net;
+      if provisioning a fresh VM you can skip it, or add 4 GB once:
+      `sudo fallocate -l 4G /swapfile && sudo chmod 600 /swapfile && sudo mkswap /swapfile && sudo swapon /swapfile && echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab`.
+      *(`ai` still runs 1 gunicorn worker — architectural, for the in-memory job store — with the process pool for parallelism.)*
 - [ ] **A green deploy has run at least once** before the demo, so the Let's Encrypt cert is issued and
       `~/app/.last_good_sha` exists (the rollback anchor). Don't let the *first-ever* deploy be the live demo.
 - [ ] UptimeRobot monitor is live (§1) and has at least one recorded **down→up** event.
