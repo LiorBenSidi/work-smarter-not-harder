@@ -15,10 +15,11 @@
 > (`pytest --collect-only`; the env-gated ones run in CI's `compose-e2e` job against the live containers).
 >
 > ⚠️ **Sections still owned by their planes.** §5 (risk), §2's deploy/scale/queue rows and §3's Elad rows are
-> current as of this date. §1's API surface + data model do not yet list the DM / SSE / notification /
-> media endpoints and collections (**Lior**), and §2's AI rows (F3 model, F5, F6/F7 engine, F4 live value)
-> plus §3's `test_ai` scaffold row await the Random Forest (**Shiri**). §8 still cites `FEEDBACK.md`, which
-> [`GUIDELINES.md`](GUIDELINES.md) superseded on 8 Jul (and which added the **+5 Job Queue**).
+> current as of this date. §1's API surface + data model now list the DM / SSE / notification / comment-vote
+> endpoints and the `messages` / `notifications` collections (**Lior**), plus the media endpoints and the
+> `media` collection (**Elad**, #160). Still open: §2's AI rows (F3 model, F5, F6/F7 engine, F4 live value)
+> plus §3's `test_ai` scaffold row await the Random Forest (**Shiri**). The rubric is
+> [`GUIDELINES.md`](GUIDELINES.md) (which superseded `FEEDBACK.md` on 8 Jul and added the **+5 Job Queue**).
 
 ---
 
@@ -62,15 +63,23 @@ is implemented independently.
 | `/forum/posts` | GET · POST | Forum: list / create |
 | `/forum/posts/<id>` | GET · PATCH · DELETE | Forum: read / **edit-own** / **delete-own** (403 otherwise) |
 | `/forum/posts/<id>/comments` | POST | Forum: comment |
-| `/forum/posts/<id>/vote` | POST | Forum: vote (strict `+1` / `-1`) |
-| `/` · `/health` | GET | SPA entry · liveness probe |
+| `/forum/posts/<id>/vote` | POST | Forum: post vote (strict `+1` / `-1`) |
+| `/forum/posts/<id>/comments/<cid>/vote` | POST | Forum: comment vote (strict `+1` / `-1`) |
+| `/messages` · `/conversations` · `/conversations/<peer>` · `/users/search` | POST · GET | Direct messages: send / list threads / read a thread / recipient search |
+| `/notifications` · `/notifications/read` | GET · POST | Notifications feed (poll cursor) + mark-read |
+| `/events` | GET | Real-time push — SSE `text/event-stream` (new posts, DMs, notifications) |
+| `/media` · `/media/<id>` · `/forum/posts/<id>/attachments` · `/messages/<peer>/attachments` | POST · GET | Media upload / serve + bind-to-post / bind-to-DM (owner/participant-checked) — **Elad's lane (#160)** |
+| `/` · `/health` · `/ready` | GET | SPA entry · liveness probe · readiness (dependency) gate |
+| `/manifest.webmanifest` · `/sw.js` · `/.well-known/assetlinks.json` | GET | PWA install manifest · service worker · Android-TWA Digital Asset Links |
 | `ai:/predict` | POST | readiness class + probabilities + recommendations (internal; web also reads an optional calorie target, added once the model lands) |
 
 ### Data model (MongoDB)
 
 `users` { username *(the unique internal handle)*, display_name *(non-unique)*, email, password_hash } · `profiles` { username, age, gender, height, weight, goal,
 training_frequency } · `analysis_history` { username, metrics, assessment, calories, timestamp } ·
-`forum_posts` { id, author, title, body, anonymous, score, votes, comments }.
+`forum_posts` { id, author, title, body, anonymous, score, votes, comments } ·
+`messages` { id, sender, recipient, body, created_at, read } · `notifications` { id, user, type, text, actor,
+read, created_at } · `media` { id, owner, mime, size, target_type, target_id, peers, created_at } *(Elad, #160)*.
 
 ---
 
