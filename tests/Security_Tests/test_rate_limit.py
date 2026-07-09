@@ -58,6 +58,17 @@ def test_vote_is_rate_limited_after_a_flood(rate_limited_forum_client):
     assert last.status_code == 429
 
 
+def test_comment_flood_is_rate_limited(rate_limited_forum_client):
+    c = rate_limited_forum_client
+    _login_forum(c)
+    pid = c.post("/forum/posts", json={"title": "spammee", "body": "hello there"}).get_json()["post"]["id"]
+    # 20/min on POST /forum/posts/<id>/comments: comment flooding from one IP is throttled
+    last = None
+    for i in range(25):
+        last = c.post(f"/forum/posts/{pid}/comments", json={"body": f"spam {i}"})
+    assert last.status_code == 429
+
+
 def test_normal_forum_traffic_is_not_rate_limited(forum_client):
     # the default forum_client (limiter OFF) — a handful of posts never 429 (the caps are opt-in)
     forum_client.post("/register", json={"username": "regular", "password": "s3cretpw!", "email": "r@ex.com"})
