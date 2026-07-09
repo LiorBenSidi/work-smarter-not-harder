@@ -63,7 +63,11 @@ never commit it. (The GitHub-side secrets for the deploy are in [`SECRETS.md`](S
   `test_load.py`). Deploy/harness invariants are locked by `Integration_Tests/test_deploy_contract.py`.
 - [x] **Forum:** media/attachment storage (images/video in posts, comments and DMs) + file-size limits (PR #160).
 - [x] **Rate limiting** — `flask-limiter` on the public routes (login/register/forum) (PR #160). *(Messaging already has an anti-spam rate-limit — 20/min.)*
-- [ ] **Risk assessment** — anchor the report's "what can go wrong" section (with the team's input).
+- [x] **Risk assessment** — [`docs/REPORT.md`](docs/REPORT.md) §5, rewritten around the question *"which test
+  goes red if this mitigation disappears?"*. Five sub-sections: dependency failure · the job queue's four new
+  failure modes · scale & deploy · abuse/security/data · **what we deliberately did not mitigate** (`/jobs`
+  isn't replica-safe; one VM, no failover; `web` unreplicated; tail latency across replicas). Closes with how
+  the guards are kept honest — every one was mutation-tested by breaking its invariant on purpose.
 
 ## You own the decisions
 The deploy mechanism, the compose/CI structure, the media-storage approach, the scaling
