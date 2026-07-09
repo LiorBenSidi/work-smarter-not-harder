@@ -7,7 +7,7 @@ setup + grader Q&A: [`DEPLOY_DEMO.md`](DEPLOY_DEMO.md).
 
 **The app & its health endpoint.** *Work Smarter, Not Harder* is a 3-container Flask app (web + internal `ai`
 inference + MongoDB). Only `web` is public. It exposes `GET /health` ([`web/app.py`](../web/app.py)) returning
-`200 {"status":"ok"}`, used by the container healthcheck, the pipeline's post-deploy check (R7), and the external
+`200 {"status":"ok","service":"web"}`, used by the container healthcheck, the pipeline's post-deploy check (R7), and the external
 monitor (R9).
 
 ## Requirement mapping

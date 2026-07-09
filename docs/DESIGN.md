@@ -19,9 +19,12 @@ User → web ──┬──► ai   (POST /predict, internal)
 
 ## 2. Data model (MongoDB — PROPOSAL §9)
 - `users` — { username *(unique internal handle)*, display_name *(non-unique, shown)*, email, password_hash }
-- `profiles` — { user_id, age, gender, height, weight, goal, training_frequency }
-- `programs` — { workout programs / exercise catalog }
-- `analysis_history` — { user_id, metrics, assessment, calories, timestamp }
+- `profiles` — { username, age, gender, height, weight, goal, training_frequency }
+- `analysis_history` — { username, metrics, assessment, calories, timestamp }
+- `forum_posts` — { id, author, title, body, anonymous, score, votes, comments }
+- `messages` — { id, sender, recipient, body, created_at, read }
+- `notifications` — { id, user, type, text, actor, read, created_at }
+- `media` — { id, owner, mime, size, target_type, target_id, peers, created_at }
 
 ## 3. API contracts
 | Endpoint | Method | Container | Notes |

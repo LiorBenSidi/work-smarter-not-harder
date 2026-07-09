@@ -129,7 +129,7 @@ went red — a guard that cannot fail is decoration.
 ## Deployment (CI/CD → Azure)
 Every push to `main` runs an automated pipeline ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) that takes the
 dockerized stack from commit to a running container on an Azure VM, served over HTTPS. The app exposes two probes: `GET /health`
-(trivial **liveness** — `200 {"status":"ok"}`, no Mongo, so it boots before the DB layer) and `GET /ready` (**readiness** — pings
+(trivial **liveness** — `200 {"status":"ok","service":"web"}`, no Mongo, so it boots before the DB layer) and `GET /ready` (**readiness** — pings
 Mongo, `503` if the DB is down). The container healthcheck uses `/health`; the post-deploy gate + external monitor use `/ready`.
 Full requirement-by-requirement mapping: [`docs/CICD_REPORT.md`](docs/CICD_REPORT.md).
 
@@ -155,11 +155,12 @@ certificate and redirects HTTP→HTTPS; the VM runs the prod compose, which **pu
 | Secret | `APP_SECRET_KEY` | Flask `SECRET_KEY`, injected into the VM's `.env` at deploy time |
 | Secret | `SMTP_USER` | Brevo relay login — *optional*; set it + `SMTP_PASS` to turn on real inbox email (OTP/reset). Unset → safe log backend |
 | Secret | `SMTP_PASS` | Brevo SMTP key — *optional*; its presence is the switch that flips email from log-backend to real Brevo delivery |
-| Variable | `SSH_HOST` | the VM's FQDN (`<label>.<region>.cloudapp.azure.com`) — the **SSH/deploy target**. **Until this is set, the deploy job is skipped and `main` stays green** |
+| Variable | `SSH_HOST` | the VM's FQDN (`<label>.<region>.cloudapp.azure.com`) — the **SSH/deploy target** |
+| Variable | `DEPLOY_ENABLED` | the deploy switch. **The deploy job runs only when `SSH_HOST` is set AND `DEPLOY_ENABLED == 'true'`**; anything else (unset included) → deploy skipped, `main` stays green. Flip live/off with one `gh variable set DEPLOY_ENABLED --body true|false`, never touching `SSH_HOST` |
 | Variable | `SITE_ADDRESS` | *optional* — the **public** HTTPS address (TLS cert + health check + monitor + email links). Set it to serve the app at your own domain (e.g. `app.worksmarternotharder.dev`, CNAME'd to the FQDN); unset → falls back to the Azure FQDN |
 | — (built-in) | `GITHUB_TOKEN` | authenticates the GHCR push automatically — no PAT, no signup |
 
-`SSH_USER` is the same for every group (`deploy`) and is hardcoded in the workflow. `SSH_HOST` is a **variable**, not a
+`SSH_USER` is a **variable** (default `azureuser`) — override it only if your VM uses a different login. `SSH_HOST` is a **variable**, not a
 secret — a hostname needs no masking. The `SMTP_*` pair is optional: with it unset the app writes the login code to its
 log (fine for the demo); set both to deliver real Brevo email from the authenticated `worksmarternotharder.dev` domain.
 
@@ -217,7 +218,7 @@ Proposal graded **100/100**. Rubric: [`docs/GUIDELINES.md`](docs/GUIDELINES.md) 
 **Built and live.** The web tier, the whole data layer, the online Forum (posts · comments · votes · anonymity ·
 P2P direct messages · media attachments · SSE-pushed notifications), Week-9 logging, the 3-container build, the
 CI gate, the cross-container test-runner, the **AI job queue (+5)**, **measured scaling**, and the CI/CD pipeline
-auto-deploying every green `main` to Azure over HTTPS. Suite: **648 passing / 33 environment-gated**.
+auto-deploying every green `main` to Azure over HTTPS. Suite: **653 passing / 33 environment-gated** (686 collected).
 
 **Remaining:** the Random Forest behind `POST /predict` (Shiri — the contract-shaped placeholder is in place, so
 the queue and `web` already integrate against it) and forum cold-seed content. Risk assessment and the honest

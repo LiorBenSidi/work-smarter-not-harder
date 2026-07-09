@@ -11,7 +11,7 @@
 > +10 Azure deploy + CI/CD; supersedes [`FEEDBACK.md`](FEEDBACK.md)). Architecture detail lives in [`DESIGN.md`](DESIGN.md); the phased plan in
 > [`ROADMAP.md`](ROADMAP.md).
 >
-> **Last updated:** 2026-07-09 · **Suite at this snapshot:** **684 tests, 648 passing / 33 environment-gated**
+> **Last updated:** 2026-07-09 · **Suite at this snapshot:** **686 tests, 653 passing / 33 environment-gated**
 > (`pytest --collect-only`; the env-gated ones run in CI's `compose-e2e` job against the live containers).
 >
 > ⚠️ **Sections still owned by their planes.** §5 (risk), §2's deploy/scale/queue rows and §3's Elad rows are
@@ -127,7 +127,8 @@ scale plane are the remaining build.
 ## 3. Feature × tests matrix (from the real suite)
 
 Every cell names the **actual test file(s)** and count. This supersedes the aspirational Yes/No matrix in
-`PROPOSAL.md` §13 — it is generated from the real `tests/` tree (`pytest --collect-only`), not planned.
+`PROPOSAL.md` §13. The rows below map each graded feature to representative test file(s); the totals under the
+table are the **full** suite by type (`pytest --collect-only`).
 
 | Feature / component | Unit | Integration | System | Stress | Security |
 |---|---|---|---|---|---|
@@ -148,8 +149,8 @@ Every cell names the **actual test file(s)** and count. This supersedes the aspi
 | **Whole-system journey** | — | — | `test_e2e` (register→profile→check-in→dashboard→history→forum→logout) | — | — |
 | **Load / abuse** | — | — | — | `test_load` (1, ⏸ locust scaffold) | — |
 
-**Totals by type:** Unit **180** · Integration **72** · System **1** · Stress **1** · Security **38** →
-**292 tests**.
+**Totals by type (full suite):** Unit **254** · Integration **317** · System **13** · Stress **11** ·
+Security **91** → **686 tests**.
 
 **Pass / skip:** locally **282 pass, 10 skip in ~6 s**. The 10 skips are *environment-gated, not broken* —
 they run the moment their dependency is present:
@@ -316,8 +317,8 @@ between planes (§1). Full detail in [`COLLABORATORS.md`](../COLLABORATORS.md) a
 | Person | Plane | Owns |
 |---|---|---|
 | **Shiri** (`shiriHaboob`) | **AI brain** | Random Forest model, real `/predict`, recommendation engine, the dataset, forum cold-seed content; AI unit tests |
-| **Lior** (`LiorBenSidi`) | **Web app + data + observability + CI/CD** | Flask backend (API · auth/sessions · validation · ai+db orchestration) + frontend + the **whole data layer** (`db.py` CRUD, indexes, `$jsonSchema` validators, auth config, backups, seed) + Week-9 logging + the `web`/`ai` container build & compose + the CI gate + the **CI/CD deploy pipeline** (build→GHCR→SSH-deploy→Caddy HTTPS, `docker-compose.prod.yml`); the web/data integration/system/security tests |
-| **Elad** (`EladNa1`) | **Live deployment + real-time + scale** | the **live Azure deploy** (VM secrets, GHCR-packages-public, UptimeRobot, the deploy demo — pipeline code is Lior's), the test-runner service, the Forum real-time layer (notifications / DM / media), rate-limiting (flask-limiter), stress + cross-container tests |
+| **Lior** (`LiorBenSidi`) | **Web app + data + observability + CI/CD** | Flask backend (API · auth/sessions · validation · ai+db orchestration) + frontend (incl. the Forum **real-time layer — P2P DM · live SSE notifications · vote-notifications · comment-votes**) + the **whole data layer** (`db.py` CRUD, indexes, `$jsonSchema` validators, auth config, backups, seed) + Week-9 logging + the `web`/`ai` container build & compose + the CI gate + the **CI/CD deploy pipeline** (build→GHCR→SSH-deploy→Caddy HTTPS, `docker-compose.prod.yml`); the web/data integration/system/security tests |
+| **Elad** (`EladNa1`) | **Live deployment + scale + forum media** | the **live Azure deploy** (VM secrets, GHCR-packages-public, UptimeRobot, the deploy demo — pipeline code is Lior's), the test-runner service, the Forum **media/attachments** (+ file-size caps), rate-limiting (flask-limiter), stress + cross-container tests |
 
 ---
 
