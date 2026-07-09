@@ -5,6 +5,7 @@ still boots (a bad MAX_CONTENT_LENGTH should degrade to the safe default, not ki
 Also pins the course-mandated `debug` flag: FLASK_DEBUG must toggle Flask's debug mode.
 """
 import importlib.util
+import re
 import sys
 from pathlib import Path
 
@@ -60,6 +61,29 @@ def test_ai_client_timeout_default_is_not_below_the_ai_queue_timeout(cfg):
 def test_ai_client_timeout_is_env_tunable(monkeypatch):
     monkeypatch.setenv("AI_CLIENT_TIMEOUT_SECONDS", "45")
     assert _reload_config().Config.AI_CLIENT_TIMEOUT == 45
+
+
+# The web gunicorn worker timeout must EXCEED AI_CLIENT_TIMEOUT — otherwise gunicorn SIGKILLs the worker
+# mid-/predict before ai_client's graceful degrade (return None, DESIGN §5) can fire. Guard both places the
+# web command is defined so raising AI_CLIENT_TIMEOUT past the gunicorn timeout can't silently break it.
+_REPO = Path(__file__).resolve().parents[2]
+
+
+def _web_gunicorn_timeout(text):
+    """The --timeout value on the gunicorn command that serves web (wsgi:app), or None."""
+    text = text.replace("\\\n", " ")  # join Dockerfile CMD line-continuations into one logical line
+    for line in text.splitlines():
+        if "gunicorn" in line and "wsgi:app" in line:
+            m = re.search(r"--timeout['\",\s]+(\d+)", line)
+            return int(m.group(1)) if m else None
+    return None
+
+
+@pytest.mark.parametrize("rel", ["web/Dockerfile", "docker-compose.prod.yml"])
+def test_web_gunicorn_timeout_exceeds_ai_client_timeout(cfg, rel):
+    t = _web_gunicorn_timeout((_REPO / rel).read_text())
+    assert t is not None, f"{rel}: web gunicorn command has no --timeout"
+    assert t > cfg.Config.AI_CLIENT_TIMEOUT, f"{rel}: gunicorn --timeout {t} must exceed AI_CLIENT_TIMEOUT"
 
 
 # ---- the course-mandated `debug` flag (TA notes: "a debug flag that enables debug mode") ----

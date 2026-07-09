@@ -30,7 +30,8 @@ services:
     restart: unless-stopped                # self-heal + survive a VM reboot (R5.4)
     # PROD override: 1 gunicorn worker (image default is 2) to fit the ~1 GB VM. gthread keeps concurrency
     # (1 worker x 4 threads = 4 concurrent I/O-bound requests) at ~half the memory. Dev/CI keep the 2-worker default.
-    command: ["gunicorn", "--bind", "0.0.0.0:5000", "--worker-class", "gthread", "--workers", "1", "--threads", "4", "--max-requests", "1000", "--max-requests-jitter", "100", "wsgi:app"]
+    # --timeout 45 > AI_CLIENT_TIMEOUT (33s) so a slow /predict degrades gracefully instead of a worker SIGKILL.
+    command: ["gunicorn", "--bind", "0.0.0.0:5000", "--worker-class", "gthread", "--workers", "1", "--threads", "4", "--timeout", "45", "--max-requests", "1000", "--max-requests-jitter", "100", "wsgi:app"]
     environment:
       SECRET_KEY: ${SECRET_KEY:?set SECRET_KEY}
       MONGO_URI: ${MONGO_URI:-mongodb://db:27017/worksmarter}
