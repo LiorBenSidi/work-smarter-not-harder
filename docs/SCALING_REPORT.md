@@ -121,16 +121,23 @@ LOCUST_TARGET=ai locust -f tests/Stress_Tests/locustfile.py --headless -u 8 -r 8
 
 Making `/jobs` replica-safe means an external store (Redis / Mongo) for job state. That is a real
 option, not a defect: the synchronous `/predict` path the app actually uses needs none of it, and
-adding Redis would put a fourth container on a 1 GB VM to serve an endpoint nothing calls. Documented
-in `docker-compose.scale.yml`, in `ai/jobqueue.py`, and asserted by `test_scale_contract.py`.
+adding Redis would put a fourth container — a new dependency, a new failure mode — in front of an
+endpoint nothing calls. Documented in `docker-compose.scale.yml`, in `ai/jobqueue.py`, and asserted
+by `test_scale_contract.py`.
 
 ## What this does not cover
 
 * **Multi-machine (Docker Swarm overlay).** `DESIGN.md` names it as a *path*; the containers are
   stateless so `docker stack deploy` would work, but the course supplies one VM.
-* **`web` replicas.** Sessions are cookie-signed, so `web` would scale horizontally — but nothing in the
-  rubric asks for it and the 1 GB VM cannot host them (2 gunicorn workers already OOM'd it, see
-  `docker-compose.prod.yml`).
-* **Prod is deliberately smaller than these numbers.** The VM pins `AI_QUEUE_WORKERS=2` and
-  `AI_QUEUE_MAX_PENDING=32`: each pool process holds its own copy of the model, and ~1 GB does not fit
-  four.
+* **`web` replicas.** Sessions are cookie-signed, so `web` would scale horizontally, and the resized VM
+  has the RAM for it. Not done, on purpose: `web` is I/O-bound (it waits on Mongo and `ai`, and those
+  socket waits release the GIL), so widening the **thread** pool inside one gthread worker buys the same
+  concurrency more cheaply than a second process — and on a single VM, replicas of `web` add throughput,
+  never availability.
+* **Prod now runs these numbers, not smaller ones.** The VM was resized mid-project from a ~1 GB B1s to a
+  **Standard E4ads v5 (4 vCPU / 32 GiB)**, so prod pins `AI_QUEUE_WORKERS=4` — one per vCPU, each pool
+  process holding its own copy of the model. The old 1 GB cap forced `AI_QUEUE_WORKERS=2` and could not.
+  The benchmark above capped the `ai` container at `--cpus=4`, so prod's core count now **matches the
+  measured configuration** and the 2.86× is the number prod should actually see — not a lab-only figure.
+  `AI_QUEUE_MAX_PENDING=32` stays: the backlog bound is about shedding load before callers time out, not
+  about fitting in RAM.

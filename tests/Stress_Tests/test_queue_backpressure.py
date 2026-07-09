@@ -1,9 +1,9 @@
 """Stress: what the job queue does when it is overrun — OWNER: Elad.
 
 The course rule for stress tests is "decide in advance what can crash, and defend it". For the `ai`
-container the answer is memory: a queue with no ceiling turns a traffic spike into an OOM kill on the
-~1 GB VM, which takes every in-flight request with it. The defence is backpressure — reject early,
-cheaply, and keep serving.
+container the answer is the unbounded queue: a traffic spike grows the backlog until memory runs out,
+and long before that the pool is burning cores on jobs whose callers already timed out. The defence is
+backpressure — reject early, cheaply, and keep serving. VM size sets when it breaks, not whether.
 
 These run in-process against a real `JobQueue` (thread-pool-backed, no Docker), so they belong in the
 per-PR gate: they are seconds, not minutes. The minutes-long locust scenario against the live stack

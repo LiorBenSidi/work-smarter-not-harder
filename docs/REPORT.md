@@ -240,7 +240,7 @@ fail. Each is bounded on purpose.
 
 | Risk | Impact | Mitigation | Status |
 |---|---|---|---|
-| **Queue saturation under a flood** | `ai` OOM-killed → every in-flight request dies, not just the excess | The backlog is **bounded** (`AI_QUEUE_MAX_PENDING`). Past it `submit()` raises `QueueFull` and `/predict` sheds with **503**, which `web` already treats as "ai unavailable" and degrades. On the ~1 GB VM an unbounded backlog is an OOM, not a slowdown | ✅ built & tested (`test_queue_backpressure.py`: 4× the bound arrives, the excess is shed, `/health` stays 200) |
+| **Queue saturation under a flood** | Unbounded memory growth, and a backlog so deep every caller has already timed out before its job is scored | The backlog is **bounded** (`AI_QUEUE_MAX_PENDING`). Past it `submit()` raises `QueueFull` and `/predict` sheds with **503**, which `web` already treats as "ai unavailable" and degrades. Memory is the lesser reason: a queue deeper than the callers' patience is pure waste — work is done for clients that left. Shedding early keeps the p95 honest, and a bigger VM only moves that cliff, it does not remove it | ✅ built & tested (`test_queue_backpressure.py`: 4× the bound arrives, the excess is shed, `/health` stays 200) |
 | **Job-store memory leak** | Slow-fuse OOM: one entry per `/predict`, forever | Finished jobs expire (`AI_JOB_TTL_SECONDS`) and the store is hard-capped (`AI_MAX_JOBS`). TTL alone is insufficient — a burst inside one TTL window is still unbounded — so both exist | ✅ built & tested (`test_jobqueue.py` reaping + cap; `test_queue_backpressure.py` sustained run) |
 | **The model raises, or a worker process dies** | Queue wedges permanently at "full"; every later request 503s | The failure is captured per-job and the depth slot is released on the error path too, so capacity returns the moment the model does. A worker crash cannot kill the callback thread | ✅ built & tested (`test_a_flood_of_failing_jobs_does_not_wedge_the_queue`, `test_one_failing_job_does_not_poison_the_next`) |
 | **The model hangs** | A gunicorn thread is pinned forever; `ai` stops serving | `/predict` waits with a bounded timeout (`AI_PREDICT_TIMEOUT_SECONDS`) and returns **504**. The job keeps running — a timeout is the caller giving up, not a cancellation — and the container stays healthy | ✅ built & tested (`test_predict_returns_504_when_the_model_outruns_the_timeout`; verified against the live container) |
@@ -252,12 +252,13 @@ fail. Each is bounded on purpose.
 |---|---|---|---|
 | **Load beyond one `ai` worker** | Requests serialize behind the model | Two multiplying axes: the in-container **process pool** (`AI_QUEUE_WORKERS`) and **replicas** (`--scale ai=N`). Measured: **2.86×** and **1.60×** respectively | ✅ built & **measured** ([`SCALING_REPORT.md`](SCALING_REPORT.md); `test_pool_scaling.py`) |
 | **Someone "simplifies" the process pool to threads** | Silent total loss of parallelism (and the +5): every mocked test still passes | The pool type is asserted, and a real CPU-bound test measures it. A thread pool scores **0.96×** on that test — the GIL — and fails the `>1.5×` bar | ✅ built & tested (`test_pool_scaling.py`, `test_ai_queue_contract.py`) |
-| **`GET /jobs/<id>` under `--scale ai=N`** | 404s ~(N−1)/N of the time: the job store is per-container and the GET round-robins to a replica that never saw the job | `web` calls **only** `/predict`, which is replica-safe (one request, one response, nothing read back). Documented in three places and guard-tested | ✅ bounded by design — **not** made replica-safe on purpose: an external store (Redis) would add a 4th container to a 1 GB VM to serve an endpoint nothing calls (`test_scale_contract.py`) |
+| **`GET /jobs/<id>` under `--scale ai=N`** | 404s ~(N−1)/N of the time: the job store is per-container and the GET round-robins to a replica that never saw the job | `web` calls **only** `/predict`, which is replica-safe (one request, one response, nothing read back). Documented in three places and guard-tested | ✅ bounded by design — **not** made replica-safe on purpose: an external store (Redis) would add a 4th container, a new failure mode and a new dependency to serve an endpoint nothing calls (`test_scale_contract.py`) |
 | **The CPU-burning benchmark ships as the production model** | Every prediction slow and meaningless | `inference:predict_one` is the default target; a guard asserts no shipped compose file selects `bench:cpu_burn` | ✅ built & tested (`test_scale_contract.py`) |
 | **A scaled `ai` gets published to the host** | Port collision on replica 2, **and** an unauthenticated `/jobs` reachable from outside | Only `web` publishes a port, in dev, test, prod and the scale override. `ai` has no auth because nothing but `web` can reach it — that assumption is load-bearing, so it is asserted | ✅ built & tested (`test_deploy_contract.py`, `test_ai_queue_contract.py`, `test_scale_contract.py`) |
 | **A bad deploy takes the public site down** | Public app down | CI gates the image build; the build gates the deploy; post-deploy `/ready` is probed over HTTPS and a failure **auto-rolls back** to the previous image while still failing the run. `restart: unless-stopped` survives a VM reboot | ✅ built & tested (`test_deploy_contract.py` locks the pipeline shape; **live** at `app.worksmarternotharder.dev`) |
 | **Single Azure VM (no redundancy)** | Total outage if the VM dies | Accepted. The course supplies one VM; the containers are stateless, so a Swarm overlay or a second host is a configuration change, not a rewrite. UptimeRobot alerts on the outage rather than preventing it | 🟡 accepted risk, mitigation documented ([`DESIGN.md`](DESIGN.md) §L7) |
-| **Two gunicorn workers on `ai`** | `GET /jobs/<id>` 404s ~half the time (two in-memory job stores); on the 1 GB VM, an OOM (two copies of the model) | `ai` runs exactly one worker with threads; parallelism comes from the pool | ✅ built & tested (`test_ai_runs_exactly_one_gunicorn_worker`) |
+| **Two gunicorn workers on `ai`** | `GET /jobs/<id>` 404s ~half the time — each worker owns a separate in-memory job store, and the read lands on whichever one the OS picked | `ai` runs exactly one worker with threads; parallelism comes from the pool. This is **architectural, not a memory budget** — the 32 GiB VM would host a second worker comfortably, and the job store would still split in two | ✅ built & tested (`test_ai_runs_exactly_one_gunicorn_worker`) |
+| **`ai`'s gunicorn worker outlives its own predict deadline** | A `/predict` that runs to `AI_PREDICT_TIMEOUT_SECONDS` races a worker SIGKILL: `web` sees a dropped connection, the in-flight job dies with the process, and the clean 504 degrade is unreachable | gunicorn's `--timeout` (60s) is pinned **above** the queue deadline (30s) in both the image and prod. gunicorn's own default is 30 — equal to the deadline — so leaving it unset was the bug | ✅ built & tested (`test_ai_gunicorn_timeout_exceeds_the_queue_timeout`; guard is mutation-tested against absent *and* too-low values) |
 
 ### 5.4 Abuse, security and data
 
@@ -280,12 +281,17 @@ fail. Each is bounded on purpose.
 
 Naming these is part of the assessment; an unlisted risk is an unnoticed one.
 
-* **`/jobs` is not replica-safe.** Fixing it means Redis or Mongo-backed job state — a fourth container on a
-  1 GB VM, serving an endpoint the app does not call. The synchronous `/predict` path needs none of it.
-* **One VM, no failover.** One machine is what the course provides. Recovery is `restart: unless-stopped`
-  plus an UptimeRobot alert, not redundancy.
-* **`web` is not replicated.** Sessions are cookie-signed so it would scale horizontally, but 2 gunicorn
-  workers already OOM'd the VM (see `docker-compose.prod.yml`).
+* **`/jobs` is not replica-safe.** Fixing it means Redis or Mongo-backed job state — a fourth container, a new
+  dependency and a new failure mode, serving an endpoint the app does not call. The synchronous `/predict`
+  path needs none of it. This was never a memory decision, so the larger VM does not change it.
+* **One VM, no failover.** One machine is what the course provides — and it is the single point of failure
+  that actually matters. It was resized mid-project to a **Standard E4ads v5 (4 vCPU / 32 GiB)**, which
+  bought throughput, not availability. Recovery is `restart: unless-stopped` plus an UptimeRobot alert,
+  not redundancy.
+* **`web` is not replicated.** Sessions are cookie-signed, so it would scale horizontally, and since the VM
+  resize there is RAM to spare for it. We still don't: `web` is I/O-bound (it waits on Mongo and `ai`), so a
+  wider **thread** pool inside one gthread worker serves the same concurrency more cheaply than a second
+  process, and replicas of `web` on the one VM add no availability — the VM is still the thing that dies.
 * **Tail latency across `ai` replicas.** Docker's DNS round-robin balances connections, not work, so p95
   barely improves with replicas. A real load balancer is not warranted for one VM.
 

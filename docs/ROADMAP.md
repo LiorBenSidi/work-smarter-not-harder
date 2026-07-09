@@ -53,8 +53,8 @@ parallel (worker pool / replicas), rather than serialized per request.
 front of [`ai/inference.py`](../ai/inference.py)`:predict_one`. Processes, not threads: the GIL stops CPU-bound
 scoring from overlapping across threads (measured — 0.96× on threads, 3.58× on processes).
 `POST /predict` keeps its exact response shape; `POST /jobs` · `GET /jobs/<id>` · `GET /queue/stats` are
-additive. Past `AI_QUEUE_MAX_PENDING` it sheds with 503 rather than growing a backlog into an OOM on the
-~1 GB VM. Design: [`JOB_QUEUE_PLAN.md`](JOB_QUEUE_PLAN.md) · numbers: [`SCALING_REPORT.md`](SCALING_REPORT.md).
+additive. Past `AI_QUEUE_MAX_PENDING` it sheds with 503 rather than growing a backlog nobody is still
+waiting on. Design: [`JOB_QUEUE_PLAN.md`](JOB_QUEUE_PLAN.md) · numbers: [`SCALING_REPORT.md`](SCALING_REPORT.md).
 *Banks the +5. This is the new parallelization requirement in [`GUIDELINES.md`](GUIDELINES.md).*
 
 ### Forum (+10) — *built last, in 3 cuttable slices; partial credit accrues per slice*

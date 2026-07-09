@@ -8,7 +8,8 @@ or OOM-killed `ai` container after a merge:
   * the `web -> ai` contract: `/predict` still answers `state` + `proba` + `recommendations`;
   * `/predict` still goes THROUGH the queue (not straight to the model — that re-serializes it and
     silently forfeits the +5);
-  * the queue stays BOUNDED (an unbounded backlog is an OOM on the ~1 GB VM, not a slowdown);
+  * the queue stays BOUNDED (an unbounded backlog grows memory without limit and scores jobs whose
+    callers already timed out — a bigger VM moves that cliff, it does not remove it);
   * the pool is a PROCESS pool (threads do not overlap CPU-bound inference — the GIL);
   * exactly ONE gunicorn worker serves `ai` (a second one owns a second in-memory job store, so
     `GET /jobs/<id>` would 404 whenever it landed on the wrong worker);
@@ -221,9 +222,10 @@ def test_ai_never_publishes_a_host_port(dev, prod):
         assert "expose:" in block
 
 
-def test_the_prod_queue_is_sized_for_the_small_vm(prod):
-    """Each pool process holds its own copy of the model; the course VM has ~1 GB. Prod must pin the
-    pool size rather than inherit the dev default of one-per-core."""
+def test_the_prod_queue_pins_its_sizing_explicitly(prod):
+    """Each pool process holds its own copy of the model, so pool size is a deliberate, VM-specific
+    choice (4 = the E4ads v5's vCPUs). Prod must pin it rather than inherit the dev default — the
+    container's core count is not the VM's, and an inherited default silently mis-sizes both knobs."""
     ai_prod = prod.split("  ai:", 1)[1].split("\n  db:", 1)[0]
     assert "AI_QUEUE_WORKERS" in ai_prod
     assert "AI_QUEUE_MAX_PENDING" in ai_prod
