@@ -54,5 +54,5 @@ docstring, and asserted by a guard test so nobody wires `web` to `/jobs` and sca
 
 ## Non-goals
 Docker Swarm multi-machine (`DESIGN.md` names it as a *path*, not a deliverable). `web` replicas —
-sessions are cookie-signed so it would work, but nothing in the rubric asks and the 1 GB VM cannot host
-them.
+sessions are cookie-signed so it would work, but nothing in the rubric asks, `web` is I/O-bound (threads
+beat processes for it), and replicas on the single VM would add throughput without adding availability.

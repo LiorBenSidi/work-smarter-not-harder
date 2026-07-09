@@ -65,7 +65,7 @@ def test_prod_never_publishes_the_app_or_db_directly(prod):
 
 def test_prod_pulls_pinned_ghcr_images_and_never_builds(prod):
     # R5.2: the VM pulls the exact image CI built and pushed. A `build:` here would compile on the
-    # ~1 GB student VM (slow, OOM-prone) and would deploy code that CI never tested.
+    # VM and deploy code that CI never tested — the image under test must be the image that runs.
     assert "build:" not in prod, "the prod stack must PULL from GHCR, never build on the VM"
     for image in ("work-smarter-web", "work-smarter-ai"):
         assert f"ghcr.io/${{IMAGE_OWNER:?set IMAGE_OWNER}}/{image}:${{IMAGE_TAG:-latest}}" in prod, \

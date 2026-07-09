@@ -38,7 +38,8 @@ measured at **0.96×** for threads vs **3.58×** for processes.
 - The model itself lives behind one seam, [`ai/inference.py`](ai/inference.py)`:predict_one` — the pool imports it
   by name, so it stays a plain module-level function.
 - **Bounded on purpose.** Past `AI_QUEUE_MAX_PENDING` the queue sheds with `503`, which `web` already treats as
-  "ai unavailable" and degrades. An unbounded backlog on the ~1 GB VM is an OOM, not a slowdown.
+  "ai unavailable" and degrades. An unbounded backlog grows memory without limit and scores jobs whose callers
+  have already timed out — shedding early is what keeps the p95 honest.
 - `ai` runs **one** gunicorn worker with threads: the job store is in-memory, so a second worker would own a
   second store. Parallelism comes from the pool, not from workers.
 

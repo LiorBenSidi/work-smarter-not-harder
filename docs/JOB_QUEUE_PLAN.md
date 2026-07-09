@@ -67,7 +67,8 @@ assert, as cheap text/behaviour checks in the per-PR gate:
 
 1. `/predict` still returns `state` + `proba` + `recommendations` (the `web → ai` contract).
 2. `/predict` still goes **through the queue** (not a direct `predict_one` call in the route).
-3. The queue stays **bounded** — an unbounded queue is an OOM on a 1 GB VM.
+3. The queue stays **bounded** — an unbounded queue grows memory without limit and scores jobs whose
+   callers already gave up. A bigger VM moves that cliff; it does not remove it.
 4. `ai` still publishes **no host port**, in dev and in prod.
 5. The Dockerfile still runs **one** gunicorn worker (job-store coherence) and the pool is a
    **process** pool (GIL bypass).
