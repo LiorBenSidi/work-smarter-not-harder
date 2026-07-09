@@ -22,11 +22,12 @@ The backend is built and CI-gated; the open work is two teammates' lanes. If you
   [`docs/DEPLOY_DEMO.md`](docs/DEPLOY_DEMO.md).
 - ⏳ **Open — Shiri (`ai/`):** the real Random Forest model + recommendation engine behind `POST /predict` — it's a
   contract-shaped **placeholder** today. See [`PERSON1.md`](PERSON1.md).
-- ⏳ **Open — Elad:** scaling (`ai` replicas / gunicorn workers + a locust before/after), the live-deploy
-  **demo**, and the risk-assessment section.
+- ⏳ **Open — Elad:** the live-deploy **demo** and the risk-assessment section.
   *Done:* the Azure deploy is **live** (`https://app.worksmarternotharder.dev`, auto-deploy on green `main`);
   the **AI job queue** (`ai/jobqueue.py` — bounded queue + `ProcessPoolExecutor` in front of
   `inference.predict_one`; `/predict` unchanged, `/jobs` + `/queue/stats` additive; GUIDELINES §2, +5);
+  **scaling, measured** ([`docs/SCALING_REPORT.md`](docs/SCALING_REPORT.md) — pool 1→4 = 2.86×,
+  `--scale ai=2` = 1.60×, `docker-compose.scale.yml` + `scripts/scaling_benchmark.py`);
   Forum/DM media + `flask-limiter` on the public routes (#160); the **cross-container test-runner**
   (`docker-compose.test.yml` + `tests/Dockerfile`, CI job `compose-e2e` gating `build`→`deploy`), the
   **fault-isolation** + **locust stress** suites, and the deploy-contract guard tests. See [`PERSON3.md`](PERSON3.md).
