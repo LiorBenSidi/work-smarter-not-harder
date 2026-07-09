@@ -68,3 +68,20 @@ def test_reset_token_is_single_use(client, auth_module, monkeypatch):
 
 def test_reset_rejects_a_garbage_token(client):
     assert client.post("/reset-password", json={"token": "not-a-real-token", "password": "newpass123"}).status_code == 400
+
+
+def test_forgot_password_fails_closed_in_production_posture(client):
+    # Prod posture (SESSION_COOKIE_SECURE on) + no SMTP: the reset link must NOT be surfaced, even for a
+    # registered email — so a mis-deploy without SMTP can't leak a reset token to an unauthenticated caller.
+    client.raw.application.config["SESSION_COOKIE_SECURE"] = True
+    _register(client)
+    resp = client.post("/forgot-password", json={"email": "alice@example.com"}).get_json()
+    assert "dev_reset_link" not in resp
+
+
+def test_deeply_nested_json_is_400_not_500(client):
+    # An over-nested body overflows the JSON parser (RecursionError). That's malformed input -> 400, not a 500.
+    client.raw.application.config["PROPAGATE_EXCEPTIONS"] = False   # let the app error handler run, as in prod
+    depth = 6000
+    resp = client.post("/register", data="[" * depth + "]" * depth, content_type="application/json")
+    assert resp.status_code == 400

@@ -54,6 +54,8 @@ def validate_credentials(data):
     if not isinstance(username, str) or not isinstance(password, str):
         raise ValueError("username and password must be strings")
     username = username.strip()
+    if any(ord(c) < 0x20 or ord(c) == 0x7f for c in username):   # no CR/LF/control chars -> no log injection / render tricks
+        raise ValueError("username must not contain control characters")
     if not USERNAME_MIN <= len(username) <= USERNAME_MAX:
         raise ValueError(f"username must be {USERNAME_MIN}-{USERNAME_MAX} characters")
     if not PASSWORD_MIN <= len(password) <= PASSWORD_MAX:
@@ -80,6 +82,8 @@ def validate_display_name(value):
     if not isinstance(value, str):
         raise ValueError("display name must be a string")
     value = value.strip()
+    if any(ord(c) < 0x20 or ord(c) == 0x7f for c in value):   # no CR/LF/control chars -> no log injection / render tricks
+        raise ValueError("display name must not contain control characters")
     if not USERNAME_MIN <= len(value) <= USERNAME_MAX:
         raise ValueError(f"display name must be {USERNAME_MIN}-{USERNAME_MAX} characters")
     return value
@@ -277,6 +281,7 @@ def login():
 
 
 @auth_bp.post("/verify-otp")
+@limiter.limit("10 per minute")   # defence-in-depth over the atomic OTP_MAX_ATTEMPTS cap
 def verify_otp():
     """Second login step: exchange the emailed code for a real session.
 
@@ -527,6 +532,7 @@ def _reset_serializer():
 
 
 @auth_bp.post("/forgot-password")
+@limiter.limit("10 per minute")   # unauthenticated + sends email/does a DB lookup -> throttle amplification
 def forgot_password():
     """Email a reset link for a registered address. ALWAYS 200 with the same body -> no account
     enumeration (a caller can't tell whether the email is registered)."""
@@ -550,7 +556,7 @@ def forgot_password():
         send_email(current_app.config, email, "Reset your Work Smarter, Not Harder password",
                    f"Reset your password with this link (valid {minutes} min):\n\n{link}\n\n"
                    "If you didn't request this, you can ignore this email.", force_mock=mock)
-        if mock or not current_app.config.get("SMTP_HOST"):   # dev/mock (log backend): surface the link like dev_otp
+        if _surface_dev_codes(mock):   # dev/mock (log backend) ONLY — prod (SECURE) fails closed, never surfaces
             body["dev_reset_link"] = "/?reset_token=" + token   # RELATIVE -> the click stays on the current host
     # In real (SMTP) mode the body is IDENTICAL whether or not the email was registered -> no account
     # enumeration, and the link goes out solely by email. `dev_reset_link` appears ONLY with the log backend
@@ -559,6 +565,7 @@ def forgot_password():
 
 
 @auth_bp.post("/reset-password")
+@limiter.limit("10 per minute")   # unauthenticated token submission -> throttle guessing
 def reset_password():
     """Set a new password from a valid, unexpired reset token (single-use — see ``_reset_serializer``)."""
     data = request.get_json(silent=True) or {}
@@ -617,6 +624,18 @@ def _notify_existing_account(email):
                "If this wasn't you, you can safely ignore this email.")
 
 
+def _surface_dev_codes(mock):
+    """True iff an auth code/link may be returned in the response instead of emailed.
+
+    The explicit debug override (`mock`, gated on AUTH_DEBUG_EMAIL + header, never under TESTING) always
+    wins. The no-SMTP "log backend" surfaces codes ONLY in a non-production posture — `SESSION_COOKIE_SECURE`
+    off (dev / CI / grading). In production (HTTPS → SECURE on) a missing SMTP_HOST FAILS CLOSED: the code is
+    never surfaced, so a mis-deploy without SMTP can't leak reset/OTP/verify codes to an unauthenticated caller.
+    """
+    cfg = current_app.config
+    return mock or (not cfg.get("SMTP_HOST") and not cfg.get("SESSION_COOKIE_SECURE"))
+
+
 def _debug_email_mock():
     """True iff this request may use — and asked for — the DEV email-mock override. BOTH must hold: the
     server opted in (``AUTH_DEBUG_EMAIL`` set, and not under the test harness) AND the caller sent the
@@ -647,7 +666,7 @@ def _issue_reg_code(display, pw_hash, email):
                f"Your Work Smarter, Not Harder confirmation code is: {code}\n\n"
                f"Enter it to finish creating your account. It expires in {minutes} min.\n"
                "If you didn't request this, you can ignore this email.", force_mock=mock)
-    return code if (mock or not current_app.config.get("SMTP_HOST")) else None
+    return code if _surface_dev_codes(mock) else None
 
 
 def _issue_otp(username, email):
@@ -664,7 +683,7 @@ def _issue_otp(username, email):
     send_email(current_app.config, email or "(no email on file)", "Your Work Smarter, Not Harder login code",
                f"Your Work Smarter, Not Harder login code is: {code}\n\n"
                f"It expires in {minutes} min. If this wasn't you, you can ignore this email.", force_mock=mock)
-    return code if (mock or not current_app.config.get("SMTP_HOST")) else None
+    return code if _surface_dev_codes(mock) else None
 
 
 def _remember_serializer():

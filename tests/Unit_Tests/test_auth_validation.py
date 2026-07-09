@@ -84,3 +84,14 @@ def test_rejects_null_password(validate):
     # JSON null -> Python None -> not a str -> rejected before any query
     with pytest.raises(ValueError):
         validate({"username": "alice", "password": None})
+
+
+def test_rejects_control_chars_in_username(validate):
+    # CR/LF/control chars in a logged+rendered field -> log injection / render tricks. Reject at validation.
+    with pytest.raises(ValueError):
+        validate({"username": "ab\ncd evilrow", "password": "s3cretpw!"})
+
+
+def test_rejects_control_chars_in_display_name(auth_module):
+    with pytest.raises(ValueError):
+        auth_module.validate_display_name("foo\r\nINJECTED 200 OK")
