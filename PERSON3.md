@@ -31,7 +31,7 @@ never commit it. (The GitHub-side secrets for the deploy are in [`SECRETS.md`](S
 - **Never commit `.env`** (commit `.env.example`).
 - **Rate limiting** (flask-limiter) on the public endpoints; defend against spammers.
 - **Stress tests** (locust) — decide in advance what can crash, and defend it.
-- **The deploy (+10)** — take the CI/CD pipeline (already in the repo: `ci.yml` `build`+`deploy`, `docker-compose.prod.yml`, `Caddyfile`, auto-rollback, `/ready` gate — PRs #91/#92) **live**. Already done (Lior): the `build` job pushes both images to GHCR, the **GHCR packages are public**, and the `APP_SECRET_KEY`/`SMTP_*` secrets are set. Your part is the **VM**: provision it, set `SSH_PRIVATE_KEY` + `SSH_HOST`, (optional) the `app` CNAME + `SITE_ADDRESS`, add UptimeRobot, and demo an auto-deploy on green `main`. Run-sheet: [`docs/DEPLOY_DEMO.md`](docs/DEPLOY_DEMO.md). Graded on that live demo.
+- **The deploy (+10)** — take the CI/CD pipeline (already in the repo: `ci.yml` `build`+`deploy`, `docker-compose.prod.yml`, `Caddyfile`, auto-rollback, `/ready` gate — PRs #91/#92) **live**. Already done (Lior): the `build` job pushes both images to GHCR, the **GHCR packages are public**, and the `APP_SECRET_KEY`/`SMTP_*` secrets are set. Your part is the **VM**: provision it, set `SSH_PRIVATE_KEY` + `SSH_HOST` + `DEPLOY_ENABLED=true` (the deploy runs only when both the host is set and the switch is on), (optional) the `app` CNAME + `SITE_ADDRESS`, add UptimeRobot, and demo an auto-deploy on green `main`. Run-sheet: [`docs/DEPLOY_DEMO.md`](docs/DEPLOY_DEMO.md). Graded on that live demo.
 
 ## Roadmap (build these — your way)
 - [ ] **Azure deploy + CI/CD (go live)** — the pipeline *code* is written + hardened (Lior, PRs #91/#92:
