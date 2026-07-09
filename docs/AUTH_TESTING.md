@@ -68,9 +68,35 @@ Append **`?debug=1`** to the URL → a **⚙ button** appears bottom-right and o
 - **Desktop / Mobile** toggle → **Mobile** previews the *real* mobile layout in a 390-px iframe inside your
   desktop browser (the CSS media queries fire on the iframe's width — nothing destructive, dev-only). **✕ Exit
   preview**, **Esc**, or a **backdrop click** closes it.
-- The panel also shows the current **email mode** (MOCK / LIVE).
+- The panel also shows the current **email mode** (MOCK / LIVE), and — only where the server opts in — an
+  interactive Live/Mock override (see **Switch 3** below).
 - **Zero footprint for normal users:** gated on `?debug=1` (persisted via `localStorage["ws-debug"]`), never shown
   in normal use, and never nested inside the preview iframe. **"Disable debug tools"** removes it.
+
+### Switch 3 — In-panel **Live ⇄ Mock** email override = `AUTH_DEBUG_EMAIL` (live-deploy testing)
+
+Switch 1 (`SMTP_HOST`) sets the server's **base** email mode. On a **live deploy** you sometimes want to test
+signup / OTP / reset **without sending real email** — that's what the panel's **Email codes → Live / Mock** toggle
+is for. Picking **Mock** makes your browser send an `X-Debug-Email: mock` header, and the server returns the code
+**on-screen** instead of emailing it.
+
+It is deliberately **fail-closed** — a public site can never be silently switched to "no real email" from a browser.
+Two things must **both** be true for a code to stay on-screen:
+
+| Server has `AUTH_DEBUG_EMAIL=1`? | Panel's Live/Mock toggle | A browser asking for Mock |
+|---|---|---|
+| **yes** (dev / a throwaway test deploy) | **shown** + usable | honored → code on-screen, no email |
+| **no** (default — **production**) | **hidden** | **ignored → a real email is sent** |
+
+- Enable it only where you mean to: `AUTH_DEBUG_EMAIL=1` in `.env` (dev). **Never on the public deploy.**
+- Confirm the state: `curl .../auth/config` → `"email_debug_toggle": true | false`.
+- **Gotcha (fail-closed in action):** if the flag was on, you selected **Mock**, then the flag was turned off (e.g.
+  a prod deploy), a **stale tab** can still show "Mock" while the server ignores it → **you get a real email**. A
+  page **reload** re-reads `/auth/config`, hides the switch, and drops the stale flag. By design the **server**, not
+  the browser, decides whether real email goes out.
+
+**On prod today:** `AUTH_DEBUG_EMAIL` is **off** (`email_mode: live`), so the switch is hidden and every code is a
+real email — the intended secure state. To test flows without emailing, run **locally** with `AUTH_DEBUG_EMAIL=1`.
 
 ## 1b. Password reset (dev)
 
