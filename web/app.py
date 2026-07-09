@@ -276,6 +276,13 @@ def create_app(config=Config, *, users=None, profiles=None, history=None, forum=
     app.register_blueprint(messages_bp)
     app.register_blueprint(media_bp)
 
+    @app.errorhandler(RecursionError)
+    def _too_deeply_nested(_exc):
+        # Deeply-nested JSON overflows the parser's recursion limit. `request.get_json(silent=True)`
+        # swallows ValueError/BadRequest but NOT RecursionError (it's a RuntimeError), so without this it
+        # would 500 on any endpoint. Treat it as the malformed input it is: 400, not a server error.
+        return jsonify(error="request body is malformed or too deeply nested"), 400
+
     # Register the timer FIRST — before CSRF — so a request short-circuited by the CSRF check (403)
     # still gets a start stamp and therefore an access-log line (before_request runs in registration
     # order and stops at the first one that returns a response).
