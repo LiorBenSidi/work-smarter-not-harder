@@ -8,6 +8,17 @@ recommendation engine turns that into action plans, workouts, program-balance an
 **Team (Git Push & Pray):** Lior Ben Sidi · Shiri Haboob · Elad Nachalieli
 **Full spec:** [`docs/PROPOSAL.md`](docs/PROPOSAL.md) (the submitted proposal).
 
+## Try it live
+Deployed over HTTPS at **[app.worksmarternotharder.dev](https://app.worksmarternotharder.dev)** — register an
+account and use it in any browser. It's an **installable PWA**, so you can add it to your phone's home screen and
+it opens full-screen with its own icon + splash (no browser chrome), just like a native app:
+
+- **iPhone (Safari):** open the link → **Share** → **Add to Home Screen** → **Add**.
+- **Android (Chrome):** open the link → **⋮** menu → **Install app** (or **Add to Home screen**) → **Install**.
+
+No install is required to use it — that's just the optional app-like shortcut. (There is deliberately **no Android
+APK / Play Store build**; the PWA is the supported way onto a phone.)
+
 ## Architecture (3 containers — only `web` is exposed)
 | Container | Role |
 |---|---|
