@@ -12,6 +12,8 @@ or OOM-killed `ai` container after a merge:
   * the pool is a PROCESS pool (threads do not overlap CPU-bound inference — the GIL);
   * exactly ONE gunicorn worker serves `ai` (a second one owns a second in-memory job store, so
     `GET /jobs/<id>` would 404 whenever it landed on the wrong worker);
+  * that worker's gunicorn `--timeout` EXCEEDS the queue's own deadline (otherwise gunicorn SIGKILLs
+    the worker mid-wait and `/predict`'s 504 degrade is unreachable);
   * `inference.predict_one` still exists with the shape the pool expects. Shiri owns its BODY and may
     change it freely — these guards only pin its name and its return keys.
   * `ai` still publishes no host port, in dev and in prod.
@@ -21,6 +23,7 @@ per-PR gate alongside `test_deploy_contract.py`.
 """
 import inspect
 import pickle
+import re
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 from pathlib import Path
 
@@ -175,6 +178,37 @@ def test_ai_serves_concurrent_requests_with_threads(dockerfile, prod):
     second request — the pool's parallelism would be unreachable."""
     for source, name in ((dockerfile, "ai/Dockerfile"), (prod, "docker-compose.prod.yml")):
         assert '"--threads"' in source, f"{name} must give the single ai worker a thread pool"
+
+
+def _ai_gunicorn_timeout(text):
+    """The --timeout on the gunicorn command that serves ai (app:create_app()), or None if absent."""
+    text = text.replace("\\\n", " ")  # join Dockerfile CMD line-continuations into one logical line
+    for line in text.splitlines():
+        if "gunicorn" in line and "app:create_app()" in line:
+            m = re.search(r"--timeout['\",\s]+(\d+)", line)
+            return int(m.group(1)) if m else None
+    return None
+
+
+def _predict_timeout_default(ai_source):
+    """The queue's own deadline — AI_PREDICT_TIMEOUT_SECONDS' default in ai/app.py."""
+    m = re.search(r'AI_PREDICT_TIMEOUT_SECONDS["\'],\s*["\'](\d+)', ai_source)
+    assert m, "ai/app.py no longer reads AI_PREDICT_TIMEOUT_SECONDS with a literal default"
+    return int(m.group(1))
+
+
+def test_ai_gunicorn_timeout_exceeds_the_queue_timeout(ai_source, dockerfile, prod):
+    """`/predict` waits on the pool up to AI_PREDICT_TIMEOUT_SECONDS, then answers 504 (a clean,
+    countable degrade). If gunicorn's worker timeout is <= that deadline, it SIGKILLs the worker
+    mid-wait instead: web sees a dropped connection, the in-flight job dies with the process, and the
+    504 path is unreachable. gunicorn's default is 30 — exactly the queue's default — so the ai
+    command must set --timeout explicitly, above it.
+    """
+    deadline = _predict_timeout_default(ai_source)
+    for source, name in ((dockerfile, "ai/Dockerfile"), (prod, "docker-compose.prod.yml")):
+        t = _ai_gunicorn_timeout(source)
+        assert t is not None, f"{name}: the ai gunicorn command must set --timeout (default 30 races the queue)"
+        assert t > deadline, f"{name}: gunicorn --timeout {t} must exceed the queue's {deadline}s deadline"
 
 
 def test_ai_never_publishes_a_host_port(dev, prod):
