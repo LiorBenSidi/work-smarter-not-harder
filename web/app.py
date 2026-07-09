@@ -315,7 +315,11 @@ def create_app(config=Config, *, users=None, profiles=None, history=None, forum=
         # conditional is control-flow, not data: the dev-tools markup is omitted when the shell is
         # rendered inside the mobile-preview iframe (?preview=1), so even a stale cached bundle can
         # never nest the dev tools recursively inside the preview (the #138 recursion).
-        return render_template("index.html", preview=bool(request.args.get("preview")))
+        # No-store on the shell: a deployed UI change (e.g. a CSS/colour fix) must show on the next load,
+        # not sit behind the browser's heuristic cache until a manual hard-refresh. The SW handles offline
+        # separately (navigations are network-first), and static assets keep their own long cache headers.
+        return render_template("index.html", preview=bool(request.args.get("preview"))), 200, \
+            {"Cache-Control": "no-cache, no-store, must-revalidate"}
 
     @app.get("/health")
     def health():
