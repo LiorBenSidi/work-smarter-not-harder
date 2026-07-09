@@ -27,6 +27,7 @@ import time
 import uuid
 from collections import OrderedDict
 from concurrent.futures import ProcessPoolExecutor
+from concurrent.futures import TimeoutError as FutureTimeout
 
 logger = logging.getLogger(__name__)
 
@@ -64,15 +65,20 @@ def _env_int(name, default):
 
 
 class Job:
-    __slots__ = ("id", "status", "result", "error", "submitted_at", "finished_at")
+    __slots__ = ("id", "status", "result", "error", "exception", "submitted_at", "finished_at", "settled")
 
     def __init__(self, job_id):
         self.id = job_id
         self.status = QUEUED
         self.result = None
         self.error = None
+        self.exception = None
         self.submitted_at = time.monotonic()
         self.finished_at = None
+        # Set LAST, once the depth counter and the status have been updated. Waiters block on this
+        # rather than on the raw future: `future.result()` can return before the future's done-callback
+        # has run, which would let a caller observe a finished job with a stale `pending` count.
+        self.settled = threading.Event()
 
     @property
     def finished(self):
@@ -175,10 +181,11 @@ class JobQueue:
         return job.id
 
     def _on_done(self, job_id, future):
+        exception = None
         try:
             result = future.result()
         except BaseException as exc:  # noqa: BLE001 - a worker crash must not kill the callback thread
-            status, payload, error = FAILED, None, f"{type(exc).__name__}: {exc}"
+            status, payload, error, exception = FAILED, None, f"{type(exc).__name__}: {exc}", exc
             logger.warning("job %s failed: %s", job_id, error)
         else:
             status, payload, error = DONE, result, None
@@ -192,20 +199,32 @@ class JobQueue:
             job.status = status
             job.result = payload
             job.error = error
+            job.exception = exception
             job.finished_at = time.monotonic()
+
+        job.settled.set()  # outside the lock: waiters wake and immediately take it to read stats
 
     def result(self, job_id, timeout=None):
         """Block for a job's result — the synchronous `/predict` path.
 
+        Waits on the job's `settled` event rather than the raw future: a future hands its value to
+        the waiting thread and runs its done-callbacks concurrently, so returning on the future alone
+        would let `/predict` answer while `pending` still counted this job as in flight. Backpressure
+        decisions read that counter, so it has to be true by the time a caller can observe it.
+
         Raises `JobNotFound`, `concurrent.futures.TimeoutError`, or whatever the worker raised.
         """
         with self._lock:
-            future = self._futures.get(job_id)
-            if future is None and job_id not in self._jobs:
+            job = self._jobs.get(job_id)
+            if job is None:
                 raise JobNotFound(job_id)
-        if future is None:  # already finished and its future was reaped
-            return self.get(job_id).result
-        return future.result(timeout=timeout)
+
+        if not job.settled.wait(timeout):
+            # The job keeps running — a timeout is the caller giving up, not a cancellation.
+            raise FutureTimeout(f"job {job_id} did not finish within {timeout}s")
+        if job.exception is not None:
+            raise job.exception
+        return job.result
 
     def get(self, job_id):
         with self._lock:

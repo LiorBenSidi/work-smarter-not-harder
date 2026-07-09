@@ -20,19 +20,67 @@ WHAT WE DECIDED CAN CRASH, AND HOW IT IS DEFENDED (course: "decide in advance wh
 
 Every task therefore marks 5xx as the failure and treats the rate-limit's 429 as the system
 behaving correctly under abuse.
+
+TWO USER CLASSES, picked with ``LOCUST_TARGET``:
+
+* ``LOCUST_TARGET=web`` (default) — ``WorkSmarterUser`` above: the public abuse surface.
+* ``LOCUST_TARGET=ai`` — ``AiPredictUser``: ramped load straight at the ``ai`` container's
+  ``/predict``, which is the endpoint the job queue parallelizes. This is the **before/after** load
+  (docs/SCALING_REPORT.md): run it once per pool size / replica count and compare RPS.
+
+      # before
+      AI_QUEUE_WORKERS=1 AI_WORKER_TARGET=bench:cpu_burn docker compose up -d --build
+      LOCUST_TARGET=ai locust -f tests/Stress_Tests/locustfile.py --headless -u 8 -r 8 -t 30s \
+             --host http://localhost:5099 --exit-code-on-error 1
+      # after: AI_QUEUE_WORKERS=4, same command
+
+  Against the placeholder model ``/predict`` returns in microseconds, so the measurement is only
+  meaningful with the CPU-bound bench target (``AI_WORKER_TARGET=bench:cpu_burn``) — see ai/bench.py
+  for why. ``scripts/scaling_benchmark.py`` is the same measurement without the locust dependency.
 """
+import os
 import uuid
 
-from locust import HttpUser, between, task
+from locust import HttpUser, between, constant, task
 
 CSRF_COOKIE = "csrf_token"
 CSRF_HEADER = "X-CSRF-Token"
+
+TARGET = os.environ.get("LOCUST_TARGET", "web").lower()
+
+
+class AiPredictUser(HttpUser):
+    """Saturates `ai`'s `/predict` — the endpoint the job queue parallelizes.
+
+    No wait time: the point is to keep the queue full so throughput reflects the pool, not think-time.
+    A 503 is the bounded queue shedding load correctly (a PASS); a 5xx other than 503, or a 504, means
+    it fell over or wedged.
+    """
+
+    wait_time = constant(0)
+    abstract = TARGET != "ai"  # only enabled with LOCUST_TARGET=ai
+
+    @task
+    def predict(self):
+        with self.client.post(
+            "/predict",
+            json={"features": {"sleep_hours": 7, "resting_hr": 55, "fatigue": 3,
+                               "soreness": 2, "training_load": 5}},
+            catch_response=True,
+        ) as r:
+            if r.status_code == 200:
+                r.success()
+            elif r.status_code == 503:
+                r.success()  # backpressure engaged — the defence, not a failure
+            else:
+                r.failure(f"expected 200 or 503, got {r.status_code}")
 
 
 class WorkSmarterUser(HttpUser):
     """One simulated visitor: browses, polls readiness, and hammers the auth surface."""
 
     wait_time = between(0.5, 2.0)
+    abstract = TARGET == "ai"  # disabled when the run targets the ai container directly
 
     def on_start(self):
         # Seed the double-submit CSRF cookie exactly like a browser does (one safe GET first).

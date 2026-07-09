@@ -1,0 +1,31 @@
+# Scaling override — applied ON TOP of docker-compose.yml. OWNER: Elad.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.scale.yml up --build --scale ai=2
+#
+# Two independent axes (docs/SCALING_PLAN.md):
+#   * VERTICAL   — AI_QUEUE_WORKERS sizes the process pool INSIDE each ai container.
+#   * HORIZONTAL — `--scale ai=N` runs N ai containers; web round-robins over the `ai` service DNS
+#                  name, so no config change is needed on the web side.
+#
+# `ai` still publishes NO host port here (only web is user-facing) — asserted by
+# tests/Integration_Tests/test_scale_contract.py.
+#
+# REPLICA CAVEAT: each ai container owns its own IN-MEMORY job store. `POST /predict` is
+# replica-safe (one request, one response, nothing read back later). `POST /jobs` + `GET /jobs/<id>`
+# are NOT: the GET round-robins and lands on a replica that never saw the job. `web` only calls
+# /predict, so scaling out is safe today — do not wire web to /jobs without an external store.
+services:
+  web:
+    # More gunicorn workers: web is I/O-bound (it waits on ai and Mongo), so processes let it hold
+    # many in-flight requests. Keep this modest on the 1 GB VM — see docker-compose.prod.yml.
+    command: ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "${WEB_WORKERS:-4}", "--timeout", "60", "app:create_app()"]
+
+  ai:
+    environment:
+      # Pool size per container. Total parallel scorers = AI_QUEUE_WORKERS x (number of ai replicas).
+      AI_QUEUE_WORKERS: ${AI_QUEUE_WORKERS:-4}
+      AI_QUEUE_MAX_PENDING: ${AI_QUEUE_MAX_PENDING:-64}
+      # Point the queue at the CPU-bound benchmark instead of the placeholder model, so a before/after
+      # measures the POOL rather than Flask's overhead. Unset -> the real model (ai/inference.py).
+      AI_WORKER_TARGET: ${AI_WORKER_TARGET:-inference:predict_one}
+      BENCH_ITERATIONS: ${BENCH_ITERATIONS:-200000}
