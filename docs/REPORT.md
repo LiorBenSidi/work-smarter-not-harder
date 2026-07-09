@@ -18,8 +18,8 @@
 > current as of this date. §1's API surface + data model now list the DM / SSE / notification / comment-vote
 > endpoints and the `messages` / `notifications` collections (**Lior**), plus the media endpoints and the
 > `media` collection (**Elad**, #160). Still open: §2's AI rows (F3 model, F5, F6/F7 engine, F4 live value)
-> plus §3's `test_ai` scaffold row await the Random Forest (**Shiri**); §8 still cites `FEEDBACK.md`, which
-> [`GUIDELINES.md`](GUIDELINES.md) superseded on 8 Jul (and which added the **+5 Job Queue**).
+> plus §3's `test_ai` scaffold row await the Random Forest (**Shiri**). The rubric is
+> [`GUIDELINES.md`](GUIDELINES.md) (which superseded `FEEDBACK.md` on 8 Jul and added the **+5 Job Queue**).
 
 ---
 
