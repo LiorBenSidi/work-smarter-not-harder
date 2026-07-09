@@ -32,6 +32,7 @@ These are the **universal guardrails** every owner's work must pass before it ca
 | Dashboard / History (F7/F8) | ✓ | ✓ | ✓ | – | – | Lior | `System_Tests/test_e2e.py` |
 | Deploy + CI/CD | – | ✓ | ✓ | ✓ | – | Lior (CI) / Elad (deploy + stress) | `Integration_Tests/test_deploy_contract.py`, `Stress_Tests/test_load.py` |
 | Forum media (§10) | – | ✓ | – | – | ✓ | Elad | `Integration_Tests/test_media.py`, `Security_Tests/test_media_limits.py` |
+| AI job queue (§2, +5) | ✓ | ✓ | ✓ | ✓ | ✓ | Elad | `Unit_Tests/test_jobqueue.py`, `Integration_Tests/test_ai_queue_api.py` + `test_ai_queue_contract.py`, `System_Tests/test_ai_queue_live.py`, `Stress_Tests/test_queue_backpressure.py`, `Security_Tests/test_ai_queue.py` |
 
 (✓ = required; – = N/A for that feature. Refine against the proposal's own feature×test matrix as you build.)
 
@@ -54,5 +55,6 @@ It builds `tests/Dockerfile`, waits for `web` + `db` to report healthy, then run
 | `Integration_Tests/test_db_mongo.py` | `TEST_MONGO_URI` | the data layer against a real MongoDB |
 | `System_Tests/test_e2e.py` | `E2E_BASE_URL` | register → profile → check-in → dashboard over real HTTP |
 | `System_Tests/test_fault_isolation.py` | `FAULT_TEST=1` + `E2E_BASE_URL` | **destructive**: stops `ai`/`db` — web survives, `/ready` degrades to 503 |
+| `System_Tests/test_ai_queue_live.py` | `AI_BASE_URL` | the job queue on the live `ai` container: real worker processes, concurrent `/predict`, a burst sheds with 503 |
 | `Stress_Tests/test_load.py` | `E2E_BASE_URL` | a concurrency burst sheds load with 429, never 5xx |
 | `Stress_Tests/locustfile.py` | run `locust` (CI: *Run workflow*) | ramped load; 429 = the rate-limit defending, 5xx = a real failure |

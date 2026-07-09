@@ -42,8 +42,12 @@ never commit it. (The GitHub-side secrets for the deploy are in [`SECRETS.md`](S
   + the run-sheet [`docs/DEPLOY_DEMO.md`](docs/DEPLOY_DEMO.md).
 - [ ] **Scaling** — horizontal scale (`ai` replicas + gunicorn workers) + the **multi-machine path**
   (Docker Swarm overlay, or `ai` replicas on a second machine) + a locust before/after.
-- [ ] **Job Queue (+5)** — a job queue in front of the model so the `ai` container handles many users'
-  `/predict` calls at once, processed in parallel (the new parallelization requirement — [`docs/GUIDELINES.md`](docs/GUIDELINES.md)).
+- [x] **Job Queue (+5)** — `ai/jobqueue.py` puts a **bounded** queue + a `ProcessPoolExecutor` in front of
+  the model (`ai/inference.py:predict_one`, Shiri's seam), so concurrent `/predict` calls are scored in
+  parallel across cores instead of serialized behind the GIL. `POST /predict` keeps its exact shape;
+  `POST /jobs` + `GET /jobs/<id>` + `GET /queue/stats` are additive. Past `max_pending` it sheds with 503
+  rather than growing the backlog into an OOM on the 1 GB VM. `ai` runs **one** gunicorn worker (the job
+  store is in-memory) with threads. Design: [`docs/JOB_QUEUE_PLAN.md`](docs/JOB_QUEUE_PLAN.md).
 - [x] **Cross-container test harness** — `docker-compose.test.yml` now runs a **test-runner service**
   (`tests/Dockerfile`): it waits for `web`+`db` healthy, then drives the live stack over HTTP
   (`E2E_BASE_URL=http://web:5000`) and the throwaway Mongo (`TEST_MONGO_URI`). CI job `compose-e2e`
