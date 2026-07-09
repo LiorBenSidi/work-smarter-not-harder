@@ -13,19 +13,58 @@ recommendation engine turns that into action plans, workouts, program-balance an
 |---|---|
 | `web/` | Flask frontend + authentication (werkzeug hashing) + API. **The only user-facing container.** |
 | `db`   | MongoDB — users, profiles, programs, analysis history. Internal only. |
-| `ai/`  | Random Forest inference + recommendation engine. Internal REST (`POST /predict`). |
+| `ai/`  | Random Forest inference + recommendation engine, behind a **bounded job queue + process pool**. Internal REST (`POST /predict`). |
 
 Course rules the architecture is built to satisfy: ≥3 communicating containers, only `web` exposed, local AI model
 (no external API), all 5 test types, fault tolerance, parallel scaling, password hashing + injection defense.
 
+### The AI job queue (rubric §2, +5)
+`POST /predict` does not score inline. It enqueues onto a **bounded** queue worked by a `ProcessPoolExecutor`
+([`ai/jobqueue.py`](ai/jobqueue.py)), so concurrent callers are scored **in parallel across cores** instead of
+serialized. A *process* pool, not threads: the GIL stops CPU-bound scoring from overlapping across threads —
+measured at **0.96×** for threads vs **3.58×** for processes.
+
+- The model itself lives behind one seam, [`ai/inference.py`](ai/inference.py)`:predict_one` — the pool imports it
+  by name, so it stays a plain module-level function.
+- **Bounded on purpose.** Past `AI_QUEUE_MAX_PENDING` the queue sheds with `503`, which `web` already treats as
+  "ai unavailable" and degrades. An unbounded backlog on the ~1 GB VM is an OOM, not a slowdown.
+- `ai` runs **one** gunicorn worker with threads: the job store is in-memory, so a second worker would own a
+  second store. Parallelism comes from the pool, not from workers.
+
+| Endpoint (internal) | Purpose |
+|---|---|
+| `POST /predict` | synchronous scoring — **unchanged response shape** (`state` · `proba` · `recommendations`) |
+| `POST /jobs` · `GET /jobs/<id>` | fire-and-forget enqueue + result read-back |
+| `GET /queue/stats` | depth, pool size, counters (drives the scaling before/after) |
+
+### Scaling (measured, not asserted)
+Two multiplying axes — full numbers + how to reproduce: [`docs/SCALING_REPORT.md`](docs/SCALING_REPORT.md).
+
+| Axis | Knob | Result |
+|---|---|---|
+| Vertical — the pool inside one container | `AI_QUEUE_WORKERS` 1 → 4 | **2.86×** throughput, p95 halved |
+| Horizontal — replicas | `docker compose ... --scale ai=2` | **1.60×** throughput (Docker service-DNS round-robin) |
+
+```sh
+docker compose -f docker-compose.yml -f docker-compose.scale.yml up --build --scale ai=2
+```
+
+> `GET /jobs/<id>` is **not** replica-safe — the job store is per-container, so the read round-robins to a replica
+> that never saw the job. `web` only ever calls `/predict`, which is, so scaling out is safe. See
+> [`docker-compose.scale.yml`](docker-compose.scale.yml).
+
 ## Repo layout
 ```
-web/     Flask web app + the whole data layer (built)
-ai/      Random Forest + recommendation engine (Shiri — placeholder today)
-tests/   Unit_Tests · Integration_Tests · System_Tests · Stress_Tests · Security_Tests
-docs/    PROPOSAL · DESIGN · ROADMAP · REPORT · CICD_REPORT · DEPLOY_DEMO · FEEDBACK · meeting-notes
+web/      Flask web app + the whole data layer (built)
+ai/       Random Forest + recommendation engine (Shiri — placeholder today),
+          behind jobqueue.py (bounded queue + process pool) and inference.py (the model seam)
+tests/    Unit_Tests · Integration_Tests · System_Tests · Stress_Tests · Security_Tests
+scripts/  setup-hooks.sh · scaling_benchmark.py (stdlib-only load driver)
+docs/     PROPOSAL · GUIDELINES · DESIGN · ROADMAP · REPORT · SCALING_REPORT · JOB_QUEUE_PLAN
+          CICD_REPORT · DEPLOY_DEMO · AUTH_TESTING · meeting-notes
 ```
-The web + data + CI/CD layers are built; `ai/` (Shiri's model) and the live deploy + real-time Forum (Elad) are in progress — all via pull requests (see below).
+The web + data + CI/CD layers, the job queue, scaling and the live Azure deploy are built; `ai/` (Shiri's model)
+is the remaining build — all via pull requests (see below).
 
 ## Getting started (first-time, every clone)
 **New here? → [`GETTING_STARTED.md`](GETTING_STARTED.md)** — clone · run the stack · find your part · the loop (≈5 min). It also covers the gate setup below.
@@ -51,6 +90,26 @@ docker compose up --build       # 3 containers → open http://localhost:8000/he
 ```sh
 python -m pytest tests/         # full suite — runs on any machine (no local paths)
 ```
+All five course test types live under `tests/` and run on every PR. A handful are **environment-gated** — they
+skip without their dependency and run the moment it exists (they are not unwritten):
+
+```sh
+# the cross-container harness: boots web+db+ai + a test-runner container, exits with the runner's code
+docker compose -f docker-compose.yml -f docker-compose.test.yml up --build --exit-code-from tests
+
+TEST_MONGO_URI=mongodb://localhost:27017 pytest tests/Integration_Tests/test_db_mongo.py  # real Mongo
+E2E_BASE_URL=http://localhost:8000       pytest tests/System_Tests                        # live stack
+```
+`AI_BASE_URL` un-skips the live job-queue suite (real worker processes, concurrent `/predict`, a burst shedding
+with 503). The harness above sets it to `http://ai:5000` **inside** the compose network — `ai` publishes no host
+port, so it is not reachable from your machine by design.
+
+**Guard tests.** Some invariants are cheap to break by accident and expensive to discover in production — only
+`web` is published, the queue stays bounded, the pool stays *processes*, `/predict` still goes through the queue,
+`predict_one` keeps its shape, the CPU-burning benchmark never ships as the real model. Those live in
+`test_deploy_contract.py`, `test_ai_queue_contract.py` and `test_scale_contract.py`, so a breaking change fails a
+PR rather than a container. Each was verified by **breaking its invariant on purpose** and confirming the guard
+went red — a guard that cannot fail is decoration.
 
 ## Workflow — PRs only
 `main` is protected: **no direct pushes.** All changes land via a pull request from a branch. See
@@ -63,13 +122,17 @@ dockerized stack from commit to a running container on an Azure VM, served over 
 Mongo, `503` if the DB is down). The container healthcheck uses `/health`; the post-deploy gate + external monitor use `/ready`.
 Full requirement-by-requirement mapping: [`docs/CICD_REPORT.md`](docs/CICD_REPORT.md).
 
-**Pipeline stages** (a PR runs only stage 1 — it never deploys):
+**Pipeline stages** (a PR runs only stages 1–2 — it never deploys):
 ```
-push/PR ─▶ 1. checks     ruff + bandit + pytest (real mongo:7 service)      ← gates everything
-push    ─▶ 2. build      docker build web + ai (cached) ─▶ GHCR (latest + <short-sha>)
-push    ─▶ 3. deploy     ssh → VM: docker compose pull && up -d  (VM pulls, never builds)
-push    ─▶ 4. verify     curl --fail https://<FQDN>/ready   ← fails the run + auto-rolls-back if unhealthy
+push/PR ─▶ 1. checks      ruff + bandit + pytest (real mongo:7 service)     ← gates everything
+push/PR ─▶ 2. compose-e2e boots web+db+ai + a test-runner container, drives the real wire path
+push    ─▶ 3. build       docker build web + ai (cached) ─▶ GHCR (latest + <short-sha>)
+push    ─▶ 4. deploy      ssh → VM: docker compose pull && up -d  (VM pulls, never builds)
+push    ─▶ 5. verify      curl --fail https://<FQDN>/ready  ← fails the run + auto-rolls-back if unhealthy
+manual  ─▶    stress      locust, on demand (needs a live stack; never a merge gate)
 ```
+Both `checks` **and** `compose-e2e` gate the build, so a broken `web → ai → db` wire path can never reach GHCR
+or the VM. The `stress` job is `workflow_dispatch`-only — run it with `gh workflow run ci.yml --ref main`.
 Caddy (in [`docker-compose.prod.yml`](docker-compose.prod.yml)) terminates TLS with an auto-renewing Let's Encrypt
 certificate and redirects HTTP→HTTPS; the VM runs the prod compose, which **pulls** the GHCR images rather than building.
 
@@ -137,6 +200,16 @@ protection enforces them either way. (We intentionally don't add a separate conf
 clutters the repo and drifts; the README + `AGENTS.md` are the catch-all.)
 
 ## Status
-Proposal graded **100/100**. **Built:** the web tier, the whole data layer, Week-9 logging, the 3-container build,
-the CI gate, and the CI/CD deploy pipeline (`main` green, full test suite). **In progress:** the AI model (Shiri) and the
-live Azure deploy + real-time Forum (Elad). Final project due **23 Aug 2026** (demo Week 12, present 16 July).
+Proposal graded **100/100**. Rubric: [`docs/GUIDELINES.md`](docs/GUIDELINES.md) — 75 build · **+5 Job Queue** ·
++10 Forum · +10 Deploy & CI/CD.
+
+**Built and live.** The web tier, the whole data layer, the online Forum (posts · comments · votes · anonymity ·
+P2P direct messages · media attachments · SSE-pushed notifications), Week-9 logging, the 3-container build, the
+CI gate, the cross-container test-runner, the **AI job queue (+5)**, **measured scaling**, and the CI/CD pipeline
+auto-deploying every green `main` to Azure over HTTPS. Suite: **648 passing / 33 environment-gated**.
+
+**Remaining:** the Random Forest behind `POST /predict` (Shiri — the contract-shaped placeholder is in place, so
+the queue and `web` already integrate against it) and forum cold-seed content. Risk assessment and the honest
+"what we did *not* mitigate" list: [`docs/REPORT.md`](docs/REPORT.md) §5.
+
+Final project due **23 Aug 2026** (demo Week 12, present 16 July).
