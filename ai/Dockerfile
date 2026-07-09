@@ -14,4 +14,6 @@ EXPOSE 5000
 # store and `GET /jobs/<id>` would 404 whenever it landed on the wrong one. Threads accept concurrent
 # requests; the PARALLELISM comes from the queue's process pool (ai/jobqueue.py), which — unlike
 # threads — actually overlaps CPU-bound inference across cores. Size the pool with AI_QUEUE_WORKERS.
-CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "1", "--threads", "8", "app:create_app()"]
+# --timeout 60 > the queue's AI_PREDICT_TIMEOUT_SECONDS (30): gunicorn's default is also 30, so a
+# /predict that runs to the queue deadline would race a worker SIGKILL and never reach the 504 path.
+CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "1", "--threads", "8", "--timeout", "60", "app:create_app()"]
