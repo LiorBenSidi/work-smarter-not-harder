@@ -27,6 +27,7 @@ Changing the shape is a **sync point** — update DESIGN + tell the team.
 - [ ] **Classes + features** — bin `readiness` 0–10 into classes (3-class is a natural fit); pick the feature set.
 - [ ] **Train** → `model/model.pkl`; bake into the image; **validate** it.
 - [ ] **`POST /predict`** — replace the placeholder → real `state` + `proba`.
+- [ ] **Measure the model's predict-time + peak RAM per process** — one `predict_one` call's latency, and the loaded model's memory. These two numbers size production settings behind the `/predict` contract: the queue timeout (`AI_PREDICT_TIMEOUT_SECONDS`) and the worker-pool count (`AI_QUEUE_WORKERS` — each process loads its own copy on the ~1 GB VM). Just report the two numbers; the timeout/pool config itself isn't yours to edit.
 - [ ] **Recommendation engine** — state + goals + program + recovery → workout (F5) · action-plan + program-balance (F6+F7) · trend analysis over history. *(F4 calorie is implemented in [`ai/calories.py`](ai/calories.py).)*
 - [ ] **Augmentation** if labeled data is thin — bootstrap whole rows / SMOTE (see `ai/README.md`).
 - [ ] **Forum:** the cold-seed content generator.

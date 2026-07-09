@@ -46,6 +46,22 @@ def test_int_env_non_positive_falls_back(cfg, monkeypatch):
     assert cfg._int_env("WS_TEST_INT", 4242) == 4242
 
 
+# ---- web->ai timeout invariant: web must wait at least as long as the ai queue computes ----
+# The ai queue's own timeout defaults to AI_PREDICT_TIMEOUT_SECONDS=30 (ai/app.py). If web's client
+# timeout drops below that, web abandons — and discards — a result ai is still computing, while the
+# worker stays busy. Lock the floor so a future "let's shorten the web timeout" can't silently regress it.
+_AI_QUEUE_TIMEOUT_DEFAULT = 30
+
+
+def test_ai_client_timeout_default_is_not_below_the_ai_queue_timeout(cfg):
+    assert cfg.Config.AI_CLIENT_TIMEOUT >= _AI_QUEUE_TIMEOUT_DEFAULT
+
+
+def test_ai_client_timeout_is_env_tunable(monkeypatch):
+    monkeypatch.setenv("AI_CLIENT_TIMEOUT_SECONDS", "45")
+    assert _reload_config().Config.AI_CLIENT_TIMEOUT == 45
+
+
 # ---- the course-mandated `debug` flag (TA notes: "a debug flag that enables debug mode") ----
 def test_flask_debug_flag_on(monkeypatch):
     monkeypatch.setenv("FLASK_DEBUG", "1")
