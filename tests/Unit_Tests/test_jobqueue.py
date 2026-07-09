@@ -239,6 +239,60 @@ def test_stats_track_submitted_completed_and_failed(make_queue):
     assert stats["pending"] == 0
 
 
+def test_stats_are_settled_by_the_time_result_returns(make_queue, jobqueue_module, monkeypatch):
+    """`result()` must not return while the job is still counted as pending.
+
+    A future hands its value to the waiting thread and runs its done-callbacks *concurrently*, so
+    waiting on the raw future let `/predict` answer while `pending` still counted the job as in
+    flight — backpressure then over-admits. The window is microseconds wide, so this test widens it:
+    the bookkeeping callback is delayed 100 ms, which is invisible to a `result()` that waits for the
+    job to settle, and fatal to one that waits on the future.
+
+    The job must still be RUNNING when its callback is registered, or the callback fires synchronously
+    inside `submit()` and there is no window to observe.
+
+    Without the delay this assertion flaked about one run in three, which is how the bug was found.
+    """
+    _delay_bookkeeping(jobqueue_module, monkeypatch)
+
+    queue = make_queue(slow, workers=2)
+    queue.result(queue.submit({"seconds": 0.15}), timeout=5)
+    stats = queue.stats()
+    assert stats["pending"] == 0, "result() returned before the depth counter was updated"
+    assert stats["completed"] == 1, "result() returned before the job was recorded as complete"
+
+
+def test_get_reports_a_settled_status_by_the_time_result_returns(make_queue, jobqueue_module, monkeypatch):
+    """Same race, seen through `GET /jobs/<id>`: a caller that just read its result over `/predict`
+    must never then be told the job is still 'queued'."""
+    _delay_bookkeeping(jobqueue_module, monkeypatch)
+
+    queue = make_queue(slow, workers=2)
+    job_id = queue.submit({"seconds": 0.15})
+    queue.result(job_id, timeout=5)
+    assert queue.get(job_id).status == "done"
+
+
+def _delay_bookkeeping(jobqueue_module, monkeypatch, delay=0.1):
+    """Widen the race window: run the done-callback's bookkeeping `delay` seconds late."""
+    original = jobqueue_module.JobQueue._on_done
+
+    def slow_on_done(self, job_id, future):
+        time.sleep(delay)
+        original(self, job_id, future)
+
+    monkeypatch.setattr(jobqueue_module.JobQueue, "_on_done", slow_on_done)
+
+
+def test_stats_are_settled_even_when_the_worker_raised(make_queue):
+    queue = make_queue(boom)
+    with pytest.raises(ValueError):
+        queue.result(queue.submit({"a": 1}), timeout=5)
+    stats = queue.stats()
+    assert stats["pending"] == 0
+    assert stats["failed"] == 1
+
+
 def test_stats_expose_the_bound_so_operators_can_see_headroom(make_queue):
     queue = make_queue(workers=3, max_pending=7)
     stats = queue.stats()
