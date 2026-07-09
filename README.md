@@ -61,7 +61,7 @@ ai/       Random Forest + recommendation engine (Shiri — placeholder today),
 tests/    Unit_Tests · Integration_Tests · System_Tests · Stress_Tests · Security_Tests
 scripts/  setup-hooks.sh · scaling_benchmark.py (stdlib-only load driver)
 docs/     PROPOSAL · GUIDELINES · DESIGN · ROADMAP · REPORT · SCALING_REPORT · JOB_QUEUE_PLAN
-          CICD_REPORT · DEPLOY_DEMO · ANDROID_APK · AUTH_TESTING · meeting-notes
+          CICD_REPORT · DEPLOY_DEMO · AUTH_TESTING · meeting-notes
 ```
 The web + data + CI/CD layers, the job queue, scaling and the live Azure deploy are built; `ai/` (Shiri's model)
 is the remaining build — all via pull requests (see below).
