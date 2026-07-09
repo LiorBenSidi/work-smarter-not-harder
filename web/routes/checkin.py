@@ -70,7 +70,8 @@ def checkin():
         return jsonify(error="profile store unavailable"), 503
 
     # readiness is assessed from today's metrics + the profile context; degrade if the ai is down.
-    prediction = ai_client.predict(current_app.config["AI_URL"], {**(profile or {}), **metrics})
+    prediction = ai_client.predict(current_app.config["AI_URL"], {**(profile or {}), **metrics},
+                                   timeout=current_app.config["AI_CLIENT_TIMEOUT"])
     ok = isinstance(prediction, dict)
     # calories is persisted to history AND returned to the client, so guard it to a finite number: a
     # non-finite AI value (NaN/Infinity) would both corrupt the stored entry and serialise as an

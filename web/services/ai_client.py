@@ -10,8 +10,13 @@ import requests
 logger = logging.getLogger(__name__)
 
 
-def predict(ai_url, features, timeout=5):
-    """POST `features` to `{ai_url}/predict`; return the parsed JSON, or None if the AI is unavailable."""
+def predict(ai_url, features, timeout=30):
+    """POST `features` to `{ai_url}/predict`; return the parsed JSON, or None if the AI is unavailable.
+
+    `timeout` must be >= the ai queue's AI_PREDICT_TIMEOUT_SECONDS, or web gives up on a result ai is
+    still computing (discarding the work while the worker stays busy). Callers pass the configured
+    value (`AI_CLIENT_TIMEOUT`); the 30 default is a safe floor matching the ai queue's default.
+    """
     try:
         resp = requests.post(f"{ai_url}/predict", json={"features": features}, timeout=timeout)
         resp.raise_for_status()
