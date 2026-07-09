@@ -22,9 +22,12 @@ The backend is built and CI-gated; the open work is two teammates' lanes. If you
   [`docs/DEPLOY_DEMO.md`](docs/DEPLOY_DEMO.md).
 - ⏳ **Open — Shiri (`ai/`):** the real Random Forest model + recommendation engine behind `POST /predict` — it's a
   contract-shaped **placeholder** today. See [`PERSON1.md`](PERSON1.md).
-- ⏳ **Open — Elad:** the **live** Azure deploy (VM provisioning + the demo — the pipeline *code* is done);
-  scaling (`ai` replicas / gunicorn workers + a locust before/after) and the risk-assessment section.
-  *Done:* Forum/DM media + `flask-limiter` on the public routes (#160); the **cross-container test-runner**
+- ⏳ **Open — Elad:** scaling (`ai` replicas / gunicorn workers + a locust before/after), the live-deploy
+  **demo**, and the risk-assessment section.
+  *Done:* the Azure deploy is **live** (`https://app.worksmarternotharder.dev`, auto-deploy on green `main`);
+  the **AI job queue** (`ai/jobqueue.py` — bounded queue + `ProcessPoolExecutor` in front of
+  `inference.predict_one`; `/predict` unchanged, `/jobs` + `/queue/stats` additive; GUIDELINES §2, +5);
+  Forum/DM media + `flask-limiter` on the public routes (#160); the **cross-container test-runner**
   (`docker-compose.test.yml` + `tests/Dockerfile`, CI job `compose-e2e` gating `build`→`deploy`), the
   **fault-isolation** + **locust stress** suites, and the deploy-contract guard tests. See [`PERSON3.md`](PERSON3.md).
 - ℹ️ **Online Forum (§10) status:** posts · comments · anonymity · post up/down-votes · **P2P direct messages
@@ -56,7 +59,7 @@ Full guide: [`docs/AUTH_TESTING.md`](docs/AUTH_TESTING.md); secrets + live-email
 - **Security:** hash passwords (werkzeug), auth-gate protected endpoints, rate-limit, validate input, defend against NoSQL injection.
 - **Tests:** all 5 types live under `tests/` — `Unit_Tests`, `Integration_Tests`, `System_Tests`, `Stress_Tests`, `Security_Tests`. Add tests alongside the code.
 - **Fault tolerance:** handle AI / DB / wearable-API failures gracefully (try/except + sensible fallbacks).
-- **Parallel/scaling:** horizontal — gunicorn `--workers` + `ai` replicas (`--scale ai=N`); reserve `multiprocessing` for *measured* CPU-heavy work (batch scoring, training, an L6 hot loop), not a sub-ms per-request RF predict (L8: "measure, don't guess").
+- **Parallel/scaling:** horizontal — gunicorn `--workers` + `ai` replicas (`--scale ai=N`). **`ai` is the exception**: `docs/GUIDELINES.md` §2 (+5) mandates a **job queue** in front of the model, so `ai/jobqueue.py` works `/predict` on a `ProcessPoolExecutor` (the GIL blocks CPU-bound scoring from overlapping across threads). `ai` therefore runs **one** gunicorn worker (its job store is in-memory) with `--threads`; the parallelism is the pool. Elsewhere, reserve `multiprocessing` for *measured* CPU-heavy work (batch scoring, training, an L6 hot loop) — not a sub-ms call (L8: "measure, don't guess").
 - **Performance / native code (course L6, native-vs-Python):** Python is PVM-interpreted and slow for tight loops, so for a **measured** hot path — e.g. numeric loops in the `ai` feature/inference pipeline — don't hand-roll pure-Python loops. First **vectorize with NumPy**; where that's still the bottleneck, drop to a **compiled extension (Cython / a C extension / `cffi`)**. Always **measure first** (L8: "don't guess, profile"), optimize only the proven hot spot, keep a pure-Python fallback, and **build any native module into the image** (never compile at container runtime).
 - **No `print()` in committed code** — use `logging` (course L3: print is slow; L8.1: raise errors, not print). Enforced by ruff `T20` in CI **and** the local hooks; a deliberate one-off needs `# noqa: T201`.
 - **Secrets:** never commit `.env` (commit `.env.example`). No real student IDs in committed filenames.

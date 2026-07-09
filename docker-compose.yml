@@ -51,6 +51,9 @@ services:
   ai:                               # internal only — no host port (OWNER: Shiri)
     build: ./ai
     restart: unless-stopped         # self-heal so a one-off crash doesn't strand web (which calls it)
+    environment:                    # job-queue knobs (ai/jobqueue.py) — defaults suit a dev laptop
+      AI_QUEUE_WORKERS: ${AI_QUEUE_WORKERS:-4}       # process-pool size = parallel scorers
+      AI_QUEUE_MAX_PENDING: ${AI_QUEUE_MAX_PENDING:-64}  # backlog cap -> 503 past it, never an OOM
     expose:
       - "5000"
     healthcheck:

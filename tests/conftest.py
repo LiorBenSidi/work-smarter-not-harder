@@ -14,6 +14,7 @@ import pytest
 
 ROOT = Path(__file__).resolve().parent.parent
 WEB = ROOT / "web"
+AI = ROOT / "ai"
 
 
 def _load_web_app():
@@ -26,6 +27,54 @@ def _load_web_app():
         return module
     finally:
         sys.path.remove(str(WEB))
+
+
+def _load_ai_module(name):
+    """Import an `ai/` module by its real name, with ai/ on sys.path.
+
+    Registered in `sys.modules` under its plain name (`jobqueue`, `inference`, `app`) because that is
+    how the container imports them (WORKDIR /app) — and because `ProcessPoolExecutor` resolves the
+    worker target by importing `inference` by name in the child process.
+    """
+    if name in sys.modules:
+        return sys.modules[name]
+    sys.path.insert(0, str(AI))
+    try:
+        spec = importlib.util.spec_from_file_location(name, str(AI / f"{name}.py"))
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[name] = module
+        spec.loader.exec_module(module)
+        return module
+    finally:
+        sys.path.remove(str(AI))
+
+
+@pytest.fixture(scope="session")
+def jobqueue_module():
+    return _load_ai_module("jobqueue")
+
+
+@pytest.fixture(scope="session")
+def inference_module():
+    return _load_ai_module("inference")
+
+
+@pytest.fixture(scope="session")
+def ai_app_module():
+    _load_ai_module("jobqueue")  # ai/app.py does `from jobqueue import ...`
+    _load_ai_module("inference")
+    return _load_ai_app()
+
+
+def _load_ai_app():
+    sys.path.insert(0, str(AI))
+    try:
+        spec = importlib.util.spec_from_file_location("ai_app_under_test", str(AI / "app.py"))
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module
+    finally:
+        sys.path.remove(str(AI))
 
 
 class FakeUsers:
