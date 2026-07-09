@@ -6,9 +6,10 @@
 #
 # Public surface is Caddy only (:80 + :443). web/ai/db stay on the internal network — same as dev.
 #
-# MEMORY (student VM ~1 GB RAM): web + ai run ONE gunicorn worker each in prod (overridden below) so the whole
-# stack fits; the images' default is 2 workers for dev/CI. The VM should ALSO have swap (see DEPLOY_DEMO.md §"VM
-# memory") — without headroom the ai worker (ML libs) OOMs, mongo's healthcheck times out, and web/caddy never start.
+# VM: Standard E4ads v5 — 4 vCPU / 32 GiB. `ai` still runs ONE gunicorn worker (architectural: the queue's
+# job store is in-memory per process — a 2nd worker owns a 2nd store and `/jobs` 404s half the time), with the
+# process pool (AI_QUEUE_WORKERS) providing the parallelism. `web` runs one gthread worker with a wide thread
+# pool (it's I/O-bound — waits on Mongo + ai). Swap is kept as a safety net but no longer required at 32 GiB.
 services:
   caddy:                                   # the public edge: terminates TLS, auto Let's Encrypt, HTTP->HTTPS (R10)
     image: caddy:2
@@ -28,10 +29,11 @@ services:
   web:                                     # NO host port now — only Caddy reaches it, over the internal network
     image: ghcr.io/${IMAGE_OWNER:?set IMAGE_OWNER}/work-smarter-web:${IMAGE_TAG:-latest}   # CI pins the exact SHA (R5.2)
     restart: unless-stopped                # self-heal + survive a VM reboot (R5.4)
-    # PROD override: 1 gunicorn worker (image default is 2) to fit the ~1 GB VM. gthread keeps concurrency
-    # (1 worker x 4 threads = 4 concurrent I/O-bound requests) at ~half the memory. Dev/CI keep the 2-worker default.
+    # PROD: 1 gthread worker x 8 threads = 8 concurrent I/O-bound requests (web waits on Mongo + ai, and those
+    # socket waits release the GIL, so threads — not processes — are the right lever). 8 = the VM's thread count
+    # (4 vCPU x 2). Comfortably exceeds EVENTS_MAX_STREAMS so SSE streams can't starve /health.
     # --timeout 45 > AI_CLIENT_TIMEOUT (33s) so a slow /predict degrades gracefully instead of a worker SIGKILL.
-    command: ["gunicorn", "--bind", "0.0.0.0:5000", "--worker-class", "gthread", "--workers", "1", "--threads", "4", "--timeout", "45", "--max-requests", "1000", "--max-requests-jitter", "100", "wsgi:app"]
+    command: ["gunicorn", "--bind", "0.0.0.0:5000", "--worker-class", "gthread", "--workers", "1", "--threads", "8", "--timeout", "45", "--max-requests", "1000", "--max-requests-jitter", "100", "wsgi:app"]
     environment:
       SECRET_KEY: ${SECRET_KEY:?set SECRET_KEY}
       MONGO_URI: ${MONGO_URI:-mongodb://db:27017/worksmarter}
@@ -67,14 +69,14 @@ services:
   ai:                                      # internal only (OWNER: Shiri) — no host port
     image: ghcr.io/${IMAGE_OWNER:?set IMAGE_OWNER}/work-smarter-ai:${IMAGE_TAG:-latest}
     restart: unless-stopped
-    # PROD override: 1 gunicorn worker + threads. One worker keeps the queue's in-memory job store
-    # coherent AND keeps memory down (each worker loads a full copy of the ML model + scikit-learn; 2
-    # workers OOM-killed on the ~1 GB VM). Threads accept concurrent requests; parallel scoring comes
-    # from the queue's process pool. --timeout 60 tolerates a slow first inference.
+    # PROD: exactly 1 gunicorn worker (architectural — the queue's in-memory job store must stay coherent;
+    # a 2nd worker owns a 2nd store and `/jobs` 404s half the time). Threads accept concurrent requests;
+    # parallel scoring comes from the queue's process pool. --timeout 60 tolerates a slow first inference.
     command: ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "1", "--threads", "8", "--timeout", "60", "app:create_app()"]
     environment:
-      # Sized for the 1 GB VM: each pool process holds its own copy of the model.
-      AI_QUEUE_WORKERS: ${AI_QUEUE_WORKERS:-2}
+      # Pool size = the VM's 4 vCPU (each process loads its own model copy; 32 GiB has room). This is where
+      # ai's parallelism lives — the measured 2.86x is at 4 workers (SCALING_REPORT.md).
+      AI_QUEUE_WORKERS: ${AI_QUEUE_WORKERS:-4}
       AI_QUEUE_MAX_PENDING: ${AI_QUEUE_MAX_PENDING:-32}
     expose:
       - "5000"
