@@ -70,7 +70,7 @@ is implemented independently.
 | `/events` | GET | Real-time push — SSE `text/event-stream` (new posts, DMs, notifications) |
 | `/media` · `/media/<id>` · `/forum/posts/<id>/attachments` · `/messages/<peer>/attachments` | POST · GET | Media upload / serve + bind-to-post / bind-to-DM (owner/participant-checked) — **Elad's lane (#160)** |
 | `/` · `/health` · `/ready` | GET | SPA entry · liveness probe · readiness (dependency) gate |
-| `/manifest.webmanifest` · `/sw.js` · `/.well-known/assetlinks.json` | GET | PWA install manifest · service worker · Android-TWA Digital Asset Links |
+| `/manifest.webmanifest` · `/sw.js` | GET | PWA install manifest · service worker |
 | `ai:/predict` | POST | readiness class + probabilities + recommendations (internal; web also reads an optional calorie target, added once the model lands) |
 
 ### Data model (MongoDB)
