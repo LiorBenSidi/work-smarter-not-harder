@@ -23,7 +23,7 @@ Course rules the architecture is built to satisfy: ≥3 communicating containers
 web/     Flask web app + the whole data layer (built)
 ai/      Random Forest + recommendation engine (Shiri — placeholder today)
 tests/   Unit_Tests · Integration_Tests · System_Tests · Stress_Tests · Security_Tests
-docs/    PROPOSAL · DESIGN · ROADMAP · REPORT · CICD_REPORT · DEPLOY_DEMO · ANDROID_APK · FEEDBACK · meeting-notes
+docs/    PROPOSAL · DESIGN · ROADMAP · REPORT · CICD_REPORT · DEPLOY_DEMO · FEEDBACK · meeting-notes
 ```
 The web + data + CI/CD layers are built; `ai/` (Shiri's model) and the live deploy + real-time Forum (Elad) are in progress — all via pull requests (see below).
 
