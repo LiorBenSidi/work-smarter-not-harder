@@ -43,11 +43,18 @@ defense across all endpoints.
 **Done when:** the whole proposal (minus stretch) runs on Docker; the feature×test matrix is complete; the risk
 report is concrete. **= the 80.**
 
-### Job Queue (+5) — Elad
+### Job Queue (+5) — Elad ✅ done
 **Goal:** the `ai` container handles many concurrent users' requests in parallel, not one at a time.
 **Scope:** a **job queue** in front of the model so incoming `/predict` calls are queued and processed in
 parallel (worker pool / replicas), rather than serialized per request.
 **Done when:** many simultaneous `/predict` calls are accepted and worked in parallel through the queue.
+
+**Shipped:** [`ai/jobqueue.py`](../ai/jobqueue.py) — a **bounded** queue worked by a `ProcessPoolExecutor` in
+front of [`ai/inference.py`](../ai/inference.py)`:predict_one`. Processes, not threads: the GIL stops CPU-bound
+scoring from overlapping across threads (measured — 0.96× on threads, 3.58× on processes).
+`POST /predict` keeps its exact response shape; `POST /jobs` · `GET /jobs/<id>` · `GET /queue/stats` are
+additive. Past `AI_QUEUE_MAX_PENDING` it sheds with 503 rather than growing a backlog into an OOM on the
+~1 GB VM. Design: [`JOB_QUEUE_PLAN.md`](JOB_QUEUE_PLAN.md) · numbers: [`SCALING_REPORT.md`](SCALING_REPORT.md).
 *Banks the +5. This is the new parallelization requirement in [`GUIDELINES.md`](GUIDELINES.md).*
 
 ### Forum (+10) — *built last, in 3 cuttable slices; partial credit accrues per slice*
@@ -88,20 +95,20 @@ The only coordination points are the seams (`/predict` shape, `db.py`'s function
 | ≥3 communicating containers, only `web` exposed | ✅ | Lior |
 | Local AI model, baked into image, pinned sklearn | ⬜ | Shiri |
 | All 5 test types — per-feature, run-anywhere, no-cheating | 🟡 scaffolds + matrix | all |
-| `docker-compose.yml` **and** `docker-compose.test.yml` | 🟢 compose + fault-tolerance done (test = env override → `worksmarter_test`); test-runner service TODO | Lior (compose) · Elad (runner) |
+| `docker-compose.yml` **and** `docker-compose.test.yml` | ✅ compose + fault-tolerance; the **test-runner service** boots with the stack and drives it over HTTP (CI job `compose-e2e`, gating `build`→`deploy`). Plus `docker-compose.scale.yml` (replicas + workers) | Lior (compose) · Elad (runner, scale) |
 | `debug` flag toggles debug mode | 🟡 env wired; confirm it toggles | Lior |
 | Password hashing (werkzeug) | ✅ | Lior |
 | Input validation (routes) + injection-safe queries (thin `db.py` CRUD) | ✅ | Lior |
-| Rate-limit / anti-spam | 🟡 messaging has an anti-spam rate-limit (20/min, Lior); `flask-limiter` on the other public routes TODO | Lior (messaging) · Elad (other routes) |
-| Fault tolerance + **isolation tested** (stop ai/db → web survives) | 🟡 `ai_client` degrades + compose hardening (restart/`start_period`, `web` boots if `ai` down); kill-container isolation tests TODO | Lior (degrade/compose) · Elad (kill tests) |
+| Rate-limit / anti-spam | ✅ messaging 20/min (Lior); `flask-limiter` on the public write routes + upload size caps (#160, Elad). Under load a 429 is the defence engaging, not a failure | Lior (messaging) · Elad (other routes) |
+| Fault tolerance + **isolation tested** (stop ai/db → web survives) | ✅ `ai_client` degrades + compose hardening (Lior); `System_Tests/test_fault_isolation.py` stops the real `ai`/`db` containers and re-probes over HTTP — `/health` stays 200, `/ready` degrades to 503 (Elad) | Lior (degrade/compose) · Elad (kill tests) |
 | Observability — Week-9 logging (named loggers, handlers, levels, access log) | ✅ web | Lior |
-| Parallel programming + scaling — multiprocessing batch · replicas/workers · multi-machine (Swarm / Azure VM) · **job queue for parallel AI requests (+5)** | 🟡 concrete plan | Shiri (parallel code) · Elad (scaling + job queue) |
-| Stress tests (decide what can crash) | ⬜ | Elad |
+| Parallel programming + scaling — replicas/workers · multi-machine (Swarm / Azure VM) · **job queue for parallel AI requests (+5)** | ✅ **job queue** (`ai/jobqueue.py`: bounded queue + `ProcessPoolExecutor` in front of `inference.predict_one`) and **measured scaling** — pool 1→4 = **2.86×**, `--scale ai=2` = **1.60×**, threads = 0.96× (the GIL). See [`SCALING_REPORT.md`](SCALING_REPORT.md). Multi-machine Swarm stays a documented path (one VM) | Shiri (model) · Elad (scaling + job queue) |
+| Stress tests (decide what can crash) | ✅ decided in advance: queue saturation → 503 (never an OOM), auth floods → 429, `/health` always 200 (else a restart storm). `Stress_Tests/{locustfile,test_load,test_queue_backpressure,test_pool_scaling}.py` | Elad |
 | GitHub: regular commits from **all 3**, meaningful messages | 🟡 in progress | all |
-| Report (app + features×tests + **risk assessment**) | 🟡 first draft ([`REPORT.md`](REPORT.md)); regenerated as tests land | all (Elad: risk) |
+| Report (app + features×tests + **risk assessment**) | 🟡 [`REPORT.md`](REPORT.md) §5 risk assessment ✅ (rewritten around "which test goes red if this mitigation disappears?", incl. what we deliberately did *not* mitigate). §1 API surface/data model + the AI rows still owed by their owners | all (Elad: risk ✅) |
 | Demo video of using the app | ⬜ | all |
-| Azure VM deploy + CI/CD auto-deploy (+10) | 🟡 pipeline code done (build→GHCR→SSH-deploy→Caddy HTTPS, PR #91); live VM provisioning + demo TODO | Lior (pipeline) · Elad (live VM + demo) |
-| Online Forum — real-time, 8 sub-features (+10) | 🟡 posts/comments/post-votes + anonymity + edit/delete-own + **P2P DM (text) + live DM notifications (SSE push) + vote notifications + comment votes + anti-spam messaging rate-limit** done; open: media/attachments + file-size, a received-engagement metric, fuller cold-seeding | Lior (CRUD/UI + DM + notifications + vote-notifs + comment-votes) · Elad (media) · Shiri (seed content) |
+| Azure VM deploy + CI/CD auto-deploy (+10) | ✅ **live** — every green `main` auto-deploys to the Azure VM, served over HTTPS at `app.worksmarternotharder.dev` (`/ready` gate + auto-rollback). Remaining: the graded live **demo** | Lior (pipeline) · Elad (live VM + demo) |
+| Online Forum — real-time, 8 sub-features (+10) | 🟡 posts/comments/post-votes + anonymity + edit/delete-own + **P2P DM (text) + live DM notifications (SSE push) + vote notifications + comment votes + anti-spam messaging rate-limit** done; media/attachments + file-size caps done (#160); open: a received-engagement metric, fuller cold-seeding | Lior (CRUD/UI + DM + notifications + vote-notifs + comment-votes) · Elad (media ✅ #160) · Shiri (seed content) |
 | Present 16 Jul (6 min) · demo by Wk 12 · final 23 Aug | ⬜ | all |
 | No shipped API keys | ✅ local model | Shiri |
 
