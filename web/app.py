@@ -347,6 +347,14 @@ def create_app(config=Config, *, users=None, profiles=None, history=None, forum=
         return send_from_directory(app.static_folder, "manifest.webmanifest",
                                    mimetype="application/manifest+json")
 
+    @app.get("/.well-known/assetlinks.json")
+    def assetlinks():
+        # Digital Asset Links: proves the Android TWA (package
+        # dev.worksmarternotharder.app.twa) owns this origin, so it runs
+        # fullscreen instead of falling back to a Custom Tab with a URL bar.
+        return send_from_directory(os.path.join(app.static_folder, ".well-known"),
+                                   "assetlinks.json", mimetype="application/json")
+
     @app.get("/sw.js")
     def service_worker():
         # served from root so the service worker controls the whole app scope (not just /static).
