@@ -8,8 +8,9 @@ works the queue with a **process** pool, so N requests are scored on N cores at 
 Two properties matter more than throughput:
 
 * **Bounded.** `max_pending` caps the in-flight depth. Past it, `submit()` raises `QueueFull` and the
-  caller sheds load with 503. An unbounded queue under a flood just trades a fast rejection for an OOM
-  kill — on the ~1 GB course VM, that takes the whole stack down, not just `ai`.
+  caller sheds load with 503. An unbounded queue under a flood trades a fast rejection for two slow
+  failures: memory grows without limit, and the pool keeps scoring jobs whose callers timed out long ago.
+  A larger VM raises the ceiling; it never makes the queue bounded.
 * **Coherent.** The job store is in-memory and per-process, so the container runs ONE gunicorn worker
   (threads for concurrency, the pool for parallelism). See ai/Dockerfile.
 

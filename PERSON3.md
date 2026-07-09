@@ -51,7 +51,7 @@ never commit it. (The GitHub-side secrets for the deploy are in [`SECRETS.md`](S
   the model (`ai/inference.py:predict_one`, Shiri's seam), so concurrent `/predict` calls are scored in
   parallel across cores instead of serialized behind the GIL. `POST /predict` keeps its exact shape;
   `POST /jobs` + `GET /jobs/<id>` + `GET /queue/stats` are additive. Past `max_pending` it sheds with 503
-  rather than growing the backlog into an OOM on the 1 GB VM. `ai` runs **one** gunicorn worker (the job
+  rather than growing a backlog whose callers have already timed out. `ai` runs **one** gunicorn worker (the job
   store is in-memory) with threads. Design: [`docs/JOB_QUEUE_PLAN.md`](docs/JOB_QUEUE_PLAN.md).
 - [x] **Cross-container test harness** — `docker-compose.test.yml` now runs a **test-runner service**
   (`tests/Dockerfile`): it waits for `web`+`db` healthy, then drives the live stack over HTTP
