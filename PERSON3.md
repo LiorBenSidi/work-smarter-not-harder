@@ -40,8 +40,13 @@ never commit it. (The GitHub-side secrets for the deploy are in [`SECRETS.md`](S
   `SSH_PRIVATE_KEY` (secret) + `SSH_HOST` (variable), optionally the `app` CNAME + `SITE_ADDRESS` for the branded
   domain, add UptimeRobot (R9), and run the live deploy demo. Steps: [`docs/CICD_REPORT.md`](docs/CICD_REPORT.md)
   + the run-sheet [`docs/DEPLOY_DEMO.md`](docs/DEPLOY_DEMO.md).
-- [ ] **Scaling** — horizontal scale (`ai` replicas + gunicorn workers) + the **multi-machine path**
-  (Docker Swarm overlay, or `ai` replicas on a second machine) + a locust before/after.
+- [x] **Scaling** — measured on both axes ([`docs/SCALING_REPORT.md`](docs/SCALING_REPORT.md)):
+  **vertical** (`AI_QUEUE_WORKERS` 1→4) gives **2.86× throughput** with p95 halved; **horizontal**
+  (`--scale ai=2`, Docker service-DNS round-robin) gives **1.60×**. `docker-compose.scale.yml` +
+  `scripts/scaling_benchmark.py` + `LOCUST_TARGET=ai` in the locustfile. Measured against a CPU-bound
+  workload (`ai/bench.py`), because the placeholder model returns in microseconds and would measure
+  Flask, not the pool. A thread pool scores **0.96×** on the same test — the GIL, and the reason the
+  pool is processes. *(Multi-machine Swarm remains a documented path, not a deliverable — one VM.)*
 - [x] **Job Queue (+5)** — `ai/jobqueue.py` puts a **bounded** queue + a `ProcessPoolExecutor` in front of
   the model (`ai/inference.py:predict_one`, Shiri's seam), so concurrent `/predict` calls are scored in
   parallel across cores instead of serialized behind the GIL. `POST /predict` keeps its exact shape;
