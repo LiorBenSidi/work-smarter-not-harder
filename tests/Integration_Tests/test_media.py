@@ -63,3 +63,19 @@ def test_cannot_attach_someone_elses_blob(media_client, make_client, fake_users,
     bob.post("/login", json={"username": "bob", "password": "s3cretpw!"})
     pid = bob.post("/forum/posts", json={"title": "hijack", "body": "not mine"}).get_json()["post"]["id"]
     assert bob.post(f"/forum/posts/{pid}/attachments", json={"attachment_ids": [mid]}).get_json()["bound"] == []
+
+
+def test_cannot_attach_to_someone_elses_post(media_client, make_client, fake_users, fake_forum,
+                                             fake_messages, fake_media, fake_notifications, tmp_path):
+    # alice owns a post; bob (his OWN blob) can't bolt it onto her post -> 403 (post-ownership), and a
+    # bogus post id -> 404. Without the check any logged-in user could attach media to anyone's post.
+    _login(media_client, "alice")
+    pid = media_client.post("/forum/posts", json={"title": "alice's", "body": "hers"}).get_json()["post"]["id"]
+    bob = make_client(fake_users, forum=fake_forum, messages=fake_messages, media=fake_media,
+                      notifications=fake_notifications)
+    bob.raw.application.config["MEDIA_ROOT"] = str(tmp_path / "media")
+    bob.post("/register", json={"username": "bob", "password": "s3cretpw!", "email": "bob@ex.com"})
+    bob.post("/login", json={"username": "bob", "password": "s3cretpw!"})
+    mid = _upload_png(bob).get_json()["id"]
+    assert bob.post(f"/forum/posts/{pid}/attachments", json={"attachment_ids": [mid]}).status_code == 403
+    assert bob.post("/forum/posts/nope/attachments", json={"attachment_ids": [mid]}).status_code == 404

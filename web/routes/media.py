@@ -33,6 +33,10 @@ def _media():
     return current_app.config["MEDIA"]
 
 
+def _forum():
+    return current_app.config["FORUM"]
+
+
 def _allowed_mimes():
     raw = current_app.config.get("MEDIA_ALLOWED_MIME", "")
     return {m.strip() for m in raw.split(",") if m.strip()}
@@ -123,6 +127,14 @@ def _list(target_type, target_id):
 @media_bp.post("/forum/posts/<post_id>/attachments")
 @login_required
 def attach_to_post(post_id):
+    # Only the post's author may attach media to it — and the post must exist. Without this, any logged-in
+    # user could bolt their blob onto anyone's post (or a bogus id). `get_post` returns the real author even
+    # for an anonymous post (anonymity is a display projection).
+    post = _forum().get_post(post_id)
+    if post is None:
+        return jsonify(error="no such post"), 404
+    if post.get("author") != session["username"]:
+        return jsonify(error="only the author can attach media to this post"), 403
     return _attach("post", post_id)
 
 
