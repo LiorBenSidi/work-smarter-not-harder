@@ -1,0 +1,7 @@
+# Test-runner container deps (OWNER: Elad). Pinned, and deliberately SMALL: the runner drives the
+# LIVE stack over HTTP (requests) and talks to the throwaway Mongo directly (pymongo) — it does not
+# import the Flask app in-process, so flask/gunicorn are not needed here.
+# pytest is pinned to the same version as requirements-dev.txt so local, CI and the container agree.
+pytest==8.4.2
+requests==2.32.3
+pymongo==4.10.1

@@ -1,15 +1,30 @@
 # Test-stack override — applied ON TOP of docker-compose.yml:
-#   docker compose -f docker-compose.yml -f docker-compose.test.yml up --build
+#   docker compose -f docker-compose.yml -f docker-compose.test.yml up --build --abort-on-container-exit --exit-code-from tests
 #
 # Brings the same 3 containers up in TESTING mode against a THROWAWAY database (`worksmarter_test`),
-# so a test run never touches dev/prod data. Only `web` stays exposed.
+# so a test run never touches dev/prod data, and adds a 4th, short-lived `tests` container: the
+# cross-container test RUNNER (OWNER: Elad). Only `web` stays exposed — the runner publishes nothing.
 #
-# This is the initial scaffold. The test-RUNNER service (a container that runs `pytest` against the
-# live stack — incl. the real-Mongo suite tests/Integration_Tests/test_db_mongo.py via
-# TEST_MONGO_URI=mongodb://db:27017/worksmarter_test) is Elad's to add: it depends on his Dockerfile /
-# how the tests are mounted into an image, which is his infra call.
+# The runner proves what the host's in-process pytest cannot: the REAL wire path (HTTP over the
+# compose network, gunicorn, a real Mongo) between web -> ai -> db.
 services:
   web:
     environment:
       TESTING: "1"
       MONGO_URI: mongodb://db:27017/worksmarter_test
+
+  tests:
+    build:
+      context: .
+      dockerfile: tests/Dockerfile
+    # No `ports:` — the runner is internal, like ai/db. It exits 0/1 and the stack tears down with it.
+    environment:
+      TESTING: "1"
+      E2E_BASE_URL: http://web:5000          # un-skips tests/System_Tests (they skip without it)
+      TEST_MONGO_URI: mongodb://db:27017/worksmarter_test   # un-skips the real-Mongo data-layer suite
+    depends_on:
+      web: { condition: service_healthy }    # don't start testing until web actually serves
+      db: { condition: service_healthy }     # ...and Mongo accepts connections
+    restart: "no"                            # a test run is one-shot: never restart it on exit
+    command: >
+      python -m pytest tests/System_Tests tests/Integration_Tests/test_db_mongo.py -q
