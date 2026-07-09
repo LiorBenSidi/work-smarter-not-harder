@@ -22,9 +22,11 @@ services:
       TESTING: "1"
       E2E_BASE_URL: http://web:5000          # un-skips tests/System_Tests (they skip without it)
       TEST_MONGO_URI: mongodb://db:27017/worksmarter_test   # un-skips the real-Mongo data-layer suite
+      AI_BASE_URL: http://ai:5000            # un-skips the live job-queue suite (real process pool)
     depends_on:
       web: { condition: service_healthy }    # don't start testing until web actually serves
       db: { condition: service_healthy }     # ...and Mongo accepts connections
+      ai: { condition: service_healthy }     # ...and the ai container's queue is up
     restart: "no"                            # a test run is one-shot: never restart it on exit
     command: >
       python -m pytest tests/System_Tests tests/Integration_Tests/test_db_mongo.py -q
