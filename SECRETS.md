@@ -52,9 +52,9 @@ overkill.
 ## 3. Server + CI/CD — GitHub Actions secrets & variables
 
 The pipeline ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) reads these. It **self-gates**: `checks`
-(lint · security · tests) run on every PR; **build + deploy run only on push to `main`, and deploy stays
-SKIPPED until the `SSH_HOST` variable is set** — so `main` stays green until the VM is ready, then the deploy
-activates with no code change.
+(lint · security · tests) run on every PR; **build + deploy run only on push to `main`, and deploy runs only
+when `SSH_HOST` is set AND `DEPLOY_ENABLED == 'true'`** — so `main` stays green until the VM is ready and the
+switch is flipped on, with no code change.
 
 **Secrets** — *Settings → Secrets and variables → Actions → Secrets*:
 
@@ -70,7 +70,8 @@ activates with no code change.
 
 | Variable | What |
 |---|---|
-| `SSH_HOST` | the VM host to SSH to — **setting this activates the deploy job** |
+| `SSH_HOST` | the VM host to SSH to — the deploy target (set once, permanently) |
+| `DEPLOY_ENABLED` | the deploy switch — deploy runs only when this is `true` **and** `SSH_HOST` is set |
 | `SITE_ADDRESS` | public HTTPS FQDN for the TLS cert + health check (optional; falls back to `SSH_HOST`) |
 
 Set them with the GitHub CLI — run from the repo; values are read locally, never committed:
@@ -82,6 +83,7 @@ gh secret   set SMTP_USER       -R "$R"
 gh secret   set SMTP_PASS       -R "$R"
 gh secret   set SSH_PRIVATE_KEY -R "$R" < ~/.ssh/deploy_key   # from the deploy key file
 gh variable set SSH_HOST        -R "$R" --body "your-vm.cloudapp.azure.com"
+gh variable set DEPLOY_ENABLED  -R "$R" --body "true"        # flip the deploy on (false = off)
 gh variable set SITE_ADDRESS    -R "$R" --body "app.worksmarternotharder.dev"
 ```
 
