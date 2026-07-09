@@ -180,6 +180,22 @@ def test_manifest_is_served_for_pwa(client):
     assert data["name"] and data["icons"] and data["start_url"] == "/"
 
 
+def test_assetlinks_served_for_the_android_twa(client):
+    # Digital Asset Links: the Android app (TWA) verifies it owns this origin by fetching
+    # /.well-known/assetlinks.json. If the package name or signing fingerprint drifts, the
+    # app silently drops to a Custom Tab (URL bar) instead of running fullscreen — so lock both.
+    resp = client.get("/.well-known/assetlinks.json")
+    assert resp.status_code == 200
+    assert "json" in resp.content_type
+    entry = resp.get_json(force=True)[0]
+    assert entry["relation"] == ["delegate_permission/common.handle_all_urls"]
+    target = entry["target"]
+    assert target["namespace"] == "android_app"
+    assert target["package_name"] == "dev.worksmarternotharder.app.twa"
+    fp = target["sha256_cert_fingerprints"]
+    assert len(fp) == 1 and len(fp[0].split(":")) == 32   # a full SHA-256, colon-separated
+
+
 def test_service_worker_served_at_root_scope(client):
     # the SW is served from root with Service-Worker-Allowed:/ so it controls the whole app scope.
     resp = client.get("/sw.js")
