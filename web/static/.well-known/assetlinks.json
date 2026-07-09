@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "dev.worksmarternotharder.app.twa",
+      "sha256_cert_fingerprints": [
+        "39:5D:DD:18:FF:BF:15:8F:2A:32:39:E6:C5:E7:52:48:13:43:6B:E9:D2:26:B9:C5:B1:AA:F5:2A:5D:5D:0F:9C"
+      ]
+    }
+  }
+]
