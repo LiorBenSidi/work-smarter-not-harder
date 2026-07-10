@@ -144,6 +144,7 @@ table are the **full** suite by type (`pytest --collect-only`).
 | **F9 History** | — | `test_history_flow` (3) | `test_e2e` leg | — | `test_history` (2) |
 | **Online Forum (CRUD/UI)** | `test_forum_validation` (16) | `test_forum_flow` (11) | `test_e2e` leg | `test_load` (post flood → 429, in the compose-e2e gate) | `test_forum` (9) |
 | **Online Forum (received-engagement metric)** | `test_db_engagement` (6) | `test_engagement` (7) | — | — | (auth-gated + counts-only, in `test_engagement`) |
+| **Media × engagement × caps (cross-feature journey)** | — | `test_elad_lane_journey` (4, in-process) | `test_elad_lane_live` (real HTTP, incl. the 10 MB cap at the WSGI layer; compose-e2e) | — | (journey ends with the full auth-gate sweep) |
 | **Data layer (`db.py` + Mongo)** | `test_db` (36) · `test_backup_script` (2) | `test_db_mongo` (6, real Mongo) | — | — | (injection-safe queries, in `test_profile`/`test_forum`) |
 | **Frontend (SPA / CSRF / a11y)** | — | `test_frontend` (12) | `test_e2e` leg | — | `test_csrf` (6) · `test_web_hardening` (4) |
 | **Observability (logging)** | `test_logging_config` (19) | — | — | — | (access-log path escaping, in `test_logging_config`) |

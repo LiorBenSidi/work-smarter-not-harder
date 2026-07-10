@@ -53,6 +53,15 @@ def test_the_pool_is_made_of_real_worker_processes():
     assert stats["max_pending"] >= 1
 
 
+def test_the_live_queue_reports_its_robustness_counters_and_a_healthy_pool():
+    """The #195 self-heal counters are visible on the real container — and on a healthy stack both
+    read zero. A non-zero `pool_rebuilds` here means worker processes are dying in CI, which no
+    other assertion would surface (the queue heals and every functional test stays green)."""
+    stats = _get("/queue/stats").json()
+    assert stats["pool_rebuilds"] == 0, f"pool was rebuilt during the run: {stats}"
+    assert stats["abandoned"] == 0, f"jobs were abandoned as hung during the run: {stats}"
+
+
 def test_gunicorn_serves_concurrent_predicts_without_serializing_them():
     """Fire N `/predict` calls at once. With one gunicorn worker and one thread these would queue at
     the HTTP layer; with the thread pool + process pool they overlap. We assert on *correctness under
