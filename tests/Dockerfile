@@ -4,6 +4,7 @@
 # in-process pytest run on the host cannot prove: real HTTP, real gunicorn, real Mongo, real network.
 #   - tests/System_Tests            -> E2E_BASE_URL=http://web:5000  (the whole web->ai->db journey)
 #   - tests/Integration_Tests/test_db_mongo.py -> TEST_MONGO_URI (the real data layer, throwaway DB)
+#   - tests/Stress_Tests/test_load.py -> the fast concurrency burst (real sockets; locust stays on-demand)
 #
 # It never publishes a port and it never writes to the dev/prod database.
 FROM python:3.12-slim
@@ -20,4 +21,4 @@ COPY db/ db/
 COPY tests/ tests/
 
 # Overridden by docker-compose.test.yml; this default makes `docker run` on the image do the right thing.
-CMD ["python", "-m", "pytest", "tests/System_Tests", "tests/Integration_Tests/test_db_mongo.py", "-q"]
+CMD ["python", "-m", "pytest", "tests/System_Tests", "tests/Integration_Tests/test_db_mongo.py", "tests/Stress_Tests/test_load.py", "-q"]
