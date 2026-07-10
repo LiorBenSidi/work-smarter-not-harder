@@ -11,7 +11,7 @@
 > +10 Azure deploy + CI/CD; supersedes [`FEEDBACK.md`](FEEDBACK.md)). Architecture detail lives in [`DESIGN.md`](DESIGN.md); the phased plan in
 > [`ROADMAP.md`](ROADMAP.md).
 >
-> **Last updated:** 2026-07-09 · **Suite at this snapshot:** **686 tests, 653 passing / 33 environment-gated**
+> **Last updated:** 2026-07-10 · **Suite at this snapshot:** **720 tests, 686 passing / 34 environment-gated**
 > (`pytest --collect-only`; the env-gated ones run in CI's `compose-e2e` job against the live containers).
 >
 > ⚠️ **Sections still owned by their planes.** §5 (risk), §2's deploy/scale/queue rows and §3's Elad rows are
@@ -150,7 +150,7 @@ table are the **full** suite by type (`pytest --collect-only`).
 | **Load / abuse** | — | — | — | `test_load` (4, live-stack burst: /health, /login flood, forum flood, /ready) · `locustfile.py` (ramped, on-demand CI job) | — |
 
 **Totals by type (full suite):** Unit **254** · Integration **317** · System **13** · Stress **11** ·
-Security **91** → **686 tests**.
+Security **91** → **720 tests**.
 
 **Pass / skip:** locally **282 pass, 10 skip in ~6 s**. The 10 skips are *environment-gated, not broken* —
 they run the moment their dependency is present:
