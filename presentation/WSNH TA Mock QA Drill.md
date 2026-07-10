@@ -79,10 +79,12 @@ easy → hard. (Companion to `WSNH Speaker Notes and QA.md`.)
 > model is the last piece; here's the pipeline returning a readiness signal end-to-end."]*
 
 **13. Show me the forum meets the requirement.**
-> All **seven** sub-features: posts + comments with image/video · like/dislike with counts + a personal total ·
-> direct messages (P2P + media) · notifications (DMs + who liked you) · anti-abuse (rate-limits + file-size
-> caps) · cold-seeding. Everything **real-time** over SSE (no refresh), retrievable chat history, plus an
+> Posts + comments with image/video · like/dislike with counts · direct messages (P2P + media) ·
+> notifications (DMs + who liked you) · anti-abuse (rate-limits + file-size caps) · cold-seeding. Everything
+> **real-time** over SSE (no refresh), retrievable chat history, plus an
 > **anonymity toggle** as a retained bonus.
+> *(If pressed on §3.3 completeness: the received-engagement profile total is the one open sub-feature —
+> owned by the team, not yet built. Six of seven + the anonymity bonus is honest and still a strong answer.)*
 
 **14. Is `/predict` safe under `--scale ai=2`?**
 > Yes — `POST /predict` is replica-safe, and it's all `web` calls. `GET /jobs/<id>` is *not* (per-container
