@@ -140,14 +140,14 @@ table are the **full** suite by type (`pytest --collect-only`).
 | **F7 Action plan (web surfaces list)** | — | `test_web_ai` (2) · `test_dashboard_flow` (5) | `test_e2e` leg | — | — |
 | **F8 Dashboard** | — | `test_dashboard_flow` (5) | `test_e2e` leg | — | `test_dashboard` (2) |
 | **F9 History** | — | `test_history_flow` (3) | `test_e2e` leg | — | `test_history` (2) |
-| **Online Forum (CRUD/UI)** | `test_forum_validation` (16) | `test_forum_flow` (11) | `test_e2e` leg | ⬜ *(planned — flood → 429)* | `test_forum` (9) |
+| **Online Forum (CRUD/UI)** | `test_forum_validation` (16) | `test_forum_flow` (11) | `test_e2e` leg | `test_load` (post flood → 429, in the compose-e2e gate) | `test_forum` (9) |
 | **Data layer (`db.py` + Mongo)** | `test_db` (36) · `test_backup_script` (2) | `test_db_mongo` (6, real Mongo) | — | — | (injection-safe queries, in `test_profile`/`test_forum`) |
 | **Frontend (SPA / CSRF / a11y)** | — | `test_frontend` (12) | `test_e2e` leg | — | `test_csrf` (6) · `test_web_hardening` (4) |
 | **Observability (logging)** | `test_logging_config` (19) | — | — | — | (access-log path escaping, in `test_logging_config`) |
 | **App config / debug flag / secret** | `test_config` (8) | — | — | — | `test_web_hardening` (4) |
 | **Contract / skeleton / smoke** | `test_scaffold` (4) | `test_skeleton_contract` (8) · `test_web_smoke` (1) | `test_e2e` (1) | — | — |
 | **Whole-system journey** | — | — | `test_e2e` (register→profile→check-in→dashboard→history→forum→logout) | — | — |
-| **Load / abuse** | — | — | — | `test_load` (1, ⏸ locust scaffold) | — |
+| **Load / abuse** | — | — | — | `test_load` (4, live-stack burst: /health, /login flood, forum flood, /ready) · `locustfile.py` (ramped, on-demand CI job) | — |
 
 **Totals by type (full suite):** Unit **254** · Integration **317** · System **13** · Stress **11** ·
 Security **91** → **686 tests**.
