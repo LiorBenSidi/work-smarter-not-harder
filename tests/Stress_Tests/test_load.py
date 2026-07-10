@@ -65,21 +65,6 @@ def test_health_survives_a_concurrent_burst():
     assert set(codes) == {200}, f"/health must stay 200 under load, saw {sorted(set(codes))}"
 
 
-def test_login_flood_is_shed_with_429_never_5xx():
-    """The brute-force surface sheds load via the rate-limit instead of crashing the worker."""
-    session = _csrf_session()
-    headers = {"X-CSRF-Token": session.cookies.get("csrf_token", "")}
-
-    def _attempt(_i):
-        return session.post(f"{BASE}/login", json={"username": "nobody", "password": "wrongpass"},
-                            headers=headers, timeout=TIMEOUT).status_code
-
-    codes = _burst(_attempt)
-    assert -1 not in codes, "the server dropped a connection under load instead of answering"
-    assert not [c for c in codes if c >= 500], f"login flood produced server errors: {sorted(set(codes))}"
-    assert 429 in codes, f"the rate-limit never engaged under a {len(codes)}-request flood: {sorted(set(codes))}"
-
-
 def test_forum_post_flood_is_shed_with_429_never_5xx():
     """The Forum's anti-spam cap (GUIDELINES §3.6): one IP bulk-creating posts is shed with 429.
 
@@ -87,6 +72,11 @@ def test_forum_post_flood_is_shed_with_429_never_5xx():
     the rate-limit is what stands between one hijacked/spam account and a feed full of junk. The few
     posts that land before the limiter engages are deleted afterwards (author-only delete), so a run
     against a long-lived stack leaves nothing behind.
+
+    ORDER MATTERS: this test must run BEFORE the login flood below. Both floods leave the same
+    client IP, and the login flood exhausts /login's per-minute budget — the one real login this
+    test needs would then be shed with 429 (seen live in compose-e2e). Pytest runs a file top-down,
+    so position is the ordering.
     """
     session = _csrf_session()
     headers = {"X-CSRF-Token": session.cookies.get("csrf_token", "")}
@@ -116,6 +106,21 @@ def test_forum_post_flood_is_shed_with_429_never_5xx():
     finally:
         for post_id in created:  # deletes are capped at 20/min; the limiter admits well under that
             session.delete(f"{BASE}/forum/posts/{post_id}", headers=headers, timeout=TIMEOUT)
+
+
+def test_login_flood_is_shed_with_429_never_5xx():
+    """The brute-force surface sheds load via the rate-limit instead of crashing the worker."""
+    session = _csrf_session()
+    headers = {"X-CSRF-Token": session.cookies.get("csrf_token", "")}
+
+    def _attempt(_i):
+        return session.post(f"{BASE}/login", json={"username": "nobody", "password": "wrongpass"},
+                            headers=headers, timeout=TIMEOUT).status_code
+
+    codes = _burst(_attempt)
+    assert -1 not in codes, "the server dropped a connection under load instead of answering"
+    assert not [c for c in codes if c >= 500], f"login flood produced server errors: {sorted(set(codes))}"
+    assert 429 in codes, f"the rate-limit never engaged under a {len(codes)}-request flood: {sorted(set(codes))}"
 
 
 def test_readiness_never_returns_a_server_error_under_load():
