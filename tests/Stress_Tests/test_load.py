@@ -34,8 +34,25 @@ REQUESTS_PER_WORKER = 8
 TIMEOUT = 10
 
 
-def _csrf_session():
+def _session():
+    """A Session whose connection pool matches the burst CONCURRENCY.
+
+    requests' default urllib3 pool holds 10 connections; a 16-thread burst through it forces the
+    extra threads onto freshly-opened TCP connections every call, which on a slow/loaded CI runner
+    fail often enough to surface as `-1`s — masquerading as exactly the server-drop the `-1` guard
+    exists to catch (issue #215: three of these tests flaked on a docs-only PR). Sizing the pool to
+    the concurrency keeps every thread on a kept-alive connection, so a `-1` again means the SERVER
+    dropped us. The burst itself is unchanged — same request count, timeouts and assertions.
+    """
     s = requests.Session()
+    adapter = requests.adapters.HTTPAdapter(pool_connections=CONCURRENCY, pool_maxsize=CONCURRENCY)
+    s.mount("http://", adapter)
+    s.mount("https://", adapter)
+    return s
+
+
+def _csrf_session():
+    s = _session()
     s.get(f"{BASE}/health", timeout=TIMEOUT)   # seed the double-submit CSRF cookie
     return s
 
@@ -60,7 +77,7 @@ def _burst(call):
 
 def test_health_survives_a_concurrent_burst():
     """Liveness never sheds load: a burst must not make Docker's healthcheck fail (=> restart storm)."""
-    session = requests.Session()
+    session = _session()
     codes = _burst(lambda _i: session.get(f"{BASE}/health", timeout=TIMEOUT).status_code)
     assert set(codes) == {200}, f"/health must stay 200 under load, saw {sorted(set(codes))}"
 
@@ -125,7 +142,7 @@ def test_login_flood_is_shed_with_429_never_5xx():
 
 def test_readiness_never_returns_a_server_error_under_load():
     """/ready pings Mongo on every call — under pressure it must answer 200 or a clean 503, never 5xx."""
-    session = requests.Session()
+    session = _session()
     codes = _burst(lambda _i: session.get(f"{BASE}/ready", timeout=TIMEOUT).status_code)
     assert -1 not in codes, "/ready hung or dropped the connection under load"
     assert set(codes) <= {200, 503}, f"/ready must degrade cleanly, saw {sorted(set(codes))}"
