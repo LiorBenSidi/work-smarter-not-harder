@@ -501,11 +501,14 @@
     /* segmented theme control (Display & accessibility) */
     .settings-group { border:1px solid var(--line); border-radius:14px; padding:12px 12px 8px; margin:0; }
     .settings-group legend { padding:0 6px; font-size:13px; color:var(--muted); }
-    .settings-group .seg-row { display:flex; flex-wrap:wrap; gap:8px; margin-top:4px; }
-    .settings-group .seg { display:flex; flex:1 1 30%; min-width:92px; align-items:center; justify-content:center; gap:7px; margin:0; padding:8px 12px;
-      border:1px solid var(--line); border-radius:999px; cursor:pointer; font-size:14px; min-height:44px; white-space:nowrap; }
-    .settings-group .seg input { accent-color:var(--accent); margin:0; }
-    .settings-group .seg:has(input:checked) { border-color: color-mix(in srgb, var(--accent) 60%, transparent); background:var(--field); }
+    .settings-group .seg-row { display:flex; gap:8px; margin-top:6px; }
+    .settings-group .seg { flex:1 1 0; min-width:0; display:flex; align-items:center; justify-content:center; margin:0; padding:10px 6px;
+      border:1px solid var(--line); border-radius:999px; cursor:pointer; font-size:14px; font-weight:700; min-height:44px; color:var(--muted); }
+    /* Native radio visually hidden — the label pill IS the control (fixes the dot+text that overflowed the
+       narrow pill and clipped 'System'/'Light' on mobile). Selection shows via the pill fill/border below. */
+    .settings-group .seg input { position:absolute; opacity:0; width:1px; height:1px; margin:0; }
+    .settings-group .seg span { white-space:nowrap; }
+    .settings-group .seg:has(input:checked) { border-color: color-mix(in srgb, var(--accent) 60%, transparent); background:var(--field); color:var(--ink); }
     .settings-group .seg:has(input:focus-visible) { outline:2px solid var(--accent); outline-offset:2px; }
     /* Password show/hide toggle — an eye button injected into every password field (see JS addPasswordToggles). */
     .pw-wrap { position:relative; display:block; }
