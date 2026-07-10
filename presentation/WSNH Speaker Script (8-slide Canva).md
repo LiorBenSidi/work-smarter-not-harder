@@ -30,7 +30,7 @@ Rehearse once with a timer. Usual overrun = slides 2, 4, 7 — keep to the one p
 > "For the +10 Online Forum we built **all seven** required features: posts and comments with images and video, likes and dislikes, **direct messages**, **notifications**, anti-abuse rate-limits, and cold-seeded content. Everything updates in **real time — no refresh** — and there's an **anonymity toggle** for the retained bonus."
 
 **Slide 6 — Security, Data & Testing (35s).**
-> "It's built to be safe: **password hashing**, **two-step login OTP**, email verification, CSRF protection and injection-safe database queries. And it's **tested** — all five course test types across **686 tests**, including a **real-Mongo** integration suite and a **cross-container end-to-end** test that both **gate the build**. A broken wire path literally can't reach deploy."
+> "It's built to be safe: **password hashing**, **two-step login OTP**, email verification, CSRF protection and injection-safe database queries. And it's **tested** — all five course test types, each one load-bearing — **mutation-tested**, not padding — including a **real-Mongo** integration suite and a **cross-container end-to-end** test that both **gate the build**. A broken wire path literally can't reach deploy."
 > **→ Hand to Elad:** "Elad will take it from performance to production."
 
 ---
