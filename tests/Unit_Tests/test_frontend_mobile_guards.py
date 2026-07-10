@@ -127,3 +127,10 @@ def test_hero_accent_is_not_gradient_text():
     rule = m.group(0)
     assert "background-clip" not in rule and "color: var(--accent)" in rule, \
         "hero accent must be a solid colour, not gradient-clipped text (Impeccable's gradient-text detector)"
+
+
+# ---- 12. Every numeric readout uses the mono "instrument" face (type-system consistency) ----
+def test_streak_number_uses_mono():
+    m = re.search(r"\.streak-n\s*\{[^}]*\}", INDEX)
+    assert m and "font-family:var(--font-mono)" in m.group(0), \
+        "the streak count must use --font-mono like every other number (the one that used to break the system)"

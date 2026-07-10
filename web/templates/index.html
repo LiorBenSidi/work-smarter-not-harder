@@ -300,7 +300,7 @@
       background: color-mix(in srgb, var(--warn) 14%, var(--card)); border:1px solid color-mix(in srgb, var(--warn) 40%, var(--line));
       box-shadow:var(--shadow); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); animation: rise .5s cubic-bezier(.2,.7,.2,1) both; }
     .streak .ico { width:18px; height:18px; stroke:var(--warn); fill:none; stroke-width:2; flex:none; }
-    .streak-n { font-weight:800; color:var(--ink); white-space:nowrap; }
+    .streak-n { font-family:var(--font-mono); font-weight:800; color:var(--ink); white-space:nowrap; }
     .streak-cap { color:var(--muted); font-size:13px; }
     @media (max-width: 380px) { .streak-cap { display:none; } }
     /* "Check-in due" capsule: a floating nudge shown only off-Today when today's check-in is missing */
@@ -607,10 +607,10 @@
       <div class="hero">
         <div class="hero-orb" aria-hidden="true"><span class="orb-glass"><canvas class="orb-liquid"></canvas><span class="orb-spec"></span><span class="orb-frost"></span></span></div>
         <h1 class="hero-title">Know when to push.<br>Know when to <span class="accent">rest</span>.</h1>
-        <p class="hero-sub">Your training readiness — measured each morning, in one calm signal.</p>
+        <p class="hero-sub">Your training readiness, measured each morning. One calm signal.</p>
         <ol class="how" aria-label="How it works">
           <li><span class="how-n">1</span>Log a 30-second morning check-in</li>
-          <li><span class="how-n">2</span>Get one signal — Ready, Moderate or Rest</li>
+          <li><span class="how-n">2</span>Get one signal: Ready, Moderate, or Rest</li>
           <li><span class="how-n">3</span>Follow today's recommendation</li>
         </ol>
       </div>
@@ -691,11 +691,11 @@
                 <div><label for="resting_hr">Resting HR (bpm)</label><input id="resting_hr" name="resting_hr" type="number" min="30" max="220" required>
                   <small class="hint">Beats per minute before getting up. Above your norm signals fatigue.</small></div>
                 <div><label for="fatigue">Fatigue (1–10)</label><input id="fatigue" name="fatigue" type="number" min="1" max="10" required>
-                  <small class="hint">How drained you feel — 1 fresh, 10 exhausted.</small></div>
+                  <small class="hint">How drained you feel: 1 fresh, 10 exhausted.</small></div>
                 <div><label for="soreness">Soreness (1–10)</label><input id="soreness" name="soreness" type="number" min="1" max="10" required>
-                  <small class="hint">Muscle soreness right now — 1 none, 10 very sore.</small></div>
+                  <small class="hint">Muscle soreness right now: 1 none, 10 very sore.</small></div>
                 <div><label for="training_load">Training load (0–10)</label><input id="training_load" name="training_load" type="number" min="0" max="10" required>
-                  <small class="hint">Yesterday's effort — 0 rest day, 10 max session.</small></div>
+                  <small class="hint">Yesterday's effort: 0 rest day, 10 max session.</small></div>
               </div>
               <div style="margin-top:16px"><button type="submit" class="block">Submit check-in</button></div>
               <div id="checkin-flash" class="flash" aria-live="polite"></div>
@@ -1555,7 +1555,7 @@
             + '<span class="streak-cap">' + (loggedToday ? "· logged today" : "· check in to keep it") + "</span>";
           el.hidden = false;
         } else if (hasHistory) {
-          el.innerHTML = ICON.flame + '<span class="streak-cap">Start a new streak — check in today</span>';
+          el.innerHTML = ICON.flame + '<span class="streak-cap">Start a new streak: check in today</span>';
           el.hidden = false;
         } else {
           el.hidden = true;                                              // brand-new user: the first-check-in flow onboards
@@ -1611,7 +1611,7 @@
           + '<div class="readiness ready" aria-hidden="true">'
           + '<div class="orb" style="--w:100"><div class="orb-inner"><span class="signal"></span>'
           + '<div class="verdict">Ready</div><div class="orb-sub">readiness</div></div></div>'
-          + '<ul class="recs"><li>Great day to push — hit your planned session.</li></ul></div></div>';
+          + '<ul class="recs"><li>Great day to push. Hit your planned session.</li></ul></div></div>';
         return;
       }
       let html = "";
@@ -1737,7 +1737,7 @@
       const detail = $("forum-detail");
       // Rescue the open detail out of the list before we wipe innerHTML (else it'd be destroyed), then re-slot it.
       if (detail && detail.parentNode === el) el.parentNode.appendChild(detail);
-      if (!forumPosts.length) { el.innerHTML = emptyState(EMPTY_ICONS.forum, "Quiet in here", "Start the conversation — share something above."); return; }
+      if (!forumPosts.length) { el.innerHTML = emptyState(EMPTY_ICONS.forum, "Quiet in here", "Start the conversation. Share something above."); return; }
       let list = forumPosts.slice();                         // "recent" keeps the server order (newest first)
       if (forumSort === "top") list.sort((a, b) => (b.score || 0) - (a.score || 0));
       else if (forumSort === "mine") list = list.filter((p) => p.mine);
