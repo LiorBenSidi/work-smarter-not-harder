@@ -148,7 +148,10 @@
     .usermenu-btn[aria-expanded="true"] .usermenu-chev { transform: rotate(180deg); }
     .usermenu-panel { position:absolute; top:calc(100% + 8px); right:0; z-index:60; min-width:250px;
       background:var(--card); border:1px solid var(--line); border-radius:18px; padding:8px; box-shadow:var(--shadow);
-      backdrop-filter: blur(18px) saturate(1.15); transform-origin: top right; animation: menuPop .17s cubic-bezier(.2,.9,.25,1) both; }
+      /* Same liquid-glass frosting as .tabbar-inner. The -webkit- prefix is REQUIRED — iOS Safari ignores the
+         unprefixed backdrop-filter, so without it the dropdown got no blur and the page bled through crisply. */
+      -webkit-backdrop-filter: blur(22px) saturate(1.5); backdrop-filter: blur(22px) saturate(1.5);
+      transform-origin: top right; animation: menuPop .17s cubic-bezier(.2,.9,.25,1) both; }
     .usermenu-id { display:flex; align-items:center; gap:11px; padding:9px 10px 11px; }
     .usermenu-id-text { display:flex; flex-direction:column; min-width:0; }
     .usermenu-id-text strong { font-size:15px; font-weight:800; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
