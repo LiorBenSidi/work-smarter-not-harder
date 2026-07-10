@@ -28,5 +28,8 @@ services:
       db: { condition: service_healthy }     # ...and Mongo accepts connections
       ai: { condition: service_healthy }     # ...and the ai container's queue is up
     restart: "no"                            # a test run is one-shot: never restart it on exit
+    # test_load.py is the fast dependency-free stress burst (seconds, stdlib threads) — the ramped
+    # locust scenario stays out of the per-PR gate (it's the on-demand `stress` CI job).
     command: >
-      python -m pytest tests/System_Tests tests/Integration_Tests/test_db_mongo.py -q
+      python -m pytest tests/System_Tests tests/Integration_Tests/test_db_mongo.py
+      tests/Stress_Tests/test_load.py -q
