@@ -129,7 +129,9 @@ a **distinct visual identity**, Forum CRUD/UI **with edit/delete-your-own**. The
 the Mongo internals (`ensure_indexes` + `$jsonSchema` validators + env-gated auth + `db/seed.py` + `db/backup.sh`),
 tested (incl. votes-as-a-list and a real-Mongo integration suite that runs in CI via a `mongo:7` service).
 **Week-9 logging** is wired
-(named loggers + console/rotating-file handlers + per-request access log). **Still to build:** the RF model + real
-`/predict` + recommendation engine (Shiri); the
-`docker-compose.test.yml` test-runner, rate-limiting, Azure deploy, the Forum real-time layer + stress/cross-
-container tests (Elad). Due **23 Aug 2026**.
+(named loggers + console/rotating-file handlers + per-request access log). Elad's build lane is **done**: the
+`docker-compose.test.yml` test-runner, rate-limiting, the **live** Azure deploy + CI/CD, the job queue, scaling
+(measured), Forum media, and the stress/cross-container tests. The Forum **real-time layer** (SSE, DM,
+notifications) was built by **Lior** (see the §Forum table above). **Still to build:** the RF model + real
+`/predict` + recommendation engine + cold-seed content (Shiri); the received-engagement profile metric (web);
+the graded live-deploy demo + UptimeRobot (Elad, run-sheet ready). Due **23 Aug 2026**.
