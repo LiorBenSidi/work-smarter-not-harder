@@ -2,7 +2,11 @@
  * Conservative on purpose: only GET static/shell requests are cache-backed; the API + auth are
  * always network (never cache credentialed/CSRF responses), and non-GET requests are untouched.
  */
-const CACHE = "ws-shell-v3";   // bump to evict any stale shell (e.g. the pre-#197 cached manifest with the old long name)
+// __BUILD__ is replaced per-deploy by the /sw.js route with a short hash of the app shell, so every
+// release ships a service worker with new bytes + a new cache name. The browser then installs the fresh
+// worker, purges the old shell on activate, and (skipWaiting + clients.claim) lets the app auto-update —
+// no delete-and-re-add. Served unstamped (e.g. straight off disk) the literal is still a valid cache name.
+const CACHE = "ws-shell-__BUILD__";
 const SHELL = ["/", "/static/icon-192.png", "/static/icon-512.png", "/manifest.webmanifest?v=3"];
 
 // API / auth paths — always hit the network, never served from cache.

@@ -3,6 +3,7 @@
 JS behaviour itself needs a browser (exercised by the running stack / system tests); this pins that
 the page is served and wired to every endpoint, so a template break is caught in CI.
 """
+import re
 
 
 def test_index_serves_html(client):
@@ -194,6 +195,22 @@ def test_index_wires_the_pwa(client):
     assert 'rel="manifest"' in html and 'name="theme-color"' in html
     assert 'rel="apple-touch-icon"' in html
     assert "serviceWorker" in html and "/sw.js" in html
+
+
+def test_service_worker_is_stamped_with_a_build_version(client):
+    # The __BUILD__ placeholder must be replaced at serve time so every deploy ships a worker with a new
+    # cache name -> the installed PWA auto-updates. If the raw literal leaked through, no release would.
+    sw = client.get("/sw.js").get_data(as_text=True)
+    assert "__BUILD__" not in sw, "the build placeholder was served unstamped (auto-update won't trigger)"
+    assert re.search(r'CACHE\s*=\s*"ws-shell-[0-9a-f]{8}"', sw), "SW cache name must carry the build hash"
+
+
+def test_index_registers_the_auto_update_loop(client):
+    # The home-screen app refreshes itself: it listens for a new worker taking control and re-checks on
+    # foreground. Pin both so the auto-update behavior can't be silently dropped.
+    html = client.get("/").get_data(as_text=True)
+    assert "controllerchange" in html, "the reload-on-new-worker hook was removed (no auto-update)"
+    assert "reg.update()" in html, "the foreground update check was removed (backgrounded PWA won't refresh)"
 
 
 def test_account_menu_present_and_wired(client):
