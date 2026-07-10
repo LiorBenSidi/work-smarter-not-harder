@@ -220,7 +220,7 @@ Proposal graded **100/100**. Rubric: [`docs/GUIDELINES.md`](docs/GUIDELINES.md) 
 **Built and live.** The web tier, the whole data layer, the online Forum (posts · comments · votes · anonymity ·
 P2P direct messages · media attachments · SSE-pushed notifications), Week-9 logging, the 3-container build, the
 CI gate, the cross-container test-runner, the **AI job queue (+5)**, **measured scaling**, and the CI/CD pipeline
-auto-deploying every green `main` to Azure over HTTPS. Suite: **653 passing / 33 environment-gated** (686 collected).
+auto-deploying every green `main` to Azure over HTTPS. Suite: **682 passing / 33 environment-gated** (715 collected).
 
 **Remaining:** the Random Forest behind `POST /predict` (Shiri — the contract-shaped placeholder is in place, so
 the queue and `web` already integrate against it) and forum cold-seed content. Risk assessment and the honest

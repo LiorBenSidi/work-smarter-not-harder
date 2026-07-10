@@ -1,5 +1,10 @@
 # For Elad — 3 robustness items in the AI job queue (`ai/jobqueue.py` / `ai/Dockerfile`)
 
+> **✅ RESOLVED (2026-07-10).** #1 (BrokenProcessPool self-heal) and #2 (hung-worker reaper) were
+> fixed in **PR #195**; #3 (`ai/Dockerfile` gunicorn `--timeout 60`) is now in place too. Kept for the
+> record / the report's design-decisions trail. Nothing outstanding here.
+
+
 Hi Elad — we ran an adversarial review over the whole repo before submission. Your queue is solid (bounded,
 process-pool, TTL reaping, the settled-event race is correctly handled — all verified clean). Three robustness
 gaps came up in **your** files, so they're yours to judge. None is exploitable today; they matter under real

@@ -58,7 +58,7 @@ easy → hard. (Companion to `WSNH Speaker Notes and QA.md`.)
 > the last working version. The run still ends **red** so we know; the site self-heals.
 
 **10. What are the five test types, and how many tests?**
-> Unit (254) · Integration (317) · System (13) · Stress (11) · Security (91) = **686**. They run on every push;
+> Unit (277) · Integration (323) · System (13) · Stress (11) · Security (91) = **715**. They run on every push;
 > real-Mongo + cross-container E2E gate the build.
 
 **11. What's a "guard test"? What's "mutation testing"?**

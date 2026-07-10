@@ -54,7 +54,7 @@ LIOR · 5/8 · ~35s.
 ### Slide 6 — Security, Data & Testing  *(paste ↓)*
 
 LIOR · 6/8 · ~35s · (last Lior slide → hand to Elad).
-"It's built to be safe: password hashing, two-step login OTP, email verification, CSRF protection and injection-safe queries. And it's TESTED — all five course test types across 686 tests, including a real-Mongo integration suite and a cross-container end-to-end test that both GATE the build. A broken wire path can't reach deploy."
+"It's built to be safe: password hashing, two-step login OTP, email verification, CSRF protection and injection-safe queries. And it's TESTED — all five course test types across 715 tests, including a real-Mongo integration suite and a cross-container end-to-end test that both GATE the build. A broken wire path can't reach deploy."
 → HAND TO ELAD: "Elad takes it from performance to production."
 
 ---

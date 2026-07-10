@@ -31,7 +31,7 @@ Pair the **Q&A bank** below with the new speaker script and the deck. (The per-s
    over server-sent events. Plus an anonymity toggle as a bonus." → stay on Lior.
 8. **Security (Lior, 35s).** "It's built to be safe: password hashing, two-step login codes, email verification
    at signup, CSRF protection, injection-safe database queries — behind the whole data layer and Week-9 logging." → Lior.
-9. **Testing (Lior, 30s).** "All five course test types, **686 tests**. The invariants are guard-tested and
+9. **Testing (Lior, 30s).** "All five course test types, **715 tests**. The invariants are guard-tested and
    **mutation-tested** — we broke each on purpose to prove the test catches it. Real-Mongo and cross-container
    tests run in CI and gate the build." → Elad.
 10. **Deploy +10 (Elad, 45s).** "Every push runs the whole suite; on green it builds, pushes to a registry,
@@ -87,7 +87,7 @@ Two multiplying axes: the process pool inside one container (vertical, 2.86×) a
 (horizontal, 1.60× for two). Both measured against a CPU-bound workload, not the microsecond placeholder.
 
 **Q: What are the five test types and how many tests?**
-Unit (254), integration (317), system (13), stress (11), security (91) — **686** total. They run on every push;
+Unit (277), integration (323), system (13), stress (11), security (91) — **715** total. They run on every push;
 real-Mongo and cross-container E2E gate the build.
 
 **Q: How does CI/CD gate a bad change?**

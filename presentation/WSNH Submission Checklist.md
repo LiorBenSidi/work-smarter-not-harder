@@ -24,7 +24,7 @@
 - [ ] **Online Forum (+10)** — all 7 sub-features + real-time + anonymity bonus. ✅ built (cold-seed content pending — Shiri).
 - [ ] **Azure deploy + CI/CD (+10)** — live over HTTPS, auto-deploy + rollback. ✅ built & live.
 - [ ] **Report** — `docs/REPORT.md` (app overview · features×tests matrix · risk assessment). ✅ current
-      (686 tests). Export to PDF if the TA wants a file.
+      (715 tests). Export to PDF if the TA wants a file.
 - [ ] **Demo video** — record from `WSNH Demo Video Script.md`; name `VID_318155801_207490913_319000725.mp4`.
 - [ ] **Presentation** — **`WSNH Presentation (Canva).pptx/.pdf`** (8-slide light/projector deck, design `DAHO6FXsV5o`) + **`WSNH Speaker Script (8-slide Canva).md`** (word-for-word, 2 handoffs); rehearse to 5:00. *(`WSNH Presentation.pptx` + `WSNH Speaker Notes and QA.md` are the retired 11/12-slide versions — Q&A bank in the latter is still useful.)*
 
@@ -39,7 +39,7 @@
       `AI_CLIENT_TIMEOUT_SECONDS` accordingly (env vars, no code change).
 
 **Verify (should already be true):**
-- [x] Suite green — **653 passing / 33 env-gated (686 collected)**; `main` green.
+- [x] Suite green — **682 passing / 33 env-gated (715 collected)**; `main` green.
 - [x] Live URL serves over HTTPS; auto-deploy + rollback working.
 - [x] No committed secrets; only `web` exposed; auth/CSRF/injection defenses in place (TA-reviewed clean).
 - [x] Docs reconciled to reality (counts, ownership, deploy gate, data model).

@@ -21,7 +21,7 @@
 | 3 | A Local AI Brain | Shiri | 40 | A **local** Random Forest, **no external API**, baked into the image. |
 | 4 | Architecture Overview | **Lior** | 40 | 3 containers, **only `web` exposed**, live on Azure over HTTPS. |
 | 5 | Online Forum (+10) | Lior | 35 | All **7** sub-features + **real-time** (no refresh) + anonymity. |
-| 6 | Security, Data & Testing | Lior | 35 | Hashing · 2FA · CSRF · injection-safe Mongo · **686 tests** + E2E gate. |
+| 6 | Security, Data & Testing | Lior | 35 | Hashing · 2FA · CSRF · injection-safe Mongo · **715 tests** + E2E gate. |
 | 7 | AI Job Queue & Scaling (+5) | **Elad** | 40 | Bounded queue + **process pool**; **2.86×** & **1.60×** measured. |
 | 8 | Commit to Live (+10) | Elad | 45 | Pipeline + rollback; **75+5+10+10**; scan the QR — **vote for us**. |
 
@@ -68,7 +68,7 @@ signup · CSRF double-submit · injection-safe Mongo queries · sessions. Behind
 `db.py` CRUD, Mongo indexes, `$jsonSchema` validators, backups, seed. Plus Week-9 observability (named
 loggers, rotating-file handler, per-request access log).
 
-**9 — Testing (Lior).** All **five** course types (unit · integration · system · stress · security), **686
+**9 — Testing (Lior).** All **five** course types (unit · integration · system · stress · security), **715
 tests**. The invariants that matter are **guard-tested and mutation-tested** (we broke each on purpose to prove
 the guard fails). Real-Mongo integration + a **cross-container E2E** run in CI and **gate the build**.
 
