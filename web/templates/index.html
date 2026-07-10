@@ -34,7 +34,7 @@
       --accent:#6ff0cf; --accent2:#b39bff; --on-accent:#04231b;
       --ok:#6ff0cf; --warn:#ffce7a; --err:#ff9db4; --ready:#6ff0cf; --moderate:#ffce7a; --rest:#ff9db4; --brand:#b39bff;
       --shadow:0 30px 70px -34px rgba(3,6,20,.85);
-      --glow-a: rgba(111,240,207,.22); --glow-b: rgba(179,155,255,.22); --glow-c: rgba(96,150,255,.16); }
+      --glow-a: rgba(111,240,207,.22); --glow-b: rgba(179,155,255,.13); --glow-c: rgba(96,150,255,.16); }
     /* Light palette. Applied when the user FORCES Light in Settings, OR when the OS prefers light and the
        user hasn't forced a theme ([data-theme] unset). A forced theme overrides the OS preference, and
        color-scheme keeps native controls/scrollbars in step. Dark is the :root default (forced dark just
@@ -46,7 +46,7 @@
       --accent:#0eb389; --accent2:#7c5cff; --on-accent:#ffffff;
       --ok:#0eb389; --warn:#b5730c; --err:#b3163f; --ready:#0eb389; --moderate:#b5730c; --rest:#d5477a; --brand:#7c5cff;
       --shadow:0 30px 60px -34px rgba(60,60,120,.30);
-      --glow-a: rgba(14,179,137,.16); --glow-b: rgba(124,92,255,.16); --glow-c: rgba(96,150,255,.12); }
+      --glow-a: rgba(14,179,137,.16); --glow-b: rgba(124,92,255,.10); --glow-c: rgba(96,150,255,.12); }
     :root[data-theme="dark"] { color-scheme: dark; }   /* dark vars come from :root; just pin native controls */
     @media (prefers-color-scheme: light) {
       :root:not([data-theme="dark"]):not([data-theme="light"]) {
@@ -55,7 +55,7 @@
         --accent:#0eb389; --accent2:#7c5cff; --on-accent:#ffffff;
         --ok:#0eb389; --warn:#b5730c; --err:#b3163f; --ready:#0eb389; --moderate:#b5730c; --rest:#d5477a; --brand:#7c5cff;
         --shadow:0 30px 60px -34px rgba(60,60,120,.30);
-        --glow-a: rgba(14,179,137,.16); --glow-b: rgba(124,92,255,.16); --glow-c: rgba(96,150,255,.12); }
+        --glow-a: rgba(14,179,137,.16); --glow-b: rgba(124,92,255,.10); --glow-c: rgba(96,150,255,.12); }
     }
     @property --w { syntax:'<number>'; inherits:false; initial-value:0; }
     * { box-sizing:border-box; }
@@ -275,8 +275,9 @@
       background: linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,0) 42%); }
     .hero-title { font-family: var(--font-display); font-size:31px; font-weight:800; letter-spacing:-.02em; line-height:1.14; margin:0 0 10px; }
     .hero-sub { color:var(--muted); font-size:15px; margin:0 auto 20px; max-width:33ch; }
-    .hero-title .accent { background: linear-gradient(120deg, var(--accent), var(--accent2));
-      -webkit-background-clip:text; background-clip:text; color:transparent; }
+    /* Solid mint, not gradient-clipped text — gradient text on a heading is a recognizable AI-output tell
+       (Impeccable's `gradient-text` detector). One confident accent colour reads more intentional. */
+    .hero-title .accent { color: var(--accent); }
 
     /* ===== app shell (logged-in): sectioned screens + bottom tab bar ===== */
     .app-shell { padding-bottom:26px; }
