@@ -29,6 +29,7 @@ import uuid
 from collections import OrderedDict
 from concurrent.futures import ProcessPoolExecutor
 from concurrent.futures import TimeoutError as FutureTimeout
+from concurrent.futures.process import BrokenProcessPool
 
 logger = logging.getLogger(__name__)
 
@@ -65,8 +66,19 @@ def _env_int(name, default):
     return value if value > 0 else default
 
 
+def _env_float(name, default):
+    try:
+        value = float(os.environ.get(name, ""))
+    except ValueError:
+        return default
+    return value if value > 0 else default
+
+
 class Job:
-    __slots__ = ("id", "status", "result", "error", "exception", "submitted_at", "finished_at", "settled")
+    __slots__ = (
+        "id", "status", "result", "error", "exception",
+        "submitted_at", "finished_at", "settled", "generation",
+    )
 
     def __init__(self, job_id):
         self.id = job_id
@@ -76,6 +88,10 @@ class Job:
         self.exception = None
         self.submitted_at = time.monotonic()
         self.finished_at = None
+        # Which pool this job's work was submitted on. A BrokenProcessPool resolving this job may
+        # only replace THAT pool: by the time the callback runs, a concurrent detection may already
+        # have built a fresh one, which must not be thrown away in turn.
+        self.generation = None
         # Set LAST, once the depth counter and the status have been updated. Waiters block on this
         # rather than on the raw future: `future.result()` can return before the future's done-callback
         # has run, which would let a caller observe a finished job with a stale `pending` count.
@@ -109,12 +125,17 @@ class JobQueue:
         max_pending=None,
         job_ttl=None,
         max_jobs=None,
+        hard_timeout=None,
         executor_factory=None,
     ):
         self.workers = workers or _env_int("AI_QUEUE_WORKERS", min(4, os.cpu_count() or 1))
         self.max_pending = max_pending or _env_int("AI_QUEUE_MAX_PENDING", 64)
         self.job_ttl = job_ttl or _env_int("AI_JOB_TTL_SECONDS", 300)
         self.max_jobs = max_jobs or _env_int("AI_MAX_JOBS", 1000)
+        # The point past which an unfinished job is presumed HUNG and abandoned (its depth slot
+        # released). Must exceed AI_PREDICT_TIMEOUT_SECONDS, or the reaper abandons jobs a caller
+        # is still waiting on — `test_ai_queue_contract.py` pins that ordering.
+        self.hard_timeout = hard_timeout or _env_float("AI_JOB_HARD_TIMEOUT_SECONDS", 120)
         self.target = os.environ.get("AI_WORKER_TARGET", DEFAULT_TARGET)
 
         self._executor_factory = executor_factory or (
@@ -125,7 +146,20 @@ class JobQueue:
         self._jobs = OrderedDict()
         self._futures = {}
         self._pending = 0
-        self._counters = {"submitted": 0, "completed": 0, "failed": 0, "rejected": 0}
+        self._generation = 0
+        # Ids whose depth slot the hard-timeout reaper already released. If such a worker turns out
+        # to be finishing late rather than hung, its done-callback must not release the slot again.
+        # NOT cleared when the job itself is forgotten: the entry is what protects the counter if
+        # the future fires after the TTL reap. A future that truly never fires leaves its id here —
+        # a few bytes per genuinely-hung worker, bounded by the pool-replacement escalation.
+        self._abandoned = set()
+        # How many of the CURRENT pool's workers are presumed stuck. At self.workers the pool can
+        # score nothing at all, so it is replaced outright.
+        self._suspect_hung = 0
+        self._counters = {
+            "submitted": 0, "completed": 0, "failed": 0, "rejected": 0,
+            "abandoned": 0, "pool_rebuilds": 0,
+        }
 
     # ---------------------------------------------------------------- lifecycle
 
@@ -148,6 +182,26 @@ class JobQueue:
         if executor is not None:
             executor.shutdown(wait=wait)
 
+    def _heal_locked(self, generation):
+        """Replace the worker pool — called when it is BROKEN (a worker process died, so every
+        later submit raises BrokenProcessPool forever) or fully clogged by presumed-hung workers.
+
+        Generation-guarded: N concurrent detections of the same dead pool rebuild it once, and a
+        stale detection can never throw away the fresh pool a previous one just built. Jobs still
+        in flight on the old pool are not lost — `shutdown(wait=False)` lets running work finish
+        (or, on a broken pool, resolve as failed), and each outcome flows through `_on_done` as
+        usual. A truly hung worker process cannot be killed from here; the replacement restores
+        service and the stuck process is leaked until the container restarts (REPORT.md §5.2).
+        """
+        if self._executor is None or generation != self._generation:
+            return
+        retired, self._executor = self._executor, self._executor_factory()
+        self._generation += 1
+        self._suspect_hung = 0
+        self._counters["pool_rebuilds"] += 1
+        retired.shutdown(wait=False)
+        logger.error("worker pool replaced (generation %d)", self._generation)
+
     # ---------------------------------------------------------------- the queue
 
     def submit(self, features):
@@ -164,22 +218,39 @@ class JobQueue:
             self._jobs[job.id] = job
             self._pending += 1
             self._counters["submitted"] += 1
-            executor = self._executor
+            executor, generation = self._executor, self._generation
 
         # Submitted outside the lock: a pool that rejects the work (mid-shutdown) must not leave the
-        # depth counter permanently inflated, so undo the reservation on failure.
-        try:
-            future = executor.submit(_worker, self.target, features)
-        except Exception:
-            with self._lock:
-                self._pending -= 1
-                self._jobs.pop(job.id, None)
-            raise
+        # depth counter permanently inflated, so undo the reservation on failure. A BROKEN pool —
+        # a worker process died — rejects every submission forever, so it is replaced and the
+        # submit retried once on the fresh pool; without that, one dead worker turns every later
+        # /predict into a 500 until a human restarts the container.
+        for retried in (False, True):
+            try:
+                future = executor.submit(_worker, self.target, features)
+                break
+            except BrokenProcessPool:
+                with self._lock:
+                    self._heal_locked(generation)
+                    executor, generation = self._executor, self._generation
+                if retried or executor is None:
+                    self._undo_reservation(job.id)
+                    raise
+            except Exception:
+                self._undo_reservation(job.id)
+                raise
 
         with self._lock:
+            job.generation = generation
             self._futures[job.id] = future
         future.add_done_callback(lambda fut, job_id=job.id: self._on_done(job_id, fut))
         return job.id
+
+    def _undo_reservation(self, job_id):
+        """Roll back a submit that never handed work to a pool (call WITHOUT the lock held)."""
+        with self._lock:
+            self._pending -= 1
+            self._jobs.pop(job_id, None)
 
     def _on_done(self, job_id, future):
         exception = None
@@ -192,9 +263,20 @@ class JobQueue:
             status, payload, error = DONE, result, None
 
         with self._lock:
+            job = self._jobs.get(job_id)
+            if isinstance(exception, BrokenProcessPool) and job is not None:
+                # A worker process died. The pool this job ran on is permanently broken — every
+                # later submit onto it raises — so replace it. This job's result is lost either way.
+                self._heal_locked(job.generation)
+            if job_id in self._abandoned:
+                # The hard-timeout reaper already released this job's slot and settled it as
+                # failed; the worker was finishing late rather than hung. Releasing again would
+                # drive `pending` negative and let backpressure over-admit forever.
+                self._abandoned.discard(job_id)
+                self._suspect_hung = max(0, self._suspect_hung - 1)
+                return
             self._pending -= 1
             self._counters["completed" if status == DONE else "failed"] += 1
-            job = self._jobs.get(job_id)
             if job is None:  # reaped while in flight (TTL far below the model's latency)
                 return
             job.status = status
@@ -247,11 +329,22 @@ class JobQueue:
     # ---------------------------------------------------------------- reaping
 
     def _reap_locked(self):
-        """Drop finished jobs past their TTL, then trim the oldest if still over the cap.
+        """Abandon presumed-hung jobs, drop finished jobs past their TTL, then trim to the cap.
 
-        Without this the job store is a memory leak with a slow fuse: every `/predict` adds an entry
-        that nothing ever removes. In-flight jobs are never dropped by the TTL pass.
+        Without the TTL pass the job store is a memory leak with a slow fuse: every `/predict` adds
+        an entry that nothing ever removes. In-flight jobs are never dropped by the TTL pass — but
+        one that has produced nothing for `hard_timeout` is presumed HUNG and abandoned first:
+        a hung worker (unlike a dead one) never completes its future, so nothing else would ever
+        return its depth slot, and `max_pending` hangs would 503 every request forever.
         """
+        hung_cutoff = time.monotonic() - self.hard_timeout
+        for job_id, job in list(self._jobs.items()):
+            if not job.finished and job.submitted_at < hung_cutoff:
+                self._abandon_locked(job_id, job)
+        if self._suspect_hung >= self.workers:
+            # Every worker in the pool is presumed stuck: slots exist but nothing can score them.
+            self._heal_locked(self._generation)
+
         cutoff = time.monotonic() - self.job_ttl
         expired = [
             job_id
@@ -269,6 +362,27 @@ class JobQueue:
             if oldest is None:  # everything tracked is still in flight — bounded by max_pending
                 break
             self._forget_locked(oldest)
+
+    def _abandon_locked(self, job_id, job):
+        """Give up on a presumed-hung job: release its depth slot and settle its waiters.
+
+        The future is deliberately NOT cancelled: a running worker cannot be cancelled anyway, and
+        on a not-yet-started one `Future.cancel()` runs the done-callbacks synchronously in THIS
+        thread — `_on_done` would then deadlock on the lock we are holding. If the work does run
+        (or complete late) after all, `_on_done` finds the id in `_abandoned` and skips the second
+        slot release.
+        """
+        job.status = FAILED
+        job.error = f"abandoned: no result within {self.hard_timeout}s (worker presumed hung)"
+        job.exception = FutureTimeout(job.error)
+        job.finished_at = time.monotonic()
+        self._pending -= 1
+        self._counters["failed"] += 1
+        self._counters["abandoned"] += 1
+        self._suspect_hung += 1
+        self._abandoned.add(job_id)
+        job.settled.set()
+        logger.error("job %s %s", job_id, job.error)
 
     def _forget_locked(self, job_id):
         self._jobs.pop(job_id, None)

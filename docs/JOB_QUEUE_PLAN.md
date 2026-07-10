@@ -50,11 +50,44 @@ Each gunicorn worker would own a *separate* in-memory job store, so `POST /jobs`
 the **parallelism comes from the process pool**, which is what the rubric asks for (and it bypasses the
 GIL for CPU-bound inference, unlike threads).
 
+## Self-heal & hung workers (added after the pre-submission adversarial review)
+
+Two failure modes the original design missed, both found by the team's adversarial review
+(`presentation/For Elad - job queue robustness.md`) and closed here:
+
+1. **A dead worker process wedges the pool forever.** `ProcessPoolExecutor` never recovers from a
+   worker death: every later `submit()` raises `BrokenProcessPool`. The queue now **replaces the
+   pool** when that surfaces — on submit (retried once on the fresh pool) or when an in-flight
+   job's future resolves broken. The rebuild is *generation-guarded*: each job records which pool
+   generation it ran on, so N jobs dying together rebuild once, and a stale detection can never
+   throw away a fresh pool. Rebuilds are visible as `pool_rebuilds` in `/queue/stats`, and
+   `/predict` maps a lost job to a retryable **503** instead of a 500.
+2. **A hung worker leaks its depth slot.** A hang (unlike a death) never completes its future, so
+   nothing returned the slot — `max_pending` hangs meant permanent 503. A **hard wall-clock
+   reaper** (`AI_JOB_HARD_TIMEOUT_SECONDS`, default 120 s; a contract test pins it above the
+   `/predict` deadline so it can never abandon a job a caller still waits on) runs in the existing
+   reap pass: an unfinished job past the deadline is **abandoned** — slot released, waiters
+   settled with a timeout, `abandoned` counted. If the worker was merely slow, its late completion
+   is recognised (an `_abandoned` set) and does **not** release the slot twice. When *every* pool
+   worker is presumed hung the pool is replaced outright.
+
+Deliberate choices, so nobody "fixes" them later:
+* **No `max_tasks_per_child`.** It recycles a worker only *between* tasks, so it cannot reclaim a
+  hung one — and it forces the `spawn` start method, reloading the model on every respawn. It
+  solves a problem we don't have and costs one we would.
+* **No `Future.cancel()` on abandon.** A running task can't be cancelled anyway, and on a
+  not-yet-started one `cancel()` runs the done-callbacks synchronously in the caller's thread —
+  inside the queue's lock that is a self-deadlock. The abandoned-set makes the stray execution
+  harmless instead.
+* **A truly hung process is leaked, not killed.** The parent cannot safely kill a pool worker
+  mid-IPC; the pool replacement restores service and the leak is bounded and stated in
+  REPORT.md §5.2.
+
 ## Tests (all five types)
 
 | Type | File | Covers |
 |---|---|---|
-| Unit | `Unit_Tests/test_jobqueue.py` | submit/result/get, bounded rejection, TTL reaping, job cap, stats counters, worker errors, idempotent start/shutdown |
+| Unit | `Unit_Tests/test_jobqueue.py` | submit/result/get, bounded rejection, TTL reaping, job cap, stats counters, worker errors, idempotent start/shutdown, broken-pool self-heal, hung-worker abandonment |
 | Integration | `Integration_Tests/test_ai_queue_api.py` | the four routes against the real Flask app, `/predict` shape preserved, 503/504/404 paths |
 | Integration | `Integration_Tests/test_ai_queue_contract.py` | **guard tests** — lock the seam so a teammate's change breaks CI, not prod |
 | System | `System_Tests/test_ai_queue_live.py` | real process pool over HTTP against the live `ai` container (compose harness) |

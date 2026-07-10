@@ -149,6 +149,8 @@ def test_queue_stats_does_not_expose_job_payloads(client):
         "completed",
         "failed",
         "rejected",
+        "abandoned",
+        "pool_rebuilds",
     }
 
 
