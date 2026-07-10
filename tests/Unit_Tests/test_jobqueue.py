@@ -8,9 +8,11 @@ fast — the pool type itself (a PROCESS pool, for real parallelism) is locked b
 The worker target is redirected away from `inference:predict_one` per-test, so these never depend on
 the model's placeholder body (Shiri may change it at will).
 """
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from concurrent.futures import TimeoutError as FutureTimeout
+from concurrent.futures.process import BrokenProcessPool
 
 import pytest
 
@@ -40,11 +42,10 @@ def make_queue(jobqueue_module, monkeypatch):
 
     def _make(target=echo, *, workers=4, **kwargs):
         monkeypatch.setattr(jobqueue_module, "_resolve_target", lambda _name: target)
-        queue = jobqueue_module.JobQueue(
-            workers=workers,
-            executor_factory=lambda: ThreadPoolExecutor(max_workers=workers),
-            **kwargs,
+        kwargs.setdefault(
+            "executor_factory", lambda: ThreadPoolExecutor(max_workers=workers)
         )
+        queue = jobqueue_module.JobQueue(workers=workers, **kwargs)
         created.append(queue)
         return queue.start()
 
@@ -173,6 +174,193 @@ def test_one_failing_job_does_not_poison_the_next(make_queue, jobqueue_module):
         queue.result(bad, timeout=5)
     good = queue.submit({"b": 2})
     assert queue.result(good, timeout=5)["seen"] == ["b"]
+
+
+# --------------------------------------------------------------------------- a BROKEN pool heals
+#
+# A ProcessPoolExecutor whose worker PROCESS dies (OOM, segfault) is permanently broken: every later
+# `executor.submit()` raises BrokenProcessPool, and the pool never repairs itself. Before the heal
+# logic, one dead worker therefore turned every subsequent /predict into a 500 until a human
+# restarted the container — silently, because /health never touches the queue. These tests simulate
+# the two ways the breakage surfaces: `submit()` raising, and an in-flight future resolving broken.
+
+
+class BreakableExecutor:
+    """Thread-pool stand-in for a process pool whose worker died: once `broken`, every submit
+    raises BrokenProcessPool, exactly like the real executor's permanently-broken state."""
+
+    def __init__(self, workers=2):
+        self._pool = ThreadPoolExecutor(max_workers=workers)
+        self.broken = False
+
+    def submit(self, fn, *args, **kwargs):
+        if self.broken:
+            raise BrokenProcessPool("A child process terminated abruptly")
+        return self._pool.submit(fn, *args, **kwargs)
+
+    def shutdown(self, wait=True):
+        self._pool.shutdown(wait=wait)
+
+
+def test_a_pool_that_breaks_on_submit_is_replaced_and_the_submit_still_succeeds(make_queue):
+    """One dead worker process must cost at most one job — never the whole container."""
+    created = []
+
+    def factory():
+        executor = BreakableExecutor()
+        created.append(executor)
+        return executor
+
+    queue = make_queue(executor_factory=factory)
+    queue.result(queue.submit({"a": 1}), timeout=5)  # healthy pool works
+    created[0].broken = True
+
+    job_id = queue.submit({"b": 2})  # must heal the pool and retry, not raise
+    assert queue.result(job_id, timeout=5)["seen"] == ["b"]
+    assert len(created) == 2, "the broken executor was not replaced"
+    assert queue.stats()["pool_rebuilds"] == 1
+
+
+def test_a_submit_onto_a_broken_pool_leaks_no_capacity(make_queue):
+    created = []
+
+    def factory():
+        executor = BreakableExecutor()
+        created.append(executor)
+        return executor
+
+    queue = make_queue(executor_factory=factory, max_pending=2)
+    created[0].broken = True
+    queue.result(queue.submit({"a": 1}), timeout=5)  # healed + retried
+    assert queue.stats()["pending"] == 0
+    queue.submit({"b": 2})
+    queue.submit({"c": 3})  # both slots must still exist
+
+
+def test_a_worker_death_mid_job_rebuilds_the_pool_for_the_next_request(make_queue):
+    """The done-callback path: the dying worker's own future resolves to BrokenProcessPool. That
+    job is genuinely lost, but the NEXT submit must land on a fresh pool and succeed."""
+    targets = iter([lambda f: (_ for _ in ()).throw(BrokenProcessPool("worker died")), echo])
+    queue = make_queue(lambda features: next(targets)(features))
+
+    dead = queue.submit({"a": 1})
+    with pytest.raises(BrokenProcessPool):
+        queue.result(dead, timeout=5)
+    assert queue.stats()["pool_rebuilds"] == 1
+    assert queue.stats()["pending"] == 0, "the lost job must still release its slot"
+
+    good = queue.submit({"b": 2})
+    assert queue.result(good, timeout=5)["seen"] == ["b"]
+
+
+def test_two_jobs_dying_on_the_same_pool_rebuild_it_once_not_twice(make_queue):
+    """N in-flight jobs all resolve BrokenProcessPool when one worker dies. The rebuild is
+    generation-guarded so the second callback sees an already-replaced pool and leaves it alone —
+    otherwise every casualty would throw away the fresh pool the previous one just built."""
+    both_submitted = threading.Event()
+
+    def die_together(features):
+        both_submitted.wait(5)
+        raise BrokenProcessPool("worker died")
+
+    queue = make_queue(die_together, workers=2)
+    first, second = queue.submit({"a": 1}), queue.submit({"b": 2})
+    both_submitted.set()
+    for job_id in (first, second):
+        with pytest.raises(BrokenProcessPool):
+            queue.result(job_id, timeout=5)
+    assert queue.stats()["pool_rebuilds"] == 1
+
+
+# --------------------------------------------------------------------------- hung workers
+#
+# A worker that HANGS (vs. dies) never completes its future, so nothing ever returns its depth
+# slot: hang `max_pending` workers and the queue answers 503 forever. The hard wall-clock reaper
+# abandons such jobs — releases the slot, settles waiters with a timeout — and replaces the pool
+# outright once every worker is presumed hung.
+
+
+def _stuck_target(release):
+    """A worker that hangs until `release` is set — and an echo path for jobs that shouldn't."""
+
+    def target(features):
+        if features.get("stuck"):
+            release.wait(10)
+            return {"state": "late"}
+        return echo(features)
+
+    return target
+
+
+def test_a_hung_job_releases_its_slot_after_the_hard_timeout(make_queue, jobqueue_module):
+    release = threading.Event()
+    queue = make_queue(_stuck_target(release), workers=2, max_pending=1, hard_timeout=0.05)
+    hung = queue.submit({"stuck": True})
+    with pytest.raises(jobqueue_module.QueueFull):
+        queue.submit({"n": 1})  # the hung job holds the only slot
+    time.sleep(0.06)
+
+    ok = queue.submit({"n": 2})  # reaping on submit must have freed the slot
+    assert queue.result(ok, timeout=5)["seen"] == ["n"]
+    assert queue.get(hung).status == "failed"
+    assert "abandoned" in queue.get(hung).as_dict()["error"]
+    assert queue.stats()["abandoned"] == 1
+    release.set()
+
+
+def test_waiting_on_an_abandoned_job_raises_a_timeout_not_a_hang(make_queue):
+    release = threading.Event()
+    queue = make_queue(_stuck_target(release), workers=2, hard_timeout=0.05)
+    hung = queue.submit({"stuck": True})
+    time.sleep(0.06)
+    queue.submit({"n": 1})  # trigger the reap
+    with pytest.raises(FutureTimeout):
+        queue.result(hung, timeout=1)  # settled as failed — returns at once, no 1s wait
+    release.set()
+
+
+def test_an_abandoned_job_that_finishes_late_does_not_release_its_slot_twice(make_queue):
+    """The reaper freed the slot already; if the 'hung' worker was merely slow and completes later,
+    the done-callback must NOT decrement again — `pending` would go negative and backpressure would
+    over-admit by one forever."""
+    release = threading.Event()
+    queue = make_queue(_stuck_target(release), workers=2, hard_timeout=0.05)
+    queue.submit({"stuck": True})
+    time.sleep(0.06)
+    queue.result(queue.submit({"n": 1}), timeout=5)  # reap fires; slot released once
+    assert queue.stats()["pending"] == 0
+
+    release.set()  # the abandoned worker now finishes late
+    deadline = time.monotonic() + 2
+    while queue._abandoned and time.monotonic() < deadline:
+        time.sleep(0.01)
+    assert not queue._abandoned, "the late completion was never observed"
+    assert queue.stats()["pending"] == 0, "the late completion released the slot a second time"
+
+
+def test_a_pool_with_every_worker_hung_is_replaced(make_queue):
+    """Slot release alone is not enough when every pool worker is stuck: submits are accepted but
+    nothing can score them. Once the presumed-hung count reaches the pool size, the pool itself is
+    replaced so service resumes."""
+    release = threading.Event()
+    created = []
+
+    def factory():
+        executor = ThreadPoolExecutor(max_workers=1)
+        created.append(executor)
+        return executor
+
+    queue = make_queue(
+        _stuck_target(release), workers=1, max_pending=4, hard_timeout=0.05,
+        executor_factory=factory,
+    )
+    queue.submit({"stuck": True})
+    time.sleep(0.06)
+    ok = queue.submit({"n": 1})  # reap: abandon + every worker presumed hung -> rebuild
+    assert len(created) == 2, "the clogged pool was not replaced"
+    assert queue.stats()["pool_rebuilds"] == 1
+    assert queue.result(ok, timeout=5)["seen"] == ["n"]  # scored by the fresh pool
+    release.set()  # unstick the leaked worker so teardown does not wait on it
 
 
 # --------------------------------------------------------------------------- timeouts
@@ -340,6 +528,19 @@ def test_a_junk_env_value_falls_back_to_the_default_instead_of_crashing(
     monkeypatch.setenv("AI_QUEUE_MAX_PENDING", junk)
     queue = jobqueue_module.JobQueue(executor_factory=lambda: ThreadPoolExecutor(max_workers=1))
     assert queue.max_pending == 64
+
+
+def test_env_var_sizes_the_hard_timeout(jobqueue_module, monkeypatch):
+    monkeypatch.setenv("AI_JOB_HARD_TIMEOUT_SECONDS", "45.5")
+    queue = jobqueue_module.JobQueue(executor_factory=lambda: ThreadPoolExecutor(max_workers=1))
+    assert queue.hard_timeout == 45.5
+
+
+@pytest.mark.parametrize("junk", ["", "abc", "0", "-3"])
+def test_a_junk_hard_timeout_falls_back_to_the_default(jobqueue_module, monkeypatch, junk):
+    monkeypatch.setenv("AI_JOB_HARD_TIMEOUT_SECONDS", junk)
+    queue = jobqueue_module.JobQueue(executor_factory=lambda: ThreadPoolExecutor(max_workers=1))
+    assert queue.hard_timeout == 120
 
 
 def test_the_worker_target_is_resolved_by_name(jobqueue_module, monkeypatch):

@@ -15,6 +15,7 @@ import logging
 import os
 import sys
 from concurrent.futures import TimeoutError as FutureTimeout
+from concurrent.futures.process import BrokenProcessPool
 from pathlib import Path
 
 from flask import Flask, jsonify, request
@@ -80,6 +81,11 @@ def create_app(queue=None):
         except FutureTimeout:
             logger.warning("job %s exceeded %.1fs", job_id, predict_timeout)
             return jsonify(error="prediction timed out"), 504
+        except BrokenProcessPool:
+            # A worker process died mid-job. The queue has already replaced its pool (self-heal),
+            # so only THIS job's result is lost — tell the caller to retry rather than 500.
+            logger.error("job %s lost: a worker process died (pool rebuilt)", job_id)
+            return jsonify(error="prediction lost to a worker crash, retry shortly"), 503
         except Exception:
             logger.exception("job %s raised in the worker", job_id)
             return jsonify(error="prediction failed"), 500

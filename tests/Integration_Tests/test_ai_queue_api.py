@@ -125,6 +125,27 @@ def test_a_model_crash_does_not_take_the_container_down(make_client):
     assert client.post("/predict", json={"features": {}}).status_code == 200
 
 
+def test_a_dead_worker_process_costs_one_503_not_a_500_forever(make_client):
+    """A worker PROCESS dying (OOM/segfault) resolves its job's future to BrokenProcessPool. The
+    caller whose job died gets a retryable 503 — their result is genuinely lost — and the queue
+    rebuilds its pool, so the very next /predict is served normally. Before the self-heal this was
+    a 500 on every request until someone restarted the container."""
+    from concurrent.futures.process import BrokenProcessPool
+
+    def worker_died(features):
+        raise BrokenProcessPool("A child process terminated abruptly")
+
+    targets = iter([worker_died, echo])
+    client = make_client(lambda features: next(targets)(features))
+
+    response = client.post("/predict", json={"features": {"hrv": 1}})
+    assert response.status_code == 503
+    assert "retry" in response.get_json()["error"]
+
+    assert client.post("/predict", json={"features": {"hrv": 2}}).status_code == 200
+    assert client.get("/queue/stats").get_json()["pool_rebuilds"] == 1
+
+
 # --------------------------------------------------------------------------- the async job API
 
 
