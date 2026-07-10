@@ -258,6 +258,27 @@ class FakeForum:
         post["score"] = sum(post["votes"].values())
         return post["score"]
 
+    def received_engagement(self, username):
+        """Mirrors db.forum_received_engagement: votes OTHERS cast on the user's posts/comments
+        (self-votes excluded, counted per voted item's author). Counts only — no voter names."""
+        up = down = 0
+        for post in self._posts.values():
+            vote_maps = []
+            if post["author"] == username:
+                vote_maps.append(post.get("votes", {}))
+            for comment in post.get("comments", []):
+                if comment.get("author") == username:
+                    vote_maps.append(comment.get("votes", {}))
+            for votes in vote_maps:
+                for voter, value in votes.items():
+                    if voter == username:
+                        continue
+                    if value > 0:
+                        up += 1
+                    elif value < 0:
+                        down += 1
+        return {"up": up, "down": down, "score": up - down}
+
     def update_post(self, post_id, username, title, body):
         post = self._posts.get(post_id)
         if post is None:
