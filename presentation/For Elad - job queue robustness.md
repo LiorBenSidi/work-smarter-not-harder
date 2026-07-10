@@ -1,5 +1,10 @@
 # For Elad — 3 robustness items in the AI job queue (`ai/jobqueue.py` / `ai/Dockerfile`)
 
+> ✅ **RESOLVED (Elad, 2026-07-10).** All three closed: **#3** → PR #187 (`--timeout 60` in `ai/Dockerfile`,
+> guard-tested); **#1 + #2** → PR #195 (broken-pool **self-heal** + hung-worker **hard-timeout reaper**,
+> 15 new tests, both mutation-checked; issue #186 closed). The stale "1 GB VM" framing → PRs #190/#191
+> (docs) + the presentation-kit queue sections (same PR as this note). Kept for the review trail.
+
 Hi Elad — we ran an adversarial review over the whole repo before submission. Your queue is solid (bounded,
 process-pool, TTL reaping, the settled-event race is correctly handled — all verified clean). Three robustness
 gaps came up in **your** files, so they're yours to judge. None is exploitable today; they matter under real

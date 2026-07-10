@@ -51,7 +51,7 @@ design + the pipeline that's already wired and returning valid shapes.)*
 
 **5 — Job Queue +5 (Elad).** `/predict` doesn't score inline — it enqueues onto a **bounded** queue worked by
 a **`ProcessPoolExecutor`** (a *process* pool, because the GIL blocks CPU-bound threads). Past the bound it
-**sheds with 503** rather than growing a backlog into an OOM on the 1 GB VM. One gunicorn worker (the store is
+**sheds with 503** rather than growing a backlog of work whose callers already gave up. One gunicorn worker (the store is
 in-memory); the parallelism is the pool.
 
 **6 — Scaling (Elad).** Measured, not asserted: the pool 1→4 = **2.86×** throughput (p95 halved); `--scale
