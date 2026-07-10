@@ -54,6 +54,7 @@ services:
     environment:                    # job-queue knobs (ai/jobqueue.py) — defaults suit a dev laptop
       AI_QUEUE_WORKERS: ${AI_QUEUE_WORKERS:-4}       # process-pool size = parallel scorers
       AI_QUEUE_MAX_PENDING: ${AI_QUEUE_MAX_PENDING:-64}  # backlog cap -> 503 past it, never an OOM
+      AI_JOB_HARD_TIMEOUT_SECONDS: ${AI_JOB_HARD_TIMEOUT_SECONDS:-120}  # presume a worker hung past this; reclaim its slot
     expose:
       - "5000"
     healthcheck:

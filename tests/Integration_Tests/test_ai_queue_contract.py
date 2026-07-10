@@ -147,6 +147,14 @@ def test_the_queue_defaults_to_a_finite_backlog(jobqueue_module):
     assert queue.job_ttl > 0, "finished jobs must expire"
 
 
+def test_the_hard_timeout_exceeds_the_predict_deadline(ai_source, jobqueue_module):
+    """The hard-timeout reaper abandons a job it presumes hung. If that deadline were <= the
+    /predict wait (AI_PREDICT_TIMEOUT_SECONDS), the reaper would abandon jobs that a caller is
+    still legitimately waiting on — turning every slow-but-healthy prediction into a failure."""
+    queue = jobqueue_module.JobQueue(executor_factory=lambda: ThreadPoolExecutor(max_workers=1))
+    assert queue.hard_timeout > _predict_timeout_default(ai_source)
+
+
 def test_the_queue_defaults_to_at_least_one_worker(jobqueue_module):
     queue = jobqueue_module.JobQueue(executor_factory=lambda: ThreadPoolExecutor(max_workers=1))
     assert queue.workers >= 1
