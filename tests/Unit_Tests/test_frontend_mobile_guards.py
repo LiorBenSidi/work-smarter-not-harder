@@ -73,11 +73,13 @@ def test_viewport_preview_is_hidden_on_mobile():
         "viewport preview must be hidden under the mobile breakpoint (redundant on a real phone)"
 
 
-# ---- 8. Frosted-glass panels carry the -webkit- prefix (iOS Safari ignores the unprefixed one) ----
-def test_glass_panels_have_the_webkit_backdrop_prefix_for_ios():
-    # iOS Safari honors ONLY -webkit-backdrop-filter. The profile dropdown lost its blur on the phone
-    # (page bled through) because it had backdrop-filter without the prefix — pin both panels.
-    panel = re.search(r"\.usermenu-panel\s*\{[^}]*\}", INDEX, re.S).group(0)
-    assert "-webkit-backdrop-filter" in panel, "usermenu dropdown needs -webkit-backdrop-filter or iOS drops the glass"
-    tabbar = re.search(r"\.tabbar-inner\s*\{[^}]*\}", INDEX, re.S).group(0)
-    assert "-webkit-backdrop-filter" in tabbar, "nav bar needs -webkit-backdrop-filter for its iOS glass"
+# ---- 8. EVERY frosted-glass panel carries the -webkit- prefix (iOS Safari ignores the unprefixed one) ----
+def test_all_glass_panels_have_the_webkit_prefix_for_ios():
+    # iOS Safari honors ONLY -webkit-backdrop-filter. Any panel with a bare backdrop-filter loses its blur
+    # on iPhone (the page bleeds through — how the profile dropdown regressed). Pin the WHOLE file: every
+    # backdrop-filter: blur declaration must have a -webkit- sibling, so a new panel can't reintroduce it.
+    css = re.sub(r"/\*.*?\*/", "", INDEX, flags=re.S)          # strip comments (prose mentions the property)
+    plain = len(re.findall(r"(?<!-)\bbackdrop-filter:\s*blur", css))   # standalone (non -webkit-) decls
+    webkit = len(re.findall(r"-webkit-backdrop-filter:\s*blur", css))
+    assert plain and plain == webkit, (
+        f"{plain} backdrop-filter blur decls but {webkit} -webkit- siblings — a glass panel loses iOS blur")
