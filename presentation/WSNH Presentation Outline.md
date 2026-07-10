@@ -58,10 +58,11 @@ in-memory); the parallelism is the pool.
 ai=2` = **1.60×**; the same test on a *thread* pool = **0.96×** — that's the GIL, and it's why the pool is
 processes. Two multiplying axes.
 
-**7 — Forum +10 (Lior).** All seven: posts (title/body/image/video) · comments (+media) · like/dislike with
-counts + a personal total · **direct messages** (P2P + media) · **notifications** (DMs + who liked your
+**7 — Forum +10 (Lior).** Posts (title/body/image/video) · comments (+media) · like/dislike with
+counts · **direct messages** (P2P + media) · **notifications** (DMs + who liked your
 content) · **anti-abuse** (rate-limits + file-size caps) · **cold-seeding**. Plus **real-time** everywhere via
-SSE (no manual refresh), retrievable chat history, and an **anonymity toggle** (retained bonus).
+SSE (no manual refresh), retrievable chat history, and an **anonymity toggle** (retained bonus). *(One §3.3
+item — the received-engagement profile total — is owned but not yet built; don't claim it.)*
 
 **8 — Web · data · security (Lior).** Werkzeug password hashing · **2-step login OTP** · email verification at
 signup · CSRF double-submit · injection-safe Mongo queries · sessions. Behind it: the **whole data layer** —
