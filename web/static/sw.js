@@ -2,8 +2,8 @@
  * Conservative on purpose: only GET static/shell requests are cache-backed; the API + auth are
  * always network (never cache credentialed/CSRF responses), and non-GET requests are untouched.
  */
-const CACHE = "ws-shell-v2";   // bump to evict any stale shell (e.g. a mid-dev bundle -> the #138 preview recursion)
-const SHELL = ["/", "/static/icon-192.png", "/static/icon-512.png", "/manifest.webmanifest"];
+const CACHE = "ws-shell-v3";   // bump to evict any stale shell (e.g. the pre-#197 cached manifest with the old long name)
+const SHELL = ["/", "/static/icon-192.png", "/static/icon-512.png", "/manifest.webmanifest?v=3"];
 
 // API / auth paths — always hit the network, never served from cache.
 const APP_PATHS = ["/login", "/register", "/logout", "/me", "/profile", "/dashboard",
