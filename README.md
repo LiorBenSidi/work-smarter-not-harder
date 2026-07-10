@@ -7,6 +7,7 @@ recommendation engine turns that into action plans, workouts, program-balance an
 
 **Team (Git Push & Pray):** Lior Ben Sidi · Shiri Haboob · Elad Nachalieli
 **Full spec:** [`docs/PROPOSAL.md`](docs/PROPOSAL.md) (the submitted proposal).
+**Presentation kit:** [`presentation/`](presentation/) — deck, speaker script, notes, Q&A, demo shot-list, submission checklist (start at [`presentation/README.md`](presentation/README.md)).
 
 ## Try it live
 Deployed over HTTPS at **[app.worksmarternotharder.dev](https://app.worksmarternotharder.dev)** — register an
