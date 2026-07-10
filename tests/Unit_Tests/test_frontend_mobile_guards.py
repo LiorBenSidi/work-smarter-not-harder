@@ -62,3 +62,12 @@ def test_viewport_fill_and_overscroll_background():
     assert "min-height:100dvh" in INDEX, "body no longer fills the dynamic viewport (nav wobble returns)"
     assert re.search(r"html\s*\{[^}]*background-color:\s*var\(--bg\)", INDEX), \
         "html lost its theme background (iOS overscroll flashes white again)"
+
+
+# ---- 7. The debug panel's viewport preview is desktop-only (pointless/redundant on a phone) ----
+def test_viewport_preview_is_hidden_on_mobile():
+    # The section keeps its id so the media query can target it...
+    assert 'id="debug-vp-sect"' in INDEX, "the viewport-preview section lost its targetable id"
+    # ...and a narrow-viewport media query hides exactly that section (the rest of the panel stays).
+    assert re.search(r"@media\s*\(max-width:\s*859px\)\s*\{\s*#debug-vp-sect\s*\{\s*display:\s*none", INDEX), \
+        "viewport preview must be hidden under the mobile breakpoint (redundant on a real phone)"
