@@ -3,7 +3,7 @@
 Everything for the **final-project presentation**, in one place all three of us can find and edit.
 
 - 🟢 **Live app:** https://app.worksmarternotharder.dev
-- 🎨 **Slides (Canva master — edit here):** https://www.canva.com/design/DAHO6FXsV5o/ANh181HP93uInkd0gZbbHA/edit
+- 🎨 **Slides (Canva master — click to edit):** https://canva.link/50e4i8nxkaslrbj  *(team edit link; opens design `DAHO6FXsV5o`)*
 - 📄 **Deck (view/offline):** [`WSNH Presentation (Canva).pdf`](WSNH%20Presentation%20%28Canva%29.pdf) — 8 slides, projector-ready, scan-to-try QR on slides 1 & 8.
 
 ## 📅 Presentation — Thursday 16 July 2026
@@ -37,7 +37,7 @@ Handoffs: end of slide 3 → Lior, end of slide 6 → Elad.
 - **Team:** add the **"See It Live"** demo slide (as slide 5 in Canva, after Architecture) + record the 30–45s clip; do one **timed rehearsal**.
 
 ## Editing the deck (Shiri & Elad)
-Open the **Canva master** link above. If you can't edit it yet, ask Lior to click **Share** in Canva and add you. Edit in Canva (source of truth), then re-download the PPTX/PDF to refresh the deck. Presenter notes live in Canva **and** in the exported PPTX — re-exporting overwrites the PPTX, so re-paste from `WSNH Canva Notes (paste per slide).md` if needed.
+Open the **Canva master** link above — it's a team edit link, so you can edit directly (no invite needed). Edit in Canva (source of truth), then re-download the PPTX/PDF to refresh the deck. Presenter notes live in Canva **and** in the exported PPTX — re-exporting overwrites the PPTX, so re-paste from `WSNH Canva Notes (paste per slide).md` if needed.
 
 ---
 *The app itself is documented in the repo root [`README.md`](../README.md) and [`docs/`](../docs). All three members commit their own work (course requirement).*
