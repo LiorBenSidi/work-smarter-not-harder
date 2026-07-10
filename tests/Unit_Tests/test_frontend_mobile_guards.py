@@ -118,3 +118,12 @@ def test_checkin_reveal_is_orchestrated_and_guarded():
     # The refresh button must NOT pass its MouseEvent as opts (would truthy-trigger the fresh reveal).
     assert re.search(r'dashboard-refresh"\)\.addEventListener\("click",\s*\(\)\s*=>\s*loadDashboard\(\)\)', INDEX), \
         "the refresh listener must be wrapped so the click event isn't passed as opts"
+
+
+# ---- 11. The hero accent stays a solid colour (gradient-clipped heading text is an AI-output tell) ----
+def test_hero_accent_is_not_gradient_text():
+    m = re.search(r"\.hero-title \.accent\s*\{[^}]*\}", INDEX)
+    assert m, "the hero accent rule is missing"
+    rule = m.group(0)
+    assert "background-clip" not in rule and "color: var(--accent)" in rule, \
+        "hero accent must be a solid colour, not gradient-clipped text (Impeccable's gradient-text detector)"
