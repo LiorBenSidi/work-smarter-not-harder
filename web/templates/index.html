@@ -2230,9 +2230,32 @@
     })();
   </script>
   <script>
-    // Register the service worker so the app is installable ("Add to Home Screen") over HTTPS.
+    // Register the service worker so the app is installable ("Add to Home Screen") over HTTPS, and make
+    // the installed/home-screen app AUTO-UPDATE like a native app — no delete-and-re-add after a deploy.
+    // How: each release ships a service worker with a new build hash (see the /sw.js route). We check for
+    // it whenever the app returns to the foreground (iOS resumes standalone PWAs without re-navigating),
+    // and when the new worker takes control we reload once onto the fresh build. The manifest name/icon
+    // are the only thing iOS still reads only at install time — those (rare) changes still need a re-add.
     if ("serviceWorker" in navigator) {
-      window.addEventListener("load", () => navigator.serviceWorker.register("/sw.js").catch(() => {}));
+      const topLevel = window.top === window.self;              // don't reload the dev preview iframe
+      const hadController = !!navigator.serviceWorker.controller; // false on the very first install
+      let reloading = false;
+      if (topLevel) {
+        navigator.serviceWorker.addEventListener("controllerchange", () => {
+          // Skip the first-install claim (nothing to refresh) and guard against a reload loop.
+          if (reloading || !hadController) return;
+          reloading = true;
+          window.location.reload();
+        });
+      }
+      window.addEventListener("load", () => {
+        navigator.serviceWorker.register("/sw.js").then((reg) => {
+          const check = () => { if (document.visibilityState === "visible") reg.update().catch(() => {}); };
+          document.addEventListener("visibilitychange", check); // foreground/resume -> look for a new build
+          window.addEventListener("focus", check);
+          setInterval(() => reg.update().catch(() => {}), 60 * 60 * 1000); // and hourly in long sessions
+        }).catch(() => {});
+      });
     }
 
     // Freeze the `rise` entry animations once first paint is done (see the html.nav-ready CSS): the initial
