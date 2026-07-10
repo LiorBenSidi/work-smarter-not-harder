@@ -21,14 +21,21 @@ easy → hard. (Companion to `WSNH Speaker Notes and QA.md`.)
 > guard test fails if anyone swaps it back to threads.
 
 **3. Why is the queue *bounded*? What happens when it's full?**
-> An unbounded backlog under a flood is an **OOM kill** on the 1 GB VM — that drops *every* in-flight request,
-> not just the excess. Bounded, it **sheds a 503**, which `web` already treats as "ai unavailable" and degrades.
-> Load-shedding beats falling over.
+> An unbounded backlog under a flood fails twice: memory grows without limit, and the pool keeps scoring jobs
+> whose callers **already timed out** — work for clients that left. Bounded, it **sheds a 503**, which `web`
+> already treats as "ai unavailable" and degrades. Load-shedding beats falling over — and a bigger VM only
+> moves the memory cliff, it never makes the queue bounded.
 
 **4. Why exactly *one* gunicorn worker on `ai`?**
 > The job store is **in-memory, per process**. Two workers = two stores, so `GET /jobs/<id>` would 404 ~half the
-> time. Threads take concurrent requests; the parallelism is the pool. (Also each worker loads its own copy of
-> the model — two would OOM the VM.)
+> time. Threads take concurrent requests; the parallelism is the pool.
+
+**4b. What if a pool worker *dies*? Or *hangs*?**
+> A dead worker normally leaves a `ProcessPoolExecutor` **permanently broken** — every later submit raises. The
+> queue **self-heals**: it replaces the pool (generation-guarded — N simultaneous detections rebuild once),
+> retries the submit, and the one lost caller gets a retryable 503, never a 500-forever. A *hung* worker is
+> **reaped** on a hard wall-clock deadline so its slot returns to the queue; a fully-hung pool is replaced.
+> Both defences are **mutation-tested** — we disabled each fix and watched the tests go red.
 
 **5. What happens if the `ai` container is down?**
 > `web` wraps the call in try/except + a timeout; on failure it returns `None` and the dashboard renders with
@@ -88,10 +95,11 @@ easy → hard. (Companion to `WSNH Speaker Notes and QA.md`.)
 ---
 
 ### Curveballs (be ready)
-- *"What would you do differently?"* → an external job store to make `/jobs` replica-safe (we chose not to — a
-  4th container on a 1 GB VM for an endpoint nothing calls); a bigger VM to run 2 web workers.
-- *"What's the weakest part?"* → honest: the model is the last piece; and the VM is a single ~1 GB node, so it's
-  one machine, no failover (documented in the risk assessment).
+- *"What would you do differently?"* → an external job store (redis) to make `/jobs` replica-safe — we chose
+  not to add a 4th moving part for an endpoint nothing calls (only `web` calls `/predict`, which *is*
+  replica-safe); documented in the risk assessment's "what we deliberately did not mitigate".
+- *"What's the weakest part?"* → honest: the model is the last piece; and it's a **single VM** (4 vCPU /
+  32 GiB) — one machine, no failover (documented in the risk assessment).
 - *"Who did what?"* → Shiri: AI model + recommendations + cold-seed. Lior: web app + data layer + auth/security +
   forum real-time (DM/notifications) + logging + containers + CI/CD. Elad: live deploy + job queue + scaling +
   forum media + stress tests.
