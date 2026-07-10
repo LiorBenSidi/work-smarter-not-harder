@@ -213,6 +213,14 @@ def test_index_registers_the_auto_update_loop(client):
     assert "reg.update()" in html, "the foreground update check was removed (backgrounded PWA won't refresh)"
 
 
+def test_hero_display_font_is_actually_served(client):
+    # The guard test asserts the wiring STRINGS exist; this proves Flask really serves the font bytes, so a
+    # font missing from the image or a mis-set static route is caught in CI, not at the demo (fallback font).
+    resp = client.get("/static/fonts/bricolage-800-latin-v1.woff2")
+    assert resp.status_code == 200, "the self-hosted display font 404s — hero would fall back to system font"
+    assert resp.get_data()[:4] == b"wOF2", "served bytes are not a valid woff2 font"
+
+
 def test_account_menu_present_and_wired(client):
     # Wolt-style corner account menu: an avatar button in the header opens a dropdown with the identity
     # block + quick actions (Profile / Theme / Log out). The menu is an accessible popup (aria-haspopup

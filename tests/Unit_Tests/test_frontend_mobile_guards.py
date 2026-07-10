@@ -83,3 +83,20 @@ def test_all_glass_panels_have_the_webkit_prefix_for_ios():
     webkit = len(re.findall(r"-webkit-backdrop-filter:\s*blur", css))
     assert plain and plain == webkit, (
         f"{plain} backdrop-filter blur decls but {webkit} -webkit- siblings — a glass panel loses iOS blur")
+
+
+# ---- 9. The hero display face is wired end-to-end (self-hosted, preloaded, offline-cached, applied) ----
+def test_hero_display_face_is_wired():
+    font = "/static/fonts/bricolage-800-latin-v1.woff2"
+    # @font-face declares it + a --font-display token points at it + the hero H1 uses that token.
+    assert "@font-face" in INDEX and font in INDEX, "the self-hosted display @font-face/src was removed"
+    assert "--font-display" in INDEX, "the --font-display token was removed"
+    assert re.search(r"\.hero-title\s*\{[^}]*font-family:\s*var\(--font-display\)", INDEX), \
+        "the hero H1 no longer uses the display face"
+    # Preloaded (small FOUT window) with crossorigin (fonts fetch anonymous even same-origin).
+    assert re.search(r'rel="preload"[^>]*' + re.escape(font) + r'[^>]*crossorigin', INDEX) or \
+           re.search(re.escape(font) + r'"[^>]*as="font"[^>]*crossorigin', INDEX), \
+        "the display font is not preloaded with crossorigin"
+    # Cached offline as a BEST-EFFORT extra (a 404 must not fail the SW install / stall auto-update).
+    assert font in SW and "SHELL_OPTIONAL" in SW, "the font must be in the SW's non-fatal SHELL_OPTIONAL"
+    assert ".catch(() => {})" in SW, "the optional-shell add must swallow errors so a 404 can't stall install"
