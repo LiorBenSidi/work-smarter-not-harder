@@ -3,6 +3,7 @@
 App-factory that registers the route blueprints. `/health` is live; auth (F1), profile (F2),
 the dashboard (F7), history (F8) and the forum are implemented.
 """
+import hashlib
 import logging
 import os
 import secrets
@@ -242,6 +243,15 @@ def create_app(config=Config, *, users=None, profiles=None, history=None, forum=
     app = Flask(__name__, template_folder=_TEMPLATES, static_folder=_STATIC)
     app.config.from_object(config)
 
+    # Deploy version = short hash of the app shell (index.html, where the whole SPA lives inline). It
+    # changes exactly when the user-facing app changes, and a new container = a fresh read = a fresh
+    # hash. The /sw.js route stamps it so each release ships a new service worker → the app auto-updates.
+    try:
+        with open(os.path.join(_TEMPLATES, "index.html"), "rb") as _idx:
+            app.config["ASSET_VERSION"] = hashlib.sha256(_idx.read()).hexdigest()[:8]
+    except OSError:
+        app.config["ASSET_VERSION"] = "dev"
+
     # Behind Caddy (prod) the real client IP arrives in X-Forwarded-For; trust ONE proxy hop so the rate
     # limiter + logs key on the actual client, not Caddy's internal container IP (which would put every
     # external client in one shared bucket — brute-force isolation gone, and a single attacker could lock
@@ -357,7 +367,13 @@ def create_app(config=Config, *, users=None, profiles=None, history=None, forum=
     @app.get("/sw.js")
     def service_worker():
         # served from root so the service worker controls the whole app scope (not just /static).
-        resp = send_from_directory(app.static_folder, "sw.js", mimetype="text/javascript")
+        # Stamp __BUILD__ with the deploy's shell hash so the worker's bytes + cache name change every
+        # release -> the browser installs the new worker and the app auto-updates (see registration in
+        # index.html). Read fresh each request (cheap; no-cache anyway) so a hot-reloaded shell restamps.
+        sw_path = os.path.join(app.static_folder, "sw.js")
+        with open(sw_path, "r", encoding="utf-8") as fh:
+            body = fh.read().replace("__BUILD__", app.config["ASSET_VERSION"])
+        resp = app.response_class(body, mimetype="text/javascript")
         resp.headers["Service-Worker-Allowed"] = "/"
         resp.headers["Cache-Control"] = "no-cache"
         return resp
