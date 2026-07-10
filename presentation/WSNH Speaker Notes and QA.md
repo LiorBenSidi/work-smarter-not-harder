@@ -22,7 +22,8 @@ Pair the **Q&A bank** below with the new speaker script and the deck. (The per-s
    wired and returns valid shapes; the trained model drops into one seam, `predict_one`.")* → Elad.
 5. **Job Queue +5 (Elad, 45s).** "`/predict` doesn't score inline — it enqueues onto a **bounded** queue worked
    by a **process** pool, so many users' predictions run in parallel. Past the bound it sheds a 503 instead of
-   growing a backlog into an out-of-memory kill on the 1 GB VM." → stay on Elad.
+   growing a backlog of work whose callers have already timed out — a bigger VM moves that cliff, it never
+   removes it." → stay on Elad.
 6. **Scaling (Elad, 30s).** "And it's measured: the pool one-to-four gives **2.86×** throughput; a second ai
    replica gives **1.60×**; the same test on a thread pool gives 0.96× — that's the GIL, and it's why we use
    processes." → Lior.
@@ -63,14 +64,22 @@ tokens; only `web` is exposed; secrets come from GitHub secrets at deploy time (
 Let's Encrypt.
 
 **Q: Why a *bounded* queue? What happens when it's full?**
-An unbounded backlog under a flood is an out-of-memory kill on the 1 GB VM — that takes *every* in-flight
-request down, not just the excess. Bounded, it sheds a 503, which `web` already treats as "ai unavailable" and
-degrades gracefully. Load-shedding, not falling over.
+An unbounded backlog under a flood fails twice: memory grows without limit, and the pool keeps scoring jobs
+whose callers already timed out — pure waste. Bounded, it sheds a 503, which `web` already treats as
+"ai unavailable" and degrades gracefully. Load-shedding, not falling over. (A bigger VM moves the memory
+cliff; it never makes the queue bounded.)
 
 **Q: Why only one gunicorn worker on the ai container?**
 The job store is in-memory and per-process. A second worker would own a second store, so `GET /jobs/<id>` would
-404 about half the time. Threads accept concurrent requests; the parallelism comes from the process pool. (Also,
-each worker loads its own copy of the model — two would OOM the 1 GB VM.)
+404 about half the time. Threads accept concurrent requests; the parallelism comes from the process pool.
+
+**Q: What if a pool worker *dies* — or *hangs*?**
+Both handled, both tested. A dead worker normally breaks a `ProcessPoolExecutor` **permanently** — every later
+submit raises. Our queue **self-heals**: it detects the broken pool, replaces it (generation-guarded, so
+concurrent detections rebuild once), retries the submit, and answers the one lost caller with a retryable 503.
+A *hung* worker is reaped by a hard wall-clock deadline — its queue slot is reclaimed so hangs can't eat the
+queue, and a fully-hung pool is replaced outright. Rebuilds are visible in `/queue/stats`, and both defences
+were mutation-tested (disable the fix → the tests go red).
 
 **Q: What happens if the ai container is down?**
 `web` wraps the call in try/except with a timeout; on failure it returns None and the dashboard renders with
