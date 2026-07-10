@@ -163,8 +163,13 @@ def test_worker_log_file_rejects_existing_directory(logmod, tmp_path):
         logmod.worker_log_file(str(tmp_path), 123)          # a real directory -> refuse, don't write a sibling
 
 
-def test_bad_log_path_logs_at_error_level(logmod, isolated_root_logger, caplog):
-    bad = os.path.join("/dev/null", "cannot", "web.log")
+def test_bad_log_path_logs_at_error_level(logmod, isolated_root_logger, caplog, tmp_path):
+    # Impossible on EVERY OS: a regular file used as a parent directory — makedirs can't create a
+    # subdir under a file. (The old "/dev/null/cannot/web.log" is impossible only on Unix; on Windows
+    # makedirs happily creates C:\dev\null\cannot, so no error fired and the test failed there.)
+    blocker = tmp_path / "afile"
+    blocker.write_text("x")
+    bad = os.path.join(str(blocker), "cannot", "web.log")
     with caplog.at_level(logging.ERROR):
         logmod.configure_logging(enable=True, log_file=bad, force=True)
     assert any(r.levelno == logging.ERROR and "file logging disabled" in r.getMessage()
