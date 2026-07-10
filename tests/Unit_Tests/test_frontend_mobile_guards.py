@@ -100,3 +100,21 @@ def test_hero_display_face_is_wired():
     # Cached offline as a BEST-EFFORT extra (a 404 must not fail the SW install / stall auto-update).
     assert font in SW and "SHELL_OPTIONAL" in SW, "the font must be in the SW's non-fatal SHELL_OPTIONAL"
     assert ".catch(() => {})" in SW, "the optional-shell add must swallow errors so a 404 can't stall install"
+
+
+# ---- 10. The check-in reveal is orchestrated + reduced-motion-safe + race-free ----
+def test_checkin_reveal_is_orchestrated_and_guarded():
+    # kcal counts up (once, after both loaders settle) and the recs cascade — only on a FRESH check-in.
+    assert "function countUpKcal" in INDEX and "function reducedMotion" in INDEX, "the reveal helpers were removed"
+    assert "@keyframes recIn" in INDEX, "the recommendations cascade keyframe was removed"
+    # Race fix: the check-in path awaits BOTH loaders, then counts up once (not from inside renderStats).
+    assert re.search(r"Promise\.all\(\[\s*loadDashboard\(\{\s*fresh:\s*true\s*\}\),\s*loadHistory\(\)\s*\]\)", INDEX), \
+        "check-in must await both loaders before the count-up (else the double render clobbers the tween)"
+    assert "countUpKcal();" in INDEX, "the count-up is no longer kicked after the reveal settles"
+    # Reduced-motion snap (JS RAF isn't covered by the CSS kill-switch) + NaN bail for the '—' empty state.
+    assert re.search(r"function countUpKcal\(\)\s*\{\s*if\s*\(reducedMotion\(\)\)\s*return", INDEX), \
+        "countUpKcal must bail to a snap under reduced motion"
+    assert "Number.isFinite(target)" in INDEX, "count-up must bail on a non-numeric ('—') kcal value"
+    # The refresh button must NOT pass its MouseEvent as opts (would truthy-trigger the fresh reveal).
+    assert re.search(r'dashboard-refresh"\)\.addEventListener\("click",\s*\(\)\s*=>\s*loadDashboard\(\)\)', INDEX), \
+        "the refresh listener must be wrapped so the click event isn't passed as opts"

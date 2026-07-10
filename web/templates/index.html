@@ -349,6 +349,9 @@
     .recs li { position:relative; margin:8px 0; padding:11px 13px 11px 34px; background:var(--field); border:1px solid var(--line); border-radius:14px; font-size:14px; }
     .recs li::before { content:""; position:absolute; left:13px; top:15px; width:8px; height:8px; border-radius:50%;
       background:var(--accent); box-shadow:0 0 8px var(--accent); }
+    /* Recommendations cascade in on a fresh check-in reveal (per-item delay set inline, fresh-only). The
+       global prefers-reduced-motion rule disables this; the JS also skips adding it under reduced motion. */
+    @keyframes recIn { from { opacity:0; transform: translateY(6px); } to { opacity:1; transform: translateY(0); } }
 
     /* readiness confidence breakdown (per-state proba) */
     .conf { margin:18px 0 0; text-align:left; }
@@ -1443,7 +1446,13 @@
         training_load: Number.parseInt(f.training_load.value, 10),
       };
       const r = await api("/checkin", { method: "POST", body });
-      if (r.ok) { flash("checkin-flash", "Check-in saved.", "ok"); f.reset(); loadDashboard(); loadHistory(); }
+      if (r.ok) {
+        flash("checkin-flash", "Check-in saved.", "ok"); f.reset();
+        // Await BOTH loaders (each rebuilds the stat strip) so the count-up runs once, after they settle —
+        // no re-render race. fresh:true triggers the recs cascade + is the only path that animates.
+        await Promise.all([loadDashboard({ fresh: true }), loadHistory()]);
+        countUpKcal();
+      }
       else { flash("checkin-flash", (r.data && r.data.error) || "Could not save check-in"); }
     });
 
@@ -1491,6 +1500,28 @@
       s.innerHTML = statCard(ICON.pulse, statState, "readiness", true)
         + statCard(ICON.flame, statKcal, "kcal target", false)
         + statCard(ICON.check, String(statCheckins), "logged", false);
+    }
+
+    function reducedMotion() {
+      return window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    }
+    // Count the kcal target up from 0 on a FRESH check-in — the number lands as the orb settles, one
+    // orchestrated reveal. Called ONCE after both dashboard+history loads settle (no re-render race).
+    // Reduced motion snaps (the CSS kill-switch doesn't cover JS RAF); a non-numeric "—" is left as-is.
+    function countUpKcal() {
+      if (reducedMotion()) return;
+      const strip = $("stat-strip"); if (!strip) return;
+      const el = strip.querySelectorAll(".stat .n")[1];   // [readiness word, kcal, logged] -> kcal is 2nd
+      if (!el) return;
+      const target = Math.round(Number(el.textContent));
+      if (!Number.isFinite(target)) return;               // "—" empty state -> leave the dash untouched
+      const dur = 700, t0 = performance.now();
+      el.textContent = "0";
+      requestAnimationFrame(function tick(now) {
+        const p = Math.min(1, (now - t0) / dur), e = 1 - Math.pow(1 - p, 3);   // ease-out cubic
+        el.textContent = String(Math.round(e * target));
+        if (p < 1) requestAnimationFrame(tick); else el.textContent = String(target);
+      });
     }
 
     // ---- Check-in streak (consecutive days ending today/yesterday, from history) ----
@@ -1557,7 +1588,9 @@
       return ["", 50];
     }
 
-    async function loadDashboard() {
+    async function loadDashboard(opts) {
+      // freshReveal = a check-in just landed -> the recs cascade in (only then, not on tab-switch/refresh).
+      const freshReveal = !!(opts && opts.fresh) && !reducedMotion();
       const u = currentUser;
       const el = $("dashboard"); el.innerHTML = '<p class="muted">Loading…</p>';
       const r = await api("/dashboard");
@@ -1592,7 +1625,7 @@
           + '<div class="orb-sub">readiness</div></div></div>'
           + '<p class="muted" style="text-align:center;margin:10px 0 0;font-size:12px">Based on today\'s check-in vs your baseline.</p>';
         const recs = Array.isArray(d.readiness.recommendations) ? d.readiness.recommendations : [];
-        if (recs.length) html += '<ul class="recs">' + recs.map((x) => "<li>" + escapeHtml(x) + "</li>").join("") + "</ul>";
+        if (recs.length) html += '<ul class="recs">' + recs.map((x, i) => "<li" + (freshReveal ? ' style="animation:recIn .42s cubic-bezier(.2,.7,.2,1) both;animation-delay:' + (i * 60) + 'ms"' : "") + ">" + escapeHtml(x) + "</li>").join("") + "</ul>";
         html += confidenceHtml(d.readiness.proba);
         html += "</div>";
       }
@@ -1841,7 +1874,7 @@
       else { flash("forum-flash", (r.data && r.data.error) || "Could not post"); }
     });
     $("forum-refresh").addEventListener("click", loadForum);
-    $("dashboard-refresh").addEventListener("click", loadDashboard);
+    $("dashboard-refresh").addEventListener("click", () => loadDashboard());  // wrap: don't pass the click event as opts
     $("history-refresh").addEventListener("click", loadHistory);
 
     // ---- Direct messages + notifications ----
