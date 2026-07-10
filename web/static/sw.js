@@ -8,13 +8,21 @@
 // no delete-and-re-add. Served unstamped (e.g. straight off disk) the literal is still a valid cache name.
 const CACHE = "ws-shell-__BUILD__";
 const SHELL = ["/", "/static/icon-192.png", "/static/icon-512.png", "/manifest.webmanifest?v=3"];
+// Best-effort extras cached AFTER the core shell — a 404 here must NOT reject the install (which would
+// stall the auto-update and leave installed clients on the old shell). The hero display face lives here.
+const SHELL_OPTIONAL = ["/static/fonts/bricolage-800-latin-v1.woff2"];
 
 // API / auth paths — always hit the network, never served from cache.
 const APP_PATHS = ["/login", "/register", "/logout", "/me", "/profile", "/dashboard",
                    "/history", "/checkin", "/forum", "/auth/config", "/health"];
 
 self.addEventListener("install", (e) => {
-  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));
+  e.waitUntil(
+    caches.open(CACHE)
+      .then((c) => c.addAll(SHELL)                                  // core shell is atomic (must succeed)
+        .then(() => Promise.all(SHELL_OPTIONAL.map((u) => c.add(u).catch(() => {})))))  // extras best-effort
+      .then(() => self.skipWaiting())
+  );
 });
 
 self.addEventListener("activate", (e) => {

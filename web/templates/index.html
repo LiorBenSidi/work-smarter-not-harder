@@ -7,6 +7,7 @@
   <link rel="manifest" href="/manifest.webmanifest?v=3">
   <link rel="icon" href="/static/icon-192.png">
   <link rel="apple-touch-icon" href="/static/apple-touch-icon.png">
+  <link rel="preload" href="/static/fonts/bricolage-800-latin-v1.woff2" as="font" type="font/woff2" crossorigin>
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -18,9 +19,15 @@
        breathing readiness orb — a circular gauge that fills to today's readiness and breathes, colored
        green/amber/coral by state. Logged-in idiom: a native mobile-app shell — sectioned screens under a
        bottom tab bar (Today / History / Forum / Profile), soft rounded glass cards, generous space. */
+    /* Display face for the hero headline only — Bricolage Grotesque (SIL OFL, self-hosted latin subset).
+       A contemporary grotesque that shares the rounded-sans + mono system's DNA and stays crisp at
+       projector distance; preload + an 8KB subset keep the swap FOUT window tiny. */
+    @font-face { font-family: "Bricolage Grotesque"; font-style: normal; font-weight: 800;
+      font-display: swap; src: url("/static/fonts/bricolage-800-latin-v1.woff2") format("woff2"); }
     :root { color-scheme: light dark;
       --font-sans: ui-rounded, "SF Pro Rounded", "Hiragino Maru Gothic ProN", "Segoe UI Variable", "Nunito", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
       --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+      --font-display: "Bricolage Grotesque", var(--font-sans);
       /* dusk (default) — recovery at rest */
       --bg:#0a0e20; --bg2:#170f30; --ink:#eef0fb; --muted:#9aa2c9;
       --card: color-mix(in srgb, #1b1740 58%, transparent); --field: rgba(255,255,255,.05); --line: rgba(255,255,255,.10);
@@ -266,7 +273,7 @@
     .orb-frost { position:absolute; inset:0; border-radius:50%; pointer-events:none;
       box-shadow: inset 0 0 0 1px rgba(255,255,255,.10);
       background: linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,0) 42%); }
-    .hero-title { font-size:31px; font-weight:800; letter-spacing:-.02em; line-height:1.14; margin:0 0 10px; }
+    .hero-title { font-family: var(--font-display); font-size:31px; font-weight:800; letter-spacing:-.02em; line-height:1.14; margin:0 0 10px; }
     .hero-sub { color:var(--muted); font-size:15px; margin:0 auto 20px; max-width:33ch; }
     .hero-title .accent { background: linear-gradient(120deg, var(--accent), var(--accent2));
       -webkit-background-clip:text; background-clip:text; color:transparent; }
