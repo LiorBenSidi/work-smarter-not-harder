@@ -62,7 +62,7 @@ and the full guide: [`SECRETS.md`](SECRETS.md).
 - [x] **Deep adversarial audit + fixes** (#131) — two independent blind reviewers over the recent web work; the confirmed findings (an unbounded search read, a stale Forum-tab post, a DM-dropdown reset gap) fixed + regression-tested. No CRITICAL.
 - [x] **Email sender fix** (#132) — a comma in the `MAIL_FROM` display name ("Work Smarter, Not Harder") had been silently breaking **every** real OTP/reset send (SMTP 501 — smtplib read the name as an address list); the `From` is now properly quoted and the envelope sender is passed explicitly. Real Gmail-inbox delivery re-verified.
 
-All gated/validated, adversarial + **mutation-tested**, independently QA-verified, live-browser-tested (dark/light/mobile). The web + data + observability + CI/CD tiers are feature-complete (**653 tests passing**, `main` green).
+All gated/validated, adversarial + **mutation-tested**, independently QA-verified, live-browser-tested (dark/light/mobile). The web + data + observability + CI/CD tiers are feature-complete (**686 tests passing**, `main` green).
 
 **Done live (Lior):** the full 3-container stack runs end-to-end — `/health`, a real web→ai→db request path (**12/12** interactive E2E), the real-Mongo integration suite (**6/6**, incl. the validators + perf-indexes + seed), and Week-9 logging emitting in the container. **Next:** integrate/regress as Shiri's model and Elad's deploy/real-time land; I keep the web + data tiers green as the pieces connect.
 
