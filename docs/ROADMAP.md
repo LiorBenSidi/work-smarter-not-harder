@@ -108,7 +108,7 @@ The only coordination points are the seams (`/predict` shape, `db.py`'s function
 | Report (app + features×tests + **risk assessment**) | 🟡 [`REPORT.md`](REPORT.md) §5 risk assessment ✅ (rewritten around "which test goes red if this mitigation disappears?", incl. what we deliberately did *not* mitigate). §1 API surface/data model + the AI rows still owed by their owners | all (Elad: risk ✅) |
 | Demo video of using the app | ⬜ | all |
 | Azure VM deploy + CI/CD auto-deploy (+10) | ✅ **live** — every green `main` auto-deploys to the Azure VM, served over HTTPS at `app.worksmarternotharder.dev` (`/ready` gate + auto-rollback). Remaining: the graded live **demo** | Lior (pipeline) · Elad (live VM + demo) |
-| Online Forum — real-time, 8 sub-features (+10) | 🟡 posts/comments/post-votes + anonymity + edit/delete-own + **P2P DM (text) + live DM notifications (SSE push) + vote notifications + comment votes + anti-spam messaging rate-limit** done; media/attachments + file-size caps done (#160); open: a received-engagement metric, fuller cold-seeding | Lior (CRUD/UI + DM + notifications + vote-notifs + comment-votes) · Elad (media ✅ #160) · Shiri (seed content) |
+| Online Forum — real-time, 8 sub-features (+10) | 🟡 posts/comments/post-votes + anonymity + edit/delete-own + **P2P DM (text) + live DM notifications (SSE push) + vote notifications + comment votes + anti-spam messaging rate-limit** done; media/attachments + file-size caps done (#160); **received-engagement metric done** (`GET /me/engagement` + a Profile-screen card); open: fuller cold-seeding | Lior (CRUD/UI + DM + notifications + vote-notifs + comment-votes) · Elad (media ✅ #160 · engagement metric ✅) · Shiri (seed content) |
 | Present 16 Jul (6 min) · demo by Wk 12 · final 23 Aug | ⬜ | all |
 | No shipped API keys | ✅ local model | Shiri |
 
@@ -131,7 +131,8 @@ tested (incl. votes-as-a-list and a real-Mongo integration suite that runs in CI
 **Week-9 logging** is wired
 (named loggers + console/rotating-file handlers + per-request access log). Elad's build lane is **done**: the
 `docker-compose.test.yml` test-runner, rate-limiting, the **live** Azure deploy + CI/CD, the job queue, scaling
-(measured), Forum media, and the stress/cross-container tests. The Forum **real-time layer** (SSE, DM,
-notifications) was built by **Lior** (see the §Forum table above). **Still to build:** the RF model + real
-`/predict` + recommendation engine + cold-seed content (Shiri); the received-engagement profile metric (web);
+(measured), Forum media, the received-engagement metric, and the stress/cross-container tests. The Forum
+**real-time layer** (SSE, DM, notifications) was built by **Lior** (see the §Forum table above).
+**Team rule (Lior, 10 Jul): responsibilities not assigned in writing fall to Elad.** **Still to build:** the
+RF model + real `/predict` + recommendation engine + cold-seed content (Shiri);
 the graded live-deploy demo + UptimeRobot (Elad, run-sheet ready). Due **23 Aug 2026**.

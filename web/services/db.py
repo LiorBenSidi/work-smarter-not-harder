@@ -431,6 +431,38 @@ def forum_vote(db, post_id, username, value):
     return post["score"] if post else None
 
 
+def forum_received_engagement(db, username):
+    """Votes OTHERS cast on `username`'s posts and comments (GUIDELINES §3.3's per-user total).
+
+    Counted per voted item's AUTHOR — an anonymous post still feeds its real author's metric, and a
+    vote on someone else's comment under my post is theirs, not mine. The user's own votes on their
+    own content are excluded ("received" means from the community). Returns counts only
+    ({"up", "down", "score"}); voter identities never leave the store, same as the public shapes.
+
+    A full-collection scan in Python rather than a Mongo aggregation: the read happens on a personal
+    profile view (not a hot path), and staying on plain find() keeps it exercisable by the same
+    in-memory fakes as the rest of this module.
+    """
+    up = down = 0
+    for post in db.forum_posts.find():
+        vote_lists = []
+        if post.get("author") == username:
+            vote_lists.append(post.get("votes") or [])
+        for comment in post.get("comments") or []:
+            if comment.get("author") == username:
+                vote_lists.append(comment.get("votes") or [])
+        for votes in vote_lists:
+            for vote in votes:
+                if vote.get("user") == username:
+                    continue
+                value = vote.get("value", 0)
+                if value > 0:
+                    up += 1
+                elif value < 0:
+                    down += 1
+    return {"up": up, "down": down, "score": up - down}
+
+
 # A post may only be edited/deleted by its real author (even for anonymous posts, where the displayed
 # author is hidden). These return None if the post is unknown, FORBIDDEN if the caller isn't the author.
 FORBIDDEN = "forbidden"

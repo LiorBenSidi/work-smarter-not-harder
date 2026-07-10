@@ -34,8 +34,10 @@ The backend is built and CI-gated; the open work is two teammates' lanes. If you
   **fault-isolation** + **locust stress** suites, and the deploy-contract guard tests. See [`PERSON3.md`](PERSON3.md).
 - ℹ️ **Online Forum (§10) status:** posts · comments · anonymity · post **and comment** up/down-votes ·
   **P2P direct messages (text) · live DM notifications (SSE push) · vote notifications · anti-spam messaging
-  rate-limit** are built (Lior), and **media attachments + file-size limits** are built (Elad, #160). Still
-  open: a received-engagement profile metric · fuller cold-seeding (the seed content is Shiri's).
+  rate-limit** are built (Lior), **media attachments + file-size limits** are built (Elad, #160), and the
+  **received-engagement profile metric** (§3.3 "per-user total in a personal area" — `GET /me/engagement` +
+  a Profile-screen card) is built (Elad; team rule: unassigned items fall to Elad). Still open:
+  fuller cold-seeding (the seed content is Shiri's).
   Rubric: [`docs/GUIDELINES.md`](docs/GUIDELINES.md) §3 (it superseded `FEEDBACK.md` on 8 Jul).
 
 ## ⛔ Workflow — `main` is PR-only (enforced server-side)
