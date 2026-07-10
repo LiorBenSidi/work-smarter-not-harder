@@ -17,11 +17,13 @@ Everything for the **final-project presentation**, in one place all three of us 
 | [`WSNH Canva Notes (paste per slide).md`](WSNH%20Canva%20Notes%20%28paste%20per%20slide%29.md) | Same notes, formatted to paste into Canva's Notes panel | Reference / re-paste |
 | [`WSNH TA Mock QA Drill.md`](WSNH%20TA%20Mock%20QA%20Drill.md) | Hard TA questions + crisp answers | Q&A practice |
 | [`WSNH Speaker Notes and QA.md`](WSNH%20Speaker%20Notes%20and%20QA.md) | ⚠️ *old 12-slide notes (superseded)* — its **Q&A bank** is still current | Q&A bank only |
-| [`WSNH Demo Video Script.md`](WSNH%20Demo%20Video%20Script.md) | Shot-list for the 30–45s demo clip | Record the demo |
+| [`WSNH Demo Video Script.md`](WSNH%20Demo%20Video%20Script.md) | Shot-list for the 3–5 min submission demo video | Record the full video |
+| [`Demo clip - recording checklist.md`](Demo%20clip%20-%20recording%20checklist.md) | Tight checklist for the **30–45s slide-5 clip** (pre-flight, 4 shots, settings) | Record the presentation clip |
 | [`WSNH Submission Checklist.md`](WSNH%20Submission%20Checklist.md) | Dates, deliverables, pre-submission must-fixes | Don't miss anything |
 | [`WSNH Presentation Outline.md`](WSNH%20Presentation%20Outline.md) | Timing map + delivery notes | Big-picture timing |
 | [`scan-to-try-QR.png`](scan-to-try-QR.png) | Standalone QR → the live app | Posters / sharing |
 | [`For Elad - job queue robustness.md`](For%20Elad%20-%20job%20queue%20robustness.md) | Notes for Elad on the AI job-queue robustness items | Elad's follow-ups |
+| [`../ai/For Shiri - predict contract.md`](../ai/For%20Shiri%20-%20predict%20contract.md) | **Zero-rework spec for Shiri's model** — exact `/predict` shape + training plan (lives next to `ai/inference.py`) | Plug the model in |
 
 **How they connect:** the **Canva design is the master** — edit there, then **File → Download** the PPTX/PDF to refresh the deck. The **Speaker Script** is *what to say*; the **Canva Notes** file is the same text pasted into Canva's per-slide notes.
 
@@ -33,7 +35,7 @@ Everything for the **final-project presentation**, in one place all three of us 
 Handoffs: end of slide 3 → Lior, end of slide 6 → Elad.
 
 ## Left to do
-- **AI model:** train the Random Forest → real `/predict` (until then every prediction reads "Moderate") + forum cold-seed content.
+- **AI model:** train the Random Forest → real `/predict` (until then every prediction reads "Moderate") + forum cold-seed content. **Spec:** [`../ai/For Shiri - predict contract.md`](../ai/For%20Shiri%20-%20predict%20contract.md) — the exact shape + training plan for zero rework.
 - **Team:** add the **"See It Live"** demo slide (as slide 5 in Canva, after Architecture) + record the 30–45s clip; do one **timed rehearsal**.
 
 ## Editing the deck (Shiri & Elad)
