@@ -71,3 +71,13 @@ def test_viewport_preview_is_hidden_on_mobile():
     # ...and a narrow-viewport media query hides exactly that section (the rest of the panel stays).
     assert re.search(r"@media\s*\(max-width:\s*859px\)\s*\{\s*#debug-vp-sect\s*\{\s*display:\s*none", INDEX), \
         "viewport preview must be hidden under the mobile breakpoint (redundant on a real phone)"
+
+
+# ---- 8. Frosted-glass panels carry the -webkit- prefix (iOS Safari ignores the unprefixed one) ----
+def test_glass_panels_have_the_webkit_backdrop_prefix_for_ios():
+    # iOS Safari honors ONLY -webkit-backdrop-filter. The profile dropdown lost its blur on the phone
+    # (page bled through) because it had backdrop-filter without the prefix — pin both panels.
+    panel = re.search(r"\.usermenu-panel\s*\{[^}]*\}", INDEX, re.S).group(0)
+    assert "-webkit-backdrop-filter" in panel, "usermenu dropdown needs -webkit-backdrop-filter or iOS drops the glass"
+    tabbar = re.search(r"\.tabbar-inner\s*\{[^}]*\}", INDEX, re.S).group(0)
+    assert "-webkit-backdrop-filter" in tabbar, "nav bar needs -webkit-backdrop-filter for its iOS glass"
