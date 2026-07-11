@@ -95,6 +95,17 @@ def test_primary_controls_are_solid_mint_not_gradient():
         "the active auth tab must be solid mint"
 
 
+def test_content_cards_are_de_glassed():
+    # iOS 26: glass is a NAV-layer material only; content cards are solid (no backdrop-filter). The nav
+    # layer (header, tab pill, menus, tooltips) keeps its glass — this only de-glasses .card / .stat.
+    assert "--card-solid" in INDEX and "--stat-solid" in INDEX, "the solid content-surface tokens were removed"
+    card_rule = re.search(r"\.card\s*\{([^}]*)\}", INDEX).group(1)
+    assert "var(--card-solid)" in card_rule, ".card must use the solid content surface (--card-solid)"
+    assert "backdrop-filter" not in card_rule, ".card must NOT have a backdrop-filter (content is solid, glass is nav-only)"
+    stat_rule = re.search(r"\.stat\s*\{([^}]*)\}", INDEX).group(1)
+    assert "var(--stat-solid)" in stat_rule and "backdrop-filter" not in stat_rule, ".stat must be solid too"
+
+
 def test_today_leads_with_a_real_0_100_score():
     # The Today orb leads with a 0-100 readiness SCORE (mono) as the one loud number, verdict word beneath
     # (Whoop/Oura single-metric hero). The score is derived from the model's real class distribution (proba),
