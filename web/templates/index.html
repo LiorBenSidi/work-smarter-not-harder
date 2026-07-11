@@ -86,7 +86,7 @@
     .brand { display:flex; align-items:center; gap:11px; text-decoration:none; color:inherit; }
     .brand-dot { width:26px; height:26px; border-radius:50%; flex:none; display:flex; align-items:center; justify-content:center;
       background: radial-gradient(circle at 33% 28%, color-mix(in srgb, var(--accent) 92%, #fff), var(--accent) 42%, var(--accent2) 92%);
-      box-shadow:0 0 18px color-mix(in srgb, var(--accent) 55%, transparent); animation: breathe 5.5s ease-in-out infinite; }
+      box-shadow:0 0 18px color-mix(in srgb, var(--accent) 55%, transparent); }
     .brand-home-ico { display:none; width:14px; height:14px; stroke:var(--on-accent); fill:none; stroke-width:2.4; }
     .brand-name { font-size:16px; font-weight:800; letter-spacing:.04em; white-space:nowrap; }
     .brand-tag { font-size:12px; color:var(--muted); white-space:nowrap; }
@@ -178,7 +178,7 @@
     .um-seg { flex:1; background:transparent; color:var(--muted); box-shadow:none; padding:8px 6px; border-radius:999px; font-weight:800; font-size:13px; min-height:44px;
       transition: background .18s ease, color .18s ease; }
     .um-seg:hover { filter:none; box-shadow:none; color:var(--ink); background: color-mix(in srgb, var(--accent) 10%, transparent); }
-    .um-seg.active { background: linear-gradient(135deg, var(--accent), color-mix(in srgb, var(--accent) 55%, var(--accent2))); color:var(--on-accent); }
+    .um-seg.active { background: var(--accent); color:var(--on-accent); }
     .um-seg:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
     @media (max-width: 380px) { .usermenu-name { display:none; } }
     /* Dropdown reveal: a subtle scale-pop from the button (top-right), not a generic slide. Disabled under prefers-reduced-motion via the global rule below. */
@@ -206,12 +206,14 @@
     input[type=checkbox] { width:auto; height:auto; padding:0; margin:0; border:0; border-radius:0;
       background:none; box-shadow:none; accent-color:var(--accent); flex:none; cursor:pointer; }
     input[type=checkbox]:focus { box-shadow:none; border-color:transparent; }
-    button { background: linear-gradient(135deg, var(--accent), color-mix(in srgb, var(--accent) 52%, var(--accent2)));
+    /* Solid mint, not a gradient toward lilac — one tinted colour per view (iOS 26); a gradient primary is
+       a recognizable AI-output tell. Press physics (scale-down + a mint glow) give it native tactility. */
+    button { background: var(--accent);
       color:var(--on-accent); border:0; border-radius:999px; padding:12px 20px; font-weight:800; font-size:15px; font-family:inherit;
       cursor:pointer; white-space:nowrap; box-shadow:0 12px 26px -14px color-mix(in srgb, var(--accent) 85%, transparent);
-      transition: transform .08s, box-shadow .15s, filter .15s; }
+      transition: transform .1s cubic-bezier(.2,.7,.2,1), box-shadow .15s, filter .15s; }
     button:hover { filter:brightness(1.05); box-shadow:0 16px 32px -14px color-mix(in srgb, var(--accent) 92%, transparent); }
-    button:active { transform: translateY(1px) scale(.99); }
+    button:active { transform: scale(.97); }
     button:disabled { opacity:.5; cursor:not-allowed; }
     button.ghost { background:transparent; color:var(--ink); border:1px solid var(--line); box-shadow:none; font-weight:700; }
     button.ghost:hover { border-color: color-mix(in srgb, var(--accent) 55%, transparent); background:var(--field); filter:none; }
@@ -230,8 +232,7 @@
 
     .tabs { display:flex; gap:5px; margin-bottom:18px; padding:5px; background:var(--field); border:1px solid var(--line); border-radius:999px; }
     .tabs button { flex:1; background:transparent; color:var(--muted); box-shadow:none; padding:10px; border-radius:999px; font-weight:800; }
-    .tabs button.active { background: linear-gradient(135deg, var(--accent), color-mix(in srgb, var(--accent) 55%, var(--accent2)));
-      color:var(--on-accent); }
+    .tabs button.active { background: var(--accent); color:var(--on-accent); }
 
     /* auth card: full-width primary action (matches the app's Post/Save buttons; the iOS-native form
        pattern), with Back stacked below it as a quiet secondary. */
@@ -310,7 +311,7 @@
     .hero-orb { width:132px; height:132px; margin:0 auto 24px; position:relative;
       animation: breathe 6s ease-in-out infinite; }
     .hero-orb::after { content:""; position:absolute; inset:-16px; border-radius:50%;
-      border:1px solid color-mix(in srgb, var(--accent) 34%, transparent); animation: halo 6s ease-in-out infinite; }
+      border:1px solid color-mix(in srgb, var(--accent) 34%, transparent); }
     .orb-glass { position:absolute; inset:0; border-radius:50%; overflow:hidden;
       border:1px solid rgba(255,255,255,.16);
       box-shadow: inset 0 2px 12px rgba(255,255,255,.22), inset 0 -14px 30px rgba(6,4,20,.5),
@@ -392,7 +393,7 @@
       box-shadow: inset 0 1px 0 rgba(255,255,255,.06), inset 0 0 30px -10px color-mix(in srgb, var(--st) 45%, transparent);
       animation: breathe 5.5s ease-in-out infinite; }
     .signal { width:9px; height:9px; border-radius:50%; background:var(--st); margin-bottom:2px;
-      box-shadow:0 0 0 4px color-mix(in srgb, var(--st) 20%, transparent); animation: beat 2s ease-in-out infinite; }
+      box-shadow:0 0 0 4px color-mix(in srgb, var(--st) 20%, transparent); }
     .verdict { font-size:26px; font-weight:800; letter-spacing:-.01em; line-height:1.1; color:var(--st); }
     .orb-sub { font-size:10.5px; letter-spacing:.18em; text-transform:uppercase; color:var(--muted); }
     .recs { list-style:none; margin:18px 0 0; padding:0; text-align:left; }
@@ -547,9 +548,6 @@
       font-weight:700; letter-spacing:.02em; color:var(--muted); background:var(--field); border:1px solid var(--line); }
 
     @keyframes breathe { 0%,100% { transform: scale(1); } 50% { transform: scale(1.045); } }
-    @keyframes halo { 0%,100% { opacity:.5; transform: scale(1); } 50% { opacity:.9; transform: scale(1.06); } }
-    @keyframes beat { 0%,100% { box-shadow:0 0 0 3px color-mix(in srgb, var(--st, var(--accent)) 26%, transparent); }
-      50% { box-shadow:0 0 0 8px color-mix(in srgb, var(--st, var(--accent)) 4%, transparent); } }
     @keyframes rise { from { opacity:0; transform: translateY(12px); } to { opacity:1; transform:none; } }
     @media (max-width: 640px) { .brand-tag { display:none; } }
     @media (max-width: 560px) { .row { grid-template-columns:1fr; } main { padding:16px 14px 92px; } #who-name { display:none; } }
