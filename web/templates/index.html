@@ -538,10 +538,14 @@
     .dm-thread { display:flex; flex-direction:column; gap:8px; max-height:52vh; overflow-y:auto; padding:4px 2px; }
     .bubble { max-width:78%; padding:9px 13px; border-radius:16px; font-size:14px; line-height:1.35; overflow-wrap:anywhere; }
     .bubble.them { align-self:flex-start; background:var(--field); border:1px solid var(--line); border-bottom-left-radius:5px; }
-    .bubble.me { align-self:flex-end; color:var(--on-accent); border-bottom-right-radius:5px;
-      background:linear-gradient(135deg,var(--accent),color-mix(in srgb,var(--accent) 60%,var(--accent2))); }
-    #dm-reply-form { display:flex; gap:8px; margin-top:12px; }
-    #dm-reply-form input { flex:1; } #dm-reply-form button { flex:none; }
+    .bubble.me { align-self:flex-end; color:var(--on-accent); border-bottom-right-radius:5px; background:var(--accent); }
+    /* WhatsApp-style bubble meta: a small time (+ "Seen" on my most recent read message) under the text */
+    .dm-meta { display:block; margin-top:3px; font-size:10.5px; font-family:var(--font-mono); text-align:right; opacity:.7; }
+    /* date separator between days in a thread */
+    .dm-daysep { align-self:center; margin:8px 0 4px; }
+    .dm-daysep span { font-size:11px; color:var(--muted); background:var(--field); border:1px solid var(--line); padding:2px 11px; border-radius:999px; }
+    #dm-reply-form { display:flex; gap:8px; margin-top:12px; align-items:flex-end; }
+    #dm-reply-form textarea { flex:1; resize:none; min-height:44px; max-height:132px; line-height:1.35; overflow-y:auto; } #dm-reply-form button { flex:none; }
     /* DM recipient search-and-pick: a live autocomplete dropdown under the "To" field */
     .dm-search { position:relative; }
     .dm-suggest { position:absolute; left:0; right:0; top:calc(100% + 5px); z-index:30; max-height:246px; overflow-y:auto;
@@ -849,7 +853,7 @@
               <div class="dm-thread-head"><button class="ghost mini" onclick="closeThread()">← Back</button>
                 <span id="dm-thread-peer" class="dm-peer"></span></div>
               <div id="dm-thread" class="dm-thread"><p class="muted">Loading…</p></div>
-              <form id="dm-reply-form"><input id="dm-reply" name="body" placeholder="Message…" autocomplete="off" maxlength="2000" required>
+              <form id="dm-reply-form"><textarea id="dm-reply" name="body" placeholder="Message…" rows="1" autocomplete="off" maxlength="2000" required></textarea>
                 <button type="submit">Send</button></form>
               <div id="dm-reply-flash" class="flash" aria-live="polite"></div>
             </div>
@@ -2066,8 +2070,16 @@
       setHtmlIfChanged($("dm-thread-peer"), avatarHtml(dmPeer, 30) + "<span>" + escapeHtml((r.data && r.data.peer_name) || dmPeer) + "</span>");
       const nearBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 40;   // don't yank the reader up
       const msgs = (r.data && r.data.messages) || [];
+      let lastMine = -1; msgs.forEach((m, i) => { if (m.sender === currentUser) lastMine = i; });   // "Seen" rides my most recent sent msg
+      let lastDay = null;
       const changed = setHtmlIfChanged(box, msgs.length
-        ? msgs.map((m) => '<div class="bubble ' + (m.sender === currentUser ? "me" : "them") + '">' + escapeHtml(m.body) + "</div>").join("")
+        ? msgs.map((m, i) => {
+            const dk = dayKey(m.created_at);
+            const sep = dk !== lastDay ? (lastDay = dk, '<div class="dm-daysep"><span>' + escapeHtml(dayLabel(m.created_at)) + "</span></div>") : "";
+            const mine = m.sender === currentUser;
+            const meta = '<span class="dm-meta">' + escapeHtml(clockTime(m.created_at)) + (mine && i === lastMine && m.read ? " · Seen" : "") + "</span>";
+            return sep + '<div class="bubble ' + (mine ? "me" : "them") + '">' + escapeHtml(m.body) + meta + "</div>";
+          }).join("")
         : '<p class="muted">No messages yet — say hi.</p>');
       if (changed && nearBottom) box.scrollTop = box.scrollHeight;   // only re-anchor when the thread actually changed (poll no-op -> no flash)
     }
@@ -2143,9 +2155,17 @@
     onSubmit("dm-reply-form", async (f) => {
       if (!dmPeer || !f.body.value.trim()) return;
       const r = await api("/messages", { method: "POST", body: { to: dmPeer, body: f.body.value } });
-      if (r.ok) { f.reset(); flash("dm-reply-flash", "", "ok"); renderThread(); }
+      if (r.ok) { f.reset(); autoGrow($("dm-reply")); flash("dm-reply-flash", "", "ok"); renderThread(); }
       else { flash("dm-reply-flash", (r.data && r.data.error) || "Could not send"); }   // surface 429 / errors
     });
+    // Growing compose (WhatsApp): the reply textarea grows with its content (capped by CSS max-height), and
+    // Enter sends while Shift+Enter inserts a newline — the messenger convention, not a plain textarea.
+    function autoGrow(t) { if (!t) return; t.style.height = "auto"; t.style.height = Math.min(t.scrollHeight, 132) + "px"; }
+    (function () {
+      const t = $("dm-reply"); if (!t) return;
+      t.addEventListener("input", () => autoGrow(t));
+      t.addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); $("dm-reply-form").requestSubmit(); } });
+    })();
 
     $("dm-refresh").addEventListener("click", loadConversations);
 
@@ -2160,6 +2180,16 @@
     // Relative time from an ISO timestamp (history/check-in rows store ISO, not epoch). Falls back to the
     // raw string if it isn't parseable, so a legacy/odd value is shown as-is rather than "NaN ago".
     function timeAgoStr(ts) { const t = Date.parse(ts || ""); return isNaN(t) ? (ts || "") : timeAgo(t / 1000); }
+    // Chat time helpers (message created_at is epoch seconds). clockTime -> "14:32"; dayLabel -> Today/
+    // Yesterday/"Jul 9" for the date separators that WhatsApp-style threads put between days.
+    function clockTime(sec) { const d = new Date((sec || 0) * 1000); return isNaN(d.getTime()) ? "" : d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }); }
+    function dayKey(sec) { const d = new Date((sec || 0) * 1000); return d.getFullYear() + "-" + d.getMonth() + "-" + d.getDate(); }
+    function dayLabel(sec) {
+      const now = Date.now() / 1000, yst = now - 86400;
+      if (dayKey(sec) === dayKey(now)) return "Today";
+      if (dayKey(sec) === dayKey(yst)) return "Yesterday";
+      return new Date((sec || 0) * 1000).toLocaleDateString([], { month: "short", day: "numeric" });
+    }
     // Pure render from an already-fetched list (DMs surface in the thread list, so they're filtered out
     // here) — the caller owns the request, so a poll tick and the initial open share one fetch.
     function renderActivity(notifications) {
