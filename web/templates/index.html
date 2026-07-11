@@ -119,14 +119,21 @@
        Same 56px height as the pill (both bottom:12) so the two are vertically centered on one line. Desktop
        hides it (the logo is home). Body-level element (see the note by <button id="ctx-back">). */
     .header-left { display:flex; align-items:center; gap:10px; min-width:0; }
-    .ctx-back { position:fixed; left:12px; bottom:calc(12px + env(safe-area-inset-bottom)); z-index:41;
+    /* Home FAB uses the SAME liquid-glass material as the nav pill (so the pair matches) — glass fill, upgraded
+       backdrop, a light-refracting rim (::before) + specular inner highlight. */
+    .ctx-back { position:fixed; left:12px; bottom:calc(12px + env(safe-area-inset-bottom)); z-index:41; isolation:isolate;
       width:56px; height:56px; border-radius:50%; display:inline-flex; align-items:center; justify-content:center;
-      color:var(--ink); padding:0; box-shadow:var(--shadow);
-      background: color-mix(in srgb, var(--card) 76%, transparent); border:1px solid color-mix(in srgb, var(--line) 70%, transparent);
-      -webkit-backdrop-filter: blur(22px) saturate(1.5); backdrop-filter: blur(22px) saturate(1.5);
+      color:var(--ink); padding:0; border:1px solid transparent;
+      background: linear-gradient(180deg, var(--glass-fill), color-mix(in srgb, var(--glass-fill) 30%, transparent));
+      -webkit-backdrop-filter: blur(26px) saturate(1.9) brightness(1.12); backdrop-filter: blur(26px) saturate(1.9) brightness(1.12);
+      box-shadow: 0 12px 36px -10px rgba(3,6,20,.7), inset 0 1.5px 1px rgba(255,255,255,.5), inset 0 -8px 14px -12px rgba(0,0,0,.5);
       animation: rise .22s cubic-bezier(.2,.7,.2,1) both; }
-    .ctx-back:hover { border-color: color-mix(in srgb, var(--accent) 45%, transparent);
-      background: color-mix(in srgb, var(--accent) 14%, var(--card)); }
+    .ctx-back::before { content:""; position:absolute; inset:0; border-radius:inherit; padding:1.2px; pointer-events:none;
+      background: linear-gradient(180deg, var(--glass-rim), color-mix(in srgb, var(--glass-rim) 12%, transparent) 45%, color-mix(in srgb, var(--glass-rim) 40%, transparent));
+      -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor;
+      mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); mask-composite: exclude; }
+    .ctx-back svg { position:relative; z-index:1; }
+    .ctx-back:hover { filter:brightness(1.08); }
     .ctx-back:active { transform: scale(.94); }
     .ctx-back svg { width:22px; height:22px; stroke:currentColor; fill:none; stroke-width:2.2; }
     .ctx-back:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
@@ -550,11 +557,18 @@
       transition: color .15s, background .15s; position:relative; }
     .tab:hover { filter:none; background:var(--field); color:var(--ink); }
     .tab svg { width:23px; height:23px; stroke:currentColor; fill:none; stroke-width:1.9; }
-    /* iOS-26 selected-tab glass capsule: a light-lit lozenge with its own specular top edge */
-    .tab.active { color:var(--brand);
+    /* The selected-tab glass capsule is now a SLIDING indicator (WhatsApp-style) — the active tab just carries
+       the accent colour; .tab-indicator paints/animates the lozenge. .drag-active = the tab under the finger. */
+    .tab.active, .tab.drag-active { color:var(--brand); }
+    .tab.active svg, .tab.drag-active svg { stroke:var(--brand); }
+    /* the sliding selection capsule: one element that slides to the active tab (tap) or follows the finger (drag) */
+    .tab-indicator { position:absolute; top:6px; bottom:6px; left:0; width:33%; z-index:0; pointer-events:none; border-radius:16px;
       background: linear-gradient(180deg, color-mix(in srgb, var(--brand) 24%, rgba(255,255,255,.12)), color-mix(in srgb, #fff 4%, transparent));
-      box-shadow: inset 0 1px 1px rgba(255,255,255,.5), inset 0 -3px 6px -4px rgba(0,0,0,.4), 0 3px 10px -4px rgba(0,0,0,.45); }
-    .tab.active svg { stroke:var(--brand); }
+      box-shadow: inset 0 1px 1px rgba(255,255,255,.5), inset 0 -3px 6px -4px rgba(0,0,0,.4), 0 3px 10px -4px rgba(0,0,0,.45);
+      transition: transform .34s var(--ease), width .34s var(--ease), opacity .2s; transform: translateX(0); }
+    .tab-indicator.off { opacity:0; }                             /* no tab active (Today/Profile) -> hidden */
+    .tabbar-inner.dragging .tab-indicator { transition: none; }   /* follow the finger live while dragging */
+    @media (prefers-reduced-motion: reduce) { .tab-indicator { transition: opacity .2s; } }
     /* Desktop top-nav (>=860px): the 4 sections live in the header; the mobile pill is hidden. */
     .topnav { display:none; gap:4px; }
     .navlink { position:relative; background:transparent; box-shadow:none; color:var(--muted); border:0; font-weight:700;
@@ -1303,6 +1317,7 @@
       if (name === "forum") closePost();                            // re-entering Forum lands on the list, never a stale open post
       updateCheckinCapsule();                                       // capsule only shows off-Today when a check-in is due
       updateCtxBack();                                              // Home/Back button reflects the current screen
+      if (window.tabIndicatorSync) window.tabIndicatorSync();       // slide the nav selection capsule to the active tab
     }
     document.querySelectorAll("[data-screen]").forEach((t) => t.addEventListener("click", () => showScreen(t.dataset.screen)));
     // the Chat unread "pulse" now lives on both navs (mobile bottom pill + desktop top-nav) -> toggle every .dm-dot
@@ -1746,6 +1761,61 @@
         if (!ticking) { requestAnimationFrame(update); ticking = true; }
       }, { passive: true });
       update();
+    })();
+
+    // Sliding + draggable tab selection (WhatsApp-style). One capsule slides to the active tab on tap AND can
+    // be dragged between tabs with the finger; tap-to-switch still works. Positions from live geometry so it
+    // survives width/theme changes. Mobile-first (drag = touch); the slide-on-tap runs everywhere.
+    (function () {
+      const inner = document.querySelector(".tabbar-inner");
+      if (!inner) return;
+      const tabs = Array.prototype.slice.call(inner.querySelectorAll(".tab"));
+      const ind = document.createElement("div");
+      ind.className = "tab-indicator off";
+      inner.insertBefore(ind, inner.firstChild);
+      const activeTab = () => inner.querySelector(".tab.active");
+      function place(tabEl, animate) {
+        if (!tabEl) { ind.classList.add("off"); return; }
+        ind.classList.remove("off");
+        const ir = inner.getBoundingClientRect(), tr = tabEl.getBoundingClientRect();
+        if (!animate) ind.style.transition = "none";
+        ind.style.width = tr.width + "px";
+        ind.style.transform = "translateX(" + (tr.left - ir.left) + "px)";
+        if (!animate) { void ind.offsetWidth; ind.style.transition = ""; }   // reflow so the next move animates
+      }
+      window.tabIndicatorSync = () => place(activeTab(), true);               // called from showScreen after a tap
+      place(activeTab(), false);
+      window.addEventListener("resize", () => place(activeTab(), false));
+      const nearest = (x) => tabs.reduce((best, t) => {
+        const r = t.getBoundingClientRect(); const d = Math.abs(x - (r.left + r.width / 2));
+        return d < best.d ? { t, d } : best;
+      }, { t: tabs[0], d: Infinity }).t;
+      // drag
+      let startX = 0, dragging = false, moved = false;
+      inner.addEventListener("touchstart", (e) => { startX = e.touches[0].clientX; dragging = false; moved = false; }, { passive: true });
+      inner.addEventListener("touchmove", (e) => {
+        const x = e.touches[0].clientX;
+        if (!dragging && Math.abs(x - startX) > 6) { dragging = true; inner.classList.add("dragging"); }
+        if (!dragging) return;
+        moved = true;
+        const ir = inner.getBoundingClientRect();
+        const first = tabs[0].getBoundingClientRect(), last = tabs[tabs.length - 1].getBoundingClientRect();
+        const w = first.width;
+        let tx = Math.max(first.left - ir.left, Math.min(x - ir.left - w / 2, last.left - ir.left));
+        ind.classList.remove("off"); ind.style.width = w + "px"; ind.style.transform = "translateX(" + tx + "px)";
+        const near = nearest(x);
+        tabs.forEach((t) => t.classList.toggle("drag-active", t === near));
+      }, { passive: true });
+      inner.addEventListener("touchend", (e) => {
+        inner.classList.remove("dragging");
+        tabs.forEach((t) => t.classList.remove("drag-active"));
+        if (dragging && moved) {
+          e.preventDefault();                                                // suppress the synthetic click after a drag
+          const near = nearest((e.changedTouches[0] || {}).clientX || startX);
+          showScreen(near.dataset.screen);                                   // -> tabIndicatorSync snaps the capsule exactly
+        }
+        dragging = false; moved = false;
+      });
     })();
 
     // ---- Dashboard ----

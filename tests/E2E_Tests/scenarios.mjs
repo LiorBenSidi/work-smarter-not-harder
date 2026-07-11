@@ -298,4 +298,20 @@ export const SCENARIOS = [
       assert(!up, "the tab bar should return (.nav-hidden removed) on scroll-up");
     },
   },
+  {
+    // WhatsApp-style: the nav selection capsule SLIDES to the tapped tab (its transform changes per tab).
+    name: "nav: selection indicator slides to the tapped tab",
+    tags: ["nav", "design"],
+    async fn(b, ctx) {
+      if (ctx.viewport !== "mobile") return;                 // the sliding pill is the mobile nav
+      await registerAndLogin(b);
+      await b.pageExec(`(() => { const t = document.querySelector('.tab[data-screen="forum"]'); if (t) t.click(); return true; })()`);
+      await b.wait(450);
+      const t1 = await b.evaluate(`() => (document.querySelector('.tab-indicator') || {style:{}}).style.transform`);
+      await b.pageExec(`(() => { const t = document.querySelector('.tab[data-screen="messages"]'); if (t) t.click(); return true; })()`);
+      await b.wait(450);
+      const t2 = await b.evaluate(`() => (document.querySelector('.tab-indicator') || {style:{}}).style.transform`);
+      assert(t1 && t2 && t1 !== t2, `the selection capsule should slide between tabs (forum=${t1} chat=${t2})`);
+    },
+  },
 ];
