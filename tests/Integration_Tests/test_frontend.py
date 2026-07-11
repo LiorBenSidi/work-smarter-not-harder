@@ -37,7 +37,8 @@ def test_history_escapes_entry_fields(client):
     # History rows carry AI-generated assessment text + a timestamp -> escape before innerHTML.
     html = client.get("/").get_data(as_text=True)
     assert "escapeHtml(it.assessment" in html
-    assert "escapeHtml(it.timestamp" in html
+    # timestamp is now shown as a relative time, still escaped: escapeHtml(timeAgoStr(it.timestamp))
+    assert "escapeHtml(timeAgoStr(it.timestamp))" in html
     assert "escapeHtml(it.calories" in html
 
 
@@ -211,6 +212,14 @@ def test_index_registers_the_auto_update_loop(client):
     html = client.get("/").get_data(as_text=True)
     assert "controllerchange" in html, "the reload-on-new-worker hook was removed (no auto-update)"
     assert "reg.update()" in html, "the foreground update check was removed (backgrounded PWA won't refresh)"
+
+
+def test_hero_display_font_is_actually_served(client):
+    # The guard test asserts the wiring STRINGS exist; this proves Flask really serves the font bytes, so a
+    # font missing from the image or a mis-set static route is caught in CI, not at the demo (fallback font).
+    resp = client.get("/static/fonts/bricolage-800-latin-v1.woff2")
+    assert resp.status_code == 200, "the self-hosted display font 404s — hero would fall back to system font"
+    assert resp.get_data()[:4] == b"wOF2", "served bytes are not a valid woff2 font"
 
 
 def test_account_menu_present_and_wired(client):

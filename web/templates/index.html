@@ -7,6 +7,7 @@
   <link rel="manifest" href="/manifest.webmanifest?v=3">
   <link rel="icon" href="/static/icon-192.png">
   <link rel="apple-touch-icon" href="/static/apple-touch-icon.png">
+  <link rel="preload" href="/static/fonts/bricolage-800-latin-v1.woff2" as="font" type="font/woff2" crossorigin>
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -18,16 +19,24 @@
        breathing readiness orb — a circular gauge that fills to today's readiness and breathes, colored
        green/amber/coral by state. Logged-in idiom: a native mobile-app shell — sectioned screens under a
        bottom tab bar (Today / History / Forum / Profile), soft rounded glass cards, generous space. */
+    /* Display face for the hero headline only — Bricolage Grotesque (SIL OFL, self-hosted latin subset).
+       A contemporary grotesque that shares the rounded-sans + mono system's DNA and stays crisp at
+       projector distance; preload + an 8KB subset keep the swap FOUT window tiny. */
+    @font-face { font-family: "Bricolage Grotesque"; font-style: normal; font-weight: 800;
+      font-display: swap; src: url("/static/fonts/bricolage-800-latin-v1.woff2") format("woff2"); }
     :root { color-scheme: light dark;
       --font-sans: ui-rounded, "SF Pro Rounded", "Hiragino Maru Gothic ProN", "Segoe UI Variable", "Nunito", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
       --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+      --font-display: "Bricolage Grotesque", var(--font-sans);
       /* dusk (default) — recovery at rest */
       --bg:#0a0e20; --bg2:#170f30; --ink:#eef0fb; --muted:#9aa2c9;
       --card: color-mix(in srgb, #1b1740 58%, transparent); --field: rgba(255,255,255,.05); --line: rgba(255,255,255,.10);
+      /* solid content surfaces — glass is a NAV-layer material only (iOS 26); content cards are opaque */
+      --card-solid:#171338; --stat-solid:#13102e;
       --accent:#6ff0cf; --accent2:#b39bff; --on-accent:#04231b;
       --ok:#6ff0cf; --warn:#ffce7a; --err:#ff9db4; --ready:#6ff0cf; --moderate:#ffce7a; --rest:#ff9db4; --brand:#b39bff;
       --shadow:0 30px 70px -34px rgba(3,6,20,.85);
-      --glow-a: rgba(111,240,207,.22); --glow-b: rgba(179,155,255,.22); --glow-c: rgba(96,150,255,.16); }
+      --glow-a: rgba(111,240,207,.22); --glow-b: rgba(179,155,255,.13); --glow-c: rgba(96,150,255,.16); }
     /* Light palette. Applied when the user FORCES Light in Settings, OR when the OS prefers light and the
        user hasn't forced a theme ([data-theme] unset). A forced theme overrides the OS preference, and
        color-scheme keeps native controls/scrollbars in step. Dark is the :root default (forced dark just
@@ -36,19 +45,21 @@
     :root[data-theme="light"] { color-scheme: light;
       --bg:#eef0fb; --bg2:#e7e4fb; --ink:#1a1f3a; --muted:#5c6486;
       --card: color-mix(in srgb, #ffffff 78%, transparent); --field: rgba(20,26,60,.05); --line: rgba(30,36,80,.12);
+      --card-solid:#ffffff; --stat-solid:#f7f6fd;
       --accent:#0eb389; --accent2:#7c5cff; --on-accent:#ffffff;
       --ok:#0eb389; --warn:#b5730c; --err:#b3163f; --ready:#0eb389; --moderate:#b5730c; --rest:#d5477a; --brand:#7c5cff;
       --shadow:0 30px 60px -34px rgba(60,60,120,.30);
-      --glow-a: rgba(14,179,137,.16); --glow-b: rgba(124,92,255,.16); --glow-c: rgba(96,150,255,.12); }
+      --glow-a: rgba(14,179,137,.16); --glow-b: rgba(124,92,255,.10); --glow-c: rgba(96,150,255,.12); }
     :root[data-theme="dark"] { color-scheme: dark; }   /* dark vars come from :root; just pin native controls */
     @media (prefers-color-scheme: light) {
       :root:not([data-theme="dark"]):not([data-theme="light"]) {
         --bg:#eef0fb; --bg2:#e7e4fb; --ink:#1a1f3a; --muted:#5c6486;
         --card: color-mix(in srgb, #ffffff 78%, transparent); --field: rgba(20,26,60,.05); --line: rgba(30,36,80,.12);
+        --card-solid:#ffffff; --stat-solid:#f7f6fd;
         --accent:#0eb389; --accent2:#7c5cff; --on-accent:#ffffff;
         --ok:#0eb389; --warn:#b5730c; --err:#b3163f; --ready:#0eb389; --moderate:#b5730c; --rest:#d5477a; --brand:#7c5cff;
         --shadow:0 30px 60px -34px rgba(60,60,120,.30);
-        --glow-a: rgba(14,179,137,.16); --glow-b: rgba(124,92,255,.16); --glow-c: rgba(96,150,255,.12); }
+        --glow-a: rgba(14,179,137,.16); --glow-b: rgba(124,92,255,.10); --glow-c: rgba(96,150,255,.12); }
     }
     @property --w { syntax:'<number>'; inherits:false; initial-value:0; }
     * { box-sizing:border-box; }
@@ -79,7 +90,7 @@
     .brand { display:flex; align-items:center; gap:11px; text-decoration:none; color:inherit; }
     .brand-dot { width:26px; height:26px; border-radius:50%; flex:none; display:flex; align-items:center; justify-content:center;
       background: radial-gradient(circle at 33% 28%, color-mix(in srgb, var(--accent) 92%, #fff), var(--accent) 42%, var(--accent2) 92%);
-      box-shadow:0 0 18px color-mix(in srgb, var(--accent) 55%, transparent); animation: breathe 5.5s ease-in-out infinite; }
+      box-shadow:0 0 18px color-mix(in srgb, var(--accent) 55%, transparent); }
     .brand-home-ico { display:none; width:14px; height:14px; stroke:var(--on-accent); fill:none; stroke-width:2.4; }
     .brand-name { font-size:16px; font-weight:800; letter-spacing:.04em; white-space:nowrap; }
     .brand-tag { font-size:12px; color:var(--muted); white-space:nowrap; }
@@ -171,15 +182,16 @@
     .um-seg { flex:1; background:transparent; color:var(--muted); box-shadow:none; padding:8px 6px; border-radius:999px; font-weight:800; font-size:13px; min-height:44px;
       transition: background .18s ease, color .18s ease; }
     .um-seg:hover { filter:none; box-shadow:none; color:var(--ink); background: color-mix(in srgb, var(--accent) 10%, transparent); }
-    .um-seg.active { background: linear-gradient(135deg, var(--accent), color-mix(in srgb, var(--accent) 55%, var(--accent2))); color:var(--on-accent); }
+    .um-seg.active { background: var(--accent); color:var(--on-accent); }
     .um-seg:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
     @media (max-width: 380px) { .usermenu-name { display:none; } }
     /* Dropdown reveal: a subtle scale-pop from the button (top-right), not a generic slide. Disabled under prefers-reduced-motion via the global rule below. */
     @keyframes menuPop { from { opacity:0; transform: translateY(-6px) scale(.96); } to { opacity:1; transform: translateY(0) scale(1); } }
 
     main { max-width:560px; margin:0 auto; padding:22px 18px 92px; }   /* bottom clears the floating pill nav */
-    .card { background:var(--card); border:1px solid var(--line); border-radius:24px; padding:22px; margin-bottom:18px;
-      box-shadow:var(--shadow); -webkit-backdrop-filter: blur(18px) saturate(1.15); backdrop-filter: blur(18px) saturate(1.15); animation: rise .6s cubic-bezier(.2,.7,.2,1) both; }
+    /* content card: SOLID (glass is a nav-layer material only, iOS 26) — no backdrop-filter, opaque surface */
+    .card { background:var(--card-solid); border:1px solid var(--line); border-radius:24px; padding:22px; margin-bottom:18px;
+      box-shadow:var(--shadow); animation: rise .6s cubic-bezier(.2,.7,.2,1) both; }
     .screen .card:nth-child(2){ animation-delay:.04s } .screen .card:nth-child(3){ animation-delay:.10s }
     .screen .card:nth-child(4){ animation-delay:.16s }
     .card h2 { margin:0 0 16px; font-size:12px; color:var(--muted); text-transform:uppercase; letter-spacing:.14em; font-weight:800;
@@ -199,12 +211,14 @@
     input[type=checkbox] { width:auto; height:auto; padding:0; margin:0; border:0; border-radius:0;
       background:none; box-shadow:none; accent-color:var(--accent); flex:none; cursor:pointer; }
     input[type=checkbox]:focus { box-shadow:none; border-color:transparent; }
-    button { background: linear-gradient(135deg, var(--accent), color-mix(in srgb, var(--accent) 52%, var(--accent2)));
+    /* Solid mint, not a gradient toward lilac — one tinted colour per view (iOS 26); a gradient primary is
+       a recognizable AI-output tell. Press physics (scale-down + a mint glow) give it native tactility. */
+    button { background: var(--accent);
       color:var(--on-accent); border:0; border-radius:999px; padding:12px 20px; font-weight:800; font-size:15px; font-family:inherit;
       cursor:pointer; white-space:nowrap; box-shadow:0 12px 26px -14px color-mix(in srgb, var(--accent) 85%, transparent);
-      transition: transform .08s, box-shadow .15s, filter .15s; }
+      transition: transform .1s cubic-bezier(.2,.7,.2,1), box-shadow .15s, filter .15s; }
     button:hover { filter:brightness(1.05); box-shadow:0 16px 32px -14px color-mix(in srgb, var(--accent) 92%, transparent); }
-    button:active { transform: translateY(1px) scale(.99); }
+    button:active { transform: scale(.97); }
     button:disabled { opacity:.5; cursor:not-allowed; }
     button.ghost { background:transparent; color:var(--ink); border:1px solid var(--line); box-shadow:none; font-weight:700; }
     button.ghost:hover { border-color: color-mix(in srgb, var(--accent) 55%, transparent); background:var(--field); filter:none; }
@@ -223,8 +237,7 @@
 
     .tabs { display:flex; gap:5px; margin-bottom:18px; padding:5px; background:var(--field); border:1px solid var(--line); border-radius:999px; }
     .tabs button { flex:1; background:transparent; color:var(--muted); box-shadow:none; padding:10px; border-radius:999px; font-weight:800; }
-    .tabs button.active { background: linear-gradient(135deg, var(--accent), color-mix(in srgb, var(--accent) 55%, var(--accent2)));
-      color:var(--on-accent); }
+    .tabs button.active { background: var(--accent); color:var(--on-accent); }
 
     /* auth card: full-width primary action (matches the app's Post/Save buttons; the iOS-native form
        pattern), with Back stacked below it as a quiet secondary. */
@@ -246,14 +259,64 @@
     }
     #otp-expiry.flash-reset { animation: otp-reset-flash 1.1s ease-out; }
 
-    /* hero (logged-out) — the first impression */
-    .hero { text-align:center; padding:34px 8px 6px; animation: rise .7s cubic-bezier(.2,.7,.2,1) both; }
+    /* logged-out landing — the first impression. Editorial split: the thesis (headline + a LIVE readiness
+       demo + the 3 steps) on the left, the auth card on the right at desktop; stacks to one column on mobile.
+       Deliberately not a centred single column (the generic-landing look) — structure carries the story. */
+    .auth-split { display:grid; grid-template-columns:1.08fr .92fr; gap:52px; align-items:center;
+      max-width:1080px; margin:0 auto; padding:44px 8px 6px; animation: rise .7s cubic-bezier(.2,.7,.2,1) both; }
+    .auth-eyebrow { font-family:var(--font-mono); font-size:12px; letter-spacing:.26em; text-transform:uppercase;
+      color:var(--accent); margin:0 0 16px; }
+    .auth-thesis .hero-title { font-size:clamp(34px,4vw,54px); letter-spacing:-.03em; line-height:1.03; margin:0 0 20px; }
+    /* the live sample: aurora orb + a mono readout that names today's state and the day's call */
+    .readiness-demo { display:flex; align-items:center; gap:20px; padding:16px 20px; border:1px solid var(--line);
+      border-radius:20px; background:var(--field); max-width:400px; }
+    .readiness-demo .hero-orb { width:92px; height:92px; margin:0; flex:none; }
+    .demo-k { font-family:var(--font-mono); font-size:11px; letter-spacing:.2em; text-transform:uppercase; color:var(--muted); margin:0 0 4px; }
+    .demo-state { font-family:var(--font-display); font-weight:800; font-size:25px; line-height:1; color:var(--ready); transition:color .6s ease; }
+    .demo-verb { color:var(--muted); font-size:13.5px; margin:5px 0 0; }
+    /* the 3 steps — a genuine ordered sequence (check-in -> signal -> act), so numbered markers are earned,
+       not decorative. Refined mint number badges (mono, thin ring) rather than generic grey circles.
+       Desktop: number-on-top, centred, three columns. */
+    .auth-steps { list-style:none; counter-reset:step; display:flex; gap:16px; margin:28px 0 0; padding:0; max-width:520px; }
+    .auth-steps li { flex:1; margin:0; display:flex; flex-direction:column; align-items:center; text-align:center; }
+    .auth-steps li::before {
+      counter-increment:step; content:counter(step);
+      display:grid; place-items:center; width:28px; height:28px; margin:0 0 10px; border-radius:999px;
+      font-family:var(--font-mono); font-weight:700; font-size:13px; color:var(--accent);
+      background:color-mix(in srgb, var(--accent) 12%, transparent);
+      border:1.5px solid color-mix(in srgb, var(--accent) 42%, transparent); }
+    .auth-steps li b { font-size:14px; font-weight:700; color:var(--ink); line-height:1.25; }
+    .auth-steps li span { margin-top:4px; font-size:12px; font-weight:600; color:var(--muted); line-height:1.3; }
+    .auth-panel .card { max-width:420px; margin:0 0 0 auto; }
+    /* MOBILE: keep every improvement, but re-optimise the LAYOUT so the orb sits at the top and the
+       login/register card is reachable without scrolling. Flatten the split (display:contents) so the
+       thesis's parts and the auth card become one ordered column — orb -> eyebrow -> headline -> CARD —
+       with the longer copy and the 3 steps below the fold. Desktop (the editorial split) is untouched. */
+    @media (max-width: 880px) {
+      .auth-split { display:flex; flex-direction:column; gap:14px; max-width:440px; padding:16px 6px 4px; text-align:center; }
+      .auth-thesis { display:contents; }                     /* its children join the column so we can order them */
+      .readiness-demo { order:1; margin:0 auto; gap:16px; padding:13px 16px; }
+      .readiness-demo .hero-orb { width:80px; height:80px; } /* compact orb, kept at the top */
+      .demo-state { font-size:23px; }
+      .auth-eyebrow { order:2; text-align:center; margin:2px 0 0; }
+      .auth-thesis .hero-title { order:3; margin:0; font-size:clamp(29px,7.6vw,40px); }
+      .auth-panel { order:4; }                               /* the card lands right under the headline -> reachable */
+      .auth-panel .card { margin:0 auto; }
+      /* mobile: vertical list, number badge on the LEFT of each step */
+      .auth-steps { order:5; flex-direction:column; gap:0; max-width:340px; margin:6px auto 0; }
+      .auth-steps li { display:grid; grid-template-columns:auto 1fr; column-gap:14px; align-items:center;
+        text-align:left; padding:14px 2px; border-top:1px solid var(--line); }
+      .auth-steps li:first-child { border-top:0; }
+      .auth-steps li::before { margin:0; grid-column:1; grid-row:1 / span 2; align-self:center; }
+      .auth-steps li b { grid-column:2; grid-row:1; }
+      .auth-steps li span { grid-column:2; grid-row:2; margin-top:2px; }
+    }
     /* Liquid-glass readiness orb: a <canvas> paints drifting aurora "liquid"; CSS layers the "glass"
        (rim, specular highlight, depth). A luminous jewel that reads on both light and dark grounds. */
     .hero-orb { width:132px; height:132px; margin:0 auto 24px; position:relative;
       animation: breathe 6s ease-in-out infinite; }
     .hero-orb::after { content:""; position:absolute; inset:-16px; border-radius:50%;
-      border:1px solid color-mix(in srgb, var(--accent) 34%, transparent); animation: halo 6s ease-in-out infinite; }
+      border:1px solid color-mix(in srgb, var(--accent) 34%, transparent); }
     .orb-glass { position:absolute; inset:0; border-radius:50%; overflow:hidden;
       border:1px solid rgba(255,255,255,.16);
       box-shadow: inset 0 2px 12px rgba(255,255,255,.22), inset 0 -14px 30px rgba(6,4,20,.5),
@@ -266,10 +329,10 @@
     .orb-frost { position:absolute; inset:0; border-radius:50%; pointer-events:none;
       box-shadow: inset 0 0 0 1px rgba(255,255,255,.10);
       background: linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,0) 42%); }
-    .hero-title { font-size:31px; font-weight:800; letter-spacing:-.02em; line-height:1.14; margin:0 0 10px; }
-    .hero-sub { color:var(--muted); font-size:15px; margin:0 auto 20px; max-width:33ch; }
-    .hero-title .accent { background: linear-gradient(120deg, var(--accent), var(--accent2));
-      -webkit-background-clip:text; background-clip:text; color:transparent; }
+    .hero-title { font-family: var(--font-display); font-size:31px; font-weight:800; letter-spacing:-.02em; line-height:1.14; margin:0 0 10px; }
+    /* Solid mint, not gradient-clipped text — gradient text on a heading is a recognizable AI-output tell
+       (Impeccable's `gradient-text` detector). One confident accent colour reads more intentional. */
+    .hero-title .accent { color: var(--accent); }
 
     /* ===== app shell (logged-in): sectioned screens + bottom tab bar ===== */
     .app-shell { padding-bottom:26px; }
@@ -280,19 +343,22 @@
 
     /* stat strip — glanceable numbers */
     .stat-strip { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin:0 0 18px; }
-    .stat { background:var(--card); border:1px solid var(--line); border-radius:18px; padding:15px 10px 13px; text-align:center;
-      box-shadow:var(--shadow); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); animation: rise .5s cubic-bezier(.2,.7,.2,1) both; }
+    .stat { background:var(--stat-solid); border:1px solid var(--line); border-radius:18px; padding:15px 10px 13px; text-align:center;
+      box-shadow:var(--shadow); animation: rise .5s cubic-bezier(.2,.7,.2,1) both; }
     .stat .ico { width:19px; height:19px; stroke:var(--accent); fill:none; stroke-width:2; margin-bottom:5px; }
     .stat .n { font-size:21px; font-weight:800; font-family:var(--font-mono); color:var(--ink); line-height:1.05;
       max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-    .stat .n.accent { color:var(--brand); }
+    .stat .n.accent { color:var(--accent); }   /* mint is the one saturated accent — no second (lilac) colour */
     .stat .k { font-size:10px; letter-spacing:.1em; text-transform:uppercase; color:var(--muted); margin-top:5px; }
     /* Check-in streak badge (Wolt's tenure footer -> fitness motivation; warm accent = fire) */
     .streak { display:inline-flex; align-items:center; gap:9px; margin:-2px 0 16px; padding:9px 15px; border-radius:999px;
-      background: color-mix(in srgb, var(--warn) 14%, var(--card)); border:1px solid color-mix(in srgb, var(--warn) 40%, var(--line));
-      box-shadow:var(--shadow); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); animation: rise .5s cubic-bezier(.2,.7,.2,1) both; }
+      background: color-mix(in srgb, var(--warn) 14%, var(--stat-solid)); border:1px solid color-mix(in srgb, var(--warn) 40%, var(--line));
+      box-shadow:var(--shadow); animation: rise .5s cubic-bezier(.2,.7,.2,1) both; }
     .streak .ico { width:18px; height:18px; stroke:var(--warn); fill:none; stroke-width:2; flex:none; }
-    .streak-n { font-weight:800; color:var(--ink); white-space:nowrap; }
+    /* base icon: sizes to the surrounding font + inherits colour, so inline icons replace the old ▲▾✕▼ glyphs
+       cleanly (more-specific rules like .stat .ico still win on their explicit size/colour). */
+    .ico { width:1em; height:1em; stroke:currentColor; fill:none; stroke-width:2; vertical-align:-.14em; flex:none; }
+    .streak-n { font-family:var(--font-mono); font-weight:800; color:var(--ink); white-space:nowrap; }
     .streak-cap { color:var(--muted); font-size:13px; }
     @media (max-width: 380px) { .streak-cap { display:none; } }
     /* "Check-in due" capsule: a floating nudge shown only off-Today when today's check-in is missing */
@@ -335,13 +401,19 @@
       box-shadow: inset 0 1px 0 rgba(255,255,255,.06), inset 0 0 30px -10px color-mix(in srgb, var(--st) 45%, transparent);
       animation: breathe 5.5s ease-in-out infinite; }
     .signal { width:9px; height:9px; border-radius:50%; background:var(--st); margin-bottom:2px;
-      box-shadow:0 0 0 4px color-mix(in srgb, var(--st) 20%, transparent); animation: beat 2s ease-in-out infinite; }
+      box-shadow:0 0 0 4px color-mix(in srgb, var(--st) 20%, transparent); }
     .verdict { font-size:26px; font-weight:800; letter-spacing:-.01em; line-height:1.1; color:var(--st); }
+    /* single-metric hero: the 0-100 score is the one loud number on the screen (mono), verdict word beneath */
+    .score { font-family:var(--font-mono); font-weight:800; font-size:58px; line-height:.9; letter-spacing:-.02em; color:var(--st); }
+    .verdict-sub { margin-top:5px; font-size:12.5px; font-weight:800; letter-spacing:.16em; text-transform:uppercase; color:var(--st); }
     .orb-sub { font-size:10.5px; letter-spacing:.18em; text-transform:uppercase; color:var(--muted); }
     .recs { list-style:none; margin:18px 0 0; padding:0; text-align:left; }
     .recs li { position:relative; margin:8px 0; padding:11px 13px 11px 34px; background:var(--field); border:1px solid var(--line); border-radius:14px; font-size:14px; }
     .recs li::before { content:""; position:absolute; left:13px; top:15px; width:8px; height:8px; border-radius:50%;
       background:var(--accent); box-shadow:0 0 8px var(--accent); }
+    /* Recommendations cascade in on a fresh check-in reveal (per-item delay set inline, fresh-only). The
+       global prefers-reduced-motion rule disables this; the JS also skips adding it under reduced motion. */
+    @keyframes recIn { from { opacity:0; transform: translateY(6px); } to { opacity:1; transform: translateY(0); } }
 
     /* readiness confidence breakdown (per-state proba) */
     .conf { margin:18px 0 0; text-align:left; }
@@ -357,6 +429,14 @@
     .trend { margin:2px 0 16px; }
     .trend-cap { font-size:11px; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); font-weight:800; margin:0 0 8px; }
     .trend svg { width:100%; height:66px; display:block; overflow:visible; }
+    /* history rows: a colour-coded score column (state dot + numeric score + verdict + relative time) */
+    .hlist { list-style:none; margin:0; padding:0; }
+    .hrow { display:flex; align-items:center; gap:14px; padding:12px 4px 12px 12px; border-top:1px solid var(--line); position:relative; }
+    .hrow:first-child { border-top:0; }
+    .hrow::before { content:""; position:absolute; left:0; top:50%; transform:translateY(-50%); width:7px; height:7px; border-radius:50%; background:var(--st); box-shadow:0 0 8px color-mix(in srgb, var(--st) 60%, transparent); }
+    .hrow-score { font-family:var(--font-mono); font-weight:800; font-size:20px; color:var(--st); min-width:32px; text-align:center; }
+    .hrow-main { flex:1; min-width:0; } .hrow-main strong { font-weight:700; text-transform:capitalize; }
+    .hrow-time { font-size:12.5px; white-space:nowrap; }
 
     .pill { display:inline-block; padding:6px 13px; border-radius:999px; font-size:12.5px; font-family:var(--font-mono);
       background:var(--field); border:1px solid var(--line); color:var(--ink); white-space:nowrap; }
@@ -479,12 +559,6 @@
     .check-row { display:flex; align-items:flex-start; gap:10px; cursor:pointer; font-size:14px; line-height:1.4; }
     .check-row input { margin-top:2px; }
 
-    /* "How it works" 3-step on the auth hero — a genuine sequence (check-in -> signal -> action). */
-    .how { list-style:none; display:flex; gap:10px; max-width:440px; margin:2px auto 0; padding:0; }
-    .how li { flex:1; margin:0; font-size:12px; line-height:1.35; color:var(--muted); text-align:center; }
-    .how-n { display:block; width:22px; height:22px; margin:0 auto 6px; border-radius:999px;
-      font-weight:800; font-size:12px; line-height:22px; color:var(--on-accent);
-      background:linear-gradient(135deg, var(--accent), var(--accent2)); }
     /* per-field explanatory helper text under a check-in / profile input */
     .hint { display:block; margin-top:5px; font-size:11.5px; line-height:1.3; color:var(--muted); }
     /* greyed "example" readiness card shown before the first check-in (the no-profile empty state) */
@@ -493,14 +567,9 @@
       font-weight:700; letter-spacing:.02em; color:var(--muted); background:var(--field); border:1px solid var(--line); }
 
     @keyframes breathe { 0%,100% { transform: scale(1); } 50% { transform: scale(1.045); } }
-    @keyframes halo { 0%,100% { opacity:.5; transform: scale(1); } 50% { opacity:.9; transform: scale(1.06); } }
-    @keyframes beat { 0%,100% { box-shadow:0 0 0 3px color-mix(in srgb, var(--st, var(--accent)) 26%, transparent); }
-      50% { box-shadow:0 0 0 8px color-mix(in srgb, var(--st, var(--accent)) 4%, transparent); } }
     @keyframes rise { from { opacity:0; transform: translateY(12px); } to { opacity:1; transform:none; } }
     @media (max-width: 640px) { .brand-tag { display:none; } }
-    @media (max-width: 560px) { .row { grid-template-columns:1fr; } main { padding:16px 14px 92px; } .hero-title { font-size:27px; } #who-name { display:none; }
-      /* tighter hero on phones: the orb stays the signature but the auth card's action lands near the fold */
-      .hero { padding-top:18px; } .hero-orb { width:104px; height:104px; margin-bottom:18px; } .hero-sub { margin-bottom:14px; } }
+    @media (max-width: 560px) { .row { grid-template-columns:1fr; } main { padding:16px 14px 92px; } #who-name { display:none; } }
     /* Kill transitions for the instant of a theme switch so the palette change is atomic — otherwise
        each element animates its color/background at its own rate and the switch reads as a flicker. */
     html.theme-switching, html.theme-switching *, html.theme-switching *::before, html.theme-switching *::after {
@@ -531,7 +600,7 @@
        toggles display:none->block, which RESTARTS a CSS animation — so the fade+slide replays on every tab
        change and (stacked with the backdrop-filter repaint) reads as flicker. `html.nav-ready` (set shortly
        after first paint) freezes the replay while keeping the first impression animated. */
-    html.nav-ready .hero, html.nav-ready .screen, html.nav-ready .card, html.nav-ready .stat,
+    html.nav-ready .auth-split, html.nav-ready .screen, html.nav-ready .card, html.nav-ready .stat,
     html.nav-ready .streak, html.nav-ready .empty, html.nav-ready .ctx-back { animation: none !important; }
     @media (prefers-reduced-motion: reduce) { *, ::before, ::after { animation:none !important; transition:none !important; } }
   </style>
@@ -593,17 +662,28 @@
   <main>
     <!-- ===== Auth view ===== -->
     <section id="auth-view">
-      <div class="hero">
-        <div class="hero-orb" aria-hidden="true"><span class="orb-glass"><canvas class="orb-liquid"></canvas><span class="orb-spec"></span><span class="orb-frost"></span></span></div>
+      <div class="auth-split">
+      <div class="auth-thesis">
+        <p class="auth-eyebrow">Morning readiness</p>
         <h1 class="hero-title">Know when to push.<br>Know when to <span class="accent">rest</span>.</h1>
-        <p class="hero-sub">Your training readiness — measured each morning, in one calm signal.</p>
-        <ol class="how" aria-label="How it works">
-          <li><span class="how-n">1</span>Log a 30-second morning check-in</li>
-          <li><span class="how-n">2</span>Get one signal — Ready, Moderate or Rest</li>
-          <li><span class="how-n">3</span>Follow today's recommendation</li>
+        <!-- Live sample of the product's one output: the aurora orb + a readout cycle Ready -> Moderate ->
+             Rest so a visitor sees what they'll get. aria-hidden: it's an illustration, not live SR content. -->
+        <div class="readiness-demo" aria-hidden="true">
+          <div class="hero-orb"><span class="orb-glass"><canvas class="orb-liquid"></canvas><span class="orb-spec"></span><span class="orb-frost"></span></span></div>
+          <div class="demo-readout">
+            <p class="demo-k">Today you're</p>
+            <div class="demo-state" id="demo-state">Ready</div>
+            <p class="demo-verb" id="demo-verb">Green light. Train hard.</p>
+          </div>
+        </div>
+        <ol class="auth-steps" aria-label="How it works">
+          <li><b>Check in each morning</b><span>30 seconds</span></li>
+          <li><b>Get one signal</b><span>Ready, Moderate, or Rest</span></li>
+          <li><b>Train or recover</b><span>follow the day's call</span></li>
         </ol>
       </div>
-      <div class="card" style="max-width:420px;margin:6px auto 0">
+      <div class="auth-panel">
+      <div class="card">
         <div class="tabs">
           <button id="tab-login" class="active" onclick="showTab('login')">Log in</button>
           <button id="tab-register" onclick="showTab('register')">Register</button>
@@ -656,6 +736,8 @@
           <div id="otp-flash" class="flash" aria-live="polite"></div>
         </form>
       </div>
+      </div>
+      </div>
     </section>
 
     <!-- ===== App view: mobile-app shell (sectioned screens + bottom tab bar) ===== -->
@@ -680,11 +762,11 @@
                 <div><label for="resting_hr">Resting HR (bpm)</label><input id="resting_hr" name="resting_hr" type="number" min="30" max="220" required>
                   <small class="hint">Beats per minute before getting up. Above your norm signals fatigue.</small></div>
                 <div><label for="fatigue">Fatigue (1–10)</label><input id="fatigue" name="fatigue" type="number" min="1" max="10" required>
-                  <small class="hint">How drained you feel — 1 fresh, 10 exhausted.</small></div>
+                  <small class="hint">How drained you feel: 1 fresh, 10 exhausted.</small></div>
                 <div><label for="soreness">Soreness (1–10)</label><input id="soreness" name="soreness" type="number" min="1" max="10" required>
-                  <small class="hint">Muscle soreness right now — 1 none, 10 very sore.</small></div>
+                  <small class="hint">Muscle soreness right now: 1 none, 10 very sore.</small></div>
                 <div><label for="training_load">Training load (0–10)</label><input id="training_load" name="training_load" type="number" min="0" max="10" required>
-                  <small class="hint">Yesterday's effort — 0 rest day, 10 max session.</small></div>
+                  <small class="hint">Yesterday's effort: 0 rest day, 10 max session.</small></div>
               </div>
               <div style="margin-top:16px"><button type="submit" class="block">Submit check-in</button></div>
               <div id="checkin-flash" class="flash" aria-live="polite"></div>
@@ -795,6 +877,11 @@
               <div style="margin-top:16px"><button type="submit" class="block">Save profile</button></div>
               <div id="profile-flash" class="flash" aria-live="polite"></div>
             </form>
+          </div>
+          <div class="card">
+            <h2><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21C7 16.5 3 13.2 3 9.2 3 6.3 5.2 4 8 4c1.6 0 3.1.8 4 2 .9-1.2 2.4-2 4-2 2.8 0 5 2.3 5 5.2 0 4-4 7.3-9 11.8z"/></svg><span class="grow">Community engagement</span></h2>
+            <p class="muted" style="margin:-2px 0 14px">Votes your forum posts and comments received.</p>
+            <div id="engagement-strip" class="stat-strip" aria-label="Received engagement"></div>
           </div>
           <div class="card">
             <h2><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M18.4 5.6 17 7M7 17l-1.4 1.4"/></svg><span class="grow">Display &amp; accessibility</span></h2>
@@ -1052,8 +1139,11 @@
       if (body !== null) { opts.headers["Content-Type"] = "application/json"; opts.body = JSON.stringify(body); }
       if (emailDebugMock) opts.headers["X-Debug-Email"] = "mock";   // gated dev override; server ignores unless opted in
       let res;
+      // A dropped/failed request returns a synthetic non-ok result (NOT a re-throw). Every caller already
+      // handles `!r.ok`, so a network blip renders the panel's error fallback instead of leaving it stuck on
+      // "Loading…" with an unhandled rejection — critical on a memory-tight prod box where requests can drop.
       try { res = await fetch(path, opts); }
-      catch (e) { dbg("api NETWORK FAIL", method, path, "—", e && e.message); throw e; }   // preserve the reject; just make it visible
+      catch (e) { dbg("api NETWORK FAIL", method, path, "—", e && e.message); return { ok: false, status: 0, data: null }; }
       let data = null;
       try { data = await res.json(); } catch (_) { data = null; }
       if (!res.ok) dbg("api", method, path, "->", res.status, (data && data.error) || "");
@@ -1431,7 +1521,13 @@
         training_load: Number.parseInt(f.training_load.value, 10),
       };
       const r = await api("/checkin", { method: "POST", body });
-      if (r.ok) { flash("checkin-flash", "Check-in saved.", "ok"); f.reset(); loadDashboard(); loadHistory(); }
+      if (r.ok) {
+        flash("checkin-flash", "Check-in saved.", "ok"); f.reset();
+        // Await BOTH loaders (each rebuilds the stat strip) so the count-up runs once, after they settle —
+        // no re-render race. fresh:true triggers the recs cascade + is the only path that animates.
+        await Promise.all([loadDashboard({ fresh: true }), loadHistory()]);
+        countUpKcal();
+      }
       else { flash("checkin-flash", (r.data && r.data.error) || "Could not save check-in"); }
     });
 
@@ -1445,6 +1541,20 @@
           if (p[k] !== undefined && f[k]) f[k].value = p[k];
         }
       }
+      loadEngagement(u);
+    }
+
+    // ---- Received engagement (profile "personal area" — votes my posts/comments got) ----
+    async function loadEngagement(u) {
+      const strip = $("engagement-strip"); if (!strip) return;
+      const r = await api("/me/engagement");
+      if (sessionChanged(u, "loadEngagement")) return;
+      if (!r.ok || !r.data) { strip.innerHTML = ""; return; }   // store down -> hide, never break the profile
+      const up = Number(r.data.up) || 0, down = Number(r.data.down) || 0, score = Number(r.data.score) || 0;
+      // numbers only -> HTML-safe by construction (same contract as renderStats)
+      strip.innerHTML = statCard(ICON.up, String(up), "upvotes", true)
+        + statCard(ICON.down, String(down), "downvotes", false)
+        + statCard(ICON.pulse, (score > 0 ? "+" : "") + score, "net score", false);
     }
 
     // ---- Stat strip (Today) ----
@@ -1452,6 +1562,10 @@
       pulse: '<svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h4l2 5 4-13 2 8h6"/></svg>',
       flame: '<svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3c1 3-2 4-2 7a4 4 0 1 0 8 0c0-2-1-3-2-4 0 2-1 3-2 3 .5-2-1-5-2-6z"/></svg>',
       check: '<svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>',
+      up: '<svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7"/></svg>',
+      down: '<svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12l7 7 7-7"/></svg>',
+      close: '<svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>',
+      chev: '<svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>',
     };
     let statState = "—", statKcal = "—", statCheckins = 0;
     function statCard(ico, val, k, accent) {
@@ -1463,6 +1577,28 @@
       s.innerHTML = statCard(ICON.pulse, statState, "readiness", true)
         + statCard(ICON.flame, statKcal, "kcal target", false)
         + statCard(ICON.check, String(statCheckins), "logged", false);
+    }
+
+    function reducedMotion() {
+      return window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    }
+    // Count the kcal target up from 0 on a FRESH check-in — the number lands as the orb settles, one
+    // orchestrated reveal. Called ONCE after both dashboard+history loads settle (no re-render race).
+    // Reduced motion snaps (the CSS kill-switch doesn't cover JS RAF); a non-numeric "—" is left as-is.
+    function countUpKcal() {
+      if (reducedMotion()) return;
+      const strip = $("stat-strip"); if (!strip) return;
+      const el = strip.querySelectorAll(".stat .n")[1];   // [readiness word, kcal, logged] -> kcal is 2nd
+      if (!el) return;
+      const target = Math.round(Number(el.textContent));
+      if (!Number.isFinite(target)) return;               // "—" empty state -> leave the dash untouched
+      const dur = 700, t0 = performance.now();
+      el.textContent = "0";
+      requestAnimationFrame(function tick(now) {
+        const p = Math.min(1, (now - t0) / dur), e = 1 - Math.pow(1 - p, 3);   // ease-out cubic
+        el.textContent = String(Math.round(e * target));
+        if (p < 1) requestAnimationFrame(tick); else el.textContent = String(target);
+      });
     }
 
     // ---- Check-in streak (consecutive days ending today/yesterday, from history) ----
@@ -1495,7 +1631,7 @@
             + '<span class="streak-cap">' + (loggedToday ? "· logged today" : "· check in to keep it") + "</span>";
           el.hidden = false;
         } else if (hasHistory) {
-          el.innerHTML = ICON.flame + '<span class="streak-cap">Start a new streak — check in today</span>';
+          el.innerHTML = ICON.flame + '<span class="streak-cap">Start a new streak: check in today</span>';
           el.hidden = false;
         } else {
           el.hidden = true;                                              // brand-new user: the first-check-in flow onboards
@@ -1528,8 +1664,26 @@
       if (/\b(rest|low|recover|recovery|fatigued?|poor|over\w*)\b/.test(s)) return ["rest", 33];
       return ["", 50];
     }
+    // A real 0-100 readiness score. When the model returns a class distribution (proba), it's a genuine
+    // weighted blend of the class weights (ready=100 / moderate=55 / rest=15) — NOT an invented number.
+    // With no distribution, it degrades to the class's representative ring value (also a real 0-100).
+    function readinessScore(readiness) {
+      const p = readiness && readiness.proba;
+      if (p && typeof p === "object") {
+        let num = 0, den = 0;
+        for (const k in p) {
+          const v = Number(p[k]); if (!Number.isFinite(v) || v < 0) continue;
+          const [cls] = readinessClass(k);
+          num += (cls === "ready" ? 100 : cls === "moderate" ? 55 : cls === "rest" ? 15 : 50) * v; den += v;
+        }
+        if (den > 0) return Math.max(0, Math.min(100, Math.round(num / den)));
+      }
+      return readinessClass(readiness && readiness.state)[1];
+    }
 
-    async function loadDashboard() {
+    async function loadDashboard(opts) {
+      // freshReveal = a check-in just landed -> the recs cascade in (only then, not on tab-switch/refresh).
+      const freshReveal = !!(opts && opts.fresh) && !reducedMotion();
       const u = currentUser;
       const el = $("dashboard"); el.innerHTML = '<p class="muted">Loading…</p>';
       const r = await api("/dashboard");
@@ -1537,7 +1691,8 @@
       if (!r.ok) { el.innerHTML = '<p class="flash error">Could not load the dashboard.</p>'; return; }
       const d = r.data;
       // keep the glanceable stats in sync with the AI's latest read
-      statState = (d.readiness && d.readiness.state) ? escapeHtml(d.readiness.state) : "—";
+      // the stat strip shows the SAME 0-100 score as the orb (one consistent number), not the class word
+      statState = d.readiness ? String(readinessScore(d.readiness)) : "—";
       statKcal = d.calories != null ? escapeHtml(d.calories) : "—";
       renderStats();
       if (d.needs_profile) {
@@ -1547,24 +1702,26 @@
           '<p class="muted" style="text-align:center;margin:0 0 2px">Fill in your profile, then log a check-in to see your readiness.</p>'
           + '<div class="ex"><span class="ex-tag">Example</span>'
           + '<div class="readiness ready" aria-hidden="true">'
-          + '<div class="orb" style="--w:100"><div class="orb-inner"><span class="signal"></span>'
-          + '<div class="verdict">Ready</div><div class="orb-sub">readiness</div></div></div>'
-          + '<ul class="recs"><li>Great day to push — hit your planned session.</li></ul></div></div>';
+          + '<div class="orb" style="--w:88"><div class="orb-inner">'
+          + '<div class="score">88</div><div class="verdict-sub">Ready</div><div class="orb-sub">readiness</div></div></div>'
+          + '<ul class="recs"><li>Great day to push. Hit your planned session.</li></ul></div></div>';
         return;
       }
       let html = "";
       if (d.ai_status === "unavailable") {
         html += '<p class="flash warn">Readiness is temporarily unavailable (AI service down).</p>';
       } else if (d.readiness) {
-        const [cls, pct] = readinessClass(d.readiness.state);
+        const [cls] = readinessClass(d.readiness.state);
+        const score = readinessScore(d.readiness);   // real 0-100 hero number (from the model's proba)
         html += '<div class="readiness ' + cls + '">'
-          + '<div class="orb" data-w="' + pct + '" role="img" aria-label="Readiness: ' + escapeHtml(d.readiness.state || "unknown") + '">'
-          + '<div class="orb-inner"><span class="signal" aria-hidden="true"></span>'
-          + '<div class="verdict">' + escapeHtml(d.readiness.state || "—") + '</div>'
+          + '<div class="orb" data-w="' + score + '" role="img" aria-label="Readiness ' + score + ' out of 100: ' + escapeHtml(d.readiness.state || "unknown") + '">'
+          + '<div class="orb-inner">'
+          + '<div class="score">' + score + '</div>'
+          + '<div class="verdict-sub">' + escapeHtml(d.readiness.state || "—") + '</div>'
           + '<div class="orb-sub">readiness</div></div></div>'
           + '<p class="muted" style="text-align:center;margin:10px 0 0;font-size:12px">Based on today\'s check-in vs your baseline.</p>';
         const recs = Array.isArray(d.readiness.recommendations) ? d.readiness.recommendations : [];
-        if (recs.length) html += '<ul class="recs">' + recs.map((x) => "<li>" + escapeHtml(x) + "</li>").join("") + "</ul>";
+        if (recs.length) html += '<ul class="recs">' + recs.map((x, i) => "<li" + (freshReveal ? ' style="animation:recIn .42s cubic-bezier(.2,.7,.2,1) both;animation-delay:' + (i * 60) + 'ms"' : "") + ">" + escapeHtml(x) + "</li>").join("") + "</ul>";
         html += confidenceHtml(d.readiness.proba);
         html += "</div>";
       }
@@ -1615,11 +1772,16 @@
       const items = historyFilter === "all" ? historyItems
         : historyItems.filter((it) => readinessClass(it && it.assessment)[0] === historyFilter);
       if (!items.length) { el.innerHTML = emptyState(EMPTY_ICONS.filter, "Nothing here", "No " + historyFilter + " days in your history yet."); return; }
-      el.innerHTML = "<ul>" + items.map((it) =>
-        "<li><strong>" + escapeHtml(it.assessment || "—") + "</strong> "
-        + (it.calories != null ? "· " + escapeHtml(it.calories) + " kcal " : "")
-        + '<span class="muted">' + escapeHtml(it.timestamp || "") + "</span></li>"
-      ).join("") + "</ul>";
+      // Each row reads as a colour-coded score line (Whoop trend tier): a state dot + the numeric readiness
+      // score + the verdict word + kcal, with a relative timestamp. Scannable as a coloured column.
+      el.innerHTML = '<ul class="hlist">' + items.map((it) => {
+        const [cls, pct] = readinessClass(it.assessment);
+        return '<li class="hrow readiness ' + cls + '">'
+          + '<span class="hrow-score">' + pct + '</span>'
+          + '<span class="hrow-main"><strong>' + escapeHtml(it.assessment || "—") + "</strong>"
+          + (it.calories != null ? '<span class="muted"> · ' + escapeHtml(it.calories) + " kcal</span>" : "") + "</span>"
+          + '<span class="hrow-time muted">' + escapeHtml(timeAgoStr(it.timestamp)) + "</span></li>";
+      }).join("") + "</ul>";
     }
     $("history-filters").addEventListener("click", (e) => {
       const chip = e.target.closest(".chip"); if (!chip) return;
@@ -1661,9 +1823,19 @@
     // openPost()+loadForum() un-awaited, so rapid up/down clicks launch overlapping fetches whose responses
     // can arrive out of order and momentarily paint a stale score (#SPA3). The latest call always wins.
     let openPostSeq = 0, forumLoadSeq = 0;
+    // #forum-detail is slotted INSIDE #forum-list while a post is open (inline expand). Any code that wipes
+    // the list's innerHTML must move the detail OUT first, or the element is destroyed — after which every
+    // openPost throws on a null box and the forum wedges ("can't open any post", seen after voting, which
+    // calls loadForum while a post is open). Both loadForum and renderForumList stash it before wiping.
+    function stashDetail() {
+      const detail = $("forum-detail"), el = $("forum-list");
+      if (detail && el && detail.parentNode === el) el.parentNode.appendChild(detail);
+    }
     async function loadForum() {
       const u = currentUser, seq = ++forumLoadSeq;
-      const el = $("forum-list"); el.innerHTML = '<p class="muted">Loading…</p>';
+      const el = $("forum-list");
+      stashDetail();                                          // preserve an open post's detail across the wipe
+      el.innerHTML = '<p class="muted">Loading…</p>';
       const r = await api("/forum/posts");
       if (sessionChanged(u, "loadForum") || seq !== forumLoadSeq) return;   // stale session OR superseded -> don't paint
       if (!r.ok) { el.innerHTML = '<p class="flash error">Could not load the forum.</p>'; return; }
@@ -1672,10 +1844,8 @@
     }
     function renderForumList() {
       const el = $("forum-list"); if (!el) return;
-      const detail = $("forum-detail");
-      // Rescue the open detail out of the list before we wipe innerHTML (else it'd be destroyed), then re-slot it.
-      if (detail && detail.parentNode === el) el.parentNode.appendChild(detail);
-      if (!forumPosts.length) { el.innerHTML = emptyState(EMPTY_ICONS.forum, "Quiet in here", "Start the conversation — share something above."); return; }
+      stashDetail();                                          // move an open post's detail out before we wipe the list, then re-slot it below
+      if (!forumPosts.length) { el.innerHTML = emptyState(EMPTY_ICONS.forum, "Quiet in here", "Start the conversation. Share something above."); return; }
       let list = forumPosts.slice();                         // "recent" keeps the server order (newest first)
       if (forumSort === "top") list.sort((a, b) => (b.score || 0) - (a.score || 0));
       else if (forumSort === "mine") list = list.filter((p) => p.mine);
@@ -1683,7 +1853,7 @@
       el.innerHTML = list.map((p) =>
         '<div class="post' + (p.id === currentPostId ? ' open' : '') + '" data-id="' + escapeHtml(p.id) + '" role="button" tabindex="0" aria-expanded="' + (p.id === currentPostId ? 'true' : 'false') + '">'
         + '<div class="post-top"><strong>' + escapeHtml(p.title) + '</strong>'
-        + '<span class="post-right"><span class="pill">▲ ' + escapeHtml(p.score) + '</span><span class="post-chev" aria-hidden="true">▾</span></span></div>'
+        + '<span class="post-right"><span class="pill">' + ICON.up + ' ' + escapeHtml(p.score) + '</span><span class="post-chev" aria-hidden="true">' + ICON.chev + '</span></span></div>'
         + '<span class="muted">by ' + escapeHtml(p.author) + ' · ' + escapeHtml(p.comments) + ' comment' + (p.comments === 1 ? '' : 's') + '</span></div>'
       ).join("");
       el.querySelectorAll(".post").forEach((d) => {
@@ -1712,25 +1882,39 @@
       renderForumList();
     });
 
+    // A failed open must NEVER wedge the forum. currentPostId is set BEFORE the fetch, so any bail after it
+    // (a rejected fetch on a flaky mobile network, a non-ok response, or a body without .post) that leaves it
+    // set makes the post keep its .open border on every re-render with no detail — and nav-away-and-back can't
+    // clear it (the iOS #forum wedge). This resets the half-open state + surfaces a retry hint. Guard on seq so
+    // a stale call (superseded by a newer open/vote) never clobbers the newer one's state.
+    function failOpen(seq) {
+      if (seq !== openPostSeq) return;                        // a newer open owns the state now — leave it alone
+      closePost();                                            // clears currentPostId + the .open border + hides the box
+      flash("forum-flash", "Couldn't open that post — please try again.");
+    }
     async function openPost(id) {
       const u = currentUser, seq = ++openPostSeq;
       currentPostId = id;
-      const r = await api("/forum/posts/" + id);
+      let r;
+      try { r = await api("/forum/posts/" + id); }
+      catch (_) { failOpen(seq); return; }                    // network reject (offline / dropped) -> don't wedge
       if (sessionChanged(u, "openPost") || seq !== openPostSeq) return;   // stale session OR a newer open/vote superseded this
       const box = $("forum-detail");
-      if (!r.ok || !r.data || !r.data.post) { box.hidden = true; return; }
+      // non-ok / malformed / a missing detail element -> recover, never throw-and-wedge (belt-and-suspenders
+      // for the box: stashDetail keeps it alive, but a null box must degrade to a retry, not a TypeError).
+      if (!box || !r.ok || !r.data || !r.data.post) { failOpen(seq); return; }
       const p = r.data.post;
       currentPost = p;
       box.hidden = false;
       updateCtxBack();                                       // a post is open -> show the Back chevron
       box.innerHTML =
         '<div class="card detail">'
-        + '<button class="ghost close" onclick="closePost()" aria-label="Close">✕</button>'
+        + '<button class="ghost close" onclick="closePost()" aria-label="Close">' + ICON.close + '</button>'
         + '<h3>' + escapeHtml(p.title) + '</h3>'
         + '<p class="muted by">by ' + escapeHtml(p.author) + '</p>'
         + '<p class="body">' + escapeHtml(p.body) + '</p>'
-        + '<div class="vote-row"><button class="ghost" onclick="vote(1)">▲ up</button> <span class="pill">score ' + escapeHtml(p.score)
-        + '</span> <button class="ghost" onclick="vote(-1)">▼ down</button></div>'
+        + '<div class="vote-row"><button class="ghost" onclick="vote(1)">' + ICON.up + ' up</button> <span class="pill">score ' + escapeHtml(p.score)
+        + '</span> <button class="ghost" onclick="vote(-1)">' + ICON.down + ' down</button></div>'
         + (p.mine
             ? '<div class="own-actions"><button class="ghost" onclick="editPost()">Edit</button> <button class="ghost" onclick="deletePost()">Delete</button></div>'
             : '')
@@ -1738,9 +1922,9 @@
         + (p.comments.length
             ? '<ul class="comments">' + p.comments.map((c) =>
                 '<li><div class="c-main"><strong>' + escapeHtml(c.author) + '</strong> ' + escapeHtml(c.body) + '</div>'
-                + '<div class="c-vote"><button class="ghost mini cvote" data-cid="' + escapeHtml(c.id) + '" data-val="1" aria-label="Upvote comment">▲</button>'
+                + '<div class="c-vote"><button class="ghost mini cvote" data-cid="' + escapeHtml(c.id) + '" data-val="1" aria-label="Upvote comment">' + ICON.up + '</button>'
                 + '<span class="pill">' + escapeHtml(c.score) + '</span>'
-                + '<button class="ghost mini cvote" data-cid="' + escapeHtml(c.id) + '" data-val="-1" aria-label="Downvote comment">▼</button></div></li>'
+                + '<button class="ghost mini cvote" data-cid="' + escapeHtml(c.id) + '" data-val="-1" aria-label="Downvote comment">' + ICON.down + '</button></div></li>'
               ).join("") + '</ul>'
             : '<p class="muted">No comments yet.</p>')
         + '<form id="comment-form" style="margin-top:10px"><input name="body" placeholder="Add a comment" aria-label="Add a comment" maxlength="2000" required>'
@@ -1750,6 +1934,7 @@
       onSubmit("comment-form", async (f) => {
         const cr = await api("/forum/posts/" + id + "/comments", { method: "POST", body: { body: f.body.value } });
         if (cr.ok) openPost(id);
+        else flash("forum-flash", (cr.data && cr.data.error) || "Couldn't post your comment — please try again.");
       });
       // Slot the freshly-rendered detail directly under its post + mark that post open (inline expand, not a bottom panel).
       const listEl = $("forum-list");
@@ -1794,17 +1979,28 @@
 
     function cancelEdit() { if (currentPost) openPost(currentPost.id); }
 
+    // The vote buttons are inline onclick (not a <form>), so they miss onSubmit's in-flight disable. Guard
+    // here so a rapid ▲/▼ mash doesn't fire N un-awaited requests that trip the 60/min rate limit (429).
+    let voteInFlight = false;
     async function vote(value) {
-      if (!currentPostId) return;
-      const r = await api("/forum/posts/" + currentPostId + "/vote", { method: "POST", body: { value } });
-      if (r.ok) { openPost(currentPostId); loadForum(); }
+      if (!currentPostId || voteInFlight) return;
+      voteInFlight = true;
+      try {
+        const r = await api("/forum/posts/" + currentPostId + "/vote", { method: "POST", body: { value } });
+        if (r.ok) { openPost(currentPostId); loadForum(); }
+        else flash("forum-flash", (r.data && r.data.error) || "Couldn't record your vote — please try again.");
+      } finally { voteInFlight = false; }
     }
 
     async function voteComment(commentId, value) {
-      if (!currentPostId) return;
-      const r = await api("/forum/posts/" + currentPostId + "/comments/" + encodeURIComponent(commentId) + "/vote",
-        { method: "POST", body: { value } });
-      if (r.ok) openPost(currentPostId);   // re-render to reflect the new comment score
+      if (!currentPostId || voteInFlight) return;
+      voteInFlight = true;
+      try {
+        const r = await api("/forum/posts/" + currentPostId + "/comments/" + encodeURIComponent(commentId) + "/vote",
+          { method: "POST", body: { value } });
+        if (r.ok) openPost(currentPostId);   // re-render to reflect the new comment score
+        else flash("forum-flash", (r.data && r.data.error) || "Couldn't record your vote — please try again.");
+      } finally { voteInFlight = false; }
     }
 
     onSubmit("forum-form", async (f) => {
@@ -1813,7 +2009,7 @@
       else { flash("forum-flash", (r.data && r.data.error) || "Could not post"); }
     });
     $("forum-refresh").addEventListener("click", loadForum);
-    $("dashboard-refresh").addEventListener("click", loadDashboard);
+    $("dashboard-refresh").addEventListener("click", () => loadDashboard());  // wrap: don't pass the click event as opts
     $("history-refresh").addEventListener("click", loadHistory);
 
     // ---- Direct messages + notifications ----
@@ -1961,6 +2157,9 @@
       if (d < 86400) return Math.floor(d / 3600) + "h ago";
       return Math.floor(d / 86400) + "d ago";
     }
+    // Relative time from an ISO timestamp (history/check-in rows store ISO, not epoch). Falls back to the
+    // raw string if it isn't parseable, so a legacy/odd value is shown as-is rather than "NaN ago".
+    function timeAgoStr(ts) { const t = Date.parse(ts || ""); return isNaN(t) ? (ts || "") : timeAgo(t / 1000); }
     // Pure render from an already-fetched list (DMs surface in the thread list, so they're filtered out
     // here) — the caller owns the request, so a poll tick and the initial open share one fetch.
     function renderActivity(notifications) {
@@ -2197,34 +2396,61 @@
     })();
   </script>
   <script>
-    // Liquid-glass hero orb: paint drifting aurora "liquid" into the canvas; the CSS layers the glass.
+    // Liquid-glass landing orb: paint drifting aurora "liquid" into the canvas; the CSS layers the glass.
+    // On the logged-out landing it doubles as a LIVE sample of the product's one output: the aurora colour
+    // + the readout beside it cycle Ready -> Moderate -> Rest so a visitor sees what a check-in returns.
+    // The colour eases toward each state (no hard cut) for a natural crossfade. Reduced motion -> one
+    // static "Ready" frame, no cycling; off-screen (logged in) -> the loop idles.
     (function () {
       const cvs = document.querySelector(".orb-liquid");
       if (!cvs) return;
       const ctx = cvs.getContext("2d"), S = 300, reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
       const dpr = Math.min(window.devicePixelRatio || 1, 2);
       cvs.width = S * dpr; cvs.height = S * dpr; ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      const blobs = [
-        { c: "#6ff0cf", r: 135, ax: 64, ay: 48, sx: 0.55, sy: 0.90, px: 0.0, py: 1.0 },
-        { c: "#b39bff", r: 155, ax: 58, ay: 70, sx: 0.80, sy: 0.50, px: 2.0, py: 3.0 },
-        { c: "#7cc0ff", r: 115, ax: 78, ay: 58, sx: 0.50, sy: 0.72, px: 4.0, py: 1.2 },
-        { c: "#5eead4", r: 120, ax: 52, ay: 82, sx: 0.70, sy: 0.60, px: 1.0, py: 5.0 }
+      // fixed drift geometry; only the per-blob COLOUR changes with the sampled readiness state
+      const geo = [
+        { r: 135, ax: 64, ay: 48, sx: 0.55, sy: 0.90, px: 0.0, py: 1.0 },
+        { r: 155, ax: 58, ay: 70, sx: 0.80, sy: 0.50, px: 2.0, py: 3.0 },
+        { r: 115, ax: 78, ay: 58, sx: 0.50, sy: 0.72, px: 4.0, py: 1.2 },
+        { r: 120, ax: 52, ay: 82, sx: 0.70, sy: 0.60, px: 1.0, py: 5.0 }
       ];
+      const STATES = [
+        { name: "Ready",    col: "var(--ready)",    verb: "Green light. Train hard.", blobs: ["#6ff0cf", "#5eead4", "#7cc0ff", "#6ff0cf"] },
+        { name: "Moderate", col: "var(--moderate)", verb: "Ease in. Keep it honest.", blobs: ["#ffce7a", "#ffb36b", "#ffd98a", "#f7a862"] },
+        { name: "Rest",     col: "var(--rest)",     verb: "Recover. Take it easy.",   blobs: ["#ff9db4", "#ff85a6", "#ffb3c6", "#ff9db4"] }
+      ];
+      const h2r = (h) => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)];
+      const r2h = (c) => "#" + c.map((v) => Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, "0")).join("");
+      let cur = STATES[0].blobs.map(h2r), target = STATES[0].blobs.map(h2r);
+      const stateEl = document.getElementById("demo-state"), verbEl = document.getElementById("demo-verb");
+      function setState(i) {
+        const s = STATES[i]; target = s.blobs.map(h2r);
+        if (stateEl) { stateEl.textContent = s.name; stateEl.style.color = s.col; }
+        if (verbEl) verbEl.textContent = s.verb;
+      }
       function paint(time) {
         ctx.globalCompositeOperation = "source-over";
         ctx.fillStyle = "#140d2b"; ctx.fillRect(0, 0, S, S);
         ctx.globalCompositeOperation = "lighter";
-        for (const b of blobs) {
+        for (let i = 0; i < geo.length; i++) {
+          const b = geo[i];
           const cx = S / 2 + Math.sin(time * b.sx + b.px) * b.ax;
           const cy = S / 2 + Math.cos(time * b.sy + b.py) * b.ay;
+          const hx = r2h(cur[i]);
           const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, b.r);
-          g.addColorStop(0, b.c + "d0"); g.addColorStop(1, b.c + "00");
+          g.addColorStop(0, hx + "d0"); g.addColorStop(1, hx + "00");
           ctx.fillStyle = g; ctx.beginPath(); ctx.arc(cx, cy, b.r, 0, Math.PI * 2); ctx.fill();
         }
       }
-      if (reduce) { paint(1.5); return; }                    // reduced motion: one static frame
+      if (reduce) { setState(0); paint(1.5); return; }       // reduced motion: one static Ready frame, no cycling
+      let ix = 0, last = 0;
       (function frame(t) {
-        if (cvs.offsetParent !== null) paint(t / 1000);      // skip work while the hero is off-screen (logged in)
+        if (cvs.offsetParent !== null) {                     // only while the landing orb is on-screen (logged out)
+          if (!last) last = t;
+          if (t - last > 3000) { last = t; ix = (ix + 1) % STATES.length; setState(ix); }
+          cur = cur.map((c, i) => c.map((v, k) => v + (target[i][k] - v) * 0.030));   // ease colour -> gentle ~1.1s crossfade
+          paint(t / 1000);
+        } else { last = 0; }                                 // off-screen (logged in): reset so the demo resumes smoothly, not mid-jump
         requestAnimationFrame(frame);
       })(0);
     })();

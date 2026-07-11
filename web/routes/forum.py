@@ -262,6 +262,22 @@ def vote(post_id):
     return jsonify(score=score), 200
 
 
+@forum_bp.get("/me/engagement")
+@login_required
+def my_engagement():
+    """The per-user received-vote total (GUIDELINES §3.3's "personal area" metric) — OWNER: Elad.
+
+    Answers only the LOGGED-IN user's own totals: votes others cast on their posts and comments.
+    Counts only ({up, down, score}) — voter identities stay in the store, like the score fields.
+    """
+    try:
+        totals = _forum().received_engagement(session["username"])
+    except Exception:
+        logger.exception("forum store unavailable")
+        return jsonify(error="forum store unavailable"), 503
+    return jsonify(**totals), 200
+
+
 @forum_bp.post("/forum/posts/<post_id>/comments/<comment_id>/vote")
 @limiter.limit("60 per minute")   # cap comment-vote toggling from one IP
 @login_required
@@ -277,6 +293,7 @@ def vote_comment(post_id, comment_id):
         logger.exception("forum store unavailable")
         return jsonify(error="forum store unavailable"), 503
     if score is None:
-        return jsonify(error="comment not found"), 404
+        # the store returns None for an unknown post OR an unknown comment — report both (it can't tell us which)
+        return jsonify(error="post or comment not found"), 404
     _notify_comment_author_of_vote(post_id, comment_id, voter, value)   # live push; never fails the vote
     return jsonify(score=score), 200

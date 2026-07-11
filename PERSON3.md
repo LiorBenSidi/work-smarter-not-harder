@@ -66,6 +66,11 @@ never commit it. (The GitHub-side secrets for the deploy are in [`SECRETS.md`](S
   `/ready` degrades to 503) + stress (`Stress_Tests/locustfile.py` + a dependency-free burst in
   `test_load.py`). Deploy/harness invariants are locked by `Integration_Tests/test_deploy_contract.py`.
 - [x] **Forum:** media/attachment storage (images/video in posts, comments and DMs) + file-size limits (PR #160).
+- [x] **Forum: received-engagement metric** (GUIDELINES §3.3 — "a per-user total in a personal area") —
+  `GET /me/engagement` (votes *others* cast on your posts/comments; counts only, no voter identities) +
+  a "Community engagement" card on the Profile screen. `forum_received_engagement` in the data layer +
+  the seam + the test fake, additive only. *Taken under the team rule (Lior, 10 Jul): unassigned
+  responsibilities go to Elad.*
 - [x] **Rate limiting** — `flask-limiter` on the public routes (login/register/forum) (PR #160). *(Messaging already has an anti-spam rate-limit — 20/min.)*
 - [x] **Risk assessment** — [`docs/REPORT.md`](docs/REPORT.md) §5, rewritten around the question *"which test
   goes red if this mitigation disappears?"*. Five sub-sections: dependency failure · the job queue's four new

@@ -166,6 +166,10 @@ class _DbForum(_DbStore):
         db_module, handle = self._resolve()
         return db_module.forum_vote_comment(handle, post_id, comment_id, username, value)
 
+    def received_engagement(self, username):
+        db_module, handle = self._resolve()
+        return db_module.forum_received_engagement(handle, username)
+
     def update_post(self, post_id, username, title, body):
         db_module, handle = self._resolve()
         return db_module.forum_update_post(handle, post_id, username, title, body)

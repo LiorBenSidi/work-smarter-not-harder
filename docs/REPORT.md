@@ -65,6 +65,7 @@ is implemented independently.
 | `/forum/posts/<id>/comments` | POST | Forum: comment |
 | `/forum/posts/<id>/vote` | POST | Forum: post vote (strict `+1` / `-1`) |
 | `/forum/posts/<id>/comments/<cid>/vote` | POST | Forum: comment vote (strict `+1` / `-1`) |
+| `/me/engagement` | GET | Forum: the caller's received-vote totals (§3.3 "personal area" metric; counts only, never voter identities) — **Elad's lane** |
 | `/messages` · `/conversations` · `/conversations/<peer>` · `/users/search` | POST · GET | Direct messages: send / list threads / read a thread / recipient search |
 | `/notifications` · `/notifications/read` | GET · POST | Notifications feed (poll cursor) + mark-read |
 | `/events` | GET | Real-time push — SSE `text/event-stream` (new posts, DMs, notifications) |
@@ -102,6 +103,7 @@ not a per-line credit — see §6.
 | F9 — History tracking | ✅ | web |
 | Online Forum — CRUD/UI (posts, comments, votes, anonymity, edit/delete-own) | ✅ | web |
 | Online Forum — real-time layer (SSE push, DM, vote + DM notifications, media attachments) | ✅ | web (DM/SSE/notifications) · deploy (media, size caps) |
+| Online Forum — received-engagement metric (§3.3 per-user vote total: `/me/engagement` + a Profile-screen card) | ✅ | deploy (Elad) |
 | Online Forum — cold-seed content | 🟡 (idempotent seed script; content) | web ✅ · ai (content) |
 | Data layer — `db.py` CRUD + indexes + `$jsonSchema` validators + auth config + seed + backup | ✅ | web (data) |
 | Week-9 observability — named loggers, console + rotating-file handlers, per-request access log | ✅ | web |
@@ -141,6 +143,8 @@ table are the **full** suite by type (`pytest --collect-only`).
 | **F8 Dashboard** | — | `test_dashboard_flow` (5) | `test_e2e` leg | — | `test_dashboard` (2) |
 | **F9 History** | — | `test_history_flow` (3) | `test_e2e` leg | — | `test_history` (2) |
 | **Online Forum (CRUD/UI)** | `test_forum_validation` (16) | `test_forum_flow` (11) | `test_e2e` leg | `test_load` (post flood → 429, in the compose-e2e gate) | `test_forum` (9) |
+| **Online Forum (received-engagement metric)** | `test_db_engagement` (6) | `test_engagement` (7) | — | — | (auth-gated + counts-only, in `test_engagement`) |
+| **Media × engagement × caps (cross-feature journey)** | — | `test_elad_lane_journey` (4, in-process) | `test_elad_lane_live` (real HTTP, incl. the 10 MB cap at the WSGI layer; compose-e2e) | — | (journey ends with the full auth-gate sweep) |
 | **Data layer (`db.py` + Mongo)** | `test_db` (36) · `test_backup_script` (2) | `test_db_mongo` (6, real Mongo) | — | — | (injection-safe queries, in `test_profile`/`test_forum`) |
 | **Frontend (SPA / CSRF / a11y)** | — | `test_frontend` (12) | `test_e2e` leg | — | `test_csrf` (6) · `test_web_hardening` (4) |
 | **Observability (logging)** | `test_logging_config` (19) | — | — | — | (access-log path escaping, in `test_logging_config`) |
