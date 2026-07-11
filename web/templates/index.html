@@ -1122,8 +1122,11 @@
       if (body !== null) { opts.headers["Content-Type"] = "application/json"; opts.body = JSON.stringify(body); }
       if (emailDebugMock) opts.headers["X-Debug-Email"] = "mock";   // gated dev override; server ignores unless opted in
       let res;
+      // A dropped/failed request returns a synthetic non-ok result (NOT a re-throw). Every caller already
+      // handles `!r.ok`, so a network blip renders the panel's error fallback instead of leaving it stuck on
+      // "Loading…" with an unhandled rejection — critical on a memory-tight prod box where requests can drop.
       try { res = await fetch(path, opts); }
-      catch (e) { dbg("api NETWORK FAIL", method, path, "—", e && e.message); throw e; }   // preserve the reject; just make it visible
+      catch (e) { dbg("api NETWORK FAIL", method, path, "—", e && e.message); return { ok: false, status: 0, data: null }; }
       let data = null;
       try { data = await res.json(); } catch (_) { data = null; }
       if (!res.ok) dbg("api", method, path, "->", res.status, (data && data.error) || "");
@@ -1888,6 +1891,7 @@
       onSubmit("comment-form", async (f) => {
         const cr = await api("/forum/posts/" + id + "/comments", { method: "POST", body: { body: f.body.value } });
         if (cr.ok) openPost(id);
+        else flash("forum-flash", (cr.data && cr.data.error) || "Couldn't post your comment — please try again.");
       });
       // Slot the freshly-rendered detail directly under its post + mark that post open (inline expand, not a bottom panel).
       const listEl = $("forum-list");
@@ -1932,17 +1936,28 @@
 
     function cancelEdit() { if (currentPost) openPost(currentPost.id); }
 
+    // The vote buttons are inline onclick (not a <form>), so they miss onSubmit's in-flight disable. Guard
+    // here so a rapid ▲/▼ mash doesn't fire N un-awaited requests that trip the 60/min rate limit (429).
+    let voteInFlight = false;
     async function vote(value) {
-      if (!currentPostId) return;
-      const r = await api("/forum/posts/" + currentPostId + "/vote", { method: "POST", body: { value } });
-      if (r.ok) { openPost(currentPostId); loadForum(); }
+      if (!currentPostId || voteInFlight) return;
+      voteInFlight = true;
+      try {
+        const r = await api("/forum/posts/" + currentPostId + "/vote", { method: "POST", body: { value } });
+        if (r.ok) { openPost(currentPostId); loadForum(); }
+        else flash("forum-flash", (r.data && r.data.error) || "Couldn't record your vote — please try again.");
+      } finally { voteInFlight = false; }
     }
 
     async function voteComment(commentId, value) {
-      if (!currentPostId) return;
-      const r = await api("/forum/posts/" + currentPostId + "/comments/" + encodeURIComponent(commentId) + "/vote",
-        { method: "POST", body: { value } });
-      if (r.ok) openPost(currentPostId);   // re-render to reflect the new comment score
+      if (!currentPostId || voteInFlight) return;
+      voteInFlight = true;
+      try {
+        const r = await api("/forum/posts/" + currentPostId + "/comments/" + encodeURIComponent(commentId) + "/vote",
+          { method: "POST", body: { value } });
+        if (r.ok) openPost(currentPostId);   // re-render to reflect the new comment score
+        else flash("forum-flash", (r.data && r.data.error) || "Couldn't record your vote — please try again.");
+      } finally { voteInFlight = false; }
     }
 
     onSubmit("forum-form", async (f) => {
@@ -2389,7 +2404,7 @@
           if (t - last > 3000) { last = t; ix = (ix + 1) % STATES.length; setState(ix); }
           cur = cur.map((c, i) => c.map((v, k) => v + (target[i][k] - v) * 0.030));   // ease colour -> gentle ~1.1s crossfade
           paint(t / 1000);
-        }
+        } else { last = 0; }                                 // off-screen (logged in): reset so the demo resumes smoothly, not mid-jump
         requestAnimationFrame(frame);
       })(0);
     })();
