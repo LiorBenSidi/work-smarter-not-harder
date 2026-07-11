@@ -285,3 +285,15 @@ def test_streak_number_uses_mono():
     m = re.search(r"\.streak-n\s*\{[^}]*\}", INDEX)
     assert m and "font-family:var(--font-mono)" in m.group(0), \
         "the streak count must use --font-mono like every other number (the one that used to break the system)"
+
+
+def test_forum_rows_carry_generative_avatars():
+    # Forum reuses the same deterministic avatar system as DMs (avatarHtml) so a person looks the same
+    # everywhere — on the list byline, the open post's author line, and every comment. Not new decoration:
+    # the exact helper the messages surface already uses.
+    assert "avatarHtml(p.author, 20)" in INDEX, "the forum list byline must show the author's generative avatar"
+    assert "avatarHtml(p.author, 26)" in INDEX, "the open post's author line must show the author's avatar"
+    assert "avatarHtml(c.author, 28)" in INDEX, "each comment must show its author's avatar"
+    assert 'class="muted byline"' in INDEX, "the list byline wrapper (flex-aligned avatar + text) was removed"
+    m = re.search(r"\.byline\s*\{[^}]*\}", INDEX)
+    assert m and "display:flex" in m.group(0), "the byline must be flex so the avatar aligns with the text"
