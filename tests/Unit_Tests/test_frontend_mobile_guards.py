@@ -287,6 +287,18 @@ def test_streak_number_uses_mono():
         "the streak count must use --font-mono like every other number (the one that used to break the system)"
 
 
+def test_premium_polish_grain_tabular_and_easing():
+    # Tier-1 "optical detail" polish (applies to BOTH mobile + desktop): a filmic grain over the aurora (kills
+    # gradient banding), tabular figures on the data numbers (never shift width), and one shared spring-ish
+    # easing token. Cheap, high-perception, and none of it changes layout/behaviour.
+    assert re.search(r"body::after\s*\{[^}]*feTurbulence", INDEX), "the aurora grain overlay was removed"
+    assert re.search(r"body::after\s*\{[^}]*z-index:-1[^}]*pointer-events:none", INDEX), \
+        "the grain must stay a backdrop layer (z-index:-1 + pointer-events:none) so it never touches content"
+    assert "font-variant-numeric: tabular-nums" in INDEX, "tabular figures on the data numbers were removed"
+    assert re.search(r"--ease:\s*cubic-bezier", INDEX), "the shared spring easing token (--ease) was removed"
+    assert "-webkit-text-size-adjust:100%" in INDEX, "text-size-adjust (Dynamic Type stability) was removed"
+
+
 def test_floating_nav_is_liquid_glass():
     # The bottom tab bar is the app's one glass surface (iOS 26 uses glass for the floating nav). It's upgraded
     # past a flat blur to the highest-fidelity web approximation: a light-refracting gradient RIM (::before),

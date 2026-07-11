@@ -38,7 +38,9 @@
       --shadow:0 30px 70px -34px rgba(3,6,20,.85);
       --glow-a: rgba(111,240,207,.22); --glow-b: rgba(179,155,255,.13); --glow-c: rgba(96,150,255,.16);
       /* liquid-glass nav material (dark): bright top-lit fill + a light rim + full specular */
-      --glass-fill: rgba(255,255,255,.12); --glass-rim: rgba(255,255,255,.85); --glass-spec: 1; }
+      --glass-fill: rgba(255,255,255,.12); --glass-rim: rgba(255,255,255,.85); --glass-spec: 1;
+      /* one spring-ish easing curve for interactive motion (iOS feel) — used across mobile + desktop */
+      --ease: cubic-bezier(.22, 1, .36, 1); }
     /* Light palette. Applied when the user FORCES Light in Settings, OR when the OS prefers light and the
        user hasn't forced a theme ([data-theme] unset). A forced theme overrides the OS preference, and
        color-scheme keeps native controls/scrollbars in step. Dark is the :root default (forced dark just
@@ -72,7 +74,7 @@
        white (iOS ignores background-attachment:fixed, so the body gradient alone doesn't cover those areas). */
     html { min-height:100%; background-color: var(--bg); }
     body { min-height:100dvh; margin:0; font-family:var(--font-sans); color:var(--ink); line-height:1.5; overflow-x:hidden;
-      -webkit-font-smoothing:antialiased; background-attachment:fixed;
+      -webkit-font-smoothing:antialiased; background-attachment:fixed; -webkit-text-size-adjust:100%; text-size-adjust:100%;
       background:
         radial-gradient(60% 44% at 14% 6%, var(--glow-b), transparent 60%),
         radial-gradient(52% 40% at 90% 2%, var(--glow-a), transparent 55%),
@@ -82,7 +84,14 @@
       filter: blur(34px); opacity:.65; animation: drift 26s ease-in-out infinite alternate;
       background: radial-gradient(38% 50% at 30% 32%, var(--glow-a), transparent 62%),
                   radial-gradient(44% 56% at 72% 42%, var(--glow-b), transparent 62%); }
+    /* Filmic grain over the aurora (both mobile + desktop) — kills gradient banding + adds premium depth.
+       z-index:-1 + pointer-events:none -> purely a backdrop layer, never over or interacting with content. */
+    body::after { content:""; position:fixed; inset:0; z-index:-1; pointer-events:none; opacity:.12; mix-blend-mode:overlay;
+      background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"); }
     @keyframes drift { from { transform: translate3d(-3%, -1%, 0) scale(1); } to { transform: translate3d(4%, 2%, 0) scale(1.08); } }
+    /* Tabular figures on the DATA numbers (score, stats, history score, streak, pills, confidence, number inputs)
+       so they never shift width as values change. Scoped to numeric displays — prose numbers stay proportional. */
+    .score, .stat .n, .hrow-score, .streak-n, .pill, .conf-pct, input[type=number] { font-variant-numeric: tabular-nums; font-feature-settings:"tnum" 1; }
 
     header { position:sticky; top:0; z-index:30; display:flex; align-items:center; justify-content:space-between; gap:12px;
       /* Pad the sticky header for the device safe area so it never renders UNDER the status bar / notch /
@@ -228,7 +237,7 @@
     button { background: var(--accent);
       color:var(--on-accent); border:0; border-radius:999px; padding:12px 20px; font-weight:800; font-size:15px; font-family:inherit;
       cursor:pointer; white-space:nowrap; box-shadow:0 12px 26px -14px color-mix(in srgb, var(--accent) 85%, transparent);
-      transition: transform .1s cubic-bezier(.2,.7,.2,1), box-shadow .15s, filter .15s; }
+      transition: transform .16s var(--ease), box-shadow .15s, filter .15s; }
     button:hover { filter:brightness(1.05); box-shadow:0 16px 32px -14px color-mix(in srgb, var(--accent) 92%, transparent); }
     button:active { transform: scale(.97); }
     button:disabled { opacity:.5; cursor:not-allowed; }
