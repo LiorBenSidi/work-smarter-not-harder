@@ -287,6 +287,23 @@ def test_streak_number_uses_mono():
         "the streak count must use --font-mono like every other number (the one that used to break the system)"
 
 
+def test_profile_is_grouped_into_four_cards():
+    # Profile was 6 floating cards; regrouped iOS-Settings-style into 4 (You / Preferences / Account /
+    # Danger) with .sep hairlines between sub-sections. Each sub-section keeps its icon eyebrow (h2), so
+    # all 6 headings survive — only the card containers merged. Guards the grouping, not pixels.
+    m = re.search(r'<section id="screen-profile".*?</section>', INDEX, flags=re.S)
+    assert m, "the profile screen section vanished"
+    prof = m.group(0)
+    assert prof.count('<div class="card') == 4, "profile must be exactly 4 grouped cards (You/Preferences/Account/Danger)"
+    assert prof.count("<h2>") == 6, "all six section eyebrows must survive the merge"
+    # engagement is merged INTO the profile card (a .sep, not a new card, sits between Save profile and it)
+    assert re.search(r"Save profile.*?<hr class=\"sep\">.*?Community engagement", prof, flags=re.S), \
+        "Community engagement must share the 'You' card with the profile form (divided by a .sep)"
+    # privacy is merged INTO the preferences card with the theme control
+    assert re.search(r"Display &amp; accessibility.*?<hr class=\"sep\">.*?Privacy &amp; data", prof, flags=re.S), \
+        "Privacy & data must share the 'Preferences' card with Display & accessibility (divided by a .sep)"
+
+
 def test_forum_rows_carry_generative_avatars():
     # Forum reuses the same deterministic avatar system as DMs (avatarHtml) so a person looks the same
     # everywhere — on the list byline, the open post's author line, and every comment. Not new decoration:
