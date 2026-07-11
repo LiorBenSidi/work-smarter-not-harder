@@ -395,6 +395,9 @@
     .signal { width:9px; height:9px; border-radius:50%; background:var(--st); margin-bottom:2px;
       box-shadow:0 0 0 4px color-mix(in srgb, var(--st) 20%, transparent); }
     .verdict { font-size:26px; font-weight:800; letter-spacing:-.01em; line-height:1.1; color:var(--st); }
+    /* single-metric hero: the 0-100 score is the one loud number on the screen (mono), verdict word beneath */
+    .score { font-family:var(--font-mono); font-weight:800; font-size:58px; line-height:.9; letter-spacing:-.02em; color:var(--st); }
+    .verdict-sub { margin-top:5px; font-size:12.5px; font-weight:800; letter-spacing:.16em; text-transform:uppercase; color:var(--st); }
     .orb-sub { font-size:10.5px; letter-spacing:.18em; text-transform:uppercase; color:var(--muted); }
     .recs { list-style:none; margin:18px 0 0; padding:0; text-align:left; }
     .recs li { position:relative; margin:8px 0; padding:11px 13px 11px 34px; background:var(--field); border:1px solid var(--line); border-radius:14px; font-size:14px; }
@@ -1643,6 +1646,22 @@
       if (/\b(rest|low|recover|recovery|fatigued?|poor|over\w*)\b/.test(s)) return ["rest", 33];
       return ["", 50];
     }
+    // A real 0-100 readiness score. When the model returns a class distribution (proba), it's a genuine
+    // weighted blend of the class weights (ready=100 / moderate=55 / rest=15) — NOT an invented number.
+    // With no distribution, it degrades to the class's representative ring value (also a real 0-100).
+    function readinessScore(readiness) {
+      const p = readiness && readiness.proba;
+      if (p && typeof p === "object") {
+        let num = 0, den = 0;
+        for (const k in p) {
+          const v = Number(p[k]); if (!Number.isFinite(v) || v < 0) continue;
+          const [cls] = readinessClass(k);
+          num += (cls === "ready" ? 100 : cls === "moderate" ? 55 : cls === "rest" ? 15 : 50) * v; den += v;
+        }
+        if (den > 0) return Math.max(0, Math.min(100, Math.round(num / den)));
+      }
+      return readinessClass(readiness && readiness.state)[1];
+    }
 
     async function loadDashboard(opts) {
       // freshReveal = a check-in just landed -> the recs cascade in (only then, not on tab-switch/refresh).
@@ -1654,7 +1673,8 @@
       if (!r.ok) { el.innerHTML = '<p class="flash error">Could not load the dashboard.</p>'; return; }
       const d = r.data;
       // keep the glanceable stats in sync with the AI's latest read
-      statState = (d.readiness && d.readiness.state) ? escapeHtml(d.readiness.state) : "—";
+      // the stat strip shows the SAME 0-100 score as the orb (one consistent number), not the class word
+      statState = d.readiness ? String(readinessScore(d.readiness)) : "—";
       statKcal = d.calories != null ? escapeHtml(d.calories) : "—";
       renderStats();
       if (d.needs_profile) {
@@ -1664,8 +1684,8 @@
           '<p class="muted" style="text-align:center;margin:0 0 2px">Fill in your profile, then log a check-in to see your readiness.</p>'
           + '<div class="ex"><span class="ex-tag">Example</span>'
           + '<div class="readiness ready" aria-hidden="true">'
-          + '<div class="orb" style="--w:100"><div class="orb-inner"><span class="signal"></span>'
-          + '<div class="verdict">Ready</div><div class="orb-sub">readiness</div></div></div>'
+          + '<div class="orb" style="--w:88"><div class="orb-inner">'
+          + '<div class="score">88</div><div class="verdict-sub">Ready</div><div class="orb-sub">readiness</div></div></div>'
           + '<ul class="recs"><li>Great day to push. Hit your planned session.</li></ul></div></div>';
         return;
       }
@@ -1673,11 +1693,13 @@
       if (d.ai_status === "unavailable") {
         html += '<p class="flash warn">Readiness is temporarily unavailable (AI service down).</p>';
       } else if (d.readiness) {
-        const [cls, pct] = readinessClass(d.readiness.state);
+        const [cls] = readinessClass(d.readiness.state);
+        const score = readinessScore(d.readiness);   // real 0-100 hero number (from the model's proba)
         html += '<div class="readiness ' + cls + '">'
-          + '<div class="orb" data-w="' + pct + '" role="img" aria-label="Readiness: ' + escapeHtml(d.readiness.state || "unknown") + '">'
-          + '<div class="orb-inner"><span class="signal" aria-hidden="true"></span>'
-          + '<div class="verdict">' + escapeHtml(d.readiness.state || "—") + '</div>'
+          + '<div class="orb" data-w="' + score + '" role="img" aria-label="Readiness ' + score + ' out of 100: ' + escapeHtml(d.readiness.state || "unknown") + '">'
+          + '<div class="orb-inner">'
+          + '<div class="score">' + score + '</div>'
+          + '<div class="verdict-sub">' + escapeHtml(d.readiness.state || "—") + '</div>'
           + '<div class="orb-sub">readiness</div></div></div>'
           + '<p class="muted" style="text-align:center;margin:10px 0 0;font-size:12px">Based on today\'s check-in vs your baseline.</p>';
         const recs = Array.isArray(d.readiness.recommendations) ? d.readiness.recommendations : [];
