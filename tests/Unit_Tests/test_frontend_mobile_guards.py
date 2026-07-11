@@ -287,6 +287,30 @@ def test_streak_number_uses_mono():
         "the streak count must use --font-mono like every other number (the one that used to break the system)"
 
 
+def test_interactive_surfaces_have_a_mint_focus_ring():
+    # Every keyboard-reachable surface that previously had no focus ring (buttons, forum posts, DM rows,
+    # segment/checkbox labels, links) gets a consistent mint :focus-visible outline — the "visible keyboard
+    # focus" quality floor. :focus-visible keeps it keyboard-only (no click-flicker regression).
+    m = re.search(r"button:focus-visible[^{]*\{[^}]*\}", INDEX)
+    assert m, "the shared focus-ring rule was removed"
+    block = m.group(0)
+    assert "outline:2px solid var(--accent)" in block, "the focus ring must be a 2px mint outline"
+    for sel in (".post:focus-visible", ".dm-row:focus-visible", ".seg:has(:focus-visible)", "a:focus-visible"):
+        assert sel in block, f"{sel} lost its keyboard focus ring"
+
+
+def test_hero_readiness_score_counts_up():
+    # The hero readiness number rises 0->N with the orb-ring sweep (Whoop/Oura open animation). One number,
+    # the hero; must snap under reduced-motion and leave the "—" empty state untouched.
+    assert "function countUpScore" in INDEX, "the hero-score count-up was removed"
+    assert "countUpScore(el)" in INDEX, "the hero-score count-up is never called from the render"
+    m = re.search(r"function countUpScore\(el\)\s*\{.*?\n    \}", INDEX, flags=re.S)
+    assert m, "countUpScore body not found"
+    body = m.group(0)
+    assert "reducedMotion()" in body, "the hero-score count-up must snap under reduced motion"
+    assert "Number.isFinite" in body, "the hero-score count-up must bail on the non-numeric '—' state"
+
+
 def test_profile_is_grouped_into_four_cards():
     # Profile was 6 floating cards; regrouped iOS-Settings-style into 4 (You / Preferences / Account /
     # Danger) with .sep hairlines between sub-sections. Each sub-section keeps its icon eyebrow (h2), so
