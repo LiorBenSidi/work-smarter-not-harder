@@ -268,11 +268,19 @@
     .demo-k { font-family:var(--font-mono); font-size:11px; letter-spacing:.2em; text-transform:uppercase; color:var(--muted); margin:0 0 4px; }
     .demo-state { font-family:var(--font-display); font-weight:800; font-size:25px; line-height:1; color:var(--ready); transition:color .6s ease; }
     .demo-verb { color:var(--muted); font-size:13.5px; margin:5px 0 0; }
-    /* the 3 steps: a hairline-separated sequence, not boxed 01/02/03 digits (a generic-landing tell) */
-    .auth-steps { list-style:none; display:flex; margin:26px 0 0; padding:0; max-width:520px; border-top:1px solid var(--line); }
-    .auth-steps li { flex:1; padding:14px 16px 0; font-size:14px; font-weight:700; color:var(--ink); line-height:1.3; }
-    .auth-steps li + li { border-left:1px solid var(--line); }
-    .auth-steps li span { display:block; margin-top:3px; font-size:12px; font-weight:600; color:var(--muted); }
+    /* the 3 steps — a genuine ordered sequence (check-in -> signal -> act), so numbered markers are earned,
+       not decorative. Refined mint number badges (mono, thin ring) rather than generic grey circles.
+       Desktop: number-on-top, centred, three columns. */
+    .auth-steps { list-style:none; counter-reset:step; display:flex; gap:16px; margin:28px 0 0; padding:0; max-width:520px; }
+    .auth-steps li { flex:1; margin:0; display:flex; flex-direction:column; align-items:center; text-align:center; }
+    .auth-steps li::before {
+      counter-increment:step; content:counter(step);
+      display:grid; place-items:center; width:28px; height:28px; margin:0 0 10px; border-radius:999px;
+      font-family:var(--font-mono); font-weight:700; font-size:13px; color:var(--accent);
+      background:color-mix(in srgb, var(--accent) 12%, transparent);
+      border:1.5px solid color-mix(in srgb, var(--accent) 42%, transparent); }
+    .auth-steps li b { font-size:14px; font-weight:700; color:var(--ink); line-height:1.25; }
+    .auth-steps li span { margin-top:4px; font-size:12px; font-weight:600; color:var(--muted); line-height:1.3; }
     .auth-panel .card { max-width:420px; margin:0 0 0 auto; }
     /* MOBILE: keep every improvement, but re-optimise the LAYOUT so the orb sits at the top and the
        login/register card is reachable without scrolling. Flatten the split (display:contents) so the
@@ -288,9 +296,14 @@
       .auth-thesis .hero-title { order:3; margin:0; font-size:clamp(29px,7.6vw,40px); }
       .auth-panel { order:4; }                               /* the card lands right under the headline -> reachable */
       .auth-panel .card { margin:0 auto; }
-      .auth-steps { order:5; flex-direction:column; max-width:340px; margin:2px auto 0; text-align:left; border-top:0; }
-      .auth-steps li { padding:13px 2px; border-top:1px solid var(--line); }
-      .auth-steps li + li { border-left:0; }
+      /* mobile: vertical list, number badge on the LEFT of each step */
+      .auth-steps { order:5; flex-direction:column; gap:0; max-width:340px; margin:6px auto 0; }
+      .auth-steps li { display:grid; grid-template-columns:auto 1fr; column-gap:14px; align-items:center;
+        text-align:left; padding:14px 2px; border-top:1px solid var(--line); }
+      .auth-steps li:first-child { border-top:0; }
+      .auth-steps li::before { margin:0; grid-column:1; grid-row:1 / span 2; align-self:center; }
+      .auth-steps li b { grid-column:2; grid-row:1; }
+      .auth-steps li span { grid-column:2; grid-row:2; margin-top:2px; }
     }
     /* Liquid-glass readiness orb: a <canvas> paints drifting aurora "liquid"; CSS layers the "glass"
        (rim, specular highlight, depth). A luminous jewel that reads on both light and dark grounds. */
@@ -647,9 +660,9 @@
           </div>
         </div>
         <ol class="auth-steps" aria-label="How it works">
-          <li>Check in each morning<span>30 seconds</span></li>
-          <li>Get one signal<span>Ready, Moderate, or Rest</span></li>
-          <li>Train or recover<span>follow the day's call</span></li>
+          <li><b>Check in each morning</b><span>30 seconds</span></li>
+          <li><b>Get one signal</b><span>Ready, Moderate, or Rest</span></li>
+          <li><b>Train or recover</b><span>follow the day's call</span></li>
         </ol>
       </div>
       <div class="auth-panel">
