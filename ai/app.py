@@ -12,6 +12,7 @@ shape; `/jobs` is the additive fire-and-forget path.
 PMData notes + the open model decisions live in ai/README.md.
 """
 import logging
+import math
 import os
 import sys
 from concurrent.futures import TimeoutError as FutureTimeout
@@ -34,6 +35,19 @@ logger = logging.getLogger(__name__)
 MAX_FEATURES = 200
 MAX_CONTENT_LENGTH = 64 * 1024
 
+# The four inputs the readiness model needs to score a reliable Rest/Moderate/Ready result. Shiri's
+# real Random Forest raises ValueError on incomplete input rather than median-filling invented values,
+# so /predict rejects an unscoreable request AT THE QUEUE BOUNDARY: it costs a 400, not a worker
+# process, and never a 500. (name, low, high) — the ranges are the model's; web's daily check-in is the
+# producer (web/routes/checkin.py). NOTE: web's CHECKIN_FIELDS ranges and dashboard.py's profile-only
+# call don't yet match this contract — tracked as a web follow-up for Lior.
+READINESS_FIELDS = (
+    ("sleep_hours", 1, 24),
+    ("fatigue", 1, 5),
+    ("soreness", 1, 5),
+    ("training_load", 0, 1800),
+)
+
 
 def _features_or_error():
     """Validate the request body before it costs a worker process. Returns (features, error)."""
@@ -46,6 +60,25 @@ def _features_or_error():
     if len(features) > MAX_FEATURES:
         return None, f"too many features (max {MAX_FEATURES})"
     return features, None
+
+
+def _readiness_error(features):
+    """Return a clear message when `features` can't be scored, else None.
+
+    Every required field must be present, a real (non-bool) finite number, and in range — so an
+    incomplete or garbage /predict is refused before it reaches a worker, never imputed.
+    """
+    for name, lo, hi in READINESS_FIELDS:
+        if name not in features:
+            return f"{name} is required"
+        value = features[name]
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            return f"{name} must be a number"
+        if not math.isfinite(value):
+            return f"{name} must be a finite number"
+        if not lo <= value <= hi:
+            return f"{name} must be between {lo} and {hi}"
+    return None
 
 
 def create_app(queue=None):
@@ -67,6 +100,11 @@ def create_app(queue=None):
     @app.post("/predict")
     def predict():
         features, error = _features_or_error()
+        if error:
+            return jsonify(error=error), 400
+        # Reject an unscoreable readiness request here, before it costs a worker (Shiri's contract):
+        # the model needs all four fields, in range, or it would score partly-invented input.
+        error = _readiness_error(features)
         if error:
             return jsonify(error=error), 400
         try:
