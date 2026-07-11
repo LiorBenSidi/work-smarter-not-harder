@@ -319,14 +319,15 @@ def test_desktop_logo_is_the_home_button(client):
 
 
 def test_mobile_nav_pill_is_translucent_and_ios_frosted(client):
-    # The mobile floating pill must be see-through (content shows behind it), not an opaque slab. That means
-    # mixing the card colour with `transparent` (a real alpha), AND shipping the -webkit- prefix so the frosted
-    # blur actually applies on iOS Safari (mobile is iOS Safari; without the prefix the blur silently no-ops).
+    # The mobile floating pill must be see-through (content shows behind it), not an opaque slab, AND ship the
+    # -webkit- prefix so the frosted blur applies on iOS Safari. It's now an iOS-26 liquid-glass material: a
+    # translucent --glass-fill (a real alpha), an upgraded blur+saturate+brightness, and the rim/sheen layers.
     html = client.get("/").get_data(as_text=True)
-    assert "color-mix(in srgb, var(--card) 64%, transparent)" in html          # translucent pill background
+    assert "background: linear-gradient(180deg, var(--glass-fill)" in html      # translucent glass fill (real alpha token)
+    assert "--glass-fill: rgba(255,255,255,.12)" in html                        # the fill IS translucent (not an opaque slab)
     assert "var(--card) 90%, var(--bg)" not in html                            # NOT the old opaque background
     assert html.count("-webkit-backdrop-filter") >= 2                          # the pill AND the FAB frost on iOS
-    assert "backdrop-filter: blur(22px) saturate(1.5)" in html                 # blur kept for legibility
+    assert "backdrop-filter: blur(26px) saturate(1.9) brightness(1.12)" in html  # upgraded liquid-glass frost
 
 
 def test_mobile_nav_pill_is_centered_stable_with_an_aligned_fab(client):
