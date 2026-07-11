@@ -293,6 +293,7 @@ def vote_comment(post_id, comment_id):
         logger.exception("forum store unavailable")
         return jsonify(error="forum store unavailable"), 503
     if score is None:
-        return jsonify(error="comment not found"), 404
+        # the store returns None for an unknown post OR an unknown comment — report both (it can't tell us which)
+        return jsonify(error="post or comment not found"), 404
     _notify_comment_author_of_vote(post_id, comment_id, voter, value)   # live push; never fails the vote
     return jsonify(score=score), 200
