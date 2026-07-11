@@ -287,6 +287,19 @@ def test_streak_number_uses_mono():
         "the streak count must use --font-mono like every other number (the one that used to break the system)"
 
 
+def test_floating_nav_is_liquid_glass():
+    # The bottom tab bar is the app's one glass surface (iOS 26 uses glass for the floating nav). It's upgraded
+    # past a flat blur to the highest-fidelity web approximation: a light-refracting gradient RIM (::before),
+    # a specular light-catch sheen (::after), and an active-tab glass capsule — all theme-tokened so light mode
+    # softens the white specular instead of washing out. (True backdrop lensing is native-only; not faked.)
+    assert ".tabbar-inner::before" in INDEX and ".tabbar-inner::after" in INDEX, "the glass rim/sheen layers were removed"
+    for tok in ("--glass-fill", "--glass-rim", "--glass-spec"):
+        assert INDEX.count(tok) >= 3, f"{tok} must be defined in :root + both light blocks (dark/forced-light/system-light)"
+    assert "mask-composite: exclude" in INDEX, "the masked gradient rim (the refracting border) was removed"
+    m = re.search(r"\.tab\.active\s*\{[^}]*\}", INDEX)
+    assert m and "linear-gradient" in m.group(0), "the active tab must be an iOS-26 glass capsule, not a flat tint"
+
+
 def test_interactive_surfaces_have_a_mint_focus_ring():
     # Every keyboard-reachable surface that previously had no focus ring (buttons, forum posts, DM rows,
     # segment/checkbox labels, links) gets a consistent mint :focus-visible outline — the "visible keyboard
