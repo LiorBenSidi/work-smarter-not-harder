@@ -95,6 +95,16 @@ def test_primary_controls_are_solid_mint_not_gradient():
         "the active auth tab must be solid mint"
 
 
+def test_chat_thread_is_a_real_messenger():
+    # Chat now carries the WhatsApp bubble contract: per-bubble times + day separators + a "Seen" read state,
+    # and a growing multiline compose with Enter-to-send (not a single-line input).
+    assert "function clockTime" in INDEX and "function dayLabel" in INDEX, "the chat time helpers were removed"
+    assert "dm-daysep" in INDEX and "dm-meta" in INDEX, "the date separators / bubble time meta were removed"
+    assert "· Seen" in INDEX, "the read-state 'Seen' indicator was removed"
+    assert '<textarea id="dm-reply"' in INDEX and "function autoGrow" in INDEX, \
+        "the reply compose must be a growing textarea (Enter-to-send), not a single-line input"
+
+
 def test_history_rows_are_a_colour_coded_score_column():
     # History rows lead with the numeric readiness score + a state-colour dot + a RELATIVE time (Whoop trend
     # tier) — not a flat "<strong>word</strong> raw-ISO-timestamp" line.
