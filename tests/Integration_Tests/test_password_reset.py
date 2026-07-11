@@ -1,7 +1,9 @@
 """Integration: register requires a valid email + the forgot/reset-password flow. OWNER: Lior.
 
-The reset email is intercepted (the route's ``send_email`` is monkeypatched) to read the emitted link
-without a real mail server. Reset flows use a signed, single-use, time-limited token (itsdangerous).
+The reset email is intercepted (the route's ``send_email_async`` is monkeypatched) to read the emitted
+link without a real mail server. Reset flows use a signed, single-use, time-limited token (itsdangerous).
+The route dispatches the send via ``send_email_async`` so a live SMTP send never blocks the response —
+which is what keeps the registered/unregistered branches timing-identical (AUTH-H1).
 """
 import re
 
@@ -12,7 +14,7 @@ def _register(client, username="alice", password="s3cretpw!", email="alice@examp
 
 def _capture_reset(client, auth_module, monkeypatch, email="alice@example.com"):
     box = {}
-    monkeypatch.setattr(auth_module, "send_email",
+    monkeypatch.setattr(auth_module, "send_email_async",
                         lambda cfg, to, subj, body, **kw: box.update(to=to, body=body) or True)
     client.post("/forgot-password", json={"email": email})
     return box
@@ -29,12 +31,23 @@ def test_forgot_password_never_enumerates_accounts(client, auth_module, monkeypa
     # known vs unknown are byte-identical. (In dev/log mode the link is dev-surfaced on-screen — which
     # necessarily differs for a registered email — a local-only convenience, tested separately below.)
     client.raw.application.config["SMTP_HOST"] = "relay.test"
-    monkeypatch.setattr(auth_module, "send_email", lambda *a, **k: True)   # don't actually connect out
+    monkeypatch.setattr(auth_module, "send_email_async", lambda *a, **k: True)   # don't spawn a real send thread
     _register(client)
     known = client.post("/forgot-password", json={"email": "alice@example.com"})
     unknown = client.post("/forgot-password", json={"email": "ghost@nowhere.co"})
     assert known.status_code == unknown.status_code == 200
     assert known.get_json() == unknown.get_json()          # identical body -> no account enumeration
+
+
+def test_forgot_password_dispatches_the_send_asynchronously(client, auth_module, monkeypatch):
+    # AUTH-H1: the registered branch must emit the reset email via the async wrapper, so a live SMTP send
+    # never blocks the response and its latency can't be told apart from the unregistered (no-send) branch.
+    seen = []
+    monkeypatch.setattr(auth_module, "send_email_async", lambda cfg, to, *a, **k: seen.append(to) or True)
+    _register(client)
+    client.post("/forgot-password", json={"email": "alice@example.com"})
+    client.post("/forgot-password", json={"email": "ghost@nowhere.co"})   # unknown -> no send
+    assert seen == ["alice@example.com"], "registered forgot-password must dispatch via send_email_async; unknown must not send"
 
 
 def test_forgot_password_dev_surfaces_the_link_without_smtp(client):

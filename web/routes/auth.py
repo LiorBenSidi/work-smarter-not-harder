@@ -18,7 +18,7 @@ from werkzeug.security import check_password_hash, generate_password_hash
 
 from ratelimit import limiter
 from services.db import DuplicateEmailError
-from services.email import send_email
+from services.email import send_email, send_email_async
 from services.identity import display_name
 
 logger = logging.getLogger(__name__)
@@ -157,6 +157,10 @@ def register():
             # instead of a code. An attacker who doesn't control the address can't tell "taken" from "free".
             body = {"status": "verify_required", "email": email, "expires_in": current_app.config["OTP_TTL_SECONDS"]}
             if exists:
+                # Equal-cost dummy KDF: the fresh branch below hashes the 6-digit code (a second
+                # generate_password_hash) inside _issue_reg_code; do the same work here so a duplicate email
+                # can't be distinguished by response latency (AUTH-H2). Result discarded.
+                generate_password_hash(f"{secrets.randbelow(10 ** OTP_LENGTH):0{OTP_LENGTH}d}")
                 _notify_existing_account(email)
             else:
                 dev_code = _issue_reg_code(display, pw_hash, email)
@@ -553,9 +557,11 @@ def forgot_password():
         link = current_app.config["APP_BASE_URL"].rstrip("/") + "/?reset_token=" + token
         minutes = current_app.config["RESET_TOKEN_MAX_AGE"] // 60
         mock = _debug_email_mock()
-        send_email(current_app.config, email, "Reset your Work Smarter, Not Harder password",
-                   f"Reset your password with this link (valid {minutes} min):\n\n{link}\n\n"
-                   "If you didn't request this, you can ignore this email.", force_mock=mock)
+        # async in live mode -> the registered branch doesn't block on SMTP, so its response time matches the
+        # unregistered (no-send) branch: no forgot-password enumeration via latency (AUTH-H1).
+        send_email_async(current_app.config, email, "Reset your Work Smarter, Not Harder password",
+                         f"Reset your password with this link (valid {minutes} min):\n\n{link}\n\n"
+                         "If you didn't request this, you can ignore this email.", force_mock=mock)
         if _surface_dev_codes(mock):   # dev/mock (log backend) ONLY — prod (SECURE) fails closed, never surfaces
             body["dev_reset_link"] = "/?reset_token=" + token   # RELATIVE -> the click stays on the current host
     # In real (SMTP) mode the body is IDENTICAL whether or not the email was registered -> no account
@@ -617,11 +623,12 @@ def _register_verify_active():
 
 def _notify_existing_account(email):
     """Enumeration-safe duplicate-signup path: rather than leak "email taken" in the register response,
-    email the address owner that an account already exists. Best-effort; ``send_email`` never raises."""
-    send_email(current_app.config, email, "You already have a Work Smarter, Not Harder account",
-               "Someone just tried to sign up with this email. If it was you, you already have an "
-               "account — try logging in, or reset your password if you forgot it.\n\n"
-               "If this wasn't you, you can safely ignore this email.")
+    email the address owner that an account already exists. Best-effort; async so the live send never
+    blocks (matches the fresh-signup branch's timing — AUTH-H2)."""
+    send_email_async(current_app.config, email, "You already have a Work Smarter, Not Harder account",
+                     "Someone just tried to sign up with this email. If it was you, you already have an "
+                     "account — try logging in, or reset your password if you forgot it.\n\n"
+                     "If this wasn't you, you can safely ignore this email.")
 
 
 def _surface_dev_codes(mock):
@@ -662,10 +669,10 @@ def _issue_reg_code(display, pw_hash, email):
                               "code_hash": generate_password_hash(code), "expires": time.time() + ttl, "attempts": 0}
     minutes = max(1, ttl // 60)
     mock = _debug_email_mock()
-    send_email(current_app.config, email, "Confirm your Work Smarter, Not Harder email",
-               f"Your Work Smarter, Not Harder confirmation code is: {code}\n\n"
-               f"Enter it to finish creating your account. It expires in {minutes} min.\n"
-               "If you didn't request this, you can ignore this email.", force_mock=mock)
+    send_email_async(current_app.config, email, "Confirm your Work Smarter, Not Harder email",
+                     f"Your Work Smarter, Not Harder confirmation code is: {code}\n\n"
+                     f"Enter it to finish creating your account. It expires in {minutes} min.\n"
+                     "If you didn't request this, you can ignore this email.", force_mock=mock)
     return code if _surface_dev_codes(mock) else None
 
 

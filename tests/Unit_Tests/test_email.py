@@ -141,3 +141,29 @@ def test_control_chars_in_recipient_abort_the_send(monkeypatch):
     ok = email_mod.send_email({"SMTP_HOST": "relay.test", "MAIL_FROM": "C <c@x.co>"},
                               "victim@x.co\r\nRCPT TO:<evil@x.co>", "s", "b")
     assert ok is False and sent["connected"] is False   # never even opened the SMTP connection
+
+
+def test_send_email_async_stays_sync_for_the_log_backend(caplog):
+    # No SMTP_HOST (dev / CI / grading): no thread — logs synchronously, so ordering + the dev-surfaced code
+    # in the response stay deterministic. The AUTH-H1/H2 oracle only exists on the live SMTP path.
+    with caplog.at_level(logging.INFO):
+        ok = email_mod.send_email_async({}, "a@b.co", "Your code", "code: 771")
+    assert ok is True and "771" in caplog.text
+
+
+def test_send_email_async_offloads_the_live_send_to_a_thread(monkeypatch):
+    # Live SMTP: the send runs in a background thread so the request returns immediately regardless of which
+    # (registered vs not) branch it took -> no response-time enumeration (AUTH-H1/H2).
+    import threading
+    seen, done = {}, threading.Event()
+    Fake = _fake_smtp(seen)
+    real_send = Fake.send_message
+    def _send(self, msg, from_addr=None, to_addrs=None):
+        real_send(self, msg, from_addr=from_addr, to_addrs=to_addrs)
+        done.set()
+    Fake.send_message = _send
+    monkeypatch.setattr(email_mod.smtplib, "SMTP", Fake)
+    ok = email_mod.send_email_async({"SMTP_HOST": "relay.test", "MAIL_FROM": "C <c@x.co>"}, "to@z.co", "s", "b")
+    assert ok is True                                  # returned without blocking on the (backgrounded) send
+    assert done.wait(2.0), "the live send must complete on the background thread"
+    assert seen["to"] == "to@z.co"
