@@ -301,6 +301,15 @@ def test_ios_scroll_behaviors():
         "under reduced motion the nav must stay reachable (transform neutralised)"
 
 
+def test_history_rows_reveal_with_a_stagger():
+    # History rows get a one-time staggered fade+rise entrance (crafted feel). fill:both -> a row can never
+    # get stuck invisible; reduced-motion skips it entirely (no opacity:0 base).
+    assert "@keyframes revealIn" in INDEX, "the list reveal keyframe was removed"
+    assert re.search(r"prefers-reduced-motion: no-preference\)\s*\{\s*\.reveal-item\s*\{\s*animation: revealIn", INDEX), \
+        "the reveal must be gated behind no-preference so reduced-motion never leaves a row invisible"
+    assert "reveal-item readiness" in INDEX, "history rows must carry the staggered reveal class"
+
+
 def test_loading_states_use_skeleton_shimmer():
     # Panels load with a shaped skeleton-shimmer placeholder (OSS/Bluesky pattern), not a bare "Loading…".
     # Reduced-motion-safe (the shimmer animation is disabled under prefers-reduced-motion).
