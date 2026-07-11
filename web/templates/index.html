@@ -2359,7 +2359,7 @@
         if (cvs.offsetParent !== null) {                     // only while the landing orb is on-screen (logged out)
           if (!last) last = t;
           if (t - last > 3000) { last = t; ix = (ix + 1) % STATES.length; setState(ix); }
-          cur = cur.map((c, i) => c.map((v, k) => v + (target[i][k] - v) * 0.045));   // ease colour -> natural crossfade
+          cur = cur.map((c, i) => c.map((v, k) => v + (target[i][k] - v) * 0.030));   // ease colour -> gentle ~1.1s crossfade
           paint(t / 1000);
         }
         requestAnimationFrame(frame);
