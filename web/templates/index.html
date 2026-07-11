@@ -355,6 +355,9 @@
       background: color-mix(in srgb, var(--warn) 14%, var(--stat-solid)); border:1px solid color-mix(in srgb, var(--warn) 40%, var(--line));
       box-shadow:var(--shadow); animation: rise .5s cubic-bezier(.2,.7,.2,1) both; }
     .streak .ico { width:18px; height:18px; stroke:var(--warn); fill:none; stroke-width:2; flex:none; }
+    /* base icon: sizes to the surrounding font + inherits colour, so inline icons replace the old ▲▾✕▼ glyphs
+       cleanly (more-specific rules like .stat .ico still win on their explicit size/colour). */
+    .ico { width:1em; height:1em; stroke:currentColor; fill:none; stroke-width:2; vertical-align:-.14em; flex:none; }
     .streak-n { font-family:var(--font-mono); font-weight:800; color:var(--ink); white-space:nowrap; }
     .streak-cap { color:var(--muted); font-size:13px; }
     @media (max-width: 380px) { .streak-cap { display:none; } }
@@ -1553,6 +1556,8 @@
       check: '<svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>',
       up: '<svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7"/></svg>',
       down: '<svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12l7 7 7-7"/></svg>',
+      close: '<svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>',
+      chev: '<svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>',
     };
     let statState = "—", statKcal = "—", statCheckins = 0;
     function statCard(ico, val, k, accent) {
@@ -1835,7 +1840,7 @@
       el.innerHTML = list.map((p) =>
         '<div class="post' + (p.id === currentPostId ? ' open' : '') + '" data-id="' + escapeHtml(p.id) + '" role="button" tabindex="0" aria-expanded="' + (p.id === currentPostId ? 'true' : 'false') + '">'
         + '<div class="post-top"><strong>' + escapeHtml(p.title) + '</strong>'
-        + '<span class="post-right"><span class="pill">▲ ' + escapeHtml(p.score) + '</span><span class="post-chev" aria-hidden="true">▾</span></span></div>'
+        + '<span class="post-right"><span class="pill">' + ICON.up + ' ' + escapeHtml(p.score) + '</span><span class="post-chev" aria-hidden="true">' + ICON.chev + '</span></span></div>'
         + '<span class="muted">by ' + escapeHtml(p.author) + ' · ' + escapeHtml(p.comments) + ' comment' + (p.comments === 1 ? '' : 's') + '</span></div>'
       ).join("");
       el.querySelectorAll(".post").forEach((d) => {
@@ -1891,12 +1896,12 @@
       updateCtxBack();                                       // a post is open -> show the Back chevron
       box.innerHTML =
         '<div class="card detail">'
-        + '<button class="ghost close" onclick="closePost()" aria-label="Close">✕</button>'
+        + '<button class="ghost close" onclick="closePost()" aria-label="Close">' + ICON.close + '</button>'
         + '<h3>' + escapeHtml(p.title) + '</h3>'
         + '<p class="muted by">by ' + escapeHtml(p.author) + '</p>'
         + '<p class="body">' + escapeHtml(p.body) + '</p>'
-        + '<div class="vote-row"><button class="ghost" onclick="vote(1)">▲ up</button> <span class="pill">score ' + escapeHtml(p.score)
-        + '</span> <button class="ghost" onclick="vote(-1)">▼ down</button></div>'
+        + '<div class="vote-row"><button class="ghost" onclick="vote(1)">' + ICON.up + ' up</button> <span class="pill">score ' + escapeHtml(p.score)
+        + '</span> <button class="ghost" onclick="vote(-1)">' + ICON.down + ' down</button></div>'
         + (p.mine
             ? '<div class="own-actions"><button class="ghost" onclick="editPost()">Edit</button> <button class="ghost" onclick="deletePost()">Delete</button></div>'
             : '')
@@ -1904,9 +1909,9 @@
         + (p.comments.length
             ? '<ul class="comments">' + p.comments.map((c) =>
                 '<li><div class="c-main"><strong>' + escapeHtml(c.author) + '</strong> ' + escapeHtml(c.body) + '</div>'
-                + '<div class="c-vote"><button class="ghost mini cvote" data-cid="' + escapeHtml(c.id) + '" data-val="1" aria-label="Upvote comment">▲</button>'
+                + '<div class="c-vote"><button class="ghost mini cvote" data-cid="' + escapeHtml(c.id) + '" data-val="1" aria-label="Upvote comment">' + ICON.up + '</button>'
                 + '<span class="pill">' + escapeHtml(c.score) + '</span>'
-                + '<button class="ghost mini cvote" data-cid="' + escapeHtml(c.id) + '" data-val="-1" aria-label="Downvote comment">▼</button></div></li>'
+                + '<button class="ghost mini cvote" data-cid="' + escapeHtml(c.id) + '" data-val="-1" aria-label="Downvote comment">' + ICON.down + '</button></div></li>'
               ).join("") + '</ul>'
             : '<p class="muted">No comments yet.</p>')
         + '<form id="comment-form" style="margin-top:10px"><input name="body" placeholder="Add a comment" aria-label="Add a comment" maxlength="2000" required>'

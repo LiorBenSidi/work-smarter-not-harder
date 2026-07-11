@@ -95,6 +95,17 @@ def test_primary_controls_are_solid_mint_not_gradient():
         "the active auth tab must be solid mint"
 
 
+def test_forum_controls_use_svg_icons_not_unicode_glyphs():
+    # The ▲▾✕▼ template glyphs (inconsistent weight/baseline across platforms) are replaced by the app's SVG
+    # icon set — score/vote/close/chevron all render from ICON.up/down/close/chev.
+    assert "close:" in INDEX and "chev:" in INDEX, "the close/chev SVG icons were removed from the ICON set"
+    assert "ICON.close" in INDEX, "the detail close button must use the SVG close icon"
+    assert "ICON.chev" in INDEX, "the post chevron must be the SVG chev icon"
+    assert "ICON.up + ' up" in INDEX and "ICON.down + ' down" in INDEX, "vote buttons must use SVG up/down icons"
+    for g in (">▲<", ">▼<", ">✕<", ">▾<"):   # ▲ ▼ ✕ ▾ inside a rendered element
+        assert g not in INDEX, "no unicode vote/close glyph may remain in the rendered markup (SVG icons only)"
+
+
 def test_content_cards_are_de_glassed():
     # iOS 26: glass is a NAV-layer material only; content cards are solid (no backdrop-filter). The nav
     # layer (header, tab pill, menus, tooltips) keeps its glass — this only de-glasses .card / .stat.
