@@ -95,6 +95,16 @@ def test_primary_controls_are_solid_mint_not_gradient():
         "the active auth tab must be solid mint"
 
 
+def test_chat_bubbles_group_by_sender():
+    # Signal-style grouping: the tail (pointed corner) + the time/Seen meta ride ONLY the last bubble of a
+    # same-sender run, and continuation bubbles tuck tighter (.cont) — a run reads as one unit, not N stamped
+    # bubbles. The base bubble no longer carries a tail unconditionally.
+    assert re.search(r"\.bubble\.tail\.me\s*\{[^}]*border-bottom-right-radius", INDEX), "the tail must be run-end-only now"
+    assert re.search(r"\.bubble\.cont\s*\{[^}]*margin-top:-", INDEX), "consecutive same-sender bubbles must tuck tighter"
+    assert "const runEnd" in INDEX and "const cont" in INDEX, "the run grouping logic was removed"
+    assert 'runEnd ? " tail"' in INDEX, "the tail must ride only the run-end bubble"
+
+
 def test_chat_thread_is_a_real_messenger():
     # Chat now carries the WhatsApp bubble contract: per-bubble times + day separators + a "Seen" read state,
     # and a growing multiline compose with Enter-to-send (not a single-line input).
