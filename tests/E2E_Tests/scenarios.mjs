@@ -281,4 +281,21 @@ export const SCENARIOS = [
       assert(eyebrows === 6, `expected 6 section eyebrows inside the grouped cards, got ${eyebrows}`);
     },
   },
+  {
+    // iOS-26 scroll: header frosts (.scrolled) + the MOBILE tab bar recedes (.nav-hidden) on scroll-down,
+    // and the nav returns on scroll-up. Mobile-only (the pill is display:none on desktop).
+    name: "nav: header frosts + tab bar recedes on scroll-down, returns on scroll-up",
+    tags: ["nav", "scroll", "design"],
+    async fn(b, ctx) {
+      if (ctx.viewport !== "mobile") return;                 // tab-bar minimize is a mobile-only behaviour
+      await registerAndLogin(b);
+      await b.pageExec(`(async () => { document.body.style.minHeight='3000px'; window.scrollTo(0, 700); await new Promise(r=>setTimeout(r,350)); })()`);
+      const down = await b.evaluate(`() => ({s: document.documentElement.classList.contains('scrolled'), h: document.documentElement.classList.contains('nav-hidden')})`);
+      assert(down.s, "header should gain .scrolled after scrolling down");
+      assert(down.h, "the tab bar should recede (.nav-hidden) on scroll-down");
+      await b.pageExec(`(async () => { window.scrollTo(0, 120); await new Promise(r=>setTimeout(r,350)); })()`);
+      const up = await b.evaluate(`() => document.documentElement.classList.contains('nav-hidden')`);
+      assert(!up, "the tab bar should return (.nav-hidden removed) on scroll-up");
+    },
+  },
 ];

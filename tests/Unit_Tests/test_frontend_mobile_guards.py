@@ -287,6 +287,20 @@ def test_streak_number_uses_mono():
         "the streak count must use --font-mono like every other number (the one that used to break the system)"
 
 
+def test_ios_scroll_behaviors():
+    # iOS-26 scroll feel: the header is clean at the top and frosts once content scrolls under it; the MOBILE
+    # tab bar (+ Home FAB) recedes on scroll-down and returns on scroll-up. Reduced-motion keeps the nav
+    # reachable (the transform is neutralised, not the visibility). Desktop unaffected (pill is display:none).
+    assert re.search(r"html:not\(\.scrolled\) header\s*\{[^}]*backdrop-filter:none", INDEX), \
+        "the scroll-edge frost (clean header at the top) was removed"
+    assert re.search(r"html\.nav-hidden \.tabbar[^{]*\{[^}]*translateY\(150%\)", INDEX), \
+        "the tab-bar minimize-on-scroll was removed"
+    assert 'classList.toggle("scrolled"' in INDEX and 'classList.add("nav-hidden")' in INDEX, \
+        "the scroll handler (frost + nav minimize) was removed"
+    assert re.search(r"prefers-reduced-motion: reduce\)\s*\{\s*html\.nav-hidden[^}]*transform:none", INDEX), \
+        "under reduced motion the nav must stay reachable (transform neutralised)"
+
+
 def test_loading_states_use_skeleton_shimmer():
     # Panels load with a shaped skeleton-shimmer placeholder (OSS/Bluesky pattern), not a bare "Loading…".
     # Reduced-motion-safe (the shimmer animation is disabled under prefers-reduced-motion).
