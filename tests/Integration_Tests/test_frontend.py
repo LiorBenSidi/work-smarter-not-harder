@@ -37,7 +37,8 @@ def test_history_escapes_entry_fields(client):
     # History rows carry AI-generated assessment text + a timestamp -> escape before innerHTML.
     html = client.get("/").get_data(as_text=True)
     assert "escapeHtml(it.assessment" in html
-    assert "escapeHtml(it.timestamp" in html
+    # timestamp is now shown as a relative time, still escaped: escapeHtml(timeAgoStr(it.timestamp))
+    assert "escapeHtml(timeAgoStr(it.timestamp))" in html
     assert "escapeHtml(it.calories" in html
 
 
