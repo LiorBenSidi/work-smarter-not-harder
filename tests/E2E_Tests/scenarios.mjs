@@ -244,4 +244,41 @@ export const SCENARIOS = [
       assert(dark && light && dark !== light, `dark and light --bg should differ (dark=${dark} light=${light})`);
     },
   },
+  {
+    // Design pass ⑦: the forum reuses the DM generative-avatar system on every author surface.
+    name: "forum: posts + comments render generative avatars",
+    tags: ["forum", "design"],
+    async fn(b) {
+      await registerAndLogin(b);
+      await createPost(b, uniq("Avatars "), "does everyone get an avatar?");
+      await b.waitFor("#forum-list .post");
+      const listAv = await b.evaluate(`() => document.querySelectorAll("#forum-list .post .avatar").length`);
+      assert(listAv >= 1, "no generative avatar on the forum list byline");
+      await b.click("#forum-list .post", 900);
+      const detailAv = await b.evaluate(`() => document.querySelectorAll("#forum-detail .by .avatar").length`);
+      assert(detailAv >= 1, "no avatar on the open post's author line");
+      await b.type("#comment-form [name=body]", "great question");
+      await b.submit("#comment-form", 1100);
+      const cAv = await b.evaluate(`() => document.querySelectorAll("#forum-detail .comments li .avatar").length`);
+      assert(cAv >= 1, "no avatar on the comment row");
+    },
+  },
+  {
+    // Design pass ⑧: the profile screen is grouped into exactly 4 cards (You / Preferences / Account / Danger).
+    name: "profile: settings are grouped into 4 cards",
+    tags: ["profile", "design"],
+    async fn(b) {
+      await registerAndLogin(b);
+      // profile is reached via the corner account menu (not a bottom tab) — same nav as the display-name scenario
+      await b.pageExec(`(() => { const btn = document.getElementById("user-menu-btn"); if (btn) btn.click(); return true; })()`);
+      await b.wait(300);
+      await b.pageExec(`(() => { const p = document.querySelector('[data-act="profile"]'); if (p) p.click(); return true; })()`);
+      await b.waitFor("#screen-profile .card");
+      const cards = await b.evaluate(`() => document.querySelectorAll("#screen-profile .card").length`);
+      assert(cards === 4, `profile should be 4 grouped cards, got ${cards}`);
+      // all six section eyebrows must still be present inside those 4 cards
+      const eyebrows = await b.evaluate(`() => document.querySelectorAll("#screen-profile .card h2").length`);
+      assert(eyebrows === 6, `expected 6 section eyebrows inside the grouped cards, got ${eyebrows}`);
+    },
+  },
 ];
