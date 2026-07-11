@@ -402,6 +402,15 @@
       background: linear-gradient(135deg, var(--accent), color-mix(in srgb, var(--accent) 55%, var(--accent2))); }
     .chip:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
     /* Illustrated empty states: a friendly icon + guidance instead of a bare grey line (Wolt's empty cards) */
+    /* Skeleton shimmer for loading states (Bluesky/OSS pattern) — a placeholder that pulses instead of a bare
+       "Loading…". Reduced-motion safe. Both mobile + desktop. */
+    .sk { position:relative; overflow:hidden; background:var(--field); border:1px solid var(--line); border-radius:14px; }
+    .sk::after { content:""; position:absolute; inset:0; transform:translateX(-100%);
+      background:linear-gradient(90deg, transparent, color-mix(in srgb, var(--ink) 8%, transparent), transparent);
+      animation:shimmer 1.4s var(--ease) infinite; }
+    .sk + .sk { margin-top:10px; }
+    @keyframes shimmer { 100% { transform:translateX(100%); } }
+    @media (prefers-reduced-motion: reduce) { .sk::after { animation:none; } }
     .empty { text-align:center; padding:24px 16px 20px; animation: rise .4s cubic-bezier(.2,.7,.2,1) both; }
     .empty-ico { width:54px; height:54px; margin:0 auto 12px; border-radius:50%; display:inline-flex; align-items:center; justify-content:center;
       background: color-mix(in srgb, var(--accent) 12%, var(--field)); border:1px solid color-mix(in srgb, var(--accent) 26%, var(--line)); }
@@ -795,7 +804,7 @@
           <div class="card">
             <h2><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h4l2 5 4-13 2 8h6"/></svg><span class="grow">Readiness</span>
               <button id="dashboard-refresh" class="ghost mini">Refresh</button></h2>
-            <div id="dashboard"><p class="muted">Loading…</p></div>
+            <div id="dashboard"><div class="sk" style="height:220px;border-radius:24px"></div></div>
           </div>
           <div id="stat-strip" class="stat-strip" aria-label="Quick stats"></div>
           <div class="card">
@@ -832,7 +841,7 @@
               <button class="chip" type="button" data-filter="moderate">Moderate</button>
               <button class="chip" type="button" data-filter="rest">Rest</button>
             </div>
-            <div id="history"><p class="muted">Loading…</p></div>
+            <div id="history"><div class="sk" style="height:64px"></div><div class="sk" style="height:64px"></div><div class="sk" style="height:64px"></div></div>
           </div>
         </section>
 
@@ -855,7 +864,7 @@
             <button class="chip" type="button" data-sort="top">Top</button>
             <button class="chip" type="button" data-sort="mine">Mine</button>
           </div>
-          <div id="forum-list"><p class="muted">Loading…</p></div>
+          <div id="forum-list"><div class="sk" style="height:64px"></div><div class="sk" style="height:64px"></div><div class="sk" style="height:64px"></div></div>
           <div id="forum-detail" hidden></div>
         </section>
 
@@ -881,19 +890,19 @@
             <div class="card">
               <h2><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H8l-4 4V5a2 2 0 0 1 2-2h13a2 2 0 0 1 2 2z"/></svg><span class="grow">Conversations</span>
                 <button id="dm-refresh" class="ghost mini">Refresh</button></h2>
-              <div id="dm-conversations"><p class="muted">Loading…</p></div>
+              <div id="dm-conversations"><div class="sk" style="height:60px"></div><div class="sk" style="height:60px"></div></div>
             </div>
             <div class="card">
               <h2><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a1.9 1.9 0 0 1-3.4 0"/></svg><span class="grow">Activity</span>
                 <button id="activity-read" class="ghost mini" hidden>Mark all read</button></h2>
-              <div id="activity-list" aria-live="polite"><p class="muted">Loading…</p></div>
+              <div id="activity-list" aria-live="polite"><div class="sk" style="height:60px"></div><div class="sk" style="height:60px"></div></div>
             </div>
           </div>
           <div id="dm-thread-view" hidden>
             <div class="card">
               <div class="dm-thread-head"><button class="ghost mini" onclick="closeThread()">← Back</button>
                 <span id="dm-thread-peer" class="dm-peer"></span></div>
-              <div id="dm-thread" class="dm-thread"><p class="muted">Loading…</p></div>
+              <div id="dm-thread" class="dm-thread"><div class="sk" style="height:42px;width:62%;border-radius:16px"></div><div class="sk" style="height:42px;width:72%;margin-left:auto;border-radius:16px"></div></div>
               <form id="dm-reply-form"><textarea id="dm-reply" name="body" placeholder="Message…" rows="1" autocomplete="off" maxlength="2000" required></textarea>
                 <button type="submit">Send</button></form>
               <div id="dm-reply-flash" class="flash" aria-live="polite"></div>
@@ -1696,6 +1705,17 @@
         + '<p class="empty-title">' + escapeHtml(title) + "</p>"
         + '<p class="empty-text">' + escapeHtml(text) + "</p></div>";
     }
+    // Skeleton-shimmer placeholder while a panel loads (OSS pattern) — shaped per screen so it hints at the
+    // content that's coming, instead of a bare "Loading…". CSS handles the shimmer + reduced-motion.
+    function sk(kind) {
+      const row = (h) => '<div class="sk" style="height:' + h + 'px"></div>';
+      if (kind === "card") return '<div class="sk" style="height:220px;border-radius:24px"></div>';
+      if (kind === "rows") return row(64) + row(64) + row(64) + row(64);
+      if (kind === "thread") return '<div class="sk" style="height:42px;width:62%;border-radius:16px"></div>'
+        + '<div class="sk" style="height:42px;width:72%;margin-left:auto;border-radius:16px"></div>'
+        + '<div class="sk" style="height:42px;width:54%;border-radius:16px"></div>';
+      return row(64) + row(64);
+    }
 
     // ---- Dashboard ----
     // Map the AI's free-form state word to a readiness bucket + orb level (presentation only; the AI
@@ -1728,7 +1748,7 @@
       // freshReveal = a check-in just landed -> the recs cascade in (only then, not on tab-switch/refresh).
       const freshReveal = !!(opts && opts.fresh) && !reducedMotion();
       const u = currentUser;
-      const el = $("dashboard"); el.innerHTML = '<p class="muted">Loading…</p>';
+      const el = $("dashboard"); el.innerHTML = sk("card");
       const r = await api("/dashboard");
       if (sessionChanged(u, "loadDashboard")) return;        // stale session -> don't paint another user's readiness
       if (!r.ok) { el.innerHTML = '<p class="flash error">Could not load the dashboard.</p>'; return; }
@@ -1815,7 +1835,7 @@
     let historyItems = [], historyFilter = "all";
     async function loadHistory() {
       const u = currentUser;
-      const el = $("history"); el.innerHTML = '<p class="muted">Loading…</p>';
+      const el = $("history"); el.innerHTML = sk("rows");
       const r = await api("/history");
       if (sessionChanged(u, "loadHistory")) return;          // stale session -> don't paint another user's history
       if (!r.ok) { el.innerHTML = '<p class="flash error">Could not load history.</p>'; return; }
@@ -1896,7 +1916,7 @@
       const u = currentUser, seq = ++forumLoadSeq;
       const el = $("forum-list");
       stashDetail();                                          // preserve an open post's detail across the wipe
-      el.innerHTML = '<p class="muted">Loading…</p>';
+      el.innerHTML = sk("rows");
       const r = await api("/forum/posts");
       if (sessionChanged(u, "loadForum") || seq !== forumLoadSeq) return;   // stale session OR superseded -> don't paint
       if (!r.ok) { el.innerHTML = '<p class="flash error">Could not load the forum.</p>'; return; }

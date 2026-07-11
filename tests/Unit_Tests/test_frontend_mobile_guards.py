@@ -167,7 +167,7 @@ def test_forum_detail_is_stashed_before_any_list_wipe():
     # openPost throws on a null box -> the forum wedges. Both list-wipers must stashDetail() first, and
     # openPost must guard a null box so a missing detail degrades to a retry rather than a throw.
     assert "function stashDetail" in INDEX, "the stashDetail rescue helper (un-wedge after voting) was removed"
-    assert re.search(r"stashDetail\(\);[^\n]*\n\s*el\.innerHTML\s*=\s*'<p class=\"muted\">Loading", INDEX), \
+    assert re.search(r"stashDetail\(\);[^\n]*\n\s*el\.innerHTML\s*=\s*sk\(", INDEX), \
         "loadForum must stashDetail() before wiping #forum-list (else voting destroys #forum-detail)"
     # renderForumList also stashes before it rebuilds the list
     assert re.search(r"function renderForumList\(\)\s*\{[^}]*?stashDetail\(\);", INDEX), \
@@ -285,6 +285,18 @@ def test_streak_number_uses_mono():
     m = re.search(r"\.streak-n\s*\{[^}]*\}", INDEX)
     assert m and "font-family:var(--font-mono)" in m.group(0), \
         "the streak count must use --font-mono like every other number (the one that used to break the system)"
+
+
+def test_loading_states_use_skeleton_shimmer():
+    # Panels load with a shaped skeleton-shimmer placeholder (OSS/Bluesky pattern), not a bare "Loading…".
+    # Reduced-motion-safe (the shimmer animation is disabled under prefers-reduced-motion).
+    assert "@keyframes shimmer" in INDEX and re.search(r"\.sk::after\s*\{[^}]*animation:shimmer", INDEX), \
+        "the skeleton shimmer was removed"
+    assert re.search(r"prefers-reduced-motion: reduce\)\s*\{\s*\.sk::after\s*\{\s*animation:none", INDEX), \
+        "the skeleton shimmer must be disabled under reduced motion"
+    assert "function sk(" in INDEX, "the skeleton helper was removed"
+    assert 'sk("card")' in INDEX and 'sk("rows")' in INDEX, "the dashboard/list loaders must use skeletons"
+    assert 'class="muted">Loading…' not in INDEX, "no bare 'Loading…' placeholder should remain"
 
 
 def test_premium_polish_grain_tabular_and_easing():
