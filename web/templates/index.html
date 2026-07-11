@@ -618,8 +618,13 @@
     .dm-peer { display:flex; align-items:center; gap:10px; font-weight:800; }
     .dm-thread { display:flex; flex-direction:column; gap:8px; max-height:52vh; overflow-y:auto; padding:4px 2px; }
     .bubble { max-width:78%; padding:9px 13px; border-radius:16px; font-size:14px; line-height:1.35; overflow-wrap:anywhere; }
-    .bubble.them { align-self:flex-start; background:var(--field); border:1px solid var(--line); border-bottom-left-radius:5px; }
-    .bubble.me { align-self:flex-end; color:var(--on-accent); border-bottom-right-radius:5px; background:var(--accent); }
+    .bubble.them { align-self:flex-start; background:var(--field); border:1px solid var(--line); }
+    .bubble.me { align-self:flex-end; color:var(--on-accent); background:var(--accent); }
+    /* Signal-style grouping: the TAIL (pointed corner) is only on the LAST bubble of a same-sender run; and
+       consecutive same-sender bubbles tuck tighter together (a "run" reads as one unit). */
+    .bubble.tail.them { border-bottom-left-radius:5px; }
+    .bubble.tail.me { border-bottom-right-radius:5px; }
+    .bubble.cont { margin-top:-5px; }
     /* WhatsApp-style bubble meta: a small time (+ "Seen" on my most recent read message) under the text */
     .dm-meta { display:block; margin-top:3px; font-size:10.5px; font-family:var(--font-mono); text-align:right; opacity:.7; }
     /* date separator between days in a thread */
@@ -2260,8 +2265,14 @@
             const dk = dayKey(m.created_at);
             const sep = dk !== lastDay ? (lastDay = dk, '<div class="dm-daysep"><span>' + escapeHtml(dayLabel(m.created_at)) + "</span></div>") : "";
             const mine = m.sender === currentUser;
-            const meta = '<span class="dm-meta">' + escapeHtml(clockTime(m.created_at)) + (mine && i === lastMine && m.read ? " · Seen" : "") + "</span>";
-            return sep + '<div class="bubble ' + (mine ? "me" : "them") + '">' + escapeHtml(m.body) + meta + "</div>";
+            const prev = msgs[i - 1], next = msgs[i + 1];
+            // Signal grouping: a run = consecutive msgs from the same sender on the same day. The tail + the
+            // time/Seen meta ride only the LAST bubble of a run; a run-continuation bubble tucks up tighter.
+            const cont = prev && prev.sender === m.sender && dayKey(prev.created_at) === dk;
+            const runEnd = !next || next.sender !== m.sender || dayKey(next.created_at) !== dk;
+            const meta = runEnd ? '<span class="dm-meta">' + escapeHtml(clockTime(m.created_at)) + (mine && i === lastMine && m.read ? " · Seen" : "") + "</span>" : "";
+            const cls = "bubble " + (mine ? "me" : "them") + (runEnd ? " tail" : "") + (cont ? " cont" : "");
+            return sep + '<div class="' + cls + '">' + escapeHtml(m.body) + meta + "</div>";
           }).join("")
         : '<p class="muted">No messages yet — say hi.</p>');
       if (changed && nearBottom) box.scrollTop = box.scrollHeight;   // only re-anchor when the thread actually changed (poll no-op -> no flash)
