@@ -59,3 +59,6 @@ Thumbs.db
 
 # Personal PERSON3 action plan — never commit (working doc, like CLAUDE.local.md)
 PERSON3_PLAN.md
+
+# Local diagnostic / repro scratch — never committed (browser-CDP repros, one-off scripts)
+scratchpad/

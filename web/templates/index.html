@@ -1774,13 +1774,25 @@
       renderForumList();
     });
 
+    // A failed open must NEVER wedge the forum. currentPostId is set BEFORE the fetch, so any bail after it
+    // (a rejected fetch on a flaky mobile network, a non-ok response, or a body without .post) that leaves it
+    // set makes the post keep its .open border on every re-render with no detail — and nav-away-and-back can't
+    // clear it (the iOS #forum wedge). This resets the half-open state + surfaces a retry hint. Guard on seq so
+    // a stale call (superseded by a newer open/vote) never clobbers the newer one's state.
+    function failOpen(seq) {
+      if (seq !== openPostSeq) return;                        // a newer open owns the state now — leave it alone
+      closePost();                                            // clears currentPostId + the .open border + hides the box
+      flash("forum-flash", "Couldn't open that post — please try again.");
+    }
     async function openPost(id) {
       const u = currentUser, seq = ++openPostSeq;
       currentPostId = id;
-      const r = await api("/forum/posts/" + id);
+      let r;
+      try { r = await api("/forum/posts/" + id); }
+      catch (_) { failOpen(seq); return; }                    // network reject (offline / dropped) -> don't wedge
       if (sessionChanged(u, "openPost") || seq !== openPostSeq) return;   // stale session OR a newer open/vote superseded this
       const box = $("forum-detail");
-      if (!r.ok || !r.data || !r.data.post) { box.hidden = true; return; }
+      if (!r.ok || !r.data || !r.data.post) { failOpen(seq); return; }    // non-ok / malformed -> don't wedge
       const p = r.data.post;
       currentPost = p;
       box.hidden = false;
