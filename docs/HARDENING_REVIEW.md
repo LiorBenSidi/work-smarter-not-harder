@@ -21,6 +21,8 @@ and robustness improvements.
 | FE-6 | LOW | The landing-orb rAF timer wasn't reset off-screen, so on logout the demo state jumped rather than resuming smoothly. | Reset the timer when the orb is off-screen. |
 | (earlier) | HIGH | Forum "can't open a post after voting" wedge — `loadForum` wiped `#forum-list` while `#forum-detail` was slotted inside it, destroying it. | `stashDetail()` before any list wipe + null-box guard in `openPost`. Pinned by a guard test + an E2E regression scenario. |
 | (earlier) | HIGH | A failed post-open wedged the forum (stuck `.open` border, no detail). | `failOpen()` clears the half-open state on any failure. Pinned by a guard test + an E2E regression scenario. |
+| DATA-D6 | LOW | `vote_comment` returned "comment not found" even when the *post* was missing (the store can't distinguish). | Message is now "post or comment not found" (accurate for both). |
+| DATA-D7 | LOW | `_message_shape` / `_notification_shape` hard-accessed `created_at`, which the `$jsonSchema` validator doesn't require → a validator-legal partial write would 500 `/conversations` or `/notifications`. | Use `.get("created_at", 0)` (degrade gracefully, matching the sibling shapes). |
 
 ## Accepted / deferred (with rationale)
 
