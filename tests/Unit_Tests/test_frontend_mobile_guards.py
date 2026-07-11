@@ -334,8 +334,20 @@ def test_floating_nav_is_liquid_glass():
     for tok in ("--glass-fill", "--glass-rim", "--glass-spec"):
         assert INDEX.count(tok) >= 3, f"{tok} must be defined in :root + both light blocks (dark/forced-light/system-light)"
     assert "mask-composite: exclude" in INDEX, "the masked gradient rim (the refracting border) was removed"
-    m = re.search(r"\.tab\.active\s*\{[^}]*\}", INDEX)
-    assert m and "linear-gradient" in m.group(0), "the active tab must be an iOS-26 glass capsule, not a flat tint"
+    m = re.search(r"\.tab-indicator\s*\{[^}]*\}", INDEX)
+    assert m and "linear-gradient" in m.group(0), "the selected-tab glass capsule (sliding indicator) must be a glass lozenge"
+    # the Home FAB shares the same glass material as the pill (matching pair)
+    assert re.search(r"\.ctx-back\s*\{[^}]*var\(--glass-fill\)", INDEX), "the Home FAB must use the same liquid-glass material as the nav pill"
+
+
+def test_nav_selection_slides_and_drags():
+    # WhatsApp-style: one indicator SLIDES to the active tab on tap, and can be DRAGGED between tabs with the
+    # finger; tap-to-switch still works. Positions from live geometry; reduced-motion drops the slide transition.
+    assert '.tab-indicator' in INDEX and 'ind.className = "tab-indicator off"' in INDEX, "the sliding selection indicator was removed"
+    assert "window.tabIndicatorSync" in INDEX and "tabIndicatorSync()" in INDEX, "the tap-slide sync (from showScreen) was removed"
+    assert re.search(r'inner\.addEventListener\("touchmove"', INDEX) and 'classList.add("dragging")' in INDEX, \
+        "the drag handler (touchmove -> follow the finger) was removed"
+    assert 'showScreen(near.dataset.screen)' in INDEX, "releasing a drag must snap to + activate the nearest tab"
 
 
 def test_interactive_surfaces_have_a_mint_focus_ring():
