@@ -51,6 +51,24 @@ def test_forum_posts_expand_inline_with_a_chevron():
     assert "post-chev" in INDEX, "the collapse chevron was removed"
 
 
+# ---- 3b. A failed post-open must never WEDGE the forum (the iOS "can't open any post" bug, 2026-07-11) ----
+def test_forum_open_failure_never_wedges():
+    # currentPostId is set BEFORE the detail fetch, so ANY bail that leaves it set makes the post keep its
+    # .open border on every re-render with no detail, unrecoverable by nav-away-and-back. Both failure modes
+    # — a REJECTED fetch (flaky mobile network; api() re-throws) and a non-ok / malformed response — must
+    # route through failOpen(), which clears currentPostId + the border and surfaces a retry hint.
+    assert "function failOpen" in INDEX, "the failOpen reset helper (un-wedge on a failed open) was removed"
+    # failOpen bails on a superseded open (seq guard), then clears the stuck state via closePost().
+    assert re.search(r"function failOpen\(seq\)\s*\{[^}]*?if\s*\(seq\s*!==\s*openPostSeq\)\s*return;[^}]*?closePost\(\);", INDEX), \
+        "failOpen must bail on a superseded seq, then closePost() to clear currentPostId + the .open border"
+    # openPost wraps the detail fetch so a REJECTED fetch calls failOpen instead of an unhandled rejection.
+    assert re.search(r"try\s*\{\s*r\s*=\s*await\s+api\([^)]*\);\s*\}\s*catch\s*\([^)]*\)\s*\{\s*failOpen\(seq\);\s*return;", INDEX), \
+        "openPost must catch a rejected detail fetch and call failOpen (else a dropped request wedges the forum)"
+    # A non-ok / body-without-.post response also routes through failOpen (not a silent box.hidden = true).
+    assert re.search(r"if\s*\(!r\.ok\s*\|\|\s*!r\.data\s*\|\|\s*!r\.data\.post\)\s*\{\s*failOpen\(seq\);\s*return;", INDEX), \
+        "a non-ok / malformed detail response must call failOpen, not silently hide the box and leave state stuck"
+
+
 # ---- 4. Theme segments can't overlap on mobile ----
 def test_theme_segments_use_the_non_overlapping_row():
     assert 'class="seg-row"' in INDEX, "the theme segments lost their flex-row wrapper"
