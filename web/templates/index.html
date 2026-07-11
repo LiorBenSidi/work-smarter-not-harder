@@ -477,6 +477,15 @@
     .trend { margin:2px 0 16px; }
     .trend-cap { font-size:11px; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); font-weight:800; margin:0 0 8px; }
     .trend svg { width:100%; height:66px; display:block; overflow:visible; }
+    /* Readiness calendar heatmap (FitTrackee pattern) — a GitHub-style grid, one cell per day over the last
+       N weeks, tinted by that day's readiness state (mint/amber/pink) or dim if no check-in. Both platforms. */
+    .heat { margin:0 0 16px; }
+    .heatgrid { display:grid; grid-auto-flow:column; grid-template-rows:repeat(7, 1fr); gap:3px; margin:2px 0 0; }
+    .heat-cell { aspect-ratio:1; border-radius:3px; background:var(--field); }
+    .heat-cell.on { background: color-mix(in srgb, var(--st) 60%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--st) 40%, transparent); }
+    .heat-cell.future { opacity:.2; }
+    .heat-legend { display:flex; align-items:center; gap:6px; margin-top:7px; font-size:10.5px; color:var(--muted); }
+    .heat-legend i { width:11px; height:11px; border-radius:3px; display:inline-block; background: color-mix(in srgb, var(--lc) 60%, transparent); }
     /* history rows: a colour-coded score column (state dot + numeric score + verdict + relative time) */
     .hlist { list-style:none; margin:0; padding:0; }
     .hrow { display:flex; align-items:center; gap:14px; padding:12px 4px 12px 12px; border-top:1px solid var(--line); position:relative; }
@@ -871,6 +880,7 @@
             <h2><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><span class="grow">Past analyses</span>
               <button id="history-refresh" class="ghost mini">Refresh</button></h2>
             <div id="history-trend" class="trend"></div>
+            <div id="history-heat" class="heat"></div>
             <div id="history-filters" class="chips" role="group" aria-label="Filter by readiness">
               <button class="chip active" type="button" data-filter="all">All</button>
               <button class="chip" type="button" data-filter="ready">Ready</button>
@@ -1953,6 +1963,7 @@
       historyItems = (r.data && r.data.history) || [];
       statCheckins = historyItems.length; renderStats();
       renderTrend(historyItems);                             // trend + streak + capsule use the FULL set
+      renderHeat(historyItems);                              // readiness calendar heatmap
       const streak = renderStreak(historyItems);             // 🔥 consecutive-day streak badge on Today
       checkinDue = streak.hasHistory && !streak.loggedToday; // today's check-in still open (established user) -> capsule nudge
       updateCheckinCapsule();
@@ -1998,6 +2009,32 @@
         + '<div class="readiness ' + cls + '"><svg viewBox="0 0 ' + W + " " + H + '" preserveAspectRatio="none" role="img" aria-label="Readiness trend over the last ' + n + ' check-ins">'
         + '<path d="' + path + '" fill="none" stroke="var(--st)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>'
         + dots + "</svg></div>";
+    }
+    // Readiness calendar heatmap (FitTrackee) — one cell per day over the last WEEKS weeks, tinted by that
+    // day's readiness state. Column-major 7-row grid = GitHub-style; start aligned to a Sunday so rows are
+    // days of the week. Empty (no check-in) days stay dim; future cells in the current week are ghosted.
+    function renderHeat(items) {
+      const el = $("history-heat"); if (!el) return;
+      const WEEKS = 8;
+      const byDay = {};
+      (items || []).forEach((it) => {
+        const d = String((it && it.timestamp) || "").slice(0, 10);
+        if (/^\d{4}-\d{2}-\d{2}$/.test(d)) byDay[d] = readinessClass(it.assessment)[0];   // last check-in that day wins
+      });
+      const key = (d) => d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+      const today = new Date(); today.setHours(0, 0, 0, 0);
+      const start = new Date(today); start.setDate(today.getDate() - (WEEKS * 7 - 1)); start.setDate(start.getDate() - start.getDay());
+      let cells = "", cur = new Date(start);
+      for (let i = 0; i < WEEKS * 7; i++) {
+        const k = key(cur), cls = byDay[k], future = cur > today;
+        cells += '<span class="heat-cell' + (cls ? " readiness " + cls + " on" : "") + (future ? " future" : "")
+          + '" title="' + k + (cls ? " · " + cls : "") + '"></span>';
+        cur.setDate(cur.getDate() + 1);
+      }
+      el.innerHTML = '<p class="trend-cap">Last ' + WEEKS + ' weeks</p><div class="heatgrid">' + cells + "</div>"
+        + '<div class="heat-legend"><span class="readiness ready"><i style="--lc:var(--ready)"></i></span>Ready'
+        + '<span class="readiness moderate"><i style="--lc:var(--moderate)"></i></span>Moderate'
+        + '<span class="readiness rest"><i style="--lc:var(--rest)"></i></span>Rest</div>';
     }
 
     // ---- Forum ----
