@@ -95,6 +95,18 @@ def test_primary_controls_are_solid_mint_not_gradient():
         "the active auth tab must be solid mint"
 
 
+def test_today_leads_with_a_real_0_100_score():
+    # The Today orb leads with a 0-100 readiness SCORE (mono) as the one loud number, verdict word beneath
+    # (Whoop/Oura single-metric hero). The score is derived from the model's real class distribution (proba),
+    # not invented — the helper weights the classes and normalises by the total probability.
+    assert "function readinessScore" in INDEX, "the readinessScore helper (real 0-100 from proba) was removed"
+    assert re.search(r"readinessScore\(readiness\)\s*\{[^}]*?readiness\.proba", INDEX, re.S), \
+        "readinessScore must derive the number from the model's proba distribution (not a fixed/invented value)"
+    assert re.search(r'class="score"[^>]*>\'\s*\+\s*score', INDEX), "the orb must render the numeric score as its hero"
+    assert '"verdict-sub"' in INDEX and re.search(r"\.score\s*\{[^}]*font-family:var\(--font-mono\)", INDEX), \
+        "the score must use the mono instrument face with the verdict word as a sub-label"
+
+
 def test_ambient_animation_loops_are_calmed():
     # Only the hero orb(s) breathe; the brand-dot breathe, the readiness-orb halo pulse, and the signal
     # 'beat' were removed (5 simultaneous ambient loops read busy/AI-generated). Their keyframes are gone too.
