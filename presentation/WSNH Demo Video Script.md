@@ -34,6 +34,17 @@ say, and **which rubric item it proves** — so a TA can tick every box.
 - [ ] **+10 Azure/CI-CD:** shot 0 (live HTTPS) + shot 13 (pipeline test-on-commit → auto-deploy).
 - [ ] **Security posture:** email-verify (1), 2FA (2), file-size/rate-limit (10), HTTPS (0).
 
+## Beauty pass (class-vote differentiator — the app now LOOKS finished)
+The 5-min pitch is judged partly by a class vote, and a polished product reads as "done." The design pass is
+shipped and live, so let the visuals sell it in passing — no extra shots, just don't rush past them:
+- **Shot 0 / 3:** linger a beat on the **readiness ring** — the big 0–100 score **counts up** into place as the
+  ring fills (Whoop/Oura style). It's the signature moment; let it land.
+- **Shots 5–8 (forum + chat):** the **generative avatars** (each person a consistent colour) and the WhatsApp-style
+  chat (day separators, timestamps, "Seen") read as a real app — worth a slow scroll, not a fast click.
+- **Any screen:** it's a **theme-aware installable PWA** with calm, restrained motion (one accent, solid cards,
+  SVG icons) — the opposite of an "AI-generated" look. One line in the voiceover ("and it's a finished, designed
+  product, not a prototype") is enough.
+
 ## Production tips
 - One take if you can; if not, cut on tab-switches so it still feels continuous.
 - Keep the voiceover to the "Say" column — it's already timed to ~4 min.
