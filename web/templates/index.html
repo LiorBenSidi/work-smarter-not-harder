@@ -211,6 +211,13 @@
     input[type=checkbox] { width:auto; height:auto; padding:0; margin:0; border:0; border-radius:0;
       background:none; box-shadow:none; accent-color:var(--accent); flex:none; cursor:pointer; }
     input[type=checkbox]:focus { box-shadow:none; border-color:transparent; }
+    /* Consistent mint keyboard-focus ring on every interactive surface that lacked one (buttons, forum
+       posts, DM rows, theme/segment labels, checkboxes, links). :focus-visible = keyboard only, so it
+       never reintroduces the click-flicker the text fields/checkboxes above deliberately avoid. Elements
+       with their own :focus-visible rule (capsule/chip/um-seg/debug) keep it — those selectors outrank this. */
+    button:focus-visible, .post:focus-visible, .dm-row:focus-visible, a:focus-visible,
+    .seg:has(:focus-visible), .check-row:has(:focus-visible), input[type=checkbox]:focus-visible {
+      outline:2px solid var(--accent); outline-offset:2px; }
     /* Solid mint, not a gradient toward lilac — one tinted colour per view (iOS 26); a gradient primary is
        a recognizable AI-output tell. Press physics (scale-down + a mint glow) give it native tactility. */
     button { background: var(--accent);
@@ -1735,6 +1742,24 @@
         const orb = el.querySelector(".orb");
         if (orb) orb.style.setProperty("--w", orb.dataset.w);
         el.querySelectorAll(".conf-fill").forEach((f) => { f.style.width = f.dataset.w + "%"; });
+        countUpScore(el);   // the hero readiness number rises in step with the orb-ring sweep
+      });
+    }
+
+    // The hero readiness number rises 0->N over the orb-ring sweep (1.1s) — the instrument "computing"
+    // its verdict (Whoop/Oura open animation). One number, the hero; reduced-motion / "—" leave it static.
+    function countUpScore(el) {
+      if (reducedMotion()) return;
+      const node = el.querySelector(".readiness .score");
+      if (!node) return;
+      const target = Math.round(Number(node.textContent));
+      if (!Number.isFinite(target)) return;               // "—"/example state -> untouched
+      const dur = 1100, t0 = performance.now();           // match the .orb --w transition duration
+      node.textContent = "0";
+      requestAnimationFrame(function tick(now) {
+        const p = Math.min(1, (now - t0) / dur), e = 1 - Math.pow(1 - p, 3);   // ease-out cubic (matches the ring)
+        node.textContent = String(Math.round(e * target));
+        if (p < 1) requestAnimationFrame(tick); else node.textContent = String(target);
       });
     }
 
