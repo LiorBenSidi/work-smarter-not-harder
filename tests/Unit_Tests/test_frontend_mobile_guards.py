@@ -54,6 +54,8 @@ def test_landing_is_editorial_split_with_live_demo():
     assert 'class="auth-steps"' in INDEX and INDEX.count('<li>') >= 3, "the 3 how-it-works steps were removed"
     # the old boxed/numbered treatment must NOT come back (an AI-landing tell)
     assert 'class="how"' not in INDEX and "how-n" not in INDEX, "the boxed 01/02/03 steps must stay gone"
+    # the value paragraph was removed (it duplicated the 3 steps) — the steps are the single "how it works"
+    assert "hero-sub" not in INDEX, "the redundant landing value paragraph (hero-sub) must stay removed"
 
 
 # ---- 2b2. On mobile the orb is at the top and the login card is reachable without scrolling ----
@@ -66,10 +68,7 @@ def test_mobile_landing_orb_top_and_login_reachable():
     assert re.search(r"\.readiness-demo\s*\{\s*order:\s*1", INDEX), "the orb demo must be first (top) on mobile"
     assert re.search(r"\.auth-panel\s*\{\s*order:\s*4", INDEX), \
         "the auth card must sit right under the headline (order:4) so login is reachable without scrolling"
-    # on mobile the paragraph is hidden and the 3 steps are shown instead (user preference)
-    assert re.search(r"\.auth-thesis \.hero-sub\s*\{\s*display:\s*none", INDEX), \
-        "on mobile the value paragraph must be hidden (the 3 steps carry the how instead)"
-    assert re.search(r"\.auth-steps\s*\{\s*order:\s*5", INDEX), "the 3 steps must be shown (ordered) on mobile, not hidden"
+    assert re.search(r"\.auth-steps\s*\{\s*order:\s*5", INDEX), "the 3 steps must be shown (ordered) on mobile"
 
 
 # ---- 2c. The landing orb cycles the 3 states with a SMOOTH crossfade + is reduced-motion safe ----

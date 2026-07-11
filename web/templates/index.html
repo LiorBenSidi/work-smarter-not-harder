@@ -260,8 +260,7 @@
       max-width:1080px; margin:0 auto; padding:44px 8px 6px; animation: rise .7s cubic-bezier(.2,.7,.2,1) both; }
     .auth-eyebrow { font-family:var(--font-mono); font-size:12px; letter-spacing:.26em; text-transform:uppercase;
       color:var(--accent); margin:0 0 16px; }
-    .auth-thesis .hero-title { font-size:clamp(34px,4vw,54px); letter-spacing:-.03em; line-height:1.03; margin:0 0 16px; }
-    .auth-thesis .hero-sub { margin:0 0 26px; max-width:42ch; font-size:16px; line-height:1.55; }
+    .auth-thesis .hero-title { font-size:clamp(34px,4vw,54px); letter-spacing:-.03em; line-height:1.03; margin:0 0 20px; }
     /* the live sample: aurora orb + a mono readout that names today's state and the day's call */
     .readiness-demo { display:flex; align-items:center; gap:20px; padding:16px 20px; border:1px solid var(--line);
       border-radius:20px; background:var(--field); max-width:400px; }
@@ -289,7 +288,6 @@
       .auth-thesis .hero-title { order:3; margin:0; font-size:clamp(29px,7.6vw,40px); }
       .auth-panel { order:4; }                               /* the card lands right under the headline -> reachable */
       .auth-panel .card { margin:0 auto; }
-      .auth-thesis .hero-sub { display:none; }               /* on mobile the 3 steps carry the "how" — drop the redundant paragraph */
       .auth-steps { order:5; flex-direction:column; max-width:340px; margin:2px auto 0; text-align:left; border-top:0; }
       .auth-steps li { padding:13px 2px; border-top:1px solid var(--line); }
       .auth-steps li + li { border-left:0; }
@@ -313,7 +311,6 @@
       box-shadow: inset 0 0 0 1px rgba(255,255,255,.10);
       background: linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,0) 42%); }
     .hero-title { font-family: var(--font-display); font-size:31px; font-weight:800; letter-spacing:-.02em; line-height:1.14; margin:0 0 10px; }
-    .hero-sub { color:var(--muted); font-size:15px; margin:0 auto 20px; max-width:33ch; }
     /* Solid mint, not gradient-clipped text — gradient text on a heading is a recognizable AI-output tell
        (Impeccable's `gradient-text` detector). One confident accent colour reads more intentional. */
     .hero-title .accent { color: var(--accent); }
@@ -639,7 +636,6 @@
       <div class="auth-thesis">
         <p class="auth-eyebrow">Morning readiness</p>
         <h1 class="hero-title">Know when to push.<br>Know when to <span class="accent">rest</span>.</h1>
-        <p class="hero-sub">One 30-second check-in each morning turns how you slept, felt, and trained into a single signal, so you train hard on the right days and recover on the rest.</p>
         <!-- Live sample of the product's one output: the aurora orb + a readout cycle Ready -> Moderate ->
              Rest so a visitor sees what they'll get. aria-hidden: it's an illustration, not live SR content. -->
         <div class="readiness-demo" aria-hidden="true">
