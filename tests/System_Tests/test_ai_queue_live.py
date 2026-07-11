@@ -21,7 +21,9 @@ BASE = os.environ.get("AI_BASE_URL", "").rstrip("/")
 
 pytestmark = pytest.mark.skipif(not BASE, reason="set AI_BASE_URL to run against the live ai container")
 
-FEATURES = {"features": {"hrv": 60, "sleep_hours": 7, "soreness": 2}}
+# The four readiness fields the model requires, each in range — a request the /predict validator
+# accepts (ai/app.py), so the live queue actually scores it rather than 400-ing at the boundary.
+FEATURES = {"features": {"sleep_hours": 8, "fatigue": 2, "soreness": 1, "training_load": 100}}
 
 
 def _post(path, payload=None, timeout=30):

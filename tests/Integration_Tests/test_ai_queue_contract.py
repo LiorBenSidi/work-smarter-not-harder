@@ -81,8 +81,15 @@ def test_the_model_seam_takes_exactly_one_features_argument(inference_module):
 
 
 def test_the_model_seam_returns_the_web_ai_contract_keys(inference_module):
-    """Shiri owns the VALUES; `web/services/ai_client.py` reads these KEYS."""
-    result = inference_module.predict_one({"hrv": 60})
+    """Shiri owns the VALUES; `web/services/ai_client.py` reads these KEYS.
+
+    Call with the four fields the real Random Forest requires (sleep_hours, fatigue, soreness,
+    training_load) so this survives Shiri's model, which raises ValueError on incomplete input
+    rather than median-imputing invented values. The placeholder ignores them; both are green.
+    """
+    result = inference_module.predict_one(
+        {"sleep_hours": 8, "fatigue": 2, "soreness": 1, "training_load": 100}
+    )
     assert {"state", "proba", "recommendations"} <= set(result)
     assert isinstance(result["state"], str)
     assert isinstance(result["proba"], dict)
@@ -98,7 +105,9 @@ def test_the_model_seam_is_picklable_by_reference(inference_module):
 def test_the_model_seam_result_is_picklable(inference_module):
     """The worker's return value crosses a process boundary, so it must pickle too — a numpy scalar
     or a fitted-estimator handle sneaking into the response would only fail in production."""
-    result = inference_module.predict_one({"hrv": 60})
+    result = inference_module.predict_one(
+        {"sleep_hours": 8, "fatigue": 2, "soreness": 1, "training_load": 100}
+    )
     assert pickle.loads(pickle.dumps(result)) == result
 
 

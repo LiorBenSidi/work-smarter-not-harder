@@ -14,6 +14,11 @@ from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 
+# A body the readiness validator accepts (ai/app.py). Merge hostile content onto it so the request
+# passes validation and actually reaches a worker — isolating the security behaviour under test from
+# the field validation (which is covered separately below).
+VALID = {"sleep_hours": 8, "fatigue": 2, "soreness": 1, "training_load": 100}
+
 
 def echo(features):
     return {"state": "High", "proba": {"High": 1.0}, "recommendations": [], "echo": features}
@@ -72,21 +77,40 @@ def test_one_callers_job_id_does_not_expose_anothers_result(client):
 
 
 @pytest.mark.parametrize(
-    "features",
+    "hostile",
     [
         {"$where": "sleep(1000)"},          # NoSQL-injection-shaped key
         {"__class__": "gotcha"},            # attribute-traversal-shaped key
         {"a" * 5000: 1},                    # absurd key
-        {"hrv": {"$gt": ""}},               # operator object as a value
-        {"hrv": "'; DROP TABLE users; --"},
+        {"extra": {"$gt": ""}},             # operator object as a value in a non-required field
+        {"extra": "'; DROP TABLE users; --"},
     ],
 )
-def test_hostile_feature_content_is_handled_not_executed(client, features):
-    """The model seam receives data, never code. These must not 500 — the queue passes them through
-    to a worker that treats them as opaque values (and the worker is a separate process anyway)."""
-    response = client.post("/predict", json={"features": features})
+def test_hostile_feature_content_is_handled_not_executed(client, hostile):
+    """The model seam receives data, never code. Hostile content that rides in alongside the required
+    fields must not 500 — the queue passes it through to a worker that treats it as opaque values
+    (and the worker is a separate process anyway)."""
+    response = client.post("/predict", json={"features": {**VALID, **hostile}})
     assert response.status_code == 200
     assert response.get_json()["state"] == "High"
+
+
+@pytest.mark.parametrize(
+    "bad_value",
+    [
+        {"$gt": ""},                        # operator object smuggled into a required slot
+        "'; DROP TABLE users; --",          # SQL-shaped string
+        [1, 2, 3],                          # a list where a number is required
+        None,                               # null
+    ],
+)
+def test_a_hostile_value_in_a_required_field_is_refused_before_a_worker(client, bad_value):
+    """A required readiness field that isn't a plain number (injection-shaped object, SQL string,
+    list, null) is rejected at the boundary (400) — it never becomes a pickled round-trip into a
+    child process, which is exactly what the pre-`submit()` validation exists to prevent."""
+    response = client.post("/predict", json={"features": {**VALID, "sleep_hours": bad_value}})
+    assert response.status_code == 400
+    assert client.get("/queue/stats").get_json()["submitted"] == 0
 
 
 @pytest.mark.parametrize("route", ["/predict", "/jobs"])
@@ -123,7 +147,8 @@ def test_an_error_response_does_not_leak_internals(client, ai_app_module, jobque
     app = ai_app_module.create_app(queue=queue)
     app.config["TESTING"] = True
     try:
-        response = app.test_client().post("/predict", json={"features": {}})
+        # a valid body so the request reaches the worker and exercises the model-raises path
+        response = app.test_client().post("/predict", json={"features": dict(VALID)})
         assert response.status_code == 500
         assert response.get_json() == {"error": "prediction failed"}
         assert "secret" not in response.get_data(as_text=True)
@@ -137,9 +162,9 @@ def test_an_error_response_does_not_leak_internals(client, ai_app_module, jobque
 def test_queue_stats_does_not_expose_job_payloads(client):
     """`/queue/stats` is an operator view. It must report depth, never the features or results that
     passed through — those are user health data."""
-    client.post("/predict", json={"features": {"resting_hr": 48}})
+    client.post("/predict", json={"features": {**VALID, "training_load": 137}})
     stats = client.get("/queue/stats").get_json()
-    assert "48" not in str(stats)
+    assert "137" not in str(stats)
     assert set(stats) == {
         "workers",
         "pending",
