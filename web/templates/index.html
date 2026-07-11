@@ -1759,9 +1759,19 @@
     // openPost()+loadForum() un-awaited, so rapid up/down clicks launch overlapping fetches whose responses
     // can arrive out of order and momentarily paint a stale score (#SPA3). The latest call always wins.
     let openPostSeq = 0, forumLoadSeq = 0;
+    // #forum-detail is slotted INSIDE #forum-list while a post is open (inline expand). Any code that wipes
+    // the list's innerHTML must move the detail OUT first, or the element is destroyed — after which every
+    // openPost throws on a null box and the forum wedges ("can't open any post", seen after voting, which
+    // calls loadForum while a post is open). Both loadForum and renderForumList stash it before wiping.
+    function stashDetail() {
+      const detail = $("forum-detail"), el = $("forum-list");
+      if (detail && el && detail.parentNode === el) el.parentNode.appendChild(detail);
+    }
     async function loadForum() {
       const u = currentUser, seq = ++forumLoadSeq;
-      const el = $("forum-list"); el.innerHTML = '<p class="muted">Loading…</p>';
+      const el = $("forum-list");
+      stashDetail();                                          // preserve an open post's detail across the wipe
+      el.innerHTML = '<p class="muted">Loading…</p>';
       const r = await api("/forum/posts");
       if (sessionChanged(u, "loadForum") || seq !== forumLoadSeq) return;   // stale session OR superseded -> don't paint
       if (!r.ok) { el.innerHTML = '<p class="flash error">Could not load the forum.</p>'; return; }
@@ -1770,9 +1780,7 @@
     }
     function renderForumList() {
       const el = $("forum-list"); if (!el) return;
-      const detail = $("forum-detail");
-      // Rescue the open detail out of the list before we wipe innerHTML (else it'd be destroyed), then re-slot it.
-      if (detail && detail.parentNode === el) el.parentNode.appendChild(detail);
+      stashDetail();                                          // move an open post's detail out before we wipe the list, then re-slot it below
       if (!forumPosts.length) { el.innerHTML = emptyState(EMPTY_ICONS.forum, "Quiet in here", "Start the conversation. Share something above."); return; }
       let list = forumPosts.slice();                         // "recent" keeps the server order (newest first)
       if (forumSort === "top") list.sort((a, b) => (b.score || 0) - (a.score || 0));
@@ -1828,7 +1836,9 @@
       catch (_) { failOpen(seq); return; }                    // network reject (offline / dropped) -> don't wedge
       if (sessionChanged(u, "openPost") || seq !== openPostSeq) return;   // stale session OR a newer open/vote superseded this
       const box = $("forum-detail");
-      if (!r.ok || !r.data || !r.data.post) { failOpen(seq); return; }    // non-ok / malformed -> don't wedge
+      // non-ok / malformed / a missing detail element -> recover, never throw-and-wedge (belt-and-suspenders
+      // for the box: stashDetail keeps it alive, but a null box must degrade to a retry, not a TypeError).
+      if (!box || !r.ok || !r.data || !r.data.post) { failOpen(seq); return; }
       const p = r.data.post;
       currentPost = p;
       box.hidden = false;

@@ -70,6 +70,23 @@ def test_landing_orb_cycles_states_and_crossfades():
         "under reduced motion the orb must paint one static state and not cycle"
 
 
+# ---- 3a. Voting must not destroy #forum-detail (the "can't open any post after voting" wedge, 2026-07-11) ----
+def test_forum_detail_is_stashed_before_any_list_wipe():
+    # When a post is open, #forum-detail is slotted INSIDE #forum-list. loadForum() (called by vote())
+    # wipes the list's innerHTML; without moving the detail out first it is DESTROYED, and every later
+    # openPost throws on a null box -> the forum wedges. Both list-wipers must stashDetail() first, and
+    # openPost must guard a null box so a missing detail degrades to a retry rather than a throw.
+    assert "function stashDetail" in INDEX, "the stashDetail rescue helper (un-wedge after voting) was removed"
+    assert re.search(r"stashDetail\(\);[^\n]*\n\s*el\.innerHTML\s*=\s*'<p class=\"muted\">Loading", INDEX), \
+        "loadForum must stashDetail() before wiping #forum-list (else voting destroys #forum-detail)"
+    # renderForumList also stashes before it rebuilds the list
+    assert re.search(r"function renderForumList\(\)\s*\{[^}]*?stashDetail\(\);", INDEX), \
+        "renderForumList must stashDetail() before rebuilding the list"
+    # openPost degrades gracefully if the detail box is somehow missing (no TypeError-wedge)
+    assert re.search(r"if\s*\(!box\s*\|\|\s*!r\.ok", INDEX), \
+        "openPost must guard a null #forum-detail box so a missing element can't throw-and-wedge"
+
+
 # ---- 3. Forum posts expand inline (not a bottom panel) with a collapse chevron ----
 def test_forum_posts_expand_inline_with_a_chevron():
     assert "function togglePost" in INDEX, "the forum expand/collapse toggle was removed"
@@ -90,9 +107,9 @@ def test_forum_open_failure_never_wedges():
     # openPost wraps the detail fetch so a REJECTED fetch calls failOpen instead of an unhandled rejection.
     assert re.search(r"try\s*\{\s*r\s*=\s*await\s+api\([^)]*\);\s*\}\s*catch\s*\([^)]*\)\s*\{\s*failOpen\(seq\);\s*return;", INDEX), \
         "openPost must catch a rejected detail fetch and call failOpen (else a dropped request wedges the forum)"
-    # A non-ok / body-without-.post response also routes through failOpen (not a silent box.hidden = true).
-    assert re.search(r"if\s*\(!r\.ok\s*\|\|\s*!r\.data\s*\|\|\s*!r\.data\.post\)\s*\{\s*failOpen\(seq\);\s*return;", INDEX), \
-        "a non-ok / malformed detail response must call failOpen, not silently hide the box and leave state stuck"
+    # A null box / non-ok / body-without-.post response also routes through failOpen (not a silent hide/throw).
+    assert re.search(r"if\s*\(!box\s*\|\|\s*!r\.ok\s*\|\|\s*!r\.data\s*\|\|\s*!r\.data\.post\)\s*\{\s*failOpen\(seq\);\s*return;", INDEX), \
+        "a null box / non-ok / malformed detail response must call failOpen, not silently hide the box and leave state stuck"
 
 
 # ---- 4. Theme segments can't overlap on mobile ----
