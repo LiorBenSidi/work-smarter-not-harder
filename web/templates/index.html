@@ -424,6 +424,11 @@
     .sk + .sk { margin-top:10px; }
     @keyframes shimmer { 100% { transform:translateX(100%); } }
     @media (prefers-reduced-motion: reduce) { .sk::after { animation:none; } }
+    /* Staggered reveal for list rows (crafted entrance) — a one-time fade+rise per row, capped delay. The
+       animation always COMPLETES (fill:both) so a row can never get stuck invisible; reduced-motion skips it
+       entirely (no opacity:0 base). Applied to History (re-renders only on filter — a clean transition). */
+    @keyframes revealIn { from { opacity:0; transform:translateY(12px); } to { opacity:1; transform:none; } }
+    @media (prefers-reduced-motion: no-preference) { .reveal-item { animation: revealIn .45s var(--ease) both; } }
     .empty { text-align:center; padding:24px 16px 20px; animation: rise .4s cubic-bezier(.2,.7,.2,1) both; }
     .empty-ico { width:54px; height:54px; margin:0 auto 12px; border-radius:50%; display:inline-flex; align-items:center; justify-content:center;
       background: color-mix(in srgb, var(--accent) 12%, var(--field)); border:1px solid color-mix(in srgb, var(--accent) 26%, var(--line)); }
@@ -1956,9 +1961,9 @@
       if (!items.length) { el.innerHTML = emptyState(EMPTY_ICONS.filter, "Nothing here", "No " + historyFilter + " days in your history yet."); return; }
       // Each row reads as a colour-coded score line (Whoop trend tier): a state dot + the numeric readiness
       // score + the verdict word + kcal, with a relative timestamp. Scannable as a coloured column.
-      el.innerHTML = '<ul class="hlist">' + items.map((it) => {
+      el.innerHTML = '<ul class="hlist">' + items.map((it, i) => {
         const [cls, pct] = readinessClass(it.assessment);
-        return '<li class="hrow readiness ' + cls + '">'
+        return '<li class="hrow reveal-item readiness ' + cls + '" style="animation-delay:' + Math.min(i * 35, 280) + 'ms">'
           + '<span class="hrow-score">' + pct + '</span>'
           + '<span class="hrow-main"><strong>' + escapeHtml(it.assessment || "—") + "</strong>"
           + (it.calories != null ? '<span class="muted"> · ' + escapeHtml(it.calories) + " kcal</span>" : "") + "</span>"
