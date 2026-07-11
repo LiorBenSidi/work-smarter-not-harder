@@ -85,6 +85,28 @@ def test_landing_orb_cycles_states_and_crossfades():
         "under reduced motion the orb must paint one static state and not cycle"
 
 
+# ---- 2d. Motion + material polish (design pass): solid-mint primary, calm motion (no ambient loops) ----
+def test_primary_controls_are_solid_mint_not_gradient():
+    # One tinted colour per view (iOS 26); a gradient-to-lilac primary button is an AI-output tell. The
+    # primary button, active auth tab, and active menu segment fill with a solid --accent.
+    assert re.search(r"\bbutton\s*\{\s*background:\s*var\(--accent\);", INDEX), \
+        "the primary button must be solid mint (var(--accent)), not a gradient toward lilac"
+    assert re.search(r"\.tabs button\.active\s*\{\s*background:\s*var\(--accent\);", INDEX), \
+        "the active auth tab must be solid mint"
+
+
+def test_ambient_animation_loops_are_calmed():
+    # Only the hero orb(s) breathe; the brand-dot breathe, the readiness-orb halo pulse, and the signal
+    # 'beat' were removed (5 simultaneous ambient loops read busy/AI-generated). Their keyframes are gone too.
+    assert "@keyframes halo" not in INDEX, "the halo pulse keyframe must stay removed (calm motion)"
+    assert "@keyframes beat" not in INDEX, "the signal 'beat' keyframe must stay removed (calm motion)"
+    assert "animation: halo" not in INDEX and "animation: beat" not in INDEX, \
+        "no element may use the removed halo/beat ambient loops"
+    # the press-state physics that make taps feel native stay
+    assert re.search(r"button:active\s*\{\s*transform:\s*scale\(\.97\)", INDEX), \
+        "buttons must keep the scale-down press physics (native tactility)"
+
+
 # ---- 3a. Voting must not destroy #forum-detail (the "can't open any post after voting" wedge, 2026-07-11) ----
 def test_forum_detail_is_stashed_before_any_list_wipe():
     # When a post is open, #forum-detail is slotted INSIDE #forum-list. loadForum() (called by vote())
