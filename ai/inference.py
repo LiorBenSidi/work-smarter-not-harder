@@ -11,6 +11,7 @@ pays for it exactly once, not per request.
 CONTRACT (the `web -> ai` response shape — see docs/DESIGN.md):
     predict_one({...features...}) -> {"state": str, "proba": {str: float}, "recommendations": [...]}
 """
+
 import logging
 from pathlib import Path
 import joblib
@@ -48,15 +49,35 @@ def _safe_float(value):
     return numeric_value
 
 
+def _web_wellness_to_model_scale(value):
+    """Map the web's 1-10 wellness scale to the model's 1-5 scale."""
+    numeric_value = _safe_float(value)
+
+    if np.isnan(numeric_value):
+        return np.nan
+
+    if not 1.0 <= numeric_value <= 10.0:
+        return np.nan
+
+    return 1.0 + (numeric_value - 1.0) * 4.0 / 9.0
+
+
 def _build_feature_vector(features):
     """Build one model input row in the exact feature order used during training."""
     if not isinstance(features, dict):
         features = {}
 
-    values = {
-        name: [_safe_float(features.get(name))]
-        for name in _FEATURE_ORDER
-    }
+    values = {}
+
+    for name in _FEATURE_ORDER:
+        raw_value = features.get(name)
+
+        if name in {"fatigue", "soreness"}:
+            value = _web_wellness_to_model_scale(raw_value)
+        else:
+            value = _safe_float(raw_value)
+
+        values[name] = [value]
 
     return pd.DataFrame(values, columns=_FEATURE_ORDER)
 
@@ -85,6 +106,7 @@ def _choose_state(probabilities):
         non_ready_labels,
         key=lambda label: probability_by_class[label],
     )
+
 
 
 def predict_one(features):

@@ -29,6 +29,12 @@ import pandas as pd
 
 PARTICIPANTS = tuple(f"p{i:02d}" for i in range(1, 17))
 
+# Convert raw daily sRPE to the 0-10 scale used by the web check-in.
+# The explored PMData training set had a 95th-percentile daily load of 596.
+# Values at or above this reference are clipped to 10.
+TRAINING_LOAD_REFERENCE = 596.0
+TRAINING_LOAD_OUTPUT_MAX = 10.0
+
 OUTPUT_COLUMNS = [
     "participant",
     "date",
@@ -56,6 +62,33 @@ def readiness_to_class(value: float) -> str | None:
     if value <= 7:
         return "Moderate"
     return "Ready"
+
+
+def normalize_training_load(value: float) -> float:
+    """Map raw daily sRPE to the web contract's 0-10 load scale."""
+    if pd.isna(value):
+        return 0.0
+
+    numeric_value = float(value)
+
+    if numeric_value < 0:
+        raise ValueError(
+            f"training_load cannot be negative: {numeric_value}"
+        )
+
+    scaled_value = (
+        numeric_value
+        / TRAINING_LOAD_REFERENCE
+        * TRAINING_LOAD_OUTPUT_MAX
+    )
+
+    return float(
+        np.clip(
+            scaled_value,
+            0.0,
+            TRAINING_LOAD_OUTPUT_MAX,
+        )
+    )
 
 
 def load_wellness(path: Path, participant: str) -> pd.DataFrame:
@@ -245,6 +278,11 @@ def build_dataset(source_root: Path) -> pd.DataFrame:
         kind="stable",
     ).reset_index(drop=True)
 
+    dataset["training_load"] = (
+        dataset["training_load"]
+        .map(normalize_training_load)
+    )
+
     return dataset
 
 
@@ -271,6 +309,9 @@ def validate_ranges(dataset: pd.DataFrame) -> dict[str, int]:
         ),
         "training_load_below_0": int(
             (dataset["training_load"] < 0).sum()
+        ),
+        "training_load_above_10": int(
+            (dataset["training_load"] > 10).sum()
         ),
         "readiness_outside_0_10": int(
             (
