@@ -429,6 +429,14 @@
     .trend { margin:2px 0 16px; }
     .trend-cap { font-size:11px; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); font-weight:800; margin:0 0 8px; }
     .trend svg { width:100%; height:66px; display:block; overflow:visible; }
+    /* history rows: a colour-coded score column (state dot + numeric score + verdict + relative time) */
+    .hlist { list-style:none; margin:0; padding:0; }
+    .hrow { display:flex; align-items:center; gap:14px; padding:12px 4px 12px 12px; border-top:1px solid var(--line); position:relative; }
+    .hrow:first-child { border-top:0; }
+    .hrow::before { content:""; position:absolute; left:0; top:50%; transform:translateY(-50%); width:7px; height:7px; border-radius:50%; background:var(--st); box-shadow:0 0 8px color-mix(in srgb, var(--st) 60%, transparent); }
+    .hrow-score { font-family:var(--font-mono); font-weight:800; font-size:20px; color:var(--st); min-width:32px; text-align:center; }
+    .hrow-main { flex:1; min-width:0; } .hrow-main strong { font-weight:700; text-transform:capitalize; }
+    .hrow-time { font-size:12.5px; white-space:nowrap; }
 
     .pill { display:inline-block; padding:6px 13px; border-radius:999px; font-size:12.5px; font-family:var(--font-mono);
       background:var(--field); border:1px solid var(--line); color:var(--ink); white-space:nowrap; }
@@ -1764,11 +1772,16 @@
       const items = historyFilter === "all" ? historyItems
         : historyItems.filter((it) => readinessClass(it && it.assessment)[0] === historyFilter);
       if (!items.length) { el.innerHTML = emptyState(EMPTY_ICONS.filter, "Nothing here", "No " + historyFilter + " days in your history yet."); return; }
-      el.innerHTML = "<ul>" + items.map((it) =>
-        "<li><strong>" + escapeHtml(it.assessment || "—") + "</strong> "
-        + (it.calories != null ? "· " + escapeHtml(it.calories) + " kcal " : "")
-        + '<span class="muted">' + escapeHtml(it.timestamp || "") + "</span></li>"
-      ).join("") + "</ul>";
+      // Each row reads as a colour-coded score line (Whoop trend tier): a state dot + the numeric readiness
+      // score + the verdict word + kcal, with a relative timestamp. Scannable as a coloured column.
+      el.innerHTML = '<ul class="hlist">' + items.map((it) => {
+        const [cls, pct] = readinessClass(it.assessment);
+        return '<li class="hrow readiness ' + cls + '">'
+          + '<span class="hrow-score">' + pct + '</span>'
+          + '<span class="hrow-main"><strong>' + escapeHtml(it.assessment || "—") + "</strong>"
+          + (it.calories != null ? '<span class="muted"> · ' + escapeHtml(it.calories) + " kcal</span>" : "") + "</span>"
+          + '<span class="hrow-time muted">' + escapeHtml(timeAgoStr(it.timestamp)) + "</span></li>";
+      }).join("") + "</ul>";
     }
     $("history-filters").addEventListener("click", (e) => {
       const chip = e.target.closest(".chip"); if (!chip) return;
@@ -2144,6 +2157,9 @@
       if (d < 86400) return Math.floor(d / 3600) + "h ago";
       return Math.floor(d / 86400) + "d ago";
     }
+    // Relative time from an ISO timestamp (history/check-in rows store ISO, not epoch). Falls back to the
+    // raw string if it isn't parseable, so a legacy/odd value is shown as-is rather than "NaN ago".
+    function timeAgoStr(ts) { const t = Date.parse(ts || ""); return isNaN(t) ? (ts || "") : timeAgo(t / 1000); }
     // Pure render from an already-fetched list (DMs surface in the thread list, so they're filtered out
     // here) — the caller owns the request, so a poll tick and the initial open share one fetch.
     function renderActivity(notifications) {
