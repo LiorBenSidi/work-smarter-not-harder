@@ -95,6 +95,15 @@ def test_primary_controls_are_solid_mint_not_gradient():
         "the active auth tab must be solid mint"
 
 
+def test_history_rows_are_a_colour_coded_score_column():
+    # History rows lead with the numeric readiness score + a state-colour dot + a RELATIVE time (Whoop trend
+    # tier) — not a flat "<strong>word</strong> raw-ISO-timestamp" line.
+    assert "function timeAgoStr" in INDEX, "the ISO relative-time helper for history rows was removed"
+    assert "timeAgoStr(it.timestamp)" in INDEX, "history rows must show a relative time, not the raw ISO string"
+    assert 'class="hrow' in INDEX and "hrow-score" in INDEX, "the colour-coded history row markup was removed"
+    assert re.search(r"\.hrow-score\s*\{[^}]*color:var\(--st\)", INDEX), "the history score must be state-coloured (--st)"
+
+
 def test_forum_controls_use_svg_icons_not_unicode_glyphs():
     # The ▲▾✕▼ template glyphs (inconsistent weight/baseline across platforms) are replaced by the app's SVG
     # icon set — score/vote/close/chevron all render from ICON.up/down/close/chev.
