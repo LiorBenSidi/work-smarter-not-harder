@@ -92,6 +92,56 @@ jobs:
         run: docker compose -f docker-compose.yml -f docker-compose.test.yml down -v --remove-orphans
 
   # ---------------------------------------------------------------------------
+  # Browser E2E (interaction) gate. `compose-e2e` proves the HTTP wire path; THIS job drives the real UI in
+  # a headless Chrome (dependency-free — Node's built-in WebSocket over CDP, Chrome ships on the runner) at
+  # BOTH desktop and mobile viewports, so a clicked-through regression (e.g. the forum "can't open a post
+  # after voting" wedge) fails the PR. Boots with OTP/verify-email OFF so the browser can complete auth
+  # without a mailbox. Runs on PRs too. See tests/E2E_Tests/SCENARIOS.md for the full plan.
+  # ---------------------------------------------------------------------------
+  e2e-browser:
+    name: e2e (browser · desktop + mobile)
+    needs: checks
+    if: github.event_name != 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"            # global WebSocket + fetch (the harness uses no npm packages)
+
+      - name: Locate Chrome (pre-installed on ubuntu runners)
+        run: google-chrome --version || google-chrome-stable --version || chromium-browser --version
+
+      - name: Render an E2E .env (OTP + verify-email OFF so the browser can finish auth without a mailbox)
+        run: |
+          {
+            echo "SECRET_KEY=ci-only-not-a-real-secret-$RANDOM"
+            echo "REGISTER_VERIFY_EMAIL=0"
+            echo "OTP_ENABLED=0"
+            echo "SMTP_HOST="
+            echo "SESSION_COOKIE_SECURE=0"
+          } > .env
+
+      - name: Boot the stack (detached) and wait for it to serve
+        run: |
+          docker compose up --build -d
+          curl --fail --retry 30 --retry-delay 2 --retry-all-errors http://localhost:8000/ready
+
+      - name: Run the browser E2E suite at desktop AND mobile
+        env:
+          E2E_BASE_URL: http://localhost:8000
+        run: node tests/E2E_Tests/run.mjs both
+
+      - name: Dump container logs on failure
+        if: failure()
+        run: docker compose logs --no-color --tail 200
+
+      - name: Tear down (volumes too)
+        if: always()
+        run: docker compose down -v --remove-orphans
+
+  # ---------------------------------------------------------------------------
   # CD half (assignment R3–R10). These jobs run ONLY on push to main — a PR
   # stops after `checks` above (R1.3), because both are gated on the push event.
   # ---------------------------------------------------------------------------
