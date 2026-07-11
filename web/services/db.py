@@ -503,7 +503,7 @@ def forum_delete_post(db, post_id, username):
 
 def _message_shape(m):
     return {"id": m["id"], "sender": m["sender"], "recipient": m["recipient"],
-            "body": m["body"], "created_at": m["created_at"], "read": m.get("read", False)}
+            "body": m["body"], "created_at": m.get("created_at", 0), "read": m.get("read", False)}
 
 
 def message_send(db, sender, recipient, body):
@@ -546,7 +546,7 @@ def message_count_since(db, user, since):
 
 def _notification_shape(n):
     return {"id": n["id"], "type": n["type"], "actor": n["actor"], "ref": n.get("ref"),
-            "text": n["text"], "created_at": n["created_at"], "read": n.get("read", False)}
+            "text": n["text"], "created_at": n.get("created_at", 0), "read": n.get("read", False)}
 
 
 def notification_add(db, user, ntype, actor, ref, text):
