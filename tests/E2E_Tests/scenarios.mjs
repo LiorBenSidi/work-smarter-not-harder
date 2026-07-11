@@ -193,6 +193,24 @@ export const SCENARIOS = [
     },
   },
 
+  {
+    name: "resilience REGRESSION: a dropped request shows an error, not a stuck spinner",
+    tags: ["resilience", "regression"],
+    async fn(b) {
+      await registerAndLogin(b);
+      // make the next /dashboard fetch reject (a dropped request on the flaky prod host)
+      await b.pageExec(`(() => { const real = window.fetch; window.__realFetch = real;
+        window.fetch = (u, o) => (typeof u === "string" && u.indexOf("/dashboard") !== -1) ? Promise.reject(new Error("dropped")) : real(u, o); return true; })()`);
+      // trigger a dashboard reload (Refresh) and let it settle
+      await b.pageExec(`(() => { const btn = document.getElementById("dashboard-refresh"); if (btn) btn.click(); return true; })()`);
+      await b.wait(1200);
+      await b.pageExec(`(() => { if (window.__realFetch) window.fetch = window.__realFetch; return true; })()`);
+      const dash = await b.text("#dashboard");
+      assert(dash && !/loading/i.test(dash), `dashboard stuck on a spinner after a dropped request: "${dash}"`);
+      assert(dash && /could not|unavailable|error|try again/i.test(dash), `dropped request showed no error message: "${dash}"`);
+    },
+  },
+
   // ===== Profile =====
   {
     name: "profile: change display name updates the header",
