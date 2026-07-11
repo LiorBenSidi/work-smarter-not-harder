@@ -44,6 +44,32 @@ def test_password_fields_get_a_show_hide_toggle():
     assert INDEX.count('type="password"') >= 5, "expected the auth/settings password inputs to still exist"
 
 
+# ---- 2b. The logged-out landing is an editorial split with a LIVE readiness demo (not a centred column) ----
+def test_landing_is_editorial_split_with_live_demo():
+    # The generic-landing look (centred single column + boxed 01/02/03 steps) was replaced by a two-column
+    # thesis/auth split whose signature is a live sample of the product's one output.
+    assert ".auth-split" in INDEX, "the editorial thesis/auth split was removed"
+    assert 'class="readiness-demo"' in INDEX, "the live readiness demo (orb + readout) was removed"
+    assert 'id="demo-state"' in INDEX and 'id="demo-verb"' in INDEX, "the demo state/verb readout was removed"
+    assert 'class="auth-steps"' in INDEX and INDEX.count('<li>') >= 3, "the 3 how-it-works steps were removed"
+    # the old boxed/numbered treatment must NOT come back (an AI-landing tell)
+    assert 'class="how"' not in INDEX and "how-n" not in INDEX, "the boxed 01/02/03 steps must stay gone"
+
+
+# ---- 2c. The landing orb cycles the 3 states with a SMOOTH crossfade + is reduced-motion safe ----
+def test_landing_orb_cycles_states_and_crossfades():
+    # A live sample: the aurora colour + readout cycle Ready -> Moderate -> Rest, easing between colours
+    # (a per-frame lerp) rather than snapping, and staying static under reduced motion.
+    for state in ("Ready", "Moderate", "Rest"):
+        assert state in INDEX, f"the landing demo lost the {state!r} state"
+    # per-frame colour easing toward the target (the natural crossfade) — the interpolation term must exist
+    assert re.search(r"target\[i\]\[k\]\s*-\s*v\)\s*\*\s*0?\.\d+", INDEX), \
+        "the orb colour must ease toward the target per frame (crossfade), not snap"
+    # reduced-motion: paint one static state and return (no cycling loop) — JS RAF isn't covered by CSS
+    assert re.search(r"if\s*\(reduce\)\s*\{\s*setState\(0\);\s*paint\([^)]*\);\s*return;", INDEX), \
+        "under reduced motion the orb must paint one static state and not cycle"
+
+
 # ---- 3. Forum posts expand inline (not a bottom panel) with a collapse chevron ----
 def test_forum_posts_expand_inline_with_a_chevron():
     assert "function togglePost" in INDEX, "the forum expand/collapse toggle was removed"
