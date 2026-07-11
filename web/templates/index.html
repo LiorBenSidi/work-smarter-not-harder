@@ -31,6 +31,8 @@
       /* dusk (default) — recovery at rest */
       --bg:#0a0e20; --bg2:#170f30; --ink:#eef0fb; --muted:#9aa2c9;
       --card: color-mix(in srgb, #1b1740 58%, transparent); --field: rgba(255,255,255,.05); --line: rgba(255,255,255,.10);
+      /* solid content surfaces — glass is a NAV-layer material only (iOS 26); content cards are opaque */
+      --card-solid:#171338; --stat-solid:#13102e;
       --accent:#6ff0cf; --accent2:#b39bff; --on-accent:#04231b;
       --ok:#6ff0cf; --warn:#ffce7a; --err:#ff9db4; --ready:#6ff0cf; --moderate:#ffce7a; --rest:#ff9db4; --brand:#b39bff;
       --shadow:0 30px 70px -34px rgba(3,6,20,.85);
@@ -43,6 +45,7 @@
     :root[data-theme="light"] { color-scheme: light;
       --bg:#eef0fb; --bg2:#e7e4fb; --ink:#1a1f3a; --muted:#5c6486;
       --card: color-mix(in srgb, #ffffff 78%, transparent); --field: rgba(20,26,60,.05); --line: rgba(30,36,80,.12);
+      --card-solid:#ffffff; --stat-solid:#f7f6fd;
       --accent:#0eb389; --accent2:#7c5cff; --on-accent:#ffffff;
       --ok:#0eb389; --warn:#b5730c; --err:#b3163f; --ready:#0eb389; --moderate:#b5730c; --rest:#d5477a; --brand:#7c5cff;
       --shadow:0 30px 60px -34px rgba(60,60,120,.30);
@@ -52,6 +55,7 @@
       :root:not([data-theme="dark"]):not([data-theme="light"]) {
         --bg:#eef0fb; --bg2:#e7e4fb; --ink:#1a1f3a; --muted:#5c6486;
         --card: color-mix(in srgb, #ffffff 78%, transparent); --field: rgba(20,26,60,.05); --line: rgba(30,36,80,.12);
+        --card-solid:#ffffff; --stat-solid:#f7f6fd;
         --accent:#0eb389; --accent2:#7c5cff; --on-accent:#ffffff;
         --ok:#0eb389; --warn:#b5730c; --err:#b3163f; --ready:#0eb389; --moderate:#b5730c; --rest:#d5477a; --brand:#7c5cff;
         --shadow:0 30px 60px -34px rgba(60,60,120,.30);
@@ -185,8 +189,9 @@
     @keyframes menuPop { from { opacity:0; transform: translateY(-6px) scale(.96); } to { opacity:1; transform: translateY(0) scale(1); } }
 
     main { max-width:560px; margin:0 auto; padding:22px 18px 92px; }   /* bottom clears the floating pill nav */
-    .card { background:var(--card); border:1px solid var(--line); border-radius:24px; padding:22px; margin-bottom:18px;
-      box-shadow:var(--shadow); -webkit-backdrop-filter: blur(18px) saturate(1.15); backdrop-filter: blur(18px) saturate(1.15); animation: rise .6s cubic-bezier(.2,.7,.2,1) both; }
+    /* content card: SOLID (glass is a nav-layer material only, iOS 26) — no backdrop-filter, opaque surface */
+    .card { background:var(--card-solid); border:1px solid var(--line); border-radius:24px; padding:22px; margin-bottom:18px;
+      box-shadow:var(--shadow); animation: rise .6s cubic-bezier(.2,.7,.2,1) both; }
     .screen .card:nth-child(2){ animation-delay:.04s } .screen .card:nth-child(3){ animation-delay:.10s }
     .screen .card:nth-child(4){ animation-delay:.16s }
     .card h2 { margin:0 0 16px; font-size:12px; color:var(--muted); text-transform:uppercase; letter-spacing:.14em; font-weight:800;
@@ -338,17 +343,17 @@
 
     /* stat strip — glanceable numbers */
     .stat-strip { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin:0 0 18px; }
-    .stat { background:var(--card); border:1px solid var(--line); border-radius:18px; padding:15px 10px 13px; text-align:center;
-      box-shadow:var(--shadow); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); animation: rise .5s cubic-bezier(.2,.7,.2,1) both; }
+    .stat { background:var(--stat-solid); border:1px solid var(--line); border-radius:18px; padding:15px 10px 13px; text-align:center;
+      box-shadow:var(--shadow); animation: rise .5s cubic-bezier(.2,.7,.2,1) both; }
     .stat .ico { width:19px; height:19px; stroke:var(--accent); fill:none; stroke-width:2; margin-bottom:5px; }
     .stat .n { font-size:21px; font-weight:800; font-family:var(--font-mono); color:var(--ink); line-height:1.05;
       max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-    .stat .n.accent { color:var(--brand); }
+    .stat .n.accent { color:var(--accent); }   /* mint is the one saturated accent — no second (lilac) colour */
     .stat .k { font-size:10px; letter-spacing:.1em; text-transform:uppercase; color:var(--muted); margin-top:5px; }
     /* Check-in streak badge (Wolt's tenure footer -> fitness motivation; warm accent = fire) */
     .streak { display:inline-flex; align-items:center; gap:9px; margin:-2px 0 16px; padding:9px 15px; border-radius:999px;
-      background: color-mix(in srgb, var(--warn) 14%, var(--card)); border:1px solid color-mix(in srgb, var(--warn) 40%, var(--line));
-      box-shadow:var(--shadow); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); animation: rise .5s cubic-bezier(.2,.7,.2,1) both; }
+      background: color-mix(in srgb, var(--warn) 14%, var(--stat-solid)); border:1px solid color-mix(in srgb, var(--warn) 40%, var(--line));
+      box-shadow:var(--shadow); animation: rise .5s cubic-bezier(.2,.7,.2,1) both; }
     .streak .ico { width:18px; height:18px; stroke:var(--warn); fill:none; stroke-width:2; flex:none; }
     .streak-n { font-family:var(--font-mono); font-weight:800; color:var(--ink); white-space:nowrap; }
     .streak-cap { color:var(--muted); font-size:13px; }
