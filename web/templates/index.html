@@ -289,9 +289,9 @@
       .auth-thesis .hero-title { order:3; margin:0; font-size:clamp(29px,7.6vw,40px); }
       .auth-panel { order:4; }                               /* the card lands right under the headline -> reachable */
       .auth-panel .card { margin:0 auto; }
-      .auth-thesis .hero-sub { order:5; margin:6px auto 0; font-size:15px; }
-      .auth-steps { order:6; flex-direction:column; max-width:340px; margin:2px auto 0; text-align:left; border-top:0; }
-      .auth-steps li { padding:12px 0; border-top:1px solid var(--line); }
+      .auth-thesis .hero-sub { display:none; }               /* on mobile the 3 steps carry the "how" — drop the redundant paragraph */
+      .auth-steps { order:5; flex-direction:column; max-width:340px; margin:2px auto 0; text-align:left; border-top:0; }
+      .auth-steps li { padding:13px 2px; border-top:1px solid var(--line); }
       .auth-steps li + li { border-left:0; }
     }
     /* Liquid-glass readiness orb: a <canvas> paints drifting aurora "liquid"; CSS layers the "glass"

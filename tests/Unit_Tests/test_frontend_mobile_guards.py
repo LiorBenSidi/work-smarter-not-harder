@@ -59,13 +59,17 @@ def test_landing_is_editorial_split_with_live_demo():
 # ---- 2b2. On mobile the orb is at the top and the login card is reachable without scrolling ----
 def test_mobile_landing_orb_top_and_login_reachable():
     # Mobile flattens the split (display:contents) and orders the column so the orb is first (top) and the
-    # auth card comes right after the headline -> login/register reachable without scrolling. The longer
-    # copy + the 3 steps drop below. Desktop's editorial split is untouched (grid, 2 columns).
+    # auth card comes right after the headline -> login/register reachable without scrolling. On mobile the
+    # value paragraph is dropped and the 3 steps carry the "how". Desktop's editorial split is untouched.
     assert re.search(r"\.auth-thesis\s*\{\s*display:\s*contents", INDEX), \
         "mobile must flatten the split (display:contents) so the pieces can be reordered"
     assert re.search(r"\.readiness-demo\s*\{\s*order:\s*1", INDEX), "the orb demo must be first (top) on mobile"
     assert re.search(r"\.auth-panel\s*\{\s*order:\s*4", INDEX), \
         "the auth card must sit right under the headline (order:4) so login is reachable without scrolling"
+    # on mobile the paragraph is hidden and the 3 steps are shown instead (user preference)
+    assert re.search(r"\.auth-thesis \.hero-sub\s*\{\s*display:\s*none", INDEX), \
+        "on mobile the value paragraph must be hidden (the 3 steps carry the how instead)"
+    assert re.search(r"\.auth-steps\s*\{\s*order:\s*5", INDEX), "the 3 steps must be shown (ordered) on mobile, not hidden"
 
 
 # ---- 2c. The landing orb cycles the 3 states with a SMOOTH crossfade + is reduced-motion safe ----
