@@ -269,7 +269,10 @@ export const SCENARIOS = [
     tags: ["profile", "design"],
     async fn(b) {
       await registerAndLogin(b);
-      await gotoScreen(b, "profile");
+      // profile is reached via the corner account menu (not a bottom tab) — same nav as the display-name scenario
+      await b.pageExec(`(() => { const btn = document.getElementById("user-menu-btn"); if (btn) btn.click(); return true; })()`);
+      await b.wait(300);
+      await b.pageExec(`(() => { const p = document.querySelector('[data-act="profile"]'); if (p) p.click(); return true; })()`);
       await b.waitFor("#screen-profile .card");
       const cards = await b.evaluate(`() => document.querySelectorAll("#screen-profile .card").length`);
       assert(cards === 4, `profile should be 4 grouped cards, got ${cards}`);
