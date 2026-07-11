@@ -212,15 +212,18 @@ export const SCENARIOS = [
     },
   },
   {
-    name: "profile: theme toggle applies a different palette",
+    name: "profile: theme dark vs light apply different palettes",
     tags: ["profile", "theme"],
     async fn(b) {
       await registerAndLogin(b);
-      const before = await b.evaluate(`() => getComputedStyle(document.documentElement).getPropertyValue("--bg").trim()`);
-      await b.pageExec(`(() => { const el = document.documentElement; el.setAttribute("data-theme", el.getAttribute("data-theme") === "light" ? "dark" : "light"); return true; })()`);
-      await b.wait(300);
-      const after = await b.evaluate(`() => getComputedStyle(document.documentElement).getPropertyValue("--bg").trim()`);
-      assert(before !== after, `theme swap did not change --bg (${before})`);
+      const bgFor = async (t) => {
+        await b.pageExec(`(() => { document.documentElement.setAttribute("data-theme", ${JSON.stringify(t)}); return true; })()`);
+        await b.wait(250);
+        return b.evaluate(`() => getComputedStyle(document.documentElement).getPropertyValue("--bg").trim()`);
+      };
+      const dark = await bgFor("dark");     // force each explicitly -> deterministic regardless of the OS default
+      const light = await bgFor("light");
+      assert(dark && light && dark !== light, `dark and light --bg should differ (dark=${dark} light=${light})`);
     },
   },
 ];
