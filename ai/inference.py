@@ -18,6 +18,10 @@ import joblib
 import numpy as np
 import pandas as pd
 
+try:
+    from recommendations import calculate_calories, generate_recommendations
+except ImportError:
+    from ai.recommendations import calculate_calories, generate_recommendations
 
 logger = logging.getLogger(__name__)
 
@@ -108,7 +112,6 @@ def _choose_state(probabilities):
     )
 
 
-
 def predict_one(features):
     """Score one feature vector. Pure, CPU-bound, no I/O — safe to run in a worker process."""
     logger.info(
@@ -126,9 +129,15 @@ def predict_one(features):
     }
 
     state = _choose_state(probabilities)
+    recommendations = generate_recommendations(state, features)
+    calories = calculate_calories(features)
 
-    return {
+    result = {
         "state": state,
         "proba": probability_by_class,
-        "recommendations": [],
+        "recommendations": recommendations,
     }
+    if calories is not None:
+        result["calories"] = calories
+
+    return result
