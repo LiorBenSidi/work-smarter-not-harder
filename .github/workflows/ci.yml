@@ -38,18 +38,6 @@ jobs:
       - name: Lint (ruff)
         run: ruff check .
 
-      - name: Frontend inline-JS syntax check
-        run: |
-          # The frontend is a single inline file (see docs/DESIGN.md §7). Extract its largest <script> block
-          # and node --check it, so a JS typo fails HERE (fast) instead of only at the browser E2E job later.
-          python - <<'PY'
-          import re, pathlib
-          html = pathlib.Path("web/templates/index.html").read_text(encoding="utf-8")
-          js = max(re.findall(r"<script[^>]*>(.*?)</script>", html, flags=re.S), key=len)
-          pathlib.Path("/tmp/app_inline.js").write_text(js, encoding="utf-8")
-          PY
-          node --check /tmp/app_inline.js
-
       - name: Security scan (bandit)
         run: bandit -r . -q -x ./tests,./.venv,./venv,./env   # exclude tests + any local venv (matches the hook). Tune with -ll if noisy.
 
