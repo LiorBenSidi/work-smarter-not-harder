@@ -396,7 +396,9 @@
     .streak-cap { color:var(--muted); font-size:13px; }
     @media (max-width: 380px) { .streak-cap { display:none; } }
     /* "Check-in due" capsule: a floating nudge shown only off-Today when today's check-in is missing */
-    .capsule { position:fixed; left:50%; bottom:82px; z-index:45; display:inline-flex; align-items:center; gap:9px;
+    /* bottom clears the floating nav (bottom 12px + 56px tall) + a ~14px gap; safe-area-aware so it rides up
+       with the nav on devices with a home indicator (without the inset the nav overlaps the pill — issue). */
+    .capsule { position:fixed; left:50%; bottom:calc(82px + env(safe-area-inset-bottom)); z-index:45; display:inline-flex; align-items:center; gap:9px;
       padding:12px 20px; border-radius:999px; border:0; color:var(--on-accent); font-weight:800; font-size:14px; cursor:pointer;
       background: linear-gradient(135deg, var(--accent), color-mix(in srgb, var(--accent) 55%, var(--accent2)));
       box-shadow:0 16px 36px -10px color-mix(in srgb, var(--accent) 72%, transparent);
