@@ -9,9 +9,22 @@ on:
     branches: [main]
   workflow_dispatch:        # manual trigger for the on-demand stress job (locust needs a live stack)
 
+# ---------------------------------------------------------------------------
+# MASTER SWITCH — pause/resume the WHOLE pipeline with one repo variable, no code change.
+# Every job below is gated on `vars.RUN_CI != 'false'`, so:
+#   pause  (0 Actions minutes):  gh variable set RUN_CI -R OWNER/REPO --body false
+#   resume (normal CI):          gh variable set RUN_CI -R OWNER/REPO --body true   # or: gh variable delete RUN_CI
+# When RUN_CI == 'false' every job is SKIPPED. A skipped job reports its status check as passing, so PRs are
+# NOT deadlocked while paused (the required `checks` / `cross-container` contexts still go green as skipped) —
+# merges stay possible without spending minutes. Unset/anything-but-'false' == ON (default = current behavior).
+# Hard off (no runs at all, e.g. to freeze the fresh monthly quota until you choose): gh workflow disable CI.
+# This switch is independent of DEPLOY_ENABLED (which gates only the deploy job).
+# ---------------------------------------------------------------------------
+
 jobs:
   checks:
     name: checks
+    if: vars.RUN_CI != 'false'
     runs-on: ubuntu-latest
     services:
       mongo:                              # real MongoDB so the data-layer integration tests RUN in CI (not skip)
@@ -70,7 +83,7 @@ jobs:
   compose-e2e:
     name: cross-container stack (test-runner)
     needs: checks                       # don't spend 3 minutes booting Docker if the fast suite is red
-    if: github.event_name != 'workflow_dispatch'   # the manual run is for the stress job below
+    if: vars.RUN_CI != 'false' && github.event_name != 'workflow_dispatch'   # the manual run is for the stress job below
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -101,7 +114,7 @@ jobs:
   e2e-browser:
     name: e2e (browser · desktop + mobile)
     needs: checks
-    if: github.event_name != 'workflow_dispatch'
+    if: vars.RUN_CI != 'false' && github.event_name != 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -151,7 +164,7 @@ jobs:
     # R2.2: a failed test build never proceeds to build/push/deploy — and neither does a stack whose
     # cross-container path is broken (compose-e2e), which unit tests with injected fakes cannot catch.
     needs: [checks, compose-e2e]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'   # R1.3: a PR never reaches here
+    if: vars.RUN_CI != 'false' && github.event_name == 'push' && github.ref == 'refs/heads/main'   # R1.3: a PR never reaches here
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -206,7 +219,7 @@ jobs:
     #   dev  / off:  gh variable set DEPLOY_ENABLED --body false
     #   live / on :  gh variable set DEPLOY_ENABLED --body true
     # An unset (or anything-but-'true') DEPLOY_ENABLED counts as OFF, so main stays green by default.
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.SSH_HOST != '' && vars.DEPLOY_ENABLED == 'true'
+    if: vars.RUN_CI != 'false' && github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.SSH_HOST != '' && vars.DEPLOY_ENABLED == 'true'
     concurrency:
       group: azure-deploy-${{ github.ref }}
       cancel-in-progress: false     # never interrupt an in-flight deploy — queue the next push instead of racing the VM
@@ -314,7 +327,7 @@ jobs:
   # ---------------------------------------------------------------------------
   stress:
     name: stress (locust, on demand)
-    if: github.event_name == 'workflow_dispatch'
+    if: vars.RUN_CI != 'false' && github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
