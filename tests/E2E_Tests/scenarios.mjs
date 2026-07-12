@@ -38,7 +38,7 @@ async function registerAndLogin(b) {
 
 async function gotoScreen(b, screen) {
   await b.pageExec(`(() => { const t = document.querySelector('[data-screen="${screen}"]'); if (t) t.click(); return !!t; })()`);
-  await b.wait(700);
+  await b.waitUntil(`() => { const s = document.getElementById("screen-${screen}"); return s && !s.hidden; }`);
 }
 
 async function createPost(b, title, body, anonymous = false) {
@@ -63,7 +63,8 @@ export const SCENARIOS = [
       await b.goto(b.base + "/");
       await b.waitFor("#demo-state");
       const first = await b.text("#demo-state");
-      await b.wait(3400);   // one cycle tick (3s) + margin
+      // gate on the state actually changing (one cycle ~3s) rather than a blind sleep
+      await b.waitUntil(`() => { const e = document.querySelector("#demo-state"); return e && e.textContent && e.textContent !== ${JSON.stringify(first)}; }`, { timeout: 8000 });
       const second = await b.text("#demo-state");
       assert(first !== second, `orb state did not cycle (stuck on "${first}")`);
       assert(["Ready", "Moderate", "Rest"].includes(second), `unexpected state "${second}"`);
@@ -203,7 +204,8 @@ export const SCENARIOS = [
         window.fetch = (u, o) => (typeof u === "string" && u.indexOf("/dashboard") !== -1) ? Promise.reject(new Error("dropped")) : real(u, o); return true; })()`);
       // trigger a dashboard reload (Refresh) and let it settle
       await b.pageExec(`(() => { const btn = document.getElementById("dashboard-refresh"); if (btn) btn.click(); return true; })()`);
-      await b.wait(1200);
+      // gate on the error fallback actually rendering (not a fixed sleep) — the whole point of the fix
+      await b.waitUntil(`() => { const d = document.getElementById("dashboard"); const t = (d && d.textContent) || ""; return t && !/loading/i.test(t) && /could not|unavailable|error|try again/i.test(t); }`);
       await b.pageExec(`(() => { if (window.__realFetch) window.fetch = window.__realFetch; return true; })()`);
       const dash = await b.text("#dashboard");
       assert(dash && !/loading/i.test(dash), `dashboard stuck on a spinner after a dropped request: "${dash}"`);
@@ -219,7 +221,7 @@ export const SCENARIOS = [
       await registerAndLogin(b);
       // open the corner menu -> Profile
       await b.pageExec(`(() => { const btn = document.getElementById("user-menu-btn"); if (btn) btn.click(); return true; })()`);
-      await b.wait(300);
+      await b.waitUntil(`() => { const p = document.querySelector('[data-act="profile"]'); return p && p.getBoundingClientRect().width > 0; }`);
       await b.pageExec(`(() => { const p = document.querySelector('[data-act="profile"]'); if (p) p.click(); return true; })()`);
       await b.waitFor("#displayname-form");
       const newName = "Renamed" + Math.floor(performance.now() % 10000);
@@ -271,7 +273,7 @@ export const SCENARIOS = [
       await registerAndLogin(b);
       // profile is reached via the corner account menu (not a bottom tab) — same nav as the display-name scenario
       await b.pageExec(`(() => { const btn = document.getElementById("user-menu-btn"); if (btn) btn.click(); return true; })()`);
-      await b.wait(300);
+      await b.waitUntil(`() => { const p = document.querySelector('[data-act="profile"]'); return p && p.getBoundingClientRect().width > 0; }`);
       await b.pageExec(`(() => { const p = document.querySelector('[data-act="profile"]'); if (p) p.click(); return true; })()`);
       await b.waitFor("#screen-profile .card");
       const cards = await b.evaluate(`() => document.querySelectorAll("#screen-profile .card").length`);
@@ -289,11 +291,13 @@ export const SCENARIOS = [
     async fn(b, ctx) {
       if (ctx.viewport !== "mobile") return;                 // tab-bar minimize is a mobile-only behaviour
       await registerAndLogin(b);
-      await b.pageExec(`(async () => { document.body.style.minHeight='3000px'; window.scrollTo(0, 700); await new Promise(r=>setTimeout(r,350)); })()`);
+      await b.pageExec(`(() => { document.body.style.minHeight='3000px'; window.scrollTo(0, 700); return true; })()`);
+      await b.waitUntil(`() => document.documentElement.classList.contains('nav-hidden')`);   // scroll-down -> nav recedes
       const down = await b.evaluate(`() => ({s: document.documentElement.classList.contains('scrolled'), h: document.documentElement.classList.contains('nav-hidden')})`);
       assert(down.s, "header should gain .scrolled after scrolling down");
       assert(down.h, "the tab bar should recede (.nav-hidden) on scroll-down");
-      await b.pageExec(`(async () => { window.scrollTo(0, 120); await new Promise(r=>setTimeout(r,350)); })()`);
+      await b.pageExec(`(() => { window.scrollTo(0, 120); return true; })()`);
+      await b.waitUntil(`() => !document.documentElement.classList.contains('nav-hidden')`);   // scroll-up -> nav returns
       const up = await b.evaluate(`() => document.documentElement.classList.contains('nav-hidden')`);
       assert(!up, "the tab bar should return (.nav-hidden removed) on scroll-up");
     },
@@ -306,10 +310,10 @@ export const SCENARIOS = [
       if (ctx.viewport !== "mobile") return;                 // the sliding pill is the mobile nav
       await registerAndLogin(b);
       await b.pageExec(`(() => { const t = document.querySelector('.tab[data-screen="forum"]'); if (t) t.click(); return true; })()`);
-      await b.wait(450);
+      await b.waitUntil(`() => document.querySelector('.tab[data-screen="forum"]').classList.contains('active')`);
       const t1 = await b.evaluate(`() => (document.querySelector('.tab-indicator') || {style:{}}).style.transform`);
       await b.pageExec(`(() => { const t = document.querySelector('.tab[data-screen="messages"]'); if (t) t.click(); return true; })()`);
-      await b.wait(450);
+      await b.waitUntil(`() => document.querySelector('.tab[data-screen="messages"]').classList.contains('active')`);
       const t2 = await b.evaluate(`() => (document.querySelector('.tab-indicator') || {style:{}}).style.transform`);
       assert(t1 && t2 && t1 !== t2, `the selection capsule should slide between tabs (forum=${t1} chat=${t2})`);
     },

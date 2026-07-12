@@ -102,6 +102,20 @@ export class Browser {
     await this.pageExec(`(async()=>{if(navigator.serviceWorker){const rs=await navigator.serviceWorker.getRegistrations();await Promise.all(rs.map(r=>r.unregister()));}if(window.caches){const ks=await caches.keys();await Promise.all(ks.map(k=>caches.delete(k)));}return true;})()`);
   }
 
+  // Poll an arbitrary page condition (an expression string, same form as evaluate) until it returns truthy.
+  // This is the de-flake primitive: gate on the actual end state instead of a fixed sleep, so a slow CI
+  // runner just waits a little longer rather than racing. Returns the truthy value; throws on timeout.
+  async waitUntil(expr, { timeout = 6000, interval = 60 } = {}) {
+    const start = Date.now();
+    while (Date.now() - start < timeout) {
+      let v = null;
+      try { v = await this.evaluate(expr); } catch { v = null; }
+      if (v) return v;
+      await sleep(interval);
+    }
+    throw new Error("waitUntil timeout: " + expr);
+  }
+
   // Poll until the selector exists (and is visible unless {visible:false}); throws on timeout.
   async waitFor(selector, { timeout = 5000, visible = true } = {}) {
     const start = Date.now();
