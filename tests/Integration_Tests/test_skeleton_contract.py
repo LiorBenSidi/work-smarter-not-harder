@@ -59,7 +59,9 @@ def test_ai_predict_returns_the_contract_shape():
     spec.loader.exec_module(module)
 
     client = module.create_app().test_client()
-    resp = client.post("/predict", json={"features": {"sleep_hours": 7}})
+    # the four readiness fields the model requires, each in range (ai/app.py's /predict validator)
+    resp = client.post("/predict", json={"features": {"sleep_hours": 8, "fatigue": 2,
+                                                      "soreness": 1, "training_load": 100}})
     assert resp.status_code == 200
     body = resp.get_json()
     assert isinstance(body["state"], str), "state must be a category string"
