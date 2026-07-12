@@ -13,6 +13,7 @@ caller: a down mail server must not 500 a login or a reset request, so it's logg
 import logging
 import smtplib
 import ssl
+import threading
 from email.message import EmailMessage
 from email.utils import formataddr
 
@@ -79,3 +80,24 @@ def send_email(config, to, subject, body, force_mock=False):
     except Exception:
         logger.exception("EMAIL send failed to=%s (flow continues; code/link still valid server-side)", to)
         return False
+
+
+def send_email_async(config, to, subject, body, force_mock=False):
+    """Fire-and-forget send for the account-enumeration-sensitive paths (forgot-password, register).
+
+    Closes the AUTH-H1/H2 response-time side channel: a synchronous SMTP send makes the branch that emails
+    a *registered* address measurably slower than the branch that emails nothing (or does less), so an
+    attacker can distinguish "registered" from "not" even though the response BODY is identical. Running the
+    live send in a daemon thread makes the request return immediately regardless of which branch it took.
+
+    The log backend (no ``SMTP_HOST`` / ``force_mock`` — dev / CI / grading) stays SYNCHRONOUS: it's a fast
+    ``logger.info`` with no oracle, and dev/tests read the code from the response body, so nothing about
+    ordering or determinism changes there. Only the slow live-SMTP path is offloaded. Never raises
+    (``send_email`` swallows every error); the code/link is valid server-side whether or not delivery lands."""
+    host = None if force_mock else config.get("SMTP_HOST")
+    if not host:                                   # log backend: fast + no oracle -> keep it sync (tests/dev rely on this)
+        return send_email(config, to, subject, body, force_mock=force_mock)
+    snapshot = dict(config)                        # decouple from the request thread's app/config context
+    threading.Thread(target=send_email, args=(snapshot, to, subject, body),
+                     kwargs={"force_mock": force_mock}, daemon=True, name="email-send").start()
+    return True

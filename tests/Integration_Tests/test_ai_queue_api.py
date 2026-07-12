@@ -12,6 +12,10 @@ from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 
+# A body the readiness validator accepts: all four required fields, each in range (ai/app.py). Merge
+# extra keys onto it when a test needs the request to pass validation and actually reach the queue.
+VALID = {"sleep_hours": 8, "fatigue": 2, "soreness": 1, "training_load": 100}
+
 
 def echo(features):
     return {"state": "High", "proba": {"High": 0.9, "Low": 0.1}, "recommendations": ["rest"]}
@@ -55,7 +59,7 @@ def make_client(ai_app_module, jobqueue_module, monkeypatch):
 
 def test_predict_still_returns_the_contract_shape(make_client):
     """`web` reads exactly these keys (web/services/ai_client.py). The queue must not change them."""
-    response = make_client().post("/predict", json={"features": {"hrv": 60}})
+    response = make_client().post("/predict", json={"features": dict(VALID)})
     assert response.status_code == 200
     body = response.get_json()
     assert body["state"] == "High"
@@ -70,13 +74,21 @@ def test_predict_passes_the_features_through_to_the_model(make_client):
         seen.update(features)
         return echo(features)
 
-    make_client(capture).post("/predict", json={"features": {"hrv": 60, "sleep": 7}})
-    assert seen == {"hrv": 60, "sleep": 7}
+    payload = {**VALID, "hrv": 60}
+    make_client(capture).post("/predict", json={"features": payload})
+    assert seen == payload
 
 
-def test_predict_works_with_no_features_at_all(make_client):
-    """`web` posts `{"features": {}}` for a user with an empty profile; that must not 400."""
-    assert make_client().post("/predict", json={"features": {}}).status_code == 200
+def test_predict_rejects_an_empty_body_now_the_model_needs_the_four_fields(make_client):
+    """The readiness model can't score without its four inputs, so `/predict` refuses an empty
+    features map at the boundary (400) rather than letting a worker impute invented values.
+
+    NOTE (web follow-up, Lior): web must now always send the four readiness fields. `dashboard.py`
+    currently posts profile-only and will degrade to ai_status='unavailable' until it sends them.
+    """
+    response = make_client().post("/predict", json={"features": {}})
+    assert response.status_code == 400
+    assert "required" in response.get_json()["error"]
 
 
 def test_health_is_unchanged(make_client):
@@ -99,20 +111,20 @@ def test_predict_sheds_load_with_503_when_the_queue_is_full(make_client):
     for _ in range(2):
         assert client.post("/jobs", json={"features": {"seconds": 0.4}}).status_code == 202
 
-    response = client.post("/predict", json={"features": {"seconds": 0.4}})
+    response = client.post("/predict", json={"features": {**VALID, "seconds": 0.4}})
     assert response.status_code == 503
     assert "queue full" in response.get_json()["error"]
 
 
 def test_predict_returns_504_when_the_model_outruns_the_timeout(make_client):
     client = make_client(slow, predict_timeout="0.05")
-    response = client.post("/predict", json={"features": {"seconds": 0.5}})
+    response = client.post("/predict", json={"features": {**VALID, "seconds": 0.5}})
     assert response.status_code == 504
     assert "timed out" in response.get_json()["error"]
 
 
 def test_predict_returns_500_when_the_model_raises(make_client):
-    response = make_client(boom).post("/predict", json={"features": {"hrv": 1}})
+    response = make_client(boom).post("/predict", json={"features": dict(VALID)})
     assert response.status_code == 500
     assert response.get_json()["error"] == "prediction failed"
 
@@ -121,8 +133,8 @@ def test_a_model_crash_does_not_take_the_container_down(make_client):
     """One bad feature vector must not stop the next caller from being served."""
     targets = iter([boom, echo])
     client = make_client(lambda features: next(targets)(features))
-    assert client.post("/predict", json={"features": {}}).status_code == 500
-    assert client.post("/predict", json={"features": {}}).status_code == 200
+    assert client.post("/predict", json={"features": dict(VALID)}).status_code == 500
+    assert client.post("/predict", json={"features": dict(VALID)}).status_code == 200
 
 
 def test_a_dead_worker_process_costs_one_503_not_a_500_forever(make_client):
@@ -138,11 +150,11 @@ def test_a_dead_worker_process_costs_one_503_not_a_500_forever(make_client):
     targets = iter([worker_died, echo])
     client = make_client(lambda features: next(targets)(features))
 
-    response = client.post("/predict", json={"features": {"hrv": 1}})
+    response = client.post("/predict", json={"features": dict(VALID)})
     assert response.status_code == 503
     assert "retry" in response.get_json()["error"]
 
-    assert client.post("/predict", json={"features": {"hrv": 2}}).status_code == 200
+    assert client.post("/predict", json={"features": dict(VALID)}).status_code == 200
     assert client.get("/queue/stats").get_json()["pool_rebuilds"] == 1
 
 
@@ -192,7 +204,7 @@ def test_jobs_sheds_load_with_503_when_full(make_client):
 
 def test_queue_stats_reports_depth_and_bound(make_client):
     client = make_client()
-    client.post("/predict", json={"features": {"hrv": 1}})
+    client.post("/predict", json={"features": dict(VALID)})
     stats = client.get("/queue/stats").get_json()
     assert stats["max_pending"] == 64
     assert stats["workers"] == 4
@@ -242,6 +254,46 @@ def test_a_rejected_request_never_reached_a_worker(make_client):
     client.post("/predict", json={"features": "nope"})
     assert calls == []
     assert client.get("/queue/stats").get_json()["submitted"] == 0
+
+
+# --------------------------------------------------------------------------- readiness-field validation
+
+
+@pytest.mark.parametrize(
+    "bad,reason",
+    [
+        ({}, "sleep_hours is required"),
+        ({"sleep_hours": 8, "fatigue": 2, "soreness": 1}, "training_load is required"),
+        ({**VALID, "fatigue": 9}, "fatigue must be between 1 and 5"),
+        ({**VALID, "sleep_hours": 0}, "sleep_hours must be between 1 and 24"),
+        ({**VALID, "soreness": "sore"}, "soreness must be a number"),
+        ({**VALID, "training_load": True}, "training_load must be a number"),
+    ],
+)
+def test_predict_rejects_an_unscoreable_readiness_request_before_a_worker(make_client, bad, reason):
+    """A missing, non-numeric, or out-of-range readiness field must 400 at the boundary and never
+    reach a worker — the model would otherwise score partly-invented input (Shiri's contract). The
+    error names the offending field so `web` (and a human) can act on it."""
+    calls = []
+
+    def counting(features):
+        calls.append(features)
+        return echo(features)
+
+    client = make_client(counting)
+    response = client.post("/predict", json={"features": bad})
+    assert response.status_code == 400
+    assert reason in response.get_json()["error"]
+    assert calls == []
+    assert client.get("/queue/stats").get_json()["submitted"] == 0
+
+
+def test_predict_accepts_a_complete_in_range_readiness_request(make_client):
+    """The mirror of the rejection cases: the four fields present and in range go through to the
+    model and come back with the contract shape."""
+    response = make_client().post("/predict", json={"features": dict(VALID)})
+    assert response.status_code == 200
+    assert {"state", "proba", "recommendations"} <= set(response.get_json())
 
 
 # --------------------------------------------------------------------------- helper

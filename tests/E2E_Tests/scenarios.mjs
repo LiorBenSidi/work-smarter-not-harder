@@ -244,4 +244,74 @@ export const SCENARIOS = [
       assert(dark && light && dark !== light, `dark and light --bg should differ (dark=${dark} light=${light})`);
     },
   },
+  {
+    // Design pass ⑦: the forum reuses the DM generative-avatar system on every author surface.
+    name: "forum: posts + comments render generative avatars",
+    tags: ["forum", "design"],
+    async fn(b) {
+      await registerAndLogin(b);
+      await createPost(b, uniq("Avatars "), "does everyone get an avatar?");
+      await b.waitFor("#forum-list .post");
+      const listAv = await b.evaluate(`() => document.querySelectorAll("#forum-list .post .avatar").length`);
+      assert(listAv >= 1, "no generative avatar on the forum list byline");
+      await b.click("#forum-list .post", 900);
+      const detailAv = await b.evaluate(`() => document.querySelectorAll("#forum-detail .by .avatar").length`);
+      assert(detailAv >= 1, "no avatar on the open post's author line");
+      await b.type("#comment-form [name=body]", "great question");
+      await b.submit("#comment-form", 1100);
+      const cAv = await b.evaluate(`() => document.querySelectorAll("#forum-detail .comments li .avatar").length`);
+      assert(cAv >= 1, "no avatar on the comment row");
+    },
+  },
+  {
+    // Design pass ⑧: the profile screen is grouped into exactly 4 cards (You / Preferences / Account / Danger).
+    name: "profile: settings are grouped into 4 cards",
+    tags: ["profile", "design"],
+    async fn(b) {
+      await registerAndLogin(b);
+      // profile is reached via the corner account menu (not a bottom tab) — same nav as the display-name scenario
+      await b.pageExec(`(() => { const btn = document.getElementById("user-menu-btn"); if (btn) btn.click(); return true; })()`);
+      await b.wait(300);
+      await b.pageExec(`(() => { const p = document.querySelector('[data-act="profile"]'); if (p) p.click(); return true; })()`);
+      await b.waitFor("#screen-profile .card");
+      const cards = await b.evaluate(`() => document.querySelectorAll("#screen-profile .card").length`);
+      assert(cards === 4, `profile should be 4 grouped cards, got ${cards}`);
+      // all six section eyebrows must still be present inside those 4 cards
+      const eyebrows = await b.evaluate(`() => document.querySelectorAll("#screen-profile .card h2").length`);
+      assert(eyebrows === 6, `expected 6 section eyebrows inside the grouped cards, got ${eyebrows}`);
+    },
+  },
+  {
+    // iOS-26 scroll: header frosts (.scrolled) + the MOBILE tab bar recedes (.nav-hidden) on scroll-down,
+    // and the nav returns on scroll-up. Mobile-only (the pill is display:none on desktop).
+    name: "nav: header frosts + tab bar recedes on scroll-down, returns on scroll-up",
+    tags: ["nav", "scroll", "design"],
+    async fn(b, ctx) {
+      if (ctx.viewport !== "mobile") return;                 // tab-bar minimize is a mobile-only behaviour
+      await registerAndLogin(b);
+      await b.pageExec(`(async () => { document.body.style.minHeight='3000px'; window.scrollTo(0, 700); await new Promise(r=>setTimeout(r,350)); })()`);
+      const down = await b.evaluate(`() => ({s: document.documentElement.classList.contains('scrolled'), h: document.documentElement.classList.contains('nav-hidden')})`);
+      assert(down.s, "header should gain .scrolled after scrolling down");
+      assert(down.h, "the tab bar should recede (.nav-hidden) on scroll-down");
+      await b.pageExec(`(async () => { window.scrollTo(0, 120); await new Promise(r=>setTimeout(r,350)); })()`);
+      const up = await b.evaluate(`() => document.documentElement.classList.contains('nav-hidden')`);
+      assert(!up, "the tab bar should return (.nav-hidden removed) on scroll-up");
+    },
+  },
+  {
+    // WhatsApp-style: the nav selection capsule SLIDES to the tapped tab (its transform changes per tab).
+    name: "nav: selection indicator slides to the tapped tab",
+    tags: ["nav", "design"],
+    async fn(b, ctx) {
+      if (ctx.viewport !== "mobile") return;                 // the sliding pill is the mobile nav
+      await registerAndLogin(b);
+      await b.pageExec(`(() => { const t = document.querySelector('.tab[data-screen="forum"]'); if (t) t.click(); return true; })()`);
+      await b.wait(450);
+      const t1 = await b.evaluate(`() => (document.querySelector('.tab-indicator') || {style:{}}).style.transform`);
+      await b.pageExec(`(() => { const t = document.querySelector('.tab[data-screen="messages"]'); if (t) t.click(); return true; })()`);
+      await b.wait(450);
+      const t2 = await b.evaluate(`() => (document.querySelector('.tab-indicator') || {style:{}}).style.transform`);
+      assert(t1 && t2 && t1 !== t2, `the selection capsule should slide between tabs (forum=${t1} chat=${t2})`);
+    },
+  },
 ];

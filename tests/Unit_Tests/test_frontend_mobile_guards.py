@@ -95,6 +95,26 @@ def test_primary_controls_are_solid_mint_not_gradient():
         "the active auth tab must be solid mint"
 
 
+def test_chat_bubbles_group_by_sender():
+    # Signal-style grouping: the tail (pointed corner) + the time/Seen meta ride ONLY the last bubble of a
+    # same-sender run, and continuation bubbles tuck tighter (.cont) — a run reads as one unit, not N stamped
+    # bubbles. The base bubble no longer carries a tail unconditionally.
+    assert re.search(r"\.bubble\.tail\.me\s*\{[^}]*border-bottom-right-radius", INDEX), "the tail must be run-end-only now"
+    assert re.search(r"\.bubble\.cont\s*\{[^}]*margin-top:-", INDEX), "consecutive same-sender bubbles must tuck tighter"
+    assert "const runEnd" in INDEX and "const cont" in INDEX, "the run grouping logic was removed"
+    assert 'runEnd ? " tail"' in INDEX, "the tail must ride only the run-end bubble"
+
+
+def test_chat_thread_is_a_real_messenger():
+    # Chat now carries the WhatsApp bubble contract: per-bubble times + day separators + a "Seen" read state,
+    # and a growing multiline compose with Enter-to-send (not a single-line input).
+    assert "function clockTime" in INDEX and "function dayLabel" in INDEX, "the chat time helpers were removed"
+    assert "dm-daysep" in INDEX and "dm-meta" in INDEX, "the date separators / bubble time meta were removed"
+    assert "· Seen" in INDEX, "the read-state 'Seen' indicator was removed"
+    assert '<textarea id="dm-reply"' in INDEX and "function autoGrow" in INDEX, \
+        "the reply compose must be a growing textarea (Enter-to-send), not a single-line input"
+
+
 def test_history_rows_are_a_colour_coded_score_column():
     # History rows lead with the numeric readiness score + a state-colour dot + a RELATIVE time (Whoop trend
     # tier) — not a flat "<strong>word</strong> raw-ISO-timestamp" line.
@@ -157,7 +177,7 @@ def test_forum_detail_is_stashed_before_any_list_wipe():
     # openPost throws on a null box -> the forum wedges. Both list-wipers must stashDetail() first, and
     # openPost must guard a null box so a missing detail degrades to a retry rather than a throw.
     assert "function stashDetail" in INDEX, "the stashDetail rescue helper (un-wedge after voting) was removed"
-    assert re.search(r"stashDetail\(\);[^\n]*\n\s*el\.innerHTML\s*=\s*'<p class=\"muted\">Loading", INDEX), \
+    assert re.search(r"stashDetail\(\);[^\n]*\n\s*el\.innerHTML\s*=\s*sk\(", INDEX), \
         "loadForum must stashDetail() before wiping #forum-list (else voting destroys #forum-detail)"
     # renderForumList also stashes before it rebuilds the list
     assert re.search(r"function renderForumList\(\)\s*\{[^}]*?stashDetail\(\);", INDEX), \
@@ -275,3 +295,137 @@ def test_streak_number_uses_mono():
     m = re.search(r"\.streak-n\s*\{[^}]*\}", INDEX)
     assert m and "font-family:var(--font-mono)" in m.group(0), \
         "the streak count must use --font-mono like every other number (the one that used to break the system)"
+
+
+def test_ios_scroll_behaviors():
+    # iOS-26 scroll feel: the header is clean at the top and frosts once content scrolls under it; the MOBILE
+    # tab bar (+ Home FAB) recedes on scroll-down and returns on scroll-up. Reduced-motion keeps the nav
+    # reachable (the transform is neutralised, not the visibility). Desktop unaffected (pill is display:none).
+    assert re.search(r"html:not\(\.scrolled\) header\s*\{[^}]*backdrop-filter:none", INDEX), \
+        "the scroll-edge frost (clean header at the top) was removed"
+    assert re.search(r"html\.nav-hidden \.tabbar[^{]*\{[^}]*translateY\(150%\)", INDEX), \
+        "the tab-bar minimize-on-scroll was removed"
+    assert 'classList.toggle("scrolled"' in INDEX and 'classList.add("nav-hidden")' in INDEX, \
+        "the scroll handler (frost + nav minimize) was removed"
+    assert re.search(r"prefers-reduced-motion: reduce\)\s*\{\s*html\.nav-hidden[^}]*transform:none", INDEX), \
+        "under reduced motion the nav must stay reachable (transform neutralised)"
+
+
+def test_history_has_a_readiness_heatmap():
+    # FitTrackee-style calendar heatmap: a GitHub-style grid, one cell per day over the last N weeks, tinted
+    # by that day's readiness state (--st). Rendered from the history data the screen already loads.
+    assert 'id="history-heat"' in INDEX and "function renderHeat" in INDEX, "the readiness calendar heatmap was removed"
+    assert re.search(r"\.heatgrid\s*\{[^}]*grid-auto-flow:column", INDEX), "the heatmap grid (GitHub-style columns) was removed"
+    assert "renderHeat(historyItems)" in INDEX, "the heatmap must render from the history data"
+    assert re.search(r"\.heat-cell\.on\s*\{[^}]*var\(--st\)", INDEX), "heat cells must tint by readiness state (--st)"
+
+
+def test_history_rows_reveal_with_a_stagger():
+    # History rows get a one-time staggered fade+rise entrance (crafted feel). fill:both -> a row can never
+    # get stuck invisible; reduced-motion skips it entirely (no opacity:0 base).
+    assert "@keyframes revealIn" in INDEX, "the list reveal keyframe was removed"
+    assert re.search(r"prefers-reduced-motion: no-preference\)\s*\{\s*\.reveal-item\s*\{\s*animation: revealIn", INDEX), \
+        "the reveal must be gated behind no-preference so reduced-motion never leaves a row invisible"
+    assert "reveal-item readiness" in INDEX, "history rows must carry the staggered reveal class"
+
+
+def test_loading_states_use_skeleton_shimmer():
+    # Panels load with a shaped skeleton-shimmer placeholder (OSS/Bluesky pattern), not a bare "Loading…".
+    # Reduced-motion-safe (the shimmer animation is disabled under prefers-reduced-motion).
+    assert "@keyframes shimmer" in INDEX and re.search(r"\.sk::after\s*\{[^}]*animation:shimmer", INDEX), \
+        "the skeleton shimmer was removed"
+    assert re.search(r"prefers-reduced-motion: reduce\)\s*\{\s*\.sk::after\s*\{\s*animation:none", INDEX), \
+        "the skeleton shimmer must be disabled under reduced motion"
+    assert "function sk(" in INDEX, "the skeleton helper was removed"
+    assert 'sk("card")' in INDEX and 'sk("rows")' in INDEX, "the dashboard/list loaders must use skeletons"
+    assert 'class="muted">Loading…' not in INDEX, "no bare 'Loading…' placeholder should remain"
+
+
+def test_premium_polish_grain_tabular_and_easing():
+    # Tier-1 "optical detail" polish (applies to BOTH mobile + desktop): a filmic grain over the aurora (kills
+    # gradient banding), tabular figures on the data numbers (never shift width), and one shared spring-ish
+    # easing token. Cheap, high-perception, and none of it changes layout/behaviour.
+    assert re.search(r"body::after\s*\{[^}]*feTurbulence", INDEX), "the aurora grain overlay was removed"
+    assert re.search(r"body::after\s*\{[^}]*z-index:-1[^}]*pointer-events:none", INDEX), \
+        "the grain must stay a backdrop layer (z-index:-1 + pointer-events:none) so it never touches content"
+    assert "font-variant-numeric: tabular-nums" in INDEX, "tabular figures on the data numbers were removed"
+    assert re.search(r"--ease:\s*cubic-bezier", INDEX), "the shared spring easing token (--ease) was removed"
+    assert "-webkit-text-size-adjust:100%" in INDEX, "text-size-adjust (Dynamic Type stability) was removed"
+
+
+def test_floating_nav_is_liquid_glass():
+    # The bottom tab bar is the app's one glass surface (iOS 26 uses glass for the floating nav). It's upgraded
+    # past a flat blur to the highest-fidelity web approximation: a light-refracting gradient RIM (::before),
+    # a specular light-catch sheen (::after), and an active-tab glass capsule — all theme-tokened so light mode
+    # softens the white specular instead of washing out. (True backdrop lensing is native-only; not faked.)
+    assert ".tabbar-inner::before" in INDEX and ".tabbar-inner::after" in INDEX, "the glass rim/sheen layers were removed"
+    for tok in ("--glass-fill", "--glass-rim", "--glass-spec"):
+        assert INDEX.count(tok) >= 3, f"{tok} must be defined in :root + both light blocks (dark/forced-light/system-light)"
+    assert "mask-composite: exclude" in INDEX, "the masked gradient rim (the refracting border) was removed"
+    m = re.search(r"\.tab-indicator\s*\{[^}]*\}", INDEX)
+    assert m and "linear-gradient" in m.group(0), "the selected-tab glass capsule (sliding indicator) must be a glass lozenge"
+    # the Home FAB shares the same glass material as the pill (matching pair)
+    assert re.search(r"\.ctx-back\s*\{[^}]*var\(--glass-fill\)", INDEX), "the Home FAB must use the same liquid-glass material as the nav pill"
+
+
+def test_nav_selection_slides_and_drags():
+    # WhatsApp-style: one indicator SLIDES to the active tab on tap, and can be DRAGGED between tabs with the
+    # finger; tap-to-switch still works. Positions from live geometry; reduced-motion drops the slide transition.
+    assert '.tab-indicator' in INDEX and 'ind.className = "tab-indicator off"' in INDEX, "the sliding selection indicator was removed"
+    assert "window.tabIndicatorSync" in INDEX and "tabIndicatorSync()" in INDEX, "the tap-slide sync (from showScreen) was removed"
+    assert re.search(r'inner\.addEventListener\("touchmove"', INDEX) and 'classList.add("dragging")' in INDEX, \
+        "the drag handler (touchmove -> follow the finger) was removed"
+    assert 'showScreen(near.dataset.screen)' in INDEX, "releasing a drag must snap to + activate the nearest tab"
+
+
+def test_interactive_surfaces_have_a_mint_focus_ring():
+    # Every keyboard-reachable surface that previously had no focus ring (buttons, forum posts, DM rows,
+    # segment/checkbox labels, links) gets a consistent mint :focus-visible outline — the "visible keyboard
+    # focus" quality floor. :focus-visible keeps it keyboard-only (no click-flicker regression).
+    m = re.search(r"button:focus-visible[^{]*\{[^}]*\}", INDEX)
+    assert m, "the shared focus-ring rule was removed"
+    block = m.group(0)
+    assert "outline:2px solid var(--accent)" in block, "the focus ring must be a 2px mint outline"
+    for sel in (".post:focus-visible", ".dm-row:focus-visible", ".seg:has(:focus-visible)", "a:focus-visible"):
+        assert sel in block, f"{sel} lost its keyboard focus ring"
+
+
+def test_hero_readiness_score_counts_up():
+    # The hero readiness number rises 0->N with the orb-ring sweep (Whoop/Oura open animation). One number,
+    # the hero; must snap under reduced-motion and leave the "—" empty state untouched.
+    assert "function countUpScore" in INDEX, "the hero-score count-up was removed"
+    assert "countUpScore(el)" in INDEX, "the hero-score count-up is never called from the render"
+    m = re.search(r"function countUpScore\(el\)\s*\{.*?\n    \}", INDEX, flags=re.S)
+    assert m, "countUpScore body not found"
+    body = m.group(0)
+    assert "reducedMotion()" in body, "the hero-score count-up must snap under reduced motion"
+    assert "Number.isFinite" in body, "the hero-score count-up must bail on the non-numeric '—' state"
+
+
+def test_profile_is_grouped_into_four_cards():
+    # Profile was 6 floating cards; regrouped iOS-Settings-style into 4 (You / Preferences / Account /
+    # Danger) with .sep hairlines between sub-sections. Each sub-section keeps its icon eyebrow (h2), so
+    # all 6 headings survive — only the card containers merged. Guards the grouping, not pixels.
+    m = re.search(r'<section id="screen-profile".*?</section>', INDEX, flags=re.S)
+    assert m, "the profile screen section vanished"
+    prof = m.group(0)
+    assert prof.count('<div class="card') == 4, "profile must be exactly 4 grouped cards (You/Preferences/Account/Danger)"
+    assert prof.count("<h2>") == 6, "all six section eyebrows must survive the merge"
+    # engagement is merged INTO the profile card (a .sep, not a new card, sits between Save profile and it)
+    assert re.search(r"Save profile.*?<hr class=\"sep\">.*?Community engagement", prof, flags=re.S), \
+        "Community engagement must share the 'You' card with the profile form (divided by a .sep)"
+    # privacy is merged INTO the preferences card with the theme control
+    assert re.search(r"Display &amp; accessibility.*?<hr class=\"sep\">.*?Privacy &amp; data", prof, flags=re.S), \
+        "Privacy & data must share the 'Preferences' card with Display & accessibility (divided by a .sep)"
+
+
+def test_forum_rows_carry_generative_avatars():
+    # Forum reuses the same deterministic avatar system as DMs (avatarHtml) so a person looks the same
+    # everywhere — on the list byline, the open post's author line, and every comment. Not new decoration:
+    # the exact helper the messages surface already uses.
+    assert "avatarHtml(p.author, 20)" in INDEX, "the forum list byline must show the author's generative avatar"
+    assert "avatarHtml(p.author, 26)" in INDEX, "the open post's author line must show the author's avatar"
+    assert "avatarHtml(c.author, 28)" in INDEX, "each comment must show its author's avatar"
+    assert 'class="muted byline"' in INDEX, "the list byline wrapper (flex-aligned avatar + text) was removed"
+    m = re.search(r"\.byline\s*\{[^}]*\}", INDEX)
+    assert m and "display:flex" in m.group(0), "the byline must be flex so the avatar aligns with the text"

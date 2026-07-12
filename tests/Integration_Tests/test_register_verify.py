@@ -51,7 +51,7 @@ def test_register_duplicate_email_is_enumeration_safe(make_otp_client, fake_user
     # leaks "this email is registered". With SMTP configured (prod), neither surfaces a code, so the two
     # responses match on every enumeration-relevant field. The existing account is left untouched (no code
     # is issued for the duplicate; a notice email goes to the owner instead).
-    monkeypatch.setattr(auth_module, "send_email", lambda *a, **k: True)      # no network; swallows code + notice
+    monkeypatch.setattr(auth_module, "send_email_async", lambda *a, **k: True)  # no network/thread; swallows code + notice
     fake_users.add("existing", "hash", email="taken@example.com")
     client = make_otp_client(fake_users, REGISTER_VERIFY_EMAIL=True, SMTP_HOST="smtp.example.com")
     dup = client.post("/register", json={"username": "Bob", "password": PW, "email": "taken@example.com"})
@@ -60,6 +60,26 @@ def test_register_duplicate_email_is_enumeration_safe(make_otp_client, fake_user
     assert dup.get_json()["status"] == fresh.get_json()["status"] == "verify_required"
     assert "dev_code" not in dup.get_json() and "dev_code" not in fresh.get_json()   # SMTP set -> never surfaced
     assert "error" not in dup.get_json()                                      # nothing that reveals "taken"
+
+
+def test_register_equalizes_kdf_work_on_duplicate_email(make_otp_client, fake_users, auth_module, monkeypatch):
+    # AUTH-H2: a duplicate email must not be distinguishable by response LATENCY. The fresh-signup branch runs
+    # a 2nd KDF (hashing the verification code); the duplicate branch runs an equal-cost dummy hash. Count the
+    # generate_password_hash calls on each path -> they must match, so neither branch is measurably cheaper.
+    monkeypatch.setattr(auth_module, "send_email_async", lambda *a, **k: True)   # no network/thread
+    real = auth_module.generate_password_hash
+    calls = {"n": 0}
+    monkeypatch.setattr(auth_module, "generate_password_hash",
+                        lambda *a, **k: (calls.__setitem__("n", calls["n"] + 1), real(*a, **k))[1])
+    fake_users.add("existing", "hash", email="taken@example.com")
+    client = make_otp_client(fake_users, REGISTER_VERIFY_EMAIL=True, SMTP_HOST="smtp.example.com")
+    calls["n"] = 0
+    client.post("/register", json={"username": "Bob", "password": PW, "email": "taken@example.com"})
+    dup_kdf = calls["n"]
+    calls["n"] = 0
+    client.post("/register", json={"username": "Carol", "password": PW, "email": "new@example.com"})
+    fresh_kdf = calls["n"]
+    assert dup_kdf == fresh_kdf >= 2, f"duplicate branch does unequal KDF work: dup={dup_kdf} fresh={fresh_kdf}"
 
 
 def test_register_duplicate_still_409_when_verification_is_off(client, fake_users):

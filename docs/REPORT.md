@@ -11,8 +11,10 @@
 > +10 Azure deploy + CI/CD; supersedes [`FEEDBACK.md`](FEEDBACK.md)). Architecture detail lives in [`DESIGN.md`](DESIGN.md); the phased plan in
 > [`ROADMAP.md`](ROADMAP.md).
 >
-> **Last updated:** 2026-07-10 · **Suite at this snapshot:** **720 tests, 686 passing / 34 environment-gated**
+> **Last updated:** 2026-07-11 · **Suite at this snapshot:** **764 tests, 728 passing / 36 environment-gated**
 > (`pytest --collect-only`; the env-gated ones run in CI's `compose-e2e` job against the live containers).
+> Since the 07-10 snapshot: +9 frontend design-pass guards, the AUTH-H1/H2 timing-oracle tests, and two
+> browser E2E scenarios (forum avatars, profile grouping) that run on desktop **and** mobile in CI.
 >
 > ⚠️ **Sections still owned by their planes.** §5 (risk), §2's deploy/scale/queue rows and §3's Elad rows are
 > current as of this date. §1's API surface + data model now list the DM / SSE / notification / comment-vote
@@ -153,8 +155,8 @@ table are the **full** suite by type (`pytest --collect-only`).
 | **Whole-system journey** | — | — | `test_e2e` (register→profile→check-in→dashboard→history→forum→logout) | — | — |
 | **Load / abuse** | — | — | — | `test_load` (4, live-stack burst: /health, /login flood, forum flood, /ready) · `locustfile.py` (ramped, on-demand CI job) | — |
 
-**Totals by type (full suite):** Unit **254** · Integration **317** · System **13** · Stress **11** ·
-Security **91** → **720 tests**.
+**Totals by type (full suite):** Unit **307** · Integration **339** · System **15** · Stress **12** ·
+Security **91** → **764 tests**.
 
 **Pass / skip:** locally **282 pass, 10 skip in ~6 s**. The 10 skips are *environment-gated, not broken* —
 they run the moment their dependency is present:
