@@ -141,3 +141,33 @@ by `test_scale_contract.py`.
   measured configuration** and the 2.86× is the number prod should actually see — not a lab-only figure.
   `AI_QUEUE_MAX_PENDING=32` stays: the backlog bound is about shedding load before callers time out, not
   about fitting in RAM.
+
+## Measured model footprint — the real RF validates the sizing (#248)
+
+The numbers above are the *scaling* measurement (the CPU-bound bench target, so throughput reflects the
+pool). Once the real Random Forest was baked into the image, Shiri measured its footprint directly inside
+the container (50 warm-up + 1,000 measured `predict_one` calls — issue #248, 2026-07-12):
+
+| Metric | Measured |
+|---|---|
+| RSS after loading inference + model | 161.73 MB / process |
+| Model-import RAM increase | 149.61 MB / process |
+| Prediction latency — mean / median | 26.95 ms / 26.61 ms |
+| Prediction latency — p95 / max | 32.45 ms / 75.89 ms |
+
+These confirm the production knobs; **no retune was needed**:
+
+* **`AI_QUEUE_WORKERS=4` is RAM-safe.** Each pool process holds its own model copy, so the pool costs
+  ~4 × 162 MB ≈ **0.65 GB** — about 2 % of the E4ads v5's 32 GiB. Four workers (one per vCPU) is the
+  right ceiling for CPU-bound scoring, and RAM is nowhere near the limit.
+* **Every timeout in the chain sits 100–1500× above the measured latency**, so a healthy prediction can
+  never trip a deadline. In order: `AI_PREDICT_TIMEOUT_SECONDS`=30 s (the queue wait — ~395× the 76 ms
+  max) < `AI_CLIENT_TIMEOUT`=33 s (web's wait) < web gunicorn `--timeout` 45 s; on the `ai` side the
+  gunicorn `--timeout` 60 s and the hung-worker reaper `AI_JOB_HARD_TIMEOUT_SECONDS`=120 s both clear the
+  30 s deadline (guard-pinned). A deadline only fires on a genuinely wedged worker, never a slow-but-live one.
+* **`AI_QUEUE_MAX_PENDING=32` is comfortable.** At ~27 ms/predict, four workers clear ~148 predictions/s,
+  so a full 32-deep backlog drains in ≈ 0.22 s — the worst-case fully-queued `/predict` still answers
+  ~100× inside its 30 s deadline. The bound sheds load long before callers time out.
+
+Caveat, as Shiri flagged: this covers the Random Forest inference only. The recommendation engine is not
+built yet; the timeout headroom is deliberately kept for it, and these knobs get re-measured when it lands.
