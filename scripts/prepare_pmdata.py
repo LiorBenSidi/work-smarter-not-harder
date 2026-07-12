@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Collect only wellness.csv and srpe.csv from PMData participants p01..p16."""
+# ruff: noqa: T201
 
 from __future__ import annotations
 

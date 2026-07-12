@@ -18,7 +18,7 @@ Target:
 
 The raw PMData should remain outside the Git repository.
 """
-
+# ruff: noqa: T201
 from __future__ import annotations
 
 import argparse

@@ -1,7 +1,6 @@
 """Unit tests for readiness-score binning."""
 
 import importlib.util
-import math
 from pathlib import Path
 
 import pytest
