@@ -38,13 +38,13 @@ MAX_CONTENT_LENGTH = 64 * 1024
 # The four inputs the readiness model needs to score a reliable Rest/Moderate/Ready result. Shiri's
 # real Random Forest raises ValueError on incomplete input rather than median-filling invented values,
 # so /predict rejects an unscoreable request AT THE QUEUE BOUNDARY: it costs a 400, not a worker
-# process, and never a 500. (name, low, high) — the ranges are the model's; web's daily check-in is the
-# producer (web/routes/checkin.py). NOTE: web's CHECKIN_FIELDS ranges and dashboard.py's profile-only
-# call don't yet match this contract — tracked as a web follow-up for Lior.
+# process, and never a 500. (name, low, high) — these are the ranges the PRODUCER sends (web's daily
+# check-in, web/routes/checkin.py): fatigue/soreness on web's 1-10 wellness scale. inference.predict_one
+# then rescales 1-10 -> the model's 1-5 (_web_wellness_to_model_scale), so validation and model agree.
 READINESS_FIELDS = (
     ("sleep_hours", 1, 24),
-    ("fatigue", 1, 5),
-    ("soreness", 1, 5),
+    ("fatigue", 1, 10),
+    ("soreness", 1, 10),
     ("training_load", 0, 1800),
 )
 
