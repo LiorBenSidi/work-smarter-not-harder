@@ -11,8 +11,8 @@
 > +10 Azure deploy + CI/CD; supersedes [`FEEDBACK.md`](FEEDBACK.md)). Architecture detail lives in [`DESIGN.md`](DESIGN.md); the phased plan in
 > [`ROADMAP.md`](ROADMAP.md).
 >
-> **Last updated:** 2026-07-11 · **Suite at this snapshot:** **764 tests, 728 passing / 36 environment-gated**
-> (`pytest --collect-only`; the env-gated ones run in CI's `compose-e2e` job against the live containers).
+> **Last updated:** 2026-07-12 · **Suite at this snapshot:** **783 tests, 747 passing / 36 environment-gated**
+> (`pytest -q`; the env-gated ones run in CI's `compose-e2e` job against the live containers).
 > Since the 07-10 snapshot: +9 frontend design-pass guards, the AUTH-H1/H2 timing-oracle tests, and two
 > browser E2E scenarios (forum avatars, profile grouping) that run on desktop **and** mobile in CI.
 >
@@ -155,22 +155,25 @@ table are the **full** suite by type (`pytest --collect-only`).
 | **Whole-system journey** | — | — | `test_e2e` (register→profile→check-in→dashboard→history→forum→logout) | — | — |
 | **Load / abuse** | — | — | — | `test_load` (4, live-stack burst: /health, /login flood, forum flood, /ready) · `locustfile.py` (ramped, on-demand CI job) | — |
 
-**Totals by type (full suite):** Unit **307** · Integration **339** · System **15** · Stress **12** ·
-Security **91** → **764 tests**.
+**Totals by type (full suite):** Unit **315** · Integration **346** · System **15** · Stress **12** ·
+Security **95** → **783 tests**.
 
-**Pass / skip:** locally **282 pass, 10 skip in ~6 s**. The 10 skips are *environment-gated, not broken* —
+**Pass / skip:** locally **747 pass, 36 skip in ~47 s**. The 36 skips are *environment-gated, not broken* —
 they run the moment their dependency is present:
 
-- `test_db_mongo` (6) — the real-Mongo integration suite; skips without `TEST_MONGO_URI`, and **runs in CI**
+- `test_db_mongo` (15) — the real-Mongo integration suite; skips without `TEST_MONGO_URI`, and **runs in CI**
   against a `mongo:7` service on every PR.
-- `test_e2e` (1) — the full-stack system journey; runs when `E2E_BASE_URL` points at a live stack.
-- `test_ai` (2) and `test_load` (1) — TDD scaffolds for the owners still building those planes (the AI
-  model and the locust load scenario); they fail loudly (`NotImplementedError`) once un-skipped, so they
-  can't rot into false green.
+- `test_ai_queue_live` (11) — the live AI-queue behaviour (bounded queue + process pool over HTTP); runs when
+  `AI_BASE_URL` points at the running `ai` container, as CI's `compose-e2e` job does.
+- `test_load` (4) — the live-stack stress burst; runs when `E2E_BASE_URL` points at a live stack.
+- `test_e2e` + `test_elad_lane_live` (2) — full-stack system journeys; run against a live stack (`E2E_BASE_URL`).
+- `test_fault_isolation` (2) — destructive container-stop resilience checks; run with `FAULT_TEST=1`.
+- `test_ai` (2) — TDD scaffolds for the AI model (Shiri); they fail loudly (`NotImplementedError`) once
+  un-skipped, so they can't rot into false green.
 
-With the live stack up (`E2E_BASE_URL` + `TEST_MONGO_URI` set), the real-Mongo IT and the system e2e execute
-against the running containers too — **289 pass / 3 skip** (only the unwritten AI-model and locust scaffolds
-stay skipped).
+With the live stack up (`TEST_MONGO_URI` + `AI_BASE_URL` + `E2E_BASE_URL` set), the real-Mongo, live-AI-queue,
+stress and system-journey suites all execute against the running containers — exactly what CI's `compose-e2e`
+job runs green on every PR; only the `test_ai` model scaffolds and the destructive `FAULT_TEST` cases stay gated.
 
 No test is commented-out or `assert True` (course rule: a broken test is deleted or fixed, never muted).
 
@@ -344,7 +347,7 @@ between planes (§1). Full detail in [`COLLABORATORS.md`](../COLLABORATORS.md) a
 cp .env.example .env
 docker compose up --build          # 3 containers; only web is published
 # → http://localhost:8000/health   → then register, set a profile, check in, see the dashboard
-pytest -q                          # 282 pass / 10 env-gated skip
+pytest -q                          # 747 pass / 36 env-gated skip
 ```
 
 CI reproduces the gate on every PR (ruff → bandit → pytest + a `mongo:7` service). `main` is
