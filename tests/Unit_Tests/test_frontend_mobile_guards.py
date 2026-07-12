@@ -298,17 +298,21 @@ def test_streak_number_uses_mono():
 
 
 def test_ios_scroll_behaviors():
-    # iOS-26 scroll feel: the header is clean at the top and frosts once content scrolls under it; the MOBILE
-    # tab bar (+ Home FAB) recedes on scroll-down and returns on scroll-up. Reduced-motion keeps the nav
-    # reachable (the transform is neutralised, not the visibility). Desktop unaffected (pill is display:none).
+    # iOS-26 / Instagram scroll feel: the header is clean at the top and frosts once content scrolls under it; the
+    # MOBILE tab bar (+ Home FAB) SHRINKS to icon-only on scroll-down and expands back on scroll-up (it stays small
+    # on a pause, until you scroll up). Reduced-motion drops the transitions — the nav only shrinks, never hides, so
+    # it stays reachable. Desktop unaffected (pill is display:none).
     assert re.search(r"html:not\(\.scrolled\) header\s*\{[^}]*backdrop-filter:none", INDEX), \
         "the scroll-edge frost (clean header at the top) was removed"
-    assert re.search(r"html\.nav-hidden \.tabbar[^{]*\{[^}]*translateY\(150%\)", INDEX), \
-        "the tab-bar minimize-on-scroll was removed"
-    assert 'classList.toggle("scrolled"' in INDEX and 'classList.add("nav-hidden")' in INDEX, \
-        "the scroll handler (frost + nav minimize) was removed"
-    assert re.search(r"prefers-reduced-motion: reduce\)\s*\{\s*html\.nav-hidden[^}]*transform:none", INDEX), \
-        "under reduced motion the nav must stay reachable (transform neutralised)"
+    assert re.search(r"html\.nav-compact \.tabbar-inner\s*\{[^}]*height:44px", INDEX), \
+        "the tab-bar shrink-on-scroll (compact height) was removed"
+    assert re.search(r"html\.nav-compact \.tab span:not\(\.dm-dot\)\s*\{[^}]*max-height:0", INDEX), \
+        "the compact nav must collapse the tab labels (icon-only on scroll-down)"
+    assert 'classList.toggle("scrolled"' in INDEX and 'classList.add("nav-compact")' in INDEX \
+        and 'classList.remove("nav-compact")' in INDEX, \
+        "the scroll handler (frost + directional nav shrink/expand) was removed"
+    assert re.search(r"prefers-reduced-motion: reduce\)\s*\{\s*\.tabbar-inner[^}]*transition:none", INDEX), \
+        "under reduced motion the nav transitions must be dropped (nav stays reachable — it only shrinks)"
 
 
 def test_history_has_a_readiness_heatmap():

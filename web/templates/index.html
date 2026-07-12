@@ -541,8 +541,21 @@
     /* iOS-26 tab-bar minimize (MOBILE only — the pill is hidden on desktop): the floating nav recedes when you
        scroll DOWN into content, and returns the instant you scroll up (or reach the top). Reduced-motion keeps
        it always present. The Home FAB rides with it so the pair stays aligned. */
-    html.nav-hidden .tabbar, html.nav-hidden .ctx-back { transform: translateY(150%); opacity:0; pointer-events:none; }
-    @media (prefers-reduced-motion: reduce) { html.nav-hidden .tabbar, html.nav-hidden .ctx-back { transform:none; opacity:1; } }
+    /* Instagram-style compact nav: scrolling DOWN shrinks the bar to icon-only (the labels collapse); scrolling UP
+       (or reaching the top) expands it back to full size. Once small it STAYS small until you scroll up — no
+       spring-back on a scroll pause. Height, label and icon animate together for a seamless transition; the
+       sliding indicator follows automatically via its top/bottom:6px. Ref: IG's floating icon-only bar + lozenge. */
+    .tabbar-inner { transition: height .3s var(--ease), padding .3s var(--ease); }
+    .tab svg { transition: width .28s var(--ease), height .28s var(--ease); }
+    .tab span:not(.dm-dot) { overflow:hidden; max-height:16px; transition: opacity .22s var(--ease), max-height .28s var(--ease); }
+    .ctx-back { transition: transform .3s var(--ease); }
+    html.nav-compact .tabbar-inner { height:44px; padding:5px; }
+    html.nav-compact .tab span:not(.dm-dot) { opacity:0; max-height:0; }
+    html.nav-compact .tab svg { width:22px; height:22px; }
+    html.nav-compact .ctx-back { transform: scale(.82); }
+    @media (prefers-reduced-motion: reduce) {
+      .tabbar-inner, .tab svg, .tab span:not(.dm-dot), .ctx-back { transition:none; }
+    }
     /* Compact pill, fixed height so it lines up with the 56px FAB (both bottom:12 -> centers aligned). The
        width is capped at calc(100vw - 152px) so the CENTERED pill always keeps >=76px clear on each side —
        enough for the left FAB (12 + 56 + 8) — so it can never overlap, at ANY width (zoom, split-screen, 280px). */
@@ -1763,18 +1776,19 @@
         + '<div class="sk" style="height:42px;width:54%;border-radius:16px"></div>';
       return row(64) + row(64);
     }
-    // iOS scroll behaviours: the header frosts once content scrolls under it (.scrolled on <html>); the MOBILE
-    // tab bar + Home FAB recede on scroll-down and return on scroll-up / near the top (.nav-hidden). Passive +
-    // rAF-throttled so it never janks; reduced-motion still toggles the classes but CSS neutralises the transform,
-    // so the nav is never unreachable. Desktop is unaffected (the pill is display:none there).
+    // iOS/Instagram scroll behaviours: the header frosts once content scrolls under it (.scrolled on <html>); the
+    // MOBILE tab bar + Home FAB SHRINK to icon-only on scroll-DOWN and expand back to full size on scroll-UP / near
+    // the top (.nav-compact). Once small it STAYS small until you scroll up — no spring-back on a scroll pause.
+    // Passive + rAF-throttled so it never janks; reduced-motion still toggles the class but CSS drops the
+    // transitions (the nav only shrinks, never hides, so it stays reachable). Desktop unaffected (pill is display:none).
     (function () {
       const root = document.documentElement;
       let lastY = 0, ticking = false;
       function update() {
         const y = window.scrollY || root.scrollTop || 0;
         root.classList.toggle("scrolled", y > 6);
-        if (y > lastY + 6 && y > 90) root.classList.add("nav-hidden");
-        else if (y < lastY - 6 || y < 90) root.classList.remove("nav-hidden");
+        if (y > lastY + 6 && y > 90) root.classList.add("nav-compact");         // scrolling down -> shrink to icon-only
+        else if (y < lastY - 6 || y < 90) root.classList.remove("nav-compact");  // scrolling up / near top -> full size
         lastY = y; ticking = false;
       }
       window.addEventListener("scroll", function () {
