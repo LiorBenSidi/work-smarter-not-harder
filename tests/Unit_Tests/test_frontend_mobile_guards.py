@@ -311,6 +311,15 @@ def test_ios_scroll_behaviors():
         "under reduced motion the nav must stay reachable (transform neutralised)"
 
 
+def test_history_has_a_readiness_heatmap():
+    # FitTrackee-style calendar heatmap: a GitHub-style grid, one cell per day over the last N weeks, tinted
+    # by that day's readiness state (--st). Rendered from the history data the screen already loads.
+    assert 'id="history-heat"' in INDEX and "function renderHeat" in INDEX, "the readiness calendar heatmap was removed"
+    assert re.search(r"\.heatgrid\s*\{[^}]*grid-auto-flow:column", INDEX), "the heatmap grid (GitHub-style columns) was removed"
+    assert "renderHeat(historyItems)" in INDEX, "the heatmap must render from the history data"
+    assert re.search(r"\.heat-cell\.on\s*\{[^}]*var\(--st\)", INDEX), "heat cells must tint by readiness state (--st)"
+
+
 def test_history_rows_reveal_with_a_stagger():
     # History rows get a one-time staggered fade+rise entrance (crafted feel). fill:both -> a row can never
     # get stuck invisible; reduced-motion skips it entirely (no opacity:0 base).
