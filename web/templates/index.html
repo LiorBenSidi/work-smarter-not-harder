@@ -1928,23 +1928,15 @@
       statState = d.readiness ? String(readinessScore(d.readiness)) : "—";
       statKcal = d.calories != null ? d.calories : "—";   // statCard escapes on render now
       renderStats();
-      if (d.needs_profile) {
-        // Show the payoff, not just an instruction: a greyed sample of the readiness card a first
-        // check-in unlocks. aria-hidden -> it's illustrative, not read as real data.
-        el.innerHTML =
-          '<p class="muted" style="text-align:center;margin:0 0 2px">Fill in your profile, then log a check-in to see your readiness.</p>'
-          + '<div class="ex"><span class="ex-tag">Example</span>'
-          + '<div class="readiness ready" aria-hidden="true">'
-          + '<div class="orb" style="--w:88"><div class="orb-inner">'
-          + '<div class="score">88</div><div class="verdict-sub">Ready</div><div class="orb-sub">readiness</div></div></div>'
-          + '<ul class="recs"><li>Great day to push. Hit your planned session.</li></ul></div></div>';
-        return;
-      }
       if (d.needs_checkin) {
-        // Profile is set but no check-in exists yet — there are no daily metrics to score, so this is
-        // NOT an AI outage. Prompt the first check-in with the same greyed example of the payoff.
+        // No check-in yet -> there are no daily metrics to score, so this is NOT an AI outage. Prompt the
+        // first check-in with a greyed example of the payoff. Readiness needs only the check-in; a profile
+        // is OPTIONAL (it just adds the calorie target — issue #266), so mention it as a secondary nudge.
+        const lead = d.needs_profile
+          ? "Log your first check-in to see your readiness. A profile adds your daily calorie target."
+          : "Log today's check-in to see your readiness.";
         el.innerHTML =
-          '<p class="muted" style="text-align:center;margin:0 0 2px">Log today\'s check-in to see your readiness.</p>'
+          '<p class="muted" style="text-align:center;margin:0 0 2px">' + lead + '</p>'
           + '<div class="ex"><span class="ex-tag">Example</span>'
           + '<div class="readiness ready" aria-hidden="true">'
           + '<div class="orb" style="--w:88"><div class="orb-inner">'
@@ -1971,6 +1963,7 @@
         html += "</div>";
       }
       if (d.calories != null) html += '<p style="margin-top:16px;text-align:center"><span class="pill">Daily target · ' + escapeHtml(d.calories) + ' kcal</span></p>';
+      else if (d.readiness && d.needs_profile) html += '<p class="muted" style="margin-top:14px;text-align:center;font-size:12px">Set up your profile to get a daily calorie target.</p>';
       el.innerHTML = html || '<p class="muted">No readiness yet.</p>';
       // animate the orb fill and confidence bars from 0 (reduced-motion snaps to final)
       requestAnimationFrame(() => {

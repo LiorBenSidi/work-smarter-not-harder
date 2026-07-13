@@ -39,16 +39,12 @@ def dashboard():
         logger.exception("profile store unavailable on dashboard")
         return jsonify(error="profile store unavailable"), 503
 
-    if profile is None:
-        return jsonify(profile=None, readiness=None, calories=None,
-                       ai_status="skipped", needs_profile=True), 200
-
-    # Readiness is scored from the athlete's LATEST daily check-in metrics, merged with the profile
-    # context — the exact payload the check-in flow sends (routes/checkin.py). The model needs the four
-    # readiness fields (sleep_hours/fatigue/soreness/training_load) and rejects an incomplete request at
-    # its boundary (400 -> ai_status "unavailable"); the profile alone doesn't carry them. So with no
-    # check-in yet there is nothing to score: prompt one (needs_checkin) rather than firing an
-    # unscoreable profile-only /predict that would look like an AI outage.
+    # Readiness is scored from the athlete's LATEST daily check-in metrics. The profile context is OPTIONAL
+    # (issue #266): the model scores on the daily metrics alone — the profile only adds the calorie target —
+    # so the dashboard must NOT gate the whole readiness view on a profile. A user who has checked in sees
+    # their readiness whether or not a profile exists; `needs_profile` is a soft hint for the calorie
+    # target, not a hard block. With NO check-in there's simply nothing to score (the metrics are what the
+    # model needs), so we prompt a check-in — never an unscoreable profile-only /predict.
     try:
         entries = list(current_app.config["HISTORY"].list(session["username"]))
     except Exception:
@@ -58,14 +54,17 @@ def dashboard():
     latest = entries[-1] if entries else None
     metrics = latest.get("metrics") if isinstance(latest, dict) else None
     if not isinstance(metrics, dict) or not metrics:
-        return jsonify(profile=profile, readiness=None, calories=None,
-                       ai_status="skipped", needs_checkin=True), 200
+        # No check-in yet -> nothing to score. Prompt one, and flag a missing profile too (for calories).
+        return jsonify(profile=profile, readiness=None, calories=None, ai_status="skipped",
+                       needs_checkin=True, needs_profile=profile is None), 200
 
-    prediction = ai_client.predict(current_app.config["AI_URL"], {**profile, **metrics},
+    # profile may be None -> score on the metrics alone ({**{}, **metrics} is just the metrics).
+    prediction = ai_client.predict(current_app.config["AI_URL"], {**(profile or {}), **metrics},
                                    timeout=current_app.config["AI_CLIENT_TIMEOUT"])
     if not isinstance(prediction, dict):
         # ai unreachable (None) or a malformed non-object response -> degrade gracefully, never crash
-        return jsonify(profile=profile, readiness=None, calories=None, ai_status="unavailable"), 200
+        return jsonify(profile=profile, readiness=None, calories=None, ai_status="unavailable",
+                       needs_profile=profile is None), 200
 
     recs = prediction.get("recommendations")
     proba = prediction.get("proba")
@@ -82,4 +81,5 @@ def dashboard():
     # AI value would otherwise serialise as an invalid-JSON `Infinity`/`NaN` token). Absent/garbage -> null.
     calories = prediction.get("calories")
     return jsonify(profile=profile, readiness=readiness,
-                   calories=calories if _finite_number(calories) else None, ai_status="ok"), 200
+                   calories=calories if _finite_number(calories) else None,
+                   ai_status="ok", needs_profile=profile is None), 200
