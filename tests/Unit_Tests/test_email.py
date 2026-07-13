@@ -57,7 +57,8 @@ def _fake_smtp(seen):
 
         def send_message(self, msg, from_addr=None, to_addrs=None):
             seen.update(to=msg["To"], subject=msg["Subject"], from_header=str(msg["From"]),
-                        envelope_from=from_addr, to_addrs=to_addrs)
+                        envelope_from=from_addr, to_addrs=to_addrs,
+                        date=msg["Date"], message_id=msg["Message-ID"], reply_to=msg["Reply-To"])
 
     return FakeSMTP
 
@@ -73,6 +74,22 @@ def test_smtp_backend_uses_the_configured_relay(monkeypatch):
     assert seen["host"] == "relay.test" and seen["port"] == 2525
     assert seen["to"] == "to@z.co" and seen.get("tls") and seen["login"] == ("u", "p")
     assert seen["envelope_from"] == "x@y.co" and seen["to_addrs"] == ["to@z.co"]   # explicit clean envelope
+
+
+def test_smtp_message_carries_date_message_id_and_reply_to(monkeypatch):
+    # Strict receivers (Outlook/Microsoft, Proton, institutional mail like Technion) treat a MISSING Date or
+    # Message-ID as a spam signal and folder/drop otherwise-legitimate OTP/reset mail. Pin that both are set
+    # (Message-ID scoped to the sending domain) plus a Reply-To — the deliverability fix for #270.
+    seen = {}
+    monkeypatch.setattr(email_mod.smtplib, "SMTP", _fake_smtp(seen))
+    ok = email_mod.send_email(
+        {"SMTP_HOST": "relay.test", "MAIL_FROM": "Work Smarter <no-reply@worksmarternotharder.dev>"},
+        "user@outlook.com", "Your login code", "123456")
+    assert ok is True
+    assert seen["date"], "a Date header is required by strict receivers"
+    assert seen["message_id"] and seen["message_id"].endswith("@worksmarternotharder.dev>"), \
+        "Message-ID must be set and scoped to the sending domain"
+    assert seen["reply_to"] == "no-reply@worksmarternotharder.dev"
 
 
 def test_smtp_from_and_envelope_survive_a_comma_display_name(monkeypatch):

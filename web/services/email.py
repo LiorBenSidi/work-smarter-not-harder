@@ -15,7 +15,7 @@ import smtplib
 import ssl
 import threading
 from email.message import EmailMessage
-from email.utils import formataddr
+from email.utils import formataddr, formatdate, make_msgid
 
 logger = logging.getLogger(__name__)
 
@@ -64,6 +64,12 @@ def send_email(config, to, subject, body, force_mock=False):
         msg = EmailMessage()
         msg["From"] = formataddr((name, addr))   # name is quoted if it has a comma/special char; addr stays clean
         msg["To"], msg["Subject"] = to, subject
+        # Date + Message-ID are expected by strict receivers (Outlook/Microsoft, Proton, institutional mail
+        # like Technion); their ABSENCE is a spam signal that folders or silently drops otherwise-legitimate
+        # OTP/reset mail. Set them explicitly (smtplib doesn't). Reply-To points replies at the sender.
+        msg["Date"] = formatdate(localtime=True)
+        msg["Message-ID"] = make_msgid(domain=addr.rsplit("@", 1)[-1] if "@" in addr else None)
+        msg["Reply-To"] = addr
         msg.set_content(body)
         with smtplib.SMTP(host, int(config.get("SMTP_PORT") or 587), timeout=10) as server:
             server.ehlo()
