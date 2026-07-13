@@ -151,12 +151,14 @@ export const SCENARIOS = [
       await b.type("#forum-form [name=title]", "Photo " + uniq("p"));
       await b.type("#forum-form [name=body]", "with an attached image");
       await b.setFileInput("#forum-files", FIXTURE_PNG);              // real file on the picker (in-page File+DataTransfer)
+      const setState = await b.evaluate(`() => { const el=document.querySelector("#forum-files"); const f=el&&el.files&&el.files[0]; return {len: el&&el.files?el.files.length:-1, size: f?f.size:-1, name: f?f.name:null}; }`);
       await b.submit("#forum-form", 2200);                            // create post -> upload media -> bind to the post
+      const afterSubmit = await b.evaluate(`() => { const el=document.querySelector("#forum-files"); const fl=document.querySelector("#forum-flash"); return {len: el&&el.files?el.files.length:-1, flash: fl?fl.textContent.trim():null}; }`);
       await b.waitFor("#forum-list .post");
       await b.click("#forum-list .post", 1200);                       // open it
-      await b.waitFor("#post-atts img", { timeout: 7000 });           // attachments load async after the detail renders
-      const ok = await b.evaluate(`() => { const im = document.querySelector("#post-atts img"); return !!im && /\\/media\\//.test(im.getAttribute("src") || ""); }`);
-      assert(ok, "the attached photo did not render in the post detail (#post-atts img with a /media/ src)");
+      let ok = false;
+      try { await b.waitFor("#post-atts img", { timeout: 7000 }); ok = await b.evaluate(`() => { const im = document.querySelector("#post-atts img"); return !!im && /\\/media\\//.test(im.getAttribute("src") || ""); }`); } catch { ok = false; }
+      assert(ok, `DIAG setState=${JSON.stringify(setState)} afterSubmit=${JSON.stringify(afterSubmit)} exceptions=${JSON.stringify(b.exceptions.slice(-3))}`);
     },
   },
   {
