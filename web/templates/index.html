@@ -550,11 +550,13 @@
     .tabbar-inner { transition: height .3s var(--ease), padding .3s var(--ease); }
     .tab svg { transition: width .28s var(--ease), height .28s var(--ease); }
     .tab span:not(.dm-dot) { overflow:hidden; max-height:16px; transition: opacity .22s var(--ease), max-height .28s var(--ease); }
-    .ctx-back { transition: transform .3s var(--ease); }
+    .ctx-back { transition: width .3s var(--ease), height .3s var(--ease), transform .12s; }
     html.nav-compact .tabbar-inner { height:44px; padding:5px; }
     html.nav-compact .tab span:not(.dm-dot) { opacity:0; max-height:0; }
     html.nav-compact .tab svg { width:22px; height:22px; }
-    html.nav-compact .ctx-back { transform: scale(.82); }
+    /* shrink the FAB bottom-anchored (same as the tab bar), NOT scaled around its centre — otherwise its
+       centre stays put while the nav's drops ~6px, so they misalign on scroll. 44px matches the compact nav. */
+    html.nav-compact .ctx-back { width:44px; height:44px; }
     @media (prefers-reduced-motion: reduce) {
       .tabbar-inner, .tab svg, .tab span:not(.dm-dot), .ctx-back { transition:none; }
     }
@@ -803,7 +805,7 @@
           <button id="tab-register" onclick="showTab('register')">Register</button>
         </div>
 
-        <form id="login-form">
+        <form id="login-form" onsubmit="return false">
           <label for="login-username">Username or email</label><input id="login-username" name="username" autocomplete="username" required>
           <label for="login-password">Password</label><input id="login-password" name="password" type="password" autocomplete="current-password" required>
           <div style="margin-top:16px"><button type="submit">Log in</button></div>
@@ -811,7 +813,7 @@
           <div style="margin-top:12px;text-align:center"><a href="#" id="forgot-link" class="muted" style="text-decoration:none">Forgot your password?</a></div>
         </form>
 
-        <form id="register-form" hidden>
+        <form id="register-form" hidden onsubmit="return false">
           <label for="reg-username">Display name<span class="info" id="reg-username-info" tabindex="0" role="note" aria-label="Display name requirements">i<span class="tip" aria-hidden="true" id="reg-username-tip"></span></span></label><input id="reg-username" name="username" autocomplete="off" placeholder="Shown to others — can repeat" required>
           <p class="muted" style="margin:2px 0 10px;font-size:12px">Shown to others and can repeat — you'll sign in with your email.</p>
           <label for="reg-email">Email</label><input id="reg-email" name="email" type="email" autocomplete="email" required>
@@ -820,7 +822,7 @@
           <div id="register-flash" class="flash" aria-live="polite"></div>
         </form>
 
-        <form id="forgot-form" hidden>
+        <form id="forgot-form" hidden onsubmit="return false">
           <p class="muted" style="margin:0 0 12px">Enter your email and we'll send you a reset link.</p>
           <label for="forgot-email">Email</label><input id="forgot-email" name="email" type="email" autocomplete="email" required>
           <div style="margin-top:16px"><button type="submit">Send reset link</button>
@@ -828,14 +830,14 @@
           <div id="forgot-flash" class="flash" aria-live="polite"></div>
         </form>
 
-        <form id="reset-form" hidden>
+        <form id="reset-form" hidden onsubmit="return false">
           <p class="muted" style="margin:0 0 12px">Choose a new password for your account.</p>
           <label for="reset-password">New password</label><input id="reset-password" name="password" type="password" autocomplete="new-password" required>
           <div style="margin-top:16px"><button type="submit">Set new password</button></div>
           <div id="reset-flash" class="flash" aria-live="polite"></div>
         </form>
 
-        <form id="otp-form" hidden>
+        <form id="otp-form" hidden onsubmit="return false">
           <p id="otp-intro" class="muted" style="margin:0 0 12px">We sent a 6-digit code to your email. Enter it to finish signing in.</p>
           <div id="otp-devhint" class="flash warn" hidden style="margin:0 0 10px"></div>
           <label for="otp-code">Verification code</label>
@@ -1900,6 +1902,18 @@
         // check-in unlocks. aria-hidden -> it's illustrative, not read as real data.
         el.innerHTML =
           '<p class="muted" style="text-align:center;margin:0 0 2px">Fill in your profile, then log a check-in to see your readiness.</p>'
+          + '<div class="ex"><span class="ex-tag">Example</span>'
+          + '<div class="readiness ready" aria-hidden="true">'
+          + '<div class="orb" style="--w:88"><div class="orb-inner">'
+          + '<div class="score">88</div><div class="verdict-sub">Ready</div><div class="orb-sub">readiness</div></div></div>'
+          + '<ul class="recs"><li>Great day to push. Hit your planned session.</li></ul></div></div>';
+        return;
+      }
+      if (d.needs_checkin) {
+        // Profile is set but no check-in exists yet — there are no daily metrics to score, so this is
+        // NOT an AI outage. Prompt the first check-in with the same greyed example of the payoff.
+        el.innerHTML =
+          '<p class="muted" style="text-align:center;margin:0 0 2px">Log today\'s check-in to see your readiness.</p>'
           + '<div class="ex"><span class="ex-tag">Example</span>'
           + '<div class="readiness ready" aria-hidden="true">'
           + '<div class="orb" style="--w:88"><div class="orb-inner">'
