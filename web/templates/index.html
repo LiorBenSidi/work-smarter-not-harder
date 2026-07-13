@@ -2340,14 +2340,19 @@
     }
 
     onSubmit("forum-form", async (f) => {
+      // Snapshot the picked files BEFORE the await: the create round-trip below yields the event loop, and
+      // some browsers (notably headless Chrome) clear a programmatically-set FileList across that turn — so
+      // read the selection synchronously up front and upload from the captured File references.
+      const picker = $("forum-files");
+      const pickedFiles = picker ? Array.from(picker.files || []) : [];
       const r = await api("/forum/posts", { method: "POST", body: { title: f.title.value, body: f.body.value, anonymous: f.anonymous.checked } });
       if (!r.ok) { flash("forum-flash", (r.data && r.data.error) || "Could not post"); return; }
-      const post = r.data && r.data.post, picker = $("forum-files");
-      if (post && post.id && picker && picker.files && picker.files.length) {
+      const post = r.data && r.data.post;
+      if (post && post.id && pickedFiles.length) {
         flash("forum-flash", "Uploading…", "ok");
-        const ids = await uploadAll(picker.files);
+        const ids = await uploadAll(pickedFiles);
         if (ids.length) await api("/forum/posts/" + post.id + "/attachments", { method: "POST", body: { attachment_ids: ids } });
-        picker.value = "";
+        if (picker) picker.value = "";
       }
       f.reset(); filesHint($("forum-files"), "forum-files-hint"); flash("forum-flash", "Posted.", "ok"); loadForum();
     });
@@ -2508,17 +2513,20 @@
     document.addEventListener("click", (e) => { if (!e.target.closest(".dm-search")) closeDmSuggest(); });
 
     onSubmit("dm-reply-form", async (f) => {
-      const text = f.body.value.trim(), picker = $("dm-files"), hasFiles = picker && picker.files && picker.files.length;
-      if (!dmPeer || (!text && !hasFiles)) return;             // nothing to send
+      // Snapshot picked files BEFORE any await (the text send below yields the event loop, and headless
+      // Chrome can clear a programmatically-set FileList across that turn) — upload from the captured refs.
+      const text = f.body.value.trim(), picker = $("dm-files");
+      const pickedFiles = picker ? Array.from(picker.files || []) : [];
+      if (!dmPeer || (!text && !pickedFiles.length)) return;   // nothing to send
       if (text) {
         const r = await api("/messages", { method: "POST", body: { to: dmPeer, body: text } });
         if (!r.ok) { flash("dm-reply-flash", (r.data && r.data.error) || "Could not send"); return; }   // surface 429 / errors
       }
-      if (hasFiles) {
+      if (pickedFiles.length) {
         flash("dm-reply-flash", "Uploading…", "ok");
-        const ids = await uploadAll(picker.files);            // attachments bind to the conversation, not a single message
+        const ids = await uploadAll(pickedFiles);             // attachments bind to the conversation, not a single message
         if (ids.length) await api("/messages/" + encodeURIComponent(dmPeer) + "/attachments", { method: "POST", body: { attachment_ids: ids } });
-        picker.value = ""; filesHint(picker, "dm-files-hint");
+        if (picker) { picker.value = ""; filesHint(picker, "dm-files-hint"); }
       }
       f.reset(); autoGrow($("dm-reply")); flash("dm-reply-flash", "", "ok"); renderThread();
     });
