@@ -777,7 +777,9 @@
 
   <main>
     <!-- ===== Auth view ===== -->
-    <section id="auth-view">
+    <!-- hidden by default: init() reveals the right view only after GET /me resolves, so a reload while
+         logged in doesn't flash the marketing/login landing before snapping to the app. -->
+    <section id="auth-view" hidden>
       <div class="auth-split">
       <div class="auth-thesis">
         <p class="auth-eyebrow">Morning readiness</p>
@@ -873,7 +875,7 @@
             <h2><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20V10M6 20v-4M18 20V6"/></svg><span class="grow">Daily check-in</span></h2>
             <form id="checkin-form">
               <div class="row">
-                <div><label for="sleep_hours">Sleep (hours)</label><input id="sleep_hours" name="sleep_hours" type="number" min="0" max="24" step="0.1" required>
+                <div><label for="sleep_hours">Sleep (hours)</label><input id="sleep_hours" name="sleep_hours" type="number" min="1" max="24" step="0.1" required>
                   <small class="hint">How long you slept last night.</small></div>
                 <div><label for="resting_hr">Resting HR (bpm)</label><input id="resting_hr" name="resting_hr" type="number" min="30" max="220" required>
                   <small class="hint">Beats per minute before getting up. Above your norm signals fatigue.</small></div>
@@ -1031,7 +1033,7 @@
               <div id="displayname-flash" class="flash" aria-live="polite"></div>
             </form>
             <hr class="sep">
-            <form id="password-form">
+            <form id="password-form" onsubmit="return false">
               <label for="current-password">Current password</label>
               <input id="current-password" name="current_password" type="password" autocomplete="current-password" required>
               <label for="new-password">New password</label>
@@ -1257,8 +1259,17 @@
       // A dropped/failed request returns a synthetic non-ok result (NOT a re-throw). Every caller already
       // handles `!r.ok`, so a network blip renders the panel's error fallback instead of leaving it stuck on
       // "Loading…" with an unhandled rejection — critical on a memory-tight prod box where requests can drop.
+      // A HUNG request (a wedged connection, not a clean drop) never resolves, so we also arm a 60s abort:
+      // on timeout fetch rejects with AbortError -> same synthetic {ok:false} -> the error fallback shows
+      // instead of an infinite skeleton. 60s sits ABOVE the whole server ladder (ai queue 30s < web
+      // AI-client 33s < web gunicorn --timeout 45s), so a slow-but-live /predict always comes back on its
+      // own; only a genuinely black-holed request — past even gunicorn's worker ceiling — is cut.
+      const ctrl = (typeof AbortController !== "undefined") ? new AbortController() : null;
+      const timer = ctrl ? setTimeout(() => ctrl.abort(), 60000) : null;
+      if (ctrl) opts.signal = ctrl.signal;
       try { res = await fetch(path, opts); }
       catch (e) { dbg("api NETWORK FAIL", method, path, "—", e && e.message); return { ok: false, status: 0, data: null }; }
+      finally { if (timer) clearTimeout(timer); }
       let data = null;
       try { data = await res.json(); } catch (_) { data = null; }
       if (!res.ok) dbg("api", method, path, "->", res.status, (data && data.error) || "");
@@ -1685,11 +1696,12 @@
     };
     let statState = "—", statKcal = "—", statCheckins = 0;
     function statCard(ico, val, k, accent) {
-      return '<div class="stat">' + ico + '<div class="n' + (accent ? " accent" : "") + '">' + val + '</div><div class="k">' + k + "</div></div>";
+      // escape val here so the sink is safe by construction — a future caller passing a raw string can't XSS
+      return '<div class="stat">' + ico + '<div class="n' + (accent ? " accent" : "") + '">' + escapeHtml(val) + '</div><div class="k">' + k + "</div></div>";
     }
     function renderStats() {
       const s = $("stat-strip"); if (!s) return;
-      // statState / statKcal are pre-escaped in loadDashboard; statCheckins is a number -> all HTML-safe.
+      // statCard escapes every value it renders, so raw statState/statKcal/statCheckins are all HTML-safe.
       s.innerHTML = statCard(ICON.pulse, statState, "readiness", true)
         + statCard(ICON.flame, statKcal, "kcal target", false)
         + statCard(ICON.check, String(statCheckins), "logged", false);
@@ -1891,11 +1903,11 @@
       const r = await api("/dashboard");
       if (sessionChanged(u, "loadDashboard")) return;        // stale session -> don't paint another user's readiness
       if (!r.ok) { el.innerHTML = '<p class="flash error">Could not load the dashboard.</p>'; return; }
-      const d = r.data;
+      const d = r.data || {};   // a 200 with a null/unparseable body must not throw on d.readiness (mirrors the other loaders)
       // keep the glanceable stats in sync with the AI's latest read
       // the stat strip shows the SAME 0-100 score as the orb (one consistent number), not the class word
       statState = d.readiness ? String(readinessScore(d.readiness)) : "—";
-      statKcal = d.calories != null ? escapeHtml(d.calories) : "—";
+      statKcal = d.calories != null ? d.calories : "—";   // statCard escapes on render now
       renderStats();
       if (d.needs_profile) {
         // Show the payoff, not just an instruction: a greyed sample of the readiness card a first
@@ -2681,7 +2693,11 @@
     (async function init() {
       applyCredentialHints();
       const t = new URLSearchParams(location.search).get("reset_token");
-      if (t) { resetToken = t; showView("auth"); showReset(); return; }
+      if (t) {
+        resetToken = t;                                    // hold it in JS; the form reads this, not the URL
+        history.replaceState({}, "", "/");                 // scrub the token from the address bar + history NOW, not only after a successful reset
+        showView("auth"); showReset(); return;
+      }
       const r = await api("/me");
       if (r.ok && r.data && r.data.username) { enterApp(r.data.username, r.data.display_name); } else { showView("auth"); }
     })();

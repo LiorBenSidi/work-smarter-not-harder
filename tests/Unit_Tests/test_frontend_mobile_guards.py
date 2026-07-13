@@ -468,3 +468,53 @@ def test_home_fab_shrinks_bottom_anchored_to_track_the_nav():
         "the compact Home FAB must shrink to 44px (bottom-anchored), matching the compact nav height"
     assert "scale(" not in m.group(1), \
         "the compact Home FAB must not centre-scale (that misaligns it with the bottom-anchored nav)"
+
+
+def test_sleep_input_min_matches_the_model_contract():
+    # F1: the ai model rejects sleep_hours < 1. The check-in form must not let a user enter 0 (which
+    # would validate server-side under the old range, then 400 at /predict -> sticky false "AI down").
+    m = re.search(r'<input id="sleep_hours"[^>]*>', INDEX)
+    assert m, "the sleep_hours input is missing"
+    assert 'min="1"' in m.group(0), 'the sleep input must be min="1" (the model rejects < 1), not min="0"'
+
+
+def test_api_fetch_has_an_abort_timeout():
+    # P1: a HUNG request (not a clean drop) would spin the skeleton forever. api() arms an AbortController
+    # so a wedged request rejects and falls back to the {ok:false} error path.
+    assert "AbortController" in INDEX, "api() must arm an AbortController timeout so a hung request can't spin forever"
+    assert re.search(r"setTimeout\(\(\)\s*=>\s*ctrl\.abort\(\),\s*\d{4,}\)", INDEX), \
+        "the abort timer must fire after a bounded delay"
+    assert "opts.signal" in INDEX, "the fetch must actually receive the abort signal"
+
+
+def test_auth_view_is_hidden_by_default_to_avoid_a_landing_flash():
+    # P2: #auth-view must start hidden so a reload-while-logged-in doesn't flash the marketing/login
+    # landing before GET /me resolves and reveals the app.
+    m = re.search(r'<section id="auth-view"([^>]*)>', INDEX)
+    assert m and "hidden" in m.group(1), "#auth-view must be hidden by default (revealed after GET /me)"
+
+
+def test_loaddashboard_guards_a_null_body():
+    # P3: a 200 with a null/unparseable body must not throw on d.readiness (mirrors the other loaders).
+    assert "const d = r.data || {};" in INDEX, "loadDashboard must default r.data to {} so a null body can't throw"
+
+
+def test_in_app_password_form_also_blocks_native_get():
+    # L2: the settings password-change form carries password fields; give it the same onsubmit guard as
+    # the auth forms so it can never native-GET-submit a credential.
+    m = re.search(r'<form id="password-form"[^>]*>', INDEX)
+    assert m and 'onsubmit="return false"' in m.group(0), \
+        'the password-change form must have onsubmit="return false"'
+
+
+def test_reset_token_is_scrubbed_from_the_url_immediately():
+    # L3: the reset token must leave the address bar/history as soon as it's captured at boot, not only
+    # after a successful reset (the form reads the JS var, not the URL).
+    assert re.search(r'get\("reset_token"\)[\s\S]{0,200}history\.replaceState\(\{\},\s*"",\s*"/"\)', INDEX), \
+        "init() must replaceState to strip reset_token from the URL right after capturing it"
+
+
+def test_statcard_escapes_its_value():
+    # L5: statCard is an innerHTML sink; it must escape val internally so a future string caller can't XSS.
+    assert re.search(r"function statCard\([\s\S]{0,320}?escapeHtml\(val\)", INDEX), \
+        "statCard must escape val before inserting it into innerHTML"
