@@ -131,15 +131,21 @@ export class Browser {
     await sleep(settleMs);
   }
 
-  // Set a real file on a <input type=file>. Browsers block setting input.files from page JS, so we resolve
-  // the element to a CDP RemoteObject and hand DevTools the absolute path directly (the genuine upload path).
+  // Set a real file on a <input type=file>. Browsers block setting input.files from page JS, so we hand
+  // DevTools the absolute path directly. Use the canonical DOM nodeId (via getDocument+querySelector) — an
+  // objectId from Runtime isn't always in the DOM agent's node map on headless CI Chrome, so it silently
+  // no-ops there. Then verify the file actually attached (fail loud, not a vague downstream timeout).
   async setFileInput(selector, filePath) {
-    const r = await this.send("Runtime.evaluate", { expression: `document.querySelector(${JSON.stringify(selector)})`, returnByValue: false });
-    const objectId = r.result?.result?.objectId;
-    if (!objectId) throw new Error("file input not found: " + selector);
     await this.send("DOM.enable");
-    await this.send("DOM.setFileInputFiles", { files: [filePath], objectId });
+    const doc = await this.send("DOM.getDocument", { depth: 0 });
+    const rootId = doc.result?.root?.nodeId;
+    const q = await this.send("DOM.querySelector", { nodeId: rootId, selector });
+    const nodeId = q.result?.nodeId;
+    if (!nodeId) throw new Error("file input not found: " + selector);
+    await this.send("DOM.setFileInputFiles", { files: [filePath], nodeId });
     await this.pageExec(`(() => { const el = document.querySelector(${JSON.stringify(selector)}); if (el) el.dispatchEvent(new Event("change",{bubbles:true})); return true; })()`);
+    const n = await this.evaluate(`() => { const el = document.querySelector(${JSON.stringify(selector)}); return el && el.files ? el.files.length : -1; }`);
+    if (n < 1) throw new Error(`setFileInput attached ${n} files to ${selector} (expected >=1)`);
     return true;
   }
   async text(selector) { return this.evaluate(`() => { const el = document.querySelector(${JSON.stringify(selector)}); return el ? el.textContent.trim() : null; }`); }
