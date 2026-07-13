@@ -131,6 +131,17 @@ export class Browser {
     await sleep(settleMs);
   }
 
+  // Set a real file on a <input type=file>. Browsers block setting input.files from page JS, so we resolve
+  // the element to a CDP RemoteObject and hand DevTools the absolute path directly (the genuine upload path).
+  async setFileInput(selector, filePath) {
+    const r = await this.send("Runtime.evaluate", { expression: `document.querySelector(${JSON.stringify(selector)})`, returnByValue: false });
+    const objectId = r.result?.result?.objectId;
+    if (!objectId) throw new Error("file input not found: " + selector);
+    await this.send("DOM.enable");
+    await this.send("DOM.setFileInputFiles", { files: [filePath], objectId });
+    await this.pageExec(`(() => { const el = document.querySelector(${JSON.stringify(selector)}); if (el) el.dispatchEvent(new Event("change",{bubbles:true})); return true; })()`);
+    return true;
+  }
   async text(selector) { return this.evaluate(`() => { const el = document.querySelector(${JSON.stringify(selector)}); return el ? el.textContent.trim() : null; }`); }
   async visible(selector) { return this.evaluate(`() => { const el = document.querySelector(${JSON.stringify(selector)}); if (!el) return false; const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0 && !el.hidden && getComputedStyle(el).visibility !== "hidden" && getComputedStyle(el).display !== "none"; }`); }
   async exists(selector) { return this.evaluate(`() => !!document.querySelector(${JSON.stringify(selector)})`); }
