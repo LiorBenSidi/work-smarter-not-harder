@@ -264,7 +264,7 @@ def test_a_rejected_request_never_reached_a_worker(make_client):
     [
         ({}, "sleep_hours is required"),
         ({"sleep_hours": 8, "fatigue": 2, "soreness": 1}, "training_load is required"),
-        ({**VALID, "fatigue": 9}, "fatigue must be between 1 and 5"),
+        ({**VALID, "fatigue": 11}, "fatigue must be between 1 and 10"),
         ({**VALID, "sleep_hours": 0}, "sleep_hours must be between 1 and 24"),
         ({**VALID, "soreness": "sore"}, "soreness must be a number"),
         ({**VALID, "training_load": True}, "training_load must be a number"),
