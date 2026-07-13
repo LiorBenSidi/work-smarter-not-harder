@@ -479,6 +479,13 @@
     .trend { margin:2px 0 16px; }
     .trend-cap { font-size:11px; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); font-weight:800; margin:0 0 8px; }
     .trend svg { width:100%; height:66px; display:block; overflow:visible; }
+    /* the line moves between the 3 discrete model states, not a continuous score (issue #265) — this axis
+       labels the levels so the trend is legible: Ready (top) · Moderate (mid) · Rest (bottom). */
+    .trend-plot { display:flex; gap:8px; align-items:stretch; }
+    .trend-plot .readiness { flex:1; min-width:0; }
+    .trend-axis { display:flex; flex-direction:column; justify-content:space-between; text-align:right;
+      font-size:9px; font-weight:800; letter-spacing:.04em; text-transform:uppercase; color:var(--muted);
+      padding:2px 0; white-space:nowrap; }
     /* Readiness calendar heatmap (FitTrackee pattern) — a GitHub-style grid, one cell per day over the last
        N weeks, tinted by that day's readiness state (mint/amber/pink) or dim if no check-in. Both platforms. */
     .heat { margin:0 0 16px; }
@@ -1878,21 +1885,33 @@
       if (/\b(rest|low|recover|recovery|fatigued?|poor|over\w*)\b/.test(s)) return ["rest", 33];
       return ["", 50];
     }
-    // A real 0-100 readiness score. When the model returns a class distribution (proba), it's a genuine
-    // weighted blend of the class weights (ready=100 / moderate=55 / rest=15) — NOT an invented number.
-    // With no distribution, it degrades to the class's representative ring value (also a real 0-100).
+    // A real 0-100 readiness number that ALWAYS agrees with the model's verdict word. The model's discrete
+    // state (Rest/Moderate/Ready) is authoritative — it drives the verdict, the colour, and the
+    // recommendations — so the number must live in that state's BAND (rest 0-33 / moderate 34-66 /
+    // ready 67-100), never a free proba blend that could land a "66" next to a "Rest" verdict. Within the
+    // band we position by the model's CONFIDENCE in the chosen state (its probability mass), so a
+    // confidently-Ready day reads ~95 and a confidently-Rest day reads ~5. This is robust to how the model
+    // picks its state (argmax or a custom rule — see issue #264): the number tracks the state either way.
     function readinessScore(readiness) {
+      const [cls] = readinessClass(readiness && readiness.state);
+      if (!cls) return 50;                                   // unknown state -> neutral middle
+      const band = cls === "ready" ? [67, 100] : cls === "moderate" ? [34, 66] : [0, 33];
       const p = readiness && readiness.proba;
+      const mass = { ready: 0, moderate: 0, rest: 0 }; let total = 0;
       if (p && typeof p === "object") {
-        let num = 0, den = 0;
         for (const k in p) {
           const v = Number(p[k]); if (!Number.isFinite(v) || v < 0) continue;
-          const [cls] = readinessClass(k);
-          num += (cls === "ready" ? 100 : cls === "moderate" ? 55 : cls === "rest" ? 15 : 50) * v; den += v;
+          const [c] = readinessClass(k); if (mass[c] === undefined) continue;
+          mass[c] += v; total += v;
         }
-        if (den > 0) return Math.max(0, Math.min(100, Math.round(num / den)));
       }
-      return readinessClass(readiness && readiness.state)[1];
+      if (total <= 0) return Math.round((band[0] + band[1]) / 2);   // no distribution -> band centre
+      const conf = mass[cls] / total;                        // the model's probability on the chosen state
+      const t = Math.max(0, Math.min(1, (conf - 1 / 3) / (2 / 3)));  // 0 at chance (1/3), 1 at certainty
+      if (cls === "ready") return Math.round(band[0] + t * (band[1] - band[0]));   // confident ready -> 100
+      if (cls === "rest") return Math.round(band[1] - t * (band[1] - band[0]));     // confident rest  -> 0
+      const tilt = (mass.ready - mass.rest) / total;         // moderate: nudge within band by neighbour lean
+      return Math.round(50 + tilt * 15);                     // stays in [35,65] ⊂ the moderate band
     }
 
     async function loadDashboard(opts) {
@@ -2047,10 +2066,14 @@
       const path = xy.map((c, i) => (i ? "L" : "M") + c[0].toFixed(1) + " " + c[1].toFixed(1)).join(" ");
       const dots = xy.map((c) => '<circle cx="' + c[0].toFixed(1) + '" cy="' + c[1].toFixed(1) + '" r="1.7" fill="var(--st)"/>').join("");
       const [cls] = readinessClass(items[items.length - 1] && items[items.length - 1].assessment);
+      // The line runs between three discrete model states; the axis (Ready/Moderate/Rest) tells the user
+      // what the levels mean so it doesn't read as a continuous numeric score (issue #265, Shiri).
       el.innerHTML = '<p class="trend-cap">Trend · last ' + n + ' check-ins</p>'
-        + '<div class="readiness ' + cls + '"><svg viewBox="0 0 ' + W + " " + H + '" preserveAspectRatio="none" role="img" aria-label="Readiness trend over the last ' + n + ' check-ins">'
+        + '<div class="trend-plot">'
+        + '<div class="trend-axis" aria-hidden="true"><span>Ready</span><span>Moderate</span><span>Rest</span></div>'
+        + '<div class="readiness ' + cls + '"><svg viewBox="0 0 ' + W + " " + H + '" preserveAspectRatio="none" role="img" aria-label="Readiness trend over the last ' + n + ' check-ins, moving between Rest, Moderate and Ready">'
         + '<path d="' + path + '" fill="none" stroke="var(--st)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>'
-        + dots + "</svg></div>";
+        + dots + "</svg></div></div>";
     }
     // Readiness calendar heatmap (FitTrackee) — one cell per day over the last WEEKS weeks, tinted by that
     // day's readiness state. Column-major 7-row grid = GitHub-style; start aligned to a Sunday so rows are

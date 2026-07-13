@@ -518,3 +518,21 @@ def test_statcard_escapes_its_value():
     # L5: statCard is an innerHTML sink; it must escape val internally so a future string caller can't XSS.
     assert re.search(r"function statCard\([\s\S]{0,320}?escapeHtml\(val\)", INDEX), \
         "statCard must escape val before inserting it into innerHTML"
+
+
+def test_history_trend_labels_the_three_readiness_states():
+    # Issue #265 (Shiri): the trend line moves between the 3 discrete states (Rest/Moderate/Ready), not a
+    # continuous score — it must carry an axis legend so the user can read it.
+    assert "trend-axis" in INDEX, "the trend graph must render a state axis (issue #265)"
+    assert re.search(r'trend-axis[^>]*>\s*<span>Ready</span>\s*<span>Moderate</span>\s*<span>Rest</span>', INDEX), \
+        "the trend axis must label the three levels Ready / Moderate / Rest"
+
+
+def test_readiness_orb_number_stays_in_the_verdict_state_band():
+    # The 0-100 orb number must be anchored to the model's discrete state's band so it can never contradict
+    # the verdict word (a "66" next to a "Rest" verdict). Pin the banding + drop the old free proba blend.
+    assert "readinessClass(readiness && readiness.state)" in INDEX, \
+        "readinessScore must anchor to the model's chosen state, not a free proba blend"
+    assert "[67, 100]" in INDEX and "[34, 66]" in INDEX and "[0, 33]" in INDEX, \
+        "readinessScore must band the number by state (rest 0-33 / moderate 34-66 / ready 67-100)"
+    assert "? 55 :" not in INDEX, "the old proba-weighted readiness blend (could contradict the verdict) must be gone"
