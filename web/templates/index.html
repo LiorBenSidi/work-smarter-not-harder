@@ -550,11 +550,13 @@
     .tabbar-inner { transition: height .3s var(--ease), padding .3s var(--ease); }
     .tab svg { transition: width .28s var(--ease), height .28s var(--ease); }
     .tab span:not(.dm-dot) { overflow:hidden; max-height:16px; transition: opacity .22s var(--ease), max-height .28s var(--ease); }
-    .ctx-back { transition: transform .3s var(--ease); }
+    .ctx-back { transition: width .3s var(--ease), height .3s var(--ease), transform .12s; }
     html.nav-compact .tabbar-inner { height:44px; padding:5px; }
     html.nav-compact .tab span:not(.dm-dot) { opacity:0; max-height:0; }
     html.nav-compact .tab svg { width:22px; height:22px; }
-    html.nav-compact .ctx-back { transform: scale(.82); }
+    /* shrink the FAB bottom-anchored (same as the tab bar), NOT scaled around its centre — otherwise its
+       centre stays put while the nav's drops ~6px, so they misalign on scroll. 44px matches the compact nav. */
+    html.nav-compact .ctx-back { width:44px; height:44px; }
     @media (prefers-reduced-motion: reduce) {
       .tabbar-inner, .tab svg, .tab span:not(.dm-dot), .ctx-back { transition:none; }
     }
