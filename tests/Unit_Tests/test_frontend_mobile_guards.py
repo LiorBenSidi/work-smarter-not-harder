@@ -454,8 +454,18 @@ def test_dashboard_prompts_a_checkin_instead_of_faking_an_ai_outage():
     # needs_checkin (not ai_status 'unavailable'). The UI must render the check-in prompt for that
     # state, NOT the "AI service down" warning — otherwise a brand-new user sees a false outage.
     assert "d.needs_checkin" in INDEX, "the dashboard must handle the needs_checkin state"
-    assert re.search(r"needs_checkin[\s\S]{0,400}Log today", INDEX), \
-        "the needs_checkin branch must prompt the first check-in"
+    assert "Log today's check-in to see your readiness." in INDEX, \
+        "the needs_checkin branch must prompt the check-in"
+
+
+def test_dashboard_readiness_does_not_hard_require_a_profile():
+    # Issue #266: a missing profile must NOT suppress the readiness orb (it only gates the calorie target).
+    # There must be no `if (d.needs_profile) { ... return; }` early-return that shows the Example card.
+    assert not re.search(r"if\s*\(\s*d\.needs_profile\s*\)\s*\{", INDEX), \
+        "needs_profile must not early-return/suppress the dashboard (readiness shows without a profile)"
+    # instead it's a soft nudge for the calorie target when the orb is shown
+    assert "Set up your profile to get a daily calorie target." in INDEX, \
+        "when readiness shows without a profile, the UI must softly prompt a profile for the calorie target"
 
 
 def test_home_fab_shrinks_bottom_anchored_to_track_the_nav():

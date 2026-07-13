@@ -37,11 +37,37 @@ def _set_predict(monkeypatch, result):
     monkeypatch.setattr(sys.modules["services.ai_client"], "predict", lambda url, features, **kw: result)
 
 
-def test_dashboard_without_profile_prompts_to_create_one(dash_client):
+def test_dashboard_new_user_prompts_a_checkin_and_flags_the_missing_profile(dash_client):
+    # A brand-new user (no profile, no check-in) can't be scored yet -> prompt a check-in (the metrics are
+    # what the model needs), and flag the missing profile too (for the calorie target). Readiness is None.
     _login(dash_client)
     data = dash_client.get("/dashboard").get_json()
+    assert data["needs_checkin"] is True
     assert data["needs_profile"] is True
     assert data["readiness"] is None
+
+
+def test_dashboard_shows_readiness_without_a_profile(dash_client, monkeypatch):
+    # Issue #266: a user who has checked in must see their readiness even WITHOUT a profile — the model
+    # scores on the daily metrics alone; the profile only adds the calorie target. So readiness renders,
+    # calories is None, and needs_profile is a soft flag (not a hard block that shows the Example card).
+    seen = {}
+
+    def capture(url, features, **kw):
+        seen.clear()
+        seen.update(features)
+        return {"state": "Rest", "proba": {"Rest": 0.8}, "recommendations": ["recover"]}  # no calories w/o profile
+
+    monkeypatch.setattr(sys.modules["services.ai_client"], "predict", capture)
+    _login(dash_client)
+    _checkin(dash_client, sleep_hours=6, fatigue=8, soreness=7, training_load=4)   # NO profile posted
+    data = dash_client.get("/dashboard").get_json()
+    assert data["readiness"]["state"] == "Rest"          # readiness shows despite no profile
+    assert data["ai_status"] == "ok"
+    assert data["needs_profile"] is True                 # soft hint for the calorie target
+    assert data["calories"] is None                      # calories needs a profile
+    assert "goal" not in seen                             # only the metrics reached the model (no profile keys)
+    assert seen["fatigue"] == 8
 
 
 def test_dashboard_with_profile_but_no_checkin_prompts_a_checkin(dash_client, monkeypatch):
