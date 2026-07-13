@@ -282,20 +282,20 @@ export const SCENARIOS = [
     },
   },
   {
-    // iOS-26 scroll: header frosts (.scrolled) + the MOBILE tab bar recedes (.nav-hidden) on scroll-down,
-    // and the nav returns on scroll-up. Mobile-only (the pill is display:none on desktop).
-    name: "nav: header frosts + tab bar recedes on scroll-down, returns on scroll-up",
+    // iOS-26 / Instagram scroll: header frosts (.scrolled) + the MOBILE tab bar SHRINKS to icon-only
+    // (.nav-compact) on scroll-down, and expands back on scroll-up. Mobile-only (pill is display:none on desktop).
+    name: "nav: header frosts + tab bar shrinks on scroll-down, expands on scroll-up",
     tags: ["nav", "scroll", "design"],
     async fn(b, ctx) {
-      if (ctx.viewport !== "mobile") return;                 // tab-bar minimize is a mobile-only behaviour
+      if (ctx.viewport !== "mobile") return;                 // tab-bar shrink is a mobile-only behaviour
       await registerAndLogin(b);
       await b.pageExec(`(async () => { document.body.style.minHeight='3000px'; window.scrollTo(0, 700); await new Promise(r=>setTimeout(r,350)); })()`);
-      const down = await b.evaluate(`() => ({s: document.documentElement.classList.contains('scrolled'), h: document.documentElement.classList.contains('nav-hidden')})`);
+      const down = await b.evaluate(`() => ({s: document.documentElement.classList.contains('scrolled'), h: document.documentElement.classList.contains('nav-compact')})`);
       assert(down.s, "header should gain .scrolled after scrolling down");
-      assert(down.h, "the tab bar should recede (.nav-hidden) on scroll-down");
+      assert(down.h, "the tab bar should shrink (.nav-compact) on scroll-down");
       await b.pageExec(`(async () => { window.scrollTo(0, 120); await new Promise(r=>setTimeout(r,350)); })()`);
-      const up = await b.evaluate(`() => document.documentElement.classList.contains('nav-hidden')`);
-      assert(!up, "the tab bar should return (.nav-hidden removed) on scroll-up");
+      const up = await b.evaluate(`() => document.documentElement.classList.contains('nav-compact')`);
+      assert(!up, "the tab bar should expand (.nav-compact removed) on scroll-up");
     },
   },
   {
