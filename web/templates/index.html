@@ -927,6 +927,11 @@
               <input name="title" placeholder="Post title" aria-label="Post title" maxlength="140" required>
               <textarea name="body" placeholder="Share something…" aria-label="Post body" rows="2" required style="margin-top:8px;resize:vertical"></textarea>
               <label style="display:flex;align-items:center;gap:8px;margin-top:8px;font-weight:600"><input type="checkbox" name="anonymous" style="width:auto"> Post anonymously</label>
+              <div style="display:flex;align-items:center;gap:10px;margin-top:10px;flex-wrap:wrap">
+                <label class="ghost" style="cursor:pointer;display:inline-flex;align-items:center;gap:6px;padding:8px 12px;border-radius:10px;font-weight:600;font-size:14px">
+                  <input type="file" id="forum-files" accept="image/png,image/jpeg,image/webp,image/gif,video/mp4" multiple hidden>📎 Add photos</label>
+                <span id="forum-files-hint" class="muted" style="font-size:12px"></span>
+              </div>
               <div style="margin-top:10px"><button type="submit" class="block">Post</button></div>
               <div id="forum-flash" class="flash" aria-live="polite"></div>
             </form>
@@ -975,8 +980,12 @@
               <div class="dm-thread-head"><button class="ghost mini" onclick="closeThread()">← Back</button>
                 <span id="dm-thread-peer" class="dm-peer"></span></div>
               <div id="dm-thread" class="dm-thread"><div class="sk" style="height:42px;width:62%;border-radius:16px"></div><div class="sk" style="height:42px;width:72%;margin-left:auto;border-radius:16px"></div></div>
-              <form id="dm-reply-form"><textarea id="dm-reply" name="body" placeholder="Message…" rows="1" autocomplete="off" maxlength="2000" required></textarea>
+              <div id="dm-atts"></div>
+              <form id="dm-reply-form">
+                <label style="cursor:pointer;display:inline-flex;align-items:center;justify-content:center;flex:none;font-size:18px" title="Attach photo"><input type="file" id="dm-files" accept="image/png,image/jpeg,image/webp,image/gif,video/mp4" multiple hidden>📎</label>
+                <textarea id="dm-reply" name="body" placeholder="Message…" rows="1" autocomplete="off" maxlength="2000"></textarea>
                 <button type="submit">Send</button></form>
+              <span id="dm-files-hint" class="muted" style="font-size:12px"></span>
               <div id="dm-reply-flash" class="flash" aria-live="polite"></div>
             </div>
           </div>
@@ -2200,6 +2209,7 @@
         + '<h3>' + escapeHtml(p.title) + '</h3>'
         + '<p class="muted by">' + avatarHtml(p.author, 26) + 'by ' + escapeHtml(p.author) + '</p>'
         + '<p class="body">' + escapeHtml(p.body) + '</p>'
+        + '<div id="post-atts"></div>'
         + '<div class="vote-row"><button class="ghost" onclick="vote(1)">' + ICON.up + ' up</button> <span class="pill">score ' + escapeHtml(p.score)
         + '</span> <button class="ghost" onclick="vote(-1)">' + ICON.down + ' down</button></div>'
         + (p.mine
@@ -2222,6 +2232,13 @@
         const cr = await api("/forum/posts/" + id + "/comments", { method: "POST", body: { body: f.body.value } });
         if (cr.ok) openPost(id);
         else flash("forum-flash", (cr.data && cr.data.error) || "Couldn't post your comment — please try again.");
+      });
+      // Load this post's media attachments and render them under the body (best-effort; never wedges the post).
+      api("/forum/posts/" + id + "/attachments").then((ar) => {
+        if (currentPostId !== id) return;                    // a newer open superseded this
+        const atts = (ar.ok && ar.data && ar.data.attachments) || [];
+        const el = document.getElementById("post-atts");
+        if (el && atts.length) el.innerHTML = attsHtml(atts);
       });
       // Slot the freshly-rendered detail directly under its post + mark that post open (inline expand, not a bottom panel).
       const listEl = $("forum-list");
@@ -2290,11 +2307,51 @@
       } finally { voteInFlight = false; }
     }
 
+    // ---- Media attachments (Elad's backend: POST /media -> id -> bind to a post/DM -> GET serves it) ----
+    // Uploads are multipart, so they use their own fetch (api() is JSON-only). Rendering loads /media/<id>
+    // via <img>/<video>, which carry the session cookie, so the server's per-target access control applies.
+    async function uploadMedia(file) {
+      const fd = new FormData(); fd.append("file", file);
+      let res;
+      try { res = await fetch("/media", { method: "POST", credentials: "same-origin", headers: { "X-CSRF-Token": getCookie("csrf_token") }, body: fd }); }
+      catch (_) { return null; }
+      if (!res.ok) return null;
+      try { const d = await res.json(); return d && d.id ? d : null; } catch (_) { return null; }
+    }
+    async function uploadAll(files) {          // upload each picked file; return the ids that stored OK
+      const ids = [];
+      for (const f of Array.from(files || [])) { const m = await uploadMedia(f); if (m) ids.push(m.id); }
+      return ids;
+    }
+    function mediaEmbedHtml(att) {              // att = {id, url, mime}; render an image inline or an mp4 player
+      const url = "/media/" + encodeURIComponent(att.id);
+      const st = "max-width:100%;max-height:300px;border-radius:12px;display:block;border:1px solid var(--line)";
+      if (String(att.mime || "").indexOf("video/") === 0) return '<video src="' + url + '" controls preload="metadata" style="' + st + '"></video>';
+      return '<a href="' + url + '" target="_blank" rel="noopener"><img src="' + url + '" alt="attachment" loading="lazy" style="' + st + '"></a>';
+    }
+    function attsHtml(atts) {                   // a responsive grid of attachments
+      return '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px">'
+        + atts.map((a) => '<div style="flex:0 1 auto;max-width:220px">' + mediaEmbedHtml(a) + "</div>").join("") + "</div>";
+    }
+    function filesHint(input, hintId) {         // show "2 files selected" next to a file picker
+      const el = $(hintId); if (!el) return;
+      const n = input.files ? input.files.length : 0;
+      el.textContent = n ? (n + (n === 1 ? " file" : " files") + " attached") : "";
+    }
+
     onSubmit("forum-form", async (f) => {
       const r = await api("/forum/posts", { method: "POST", body: { title: f.title.value, body: f.body.value, anonymous: f.anonymous.checked } });
-      if (r.ok) { f.reset(); flash("forum-flash", "Posted.", "ok"); loadForum(); }
-      else { flash("forum-flash", (r.data && r.data.error) || "Could not post"); }
+      if (!r.ok) { flash("forum-flash", (r.data && r.data.error) || "Could not post"); return; }
+      const post = r.data && r.data.post, picker = $("forum-files");
+      if (post && post.id && picker && picker.files && picker.files.length) {
+        flash("forum-flash", "Uploading…", "ok");
+        const ids = await uploadAll(picker.files);
+        if (ids.length) await api("/forum/posts/" + post.id + "/attachments", { method: "POST", body: { attachment_ids: ids } });
+        picker.value = "";
+      }
+      f.reset(); filesHint($("forum-files"), "forum-files-hint"); flash("forum-flash", "Posted.", "ok"); loadForum();
     });
+    $("forum-files").addEventListener("change", () => filesHint($("forum-files"), "forum-files-hint"));
     $("forum-refresh").addEventListener("click", loadForum);
     $("dashboard-refresh").addEventListener("click", () => loadDashboard());  // wrap: don't pass the click event as opts
     $("history-refresh").addEventListener("click", loadHistory);
@@ -2371,6 +2428,15 @@
           }).join("")
         : '<p class="muted">No messages yet — say hi.</p>');
       if (changed && nearBottom) box.scrollTop = box.scrollHeight;   // only re-anchor when the thread actually changed (poll no-op -> no flash)
+      // Shared media for this conversation (best-effort). Attachments bind to the conversation, not a single
+      // message (Elad's backend), so they render as a labelled strip below the thread rather than inline.
+      api("/messages/" + encodeURIComponent(peer) + "/attachments").then((ar) => {
+        if (peer !== dmPeer) return;                           // switched thread mid-flight -> don't paint stale media
+        const atts = (ar.ok && ar.data && ar.data.attachments) || [];
+        const el = $("dm-atts");
+        if (el) el.innerHTML = atts.length
+          ? '<div class="muted" style="font-size:11px;letter-spacing:.06em;text-transform:uppercase;margin:8px 0 0">Shared media</div>' + attsHtml(atts) : "";
+      });
     }
 
     function closeThread() {
@@ -2442,11 +2508,21 @@
     document.addEventListener("click", (e) => { if (!e.target.closest(".dm-search")) closeDmSuggest(); });
 
     onSubmit("dm-reply-form", async (f) => {
-      if (!dmPeer || !f.body.value.trim()) return;
-      const r = await api("/messages", { method: "POST", body: { to: dmPeer, body: f.body.value } });
-      if (r.ok) { f.reset(); autoGrow($("dm-reply")); flash("dm-reply-flash", "", "ok"); renderThread(); }
-      else { flash("dm-reply-flash", (r.data && r.data.error) || "Could not send"); }   // surface 429 / errors
+      const text = f.body.value.trim(), picker = $("dm-files"), hasFiles = picker && picker.files && picker.files.length;
+      if (!dmPeer || (!text && !hasFiles)) return;             // nothing to send
+      if (text) {
+        const r = await api("/messages", { method: "POST", body: { to: dmPeer, body: text } });
+        if (!r.ok) { flash("dm-reply-flash", (r.data && r.data.error) || "Could not send"); return; }   // surface 429 / errors
+      }
+      if (hasFiles) {
+        flash("dm-reply-flash", "Uploading…", "ok");
+        const ids = await uploadAll(picker.files);            // attachments bind to the conversation, not a single message
+        if (ids.length) await api("/messages/" + encodeURIComponent(dmPeer) + "/attachments", { method: "POST", body: { attachment_ids: ids } });
+        picker.value = ""; filesHint(picker, "dm-files-hint");
+      }
+      f.reset(); autoGrow($("dm-reply")); flash("dm-reply-flash", "", "ok"); renderThread();
     });
+    $("dm-files").addEventListener("change", () => filesHint($("dm-files"), "dm-files-hint"));
     // Growing compose (WhatsApp): the reply textarea grows with its content (capped by CSS max-height), and
     // Enter sends while Shift+Enter inserts a newline — the messenger convention, not a plain textarea.
     function autoGrow(t) { if (!t) return; t.style.height = "auto"; t.style.height = Math.min(t.scrollHeight, 132) + "px"; }
