@@ -150,7 +150,7 @@ export const SCENARIOS = [
       await b.waitFor("#forum-form");
       await b.type("#forum-form [name=title]", "Photo " + uniq("p"));
       await b.type("#forum-form [name=body]", "with an attached image");
-      await b.setFileInput("#forum-files", FIXTURE_PNG);              // real file on the picker (CDP)
+      await b.setFileInput("#forum-files", FIXTURE_PNG);              // real file on the picker (in-page File+DataTransfer)
       await b.submit("#forum-form", 2200);                            // create post -> upload media -> bind to the post
       await b.waitFor("#forum-list .post");
       await b.click("#forum-list .post", 1200);                       // open it

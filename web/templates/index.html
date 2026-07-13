@@ -929,7 +929,7 @@
               <label style="display:flex;align-items:center;gap:8px;margin-top:8px;font-weight:600"><input type="checkbox" name="anonymous" style="width:auto"> Post anonymously</label>
               <div style="display:flex;align-items:center;gap:10px;margin-top:10px;flex-wrap:wrap">
                 <label class="ghost" style="cursor:pointer;display:inline-flex;align-items:center;gap:6px;padding:8px 12px;border-radius:10px;font-weight:600;font-size:14px">
-                  <input type="file" id="forum-files" accept="image/png,image/jpeg,image/webp,image/gif,video/mp4" multiple style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);opacity:0">📎 Add photos</label>
+                  <input type="file" id="forum-files" accept="image/png,image/jpeg,image/webp,image/gif,video/mp4" multiple hidden>📎 Add photos</label>
                 <span id="forum-files-hint" class="muted" style="font-size:12px"></span>
               </div>
               <div style="margin-top:10px"><button type="submit" class="block">Post</button></div>
@@ -982,7 +982,7 @@
               <div id="dm-thread" class="dm-thread"><div class="sk" style="height:42px;width:62%;border-radius:16px"></div><div class="sk" style="height:42px;width:72%;margin-left:auto;border-radius:16px"></div></div>
               <div id="dm-atts"></div>
               <form id="dm-reply-form">
-                <label style="cursor:pointer;display:inline-flex;align-items:center;justify-content:center;flex:none;font-size:18px" title="Attach photo"><input type="file" id="dm-files" accept="image/png,image/jpeg,image/webp,image/gif,video/mp4" multiple style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);opacity:0">📎</label>
+                <label style="cursor:pointer;display:inline-flex;align-items:center;justify-content:center;flex:none;font-size:18px" title="Attach photo"><input type="file" id="dm-files" accept="image/png,image/jpeg,image/webp,image/gif,video/mp4" multiple hidden>📎</label>
                 <textarea id="dm-reply" name="body" placeholder="Message…" rows="1" autocomplete="off" maxlength="2000"></textarea>
                 <button type="submit">Send</button></form>
               <span id="dm-files-hint" class="muted" style="font-size:12px"></span>

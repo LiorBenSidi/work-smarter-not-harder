@@ -10,7 +10,7 @@
 
 import { spawn } from "node:child_process";
 import { setTimeout as sleep } from "node:timers/promises";
-import { writeFileSync, mkdirSync, existsSync } from "node:fs";
+import { writeFileSync, readFileSync, mkdirSync, existsSync } from "node:fs";
 import { dirname } from "node:path";
 
 // Resolve a Chrome/Chromium binary: explicit override, then the usual macOS + Linux locations.
@@ -131,20 +131,32 @@ export class Browser {
     await sleep(settleMs);
   }
 
-  // Set a real file on a <input type=file>. Browsers block setting input.files from page JS, so we hand
-  // DevTools the absolute path directly. Use the canonical DOM nodeId (via getDocument+querySelector) — an
-  // objectId from Runtime isn't always in the DOM agent's node map on headless CI Chrome, so it silently
-  // no-ops there. Then verify the file actually attached (fail loud, not a vague downstream timeout).
+  // Set a real file on a <input type=file>. We build the File IN-PAGE from its actual bytes and assign it
+  // via DataTransfer — NOT via CDP's DOM.setFileInputFiles (attach-by-path). The path approach is unreliable
+  // on GitHub's Ubuntu headless Chrome: the file "attaches" (files.length===1) yet its bytes never reach a
+  // multipart body, so the app's submit posts nothing and no upload fires (green locally, red on CI). A File
+  // synthesized from real bytes in the page behaves exactly like a genuine user pick in every environment.
+  // Then verify it actually attached (fail loud, not a vague downstream timeout).
   async setFileInput(selector, filePath) {
-    await this.send("DOM.enable");
-    const doc = await this.send("DOM.getDocument", { depth: 0 });
-    const rootId = doc.result?.root?.nodeId;
-    const q = await this.send("DOM.querySelector", { nodeId: rootId, selector });
-    const nodeId = q.result?.nodeId;
-    if (!nodeId) throw new Error("file input not found: " + selector);
-    await this.send("DOM.setFileInputFiles", { files: [filePath], nodeId });
-    await this.pageExec(`(() => { const el = document.querySelector(${JSON.stringify(selector)}); if (el) el.dispatchEvent(new Event("change",{bubbles:true})); return true; })()`);
-    const n = await this.evaluate(`() => { const el = document.querySelector(${JSON.stringify(selector)}); return el && el.files ? el.files.length : -1; }`);
+    const b64 = readFileSync(filePath).toString("base64");
+    const name = filePath.split("/").pop() || "upload.bin";
+    const ext = name.slice(name.lastIndexOf(".") + 1).toLowerCase();
+    const mime = { png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", webp: "image/webp",
+                   gif: "image/gif", mp4: "video/mp4" }[ext] || "application/octet-stream";
+    const n = await this.pageExec(`(() => {
+      const el = document.querySelector(${JSON.stringify(selector)});
+      if (!el) return -1;
+      const bin = atob(${JSON.stringify(b64)});
+      const bytes = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      const file = new File([bytes], ${JSON.stringify(name)}, { type: ${JSON.stringify(mime)} });
+      const dt = new DataTransfer();
+      dt.items.add(file);
+      el.files = dt.files;
+      el.dispatchEvent(new Event("input", { bubbles: true }));
+      el.dispatchEvent(new Event("change", { bubbles: true }));
+      return el.files ? el.files.length : -1;
+    })()`);
     if (n < 1) throw new Error(`setFileInput attached ${n} files to ${selector} (expected >=1)`);
     return true;
   }
