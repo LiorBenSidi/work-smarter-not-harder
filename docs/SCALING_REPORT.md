@@ -155,6 +155,14 @@ the container (50 warm-up + 1,000 measured `predict_one` calls — issue #248, 2
 | Prediction latency — mean / median | 26.95 ms / 26.61 ms |
 | Prediction latency — p95 / max | 32.45 ms / 75.89 ms |
 
+A second in-container measurement (Shiri, 2026-07-13, 1,000 `predict_one` calls) reproduced the footprint
+from a fresh sample: **33.6 ms mean latency · 159.24 MB total process RSS (+151.11 MB import/load delta)**.
+The latency runs a little higher than the #248 mean — a slower / more-loaded run, it even sits above the
+#248 p95 — but it lands on the same sizing conclusion, which is the point of an independent re-measure. Both
+runs are on record; the reasoning below uses the #248 distribution and holds a fortiori at 33.6 ms. In
+particular `AI_CLIENT_TIMEOUT`=33 s stays as set — ~980× the measured mean — validated against both
+measurements rather than guessed.
+
 These confirm the production knobs; **no retune was needed**:
 
 * **`AI_QUEUE_WORKERS=4` is RAM-safe.** Each pool process holds its own model copy, so the pool costs
