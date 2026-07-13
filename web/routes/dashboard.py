@@ -43,7 +43,25 @@ def dashboard():
         return jsonify(profile=None, readiness=None, calories=None,
                        ai_status="skipped", needs_profile=True), 200
 
-    prediction = ai_client.predict(current_app.config["AI_URL"], profile,
+    # Readiness is scored from the athlete's LATEST daily check-in metrics, merged with the profile
+    # context — the exact payload the check-in flow sends (routes/checkin.py). The model needs the four
+    # readiness fields (sleep_hours/fatigue/soreness/training_load) and rejects an incomplete request at
+    # its boundary (400 -> ai_status "unavailable"); the profile alone doesn't carry them. So with no
+    # check-in yet there is nothing to score: prompt one (needs_checkin) rather than firing an
+    # unscoreable profile-only /predict that would look like an AI outage.
+    try:
+        entries = list(current_app.config["HISTORY"].list(session["username"]))
+    except Exception:
+        logger.exception("history store unavailable on dashboard")
+        return jsonify(error="history store unavailable"), 503
+
+    latest = entries[-1] if entries else None
+    metrics = latest.get("metrics") if isinstance(latest, dict) else None
+    if not isinstance(metrics, dict) or not metrics:
+        return jsonify(profile=profile, readiness=None, calories=None,
+                       ai_status="skipped", needs_checkin=True), 200
+
+    prediction = ai_client.predict(current_app.config["AI_URL"], {**profile, **metrics},
                                    timeout=current_app.config["AI_CLIENT_TIMEOUT"])
     if not isinstance(prediction, dict):
         # ai unreachable (None) or a malformed non-object response -> degrade gracefully, never crash

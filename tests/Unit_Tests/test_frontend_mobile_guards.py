@@ -433,3 +433,38 @@ def test_forum_rows_carry_generative_avatars():
     assert 'class="muted byline"' in INDEX, "the list byline wrapper (flex-aligned avatar + text) was removed"
     m = re.search(r"\.byline\s*\{[^}]*\}", INDEX)
     assert m and "display:flex" in m.group(0), "the byline must be flex so the avatar aligns with the text"
+
+
+def test_auth_forms_cannot_native_get_submit_credentials():
+    # Security (defense-in-depth): every auth form's JS submit handler POSTs via fetch, but if a submit
+    # fires BEFORE that script attaches (slow load / no-JS), a form with no method defaults to a native
+    # GET -> username & password land in the URL (?username=...&password=...) and leak into the address
+    # bar, history, server logs, and Referer. `onsubmit="return false"` closes that window at parse time.
+    for form_id in ("login-form", "register-form", "forgot-form", "reset-form", "otp-form"):
+        m = re.search(r'<form id="' + form_id + r'"[^>]*>', INDEX)
+        assert m, f"the {form_id} auth form is missing"
+        assert 'onsubmit="return false"' in m.group(0), \
+            f"{form_id} must have onsubmit=\"return false\" so it can never native-GET-submit credentials"
+        assert "method=" not in m.group(0).lower(), \
+            f"{form_id} must not declare a method (an explicit method=get would leak credentials)"
+
+
+def test_dashboard_prompts_a_checkin_instead_of_faking_an_ai_outage():
+    # With a profile but no check-in there are no metrics to score, so the dashboard returns
+    # needs_checkin (not ai_status 'unavailable'). The UI must render the check-in prompt for that
+    # state, NOT the "AI service down" warning — otherwise a brand-new user sees a false outage.
+    assert "d.needs_checkin" in INDEX, "the dashboard must handle the needs_checkin state"
+    assert re.search(r"needs_checkin[\s\S]{0,400}Log today", INDEX), \
+        "the needs_checkin branch must prompt the first check-in"
+
+
+def test_home_fab_shrinks_bottom_anchored_to_track_the_nav():
+    # The compact (scrolled) nav shrinks bottom-anchored to 44px; the Home FAB must shrink the same way
+    # (width/height to 44px), NOT transform: scale() around its centre — a centre-scaled FAB keeps its
+    # midpoint fixed while the nav's drops, so they visibly misalign on scroll (the 2026-07-13 report).
+    m = re.search(r"html\.nav-compact \.ctx-back\s*\{([^}]*)\}", INDEX)
+    assert m, "the compact-nav rule for the Home FAB (.ctx-back) is missing"
+    assert "width:44px" in m.group(1) and "height:44px" in m.group(1), \
+        "the compact Home FAB must shrink to 44px (bottom-anchored), matching the compact nav height"
+    assert "scale(" not in m.group(1), \
+        "the compact Home FAB must not centre-scale (that misaligns it with the bottom-anchored nav)"
