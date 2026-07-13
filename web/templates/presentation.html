@@ -1,0 +1,271 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0a0e20">
+  <meta name="robots" content="noindex">
+  <title>Work Smarter, Not Harder — presentation</title>
+  <!-- SELF-CONTAINED, ISOLATED PAGE. Served at /presentation. It shares NO code with the app SPA: no auth,
+       no API calls, no session, no user-supplied data is ever rendered (the only input is ?slide=N, which is
+       parsed to an integer and clamped to a slide index). So this page cannot be used to attack the app. It
+       reuses the app's *design tokens* only (colours, font, aurora) so it matches the app's exact tone. -->
+  <link rel="preload" href="/static/fonts/bricolage-800-latin-v1.woff2" as="font" type="font/woff2" crossorigin>
+  <style>
+    @font-face { font-family:"Bricolage Grotesque"; font-weight:800; font-display:swap;
+      src:url("/static/fonts/bricolage-800-latin-v1.woff2") format("woff2"); }
+    :root{ color-scheme:dark;
+      --bg:#0a0e20; --bg2:#170f30; --ink:#eef0fb; --muted:#9aa2c9;
+      --card-solid:#171338; --stat-solid:#13102e; --line:rgba(255,255,255,.10);
+      --accent:#6ff0cf; --accent2:#b39bff; --ready:#6ff0cf; --moderate:#ffce7a; --rest:#ff9db4;
+      --glow-a:rgba(111,240,207,.22); --glow-b:rgba(179,155,255,.13); --glow-c:rgba(96,150,255,.16);
+      --shadow:0 30px 70px -34px rgba(3,6,20,.85);
+      --font-sans:ui-rounded,"SF Pro Rounded","Hiragino Maru Gothic ProN","Nunito",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+      --font-mono:ui-monospace,"SF Mono","JetBrains Mono",Menlo,Consolas,monospace;
+      --font-display:"Bricolage Grotesque",var(--font-sans);
+      --ease:cubic-bezier(.22,1,.36,1); }
+    *{box-sizing:border-box;margin:0;padding:0;}
+    html{background:var(--bg);overflow:hidden;}
+    body{position:relative;min-height:100dvh;overflow:hidden;color:var(--ink);font-family:var(--font-sans);
+      -webkit-font-smoothing:antialiased;background-attachment:fixed;
+      background:
+        radial-gradient(60% 44% at 14% 6%, var(--glow-b), transparent 60%),
+        radial-gradient(52% 40% at 90% 2%, var(--glow-a), transparent 55%),
+        radial-gradient(54% 46% at 62% 104%, var(--glow-c), transparent 60%),
+        linear-gradient(158deg, var(--bg), var(--bg2)); }
+    body::before{content:"";position:fixed;inset:-20% -10% auto -10%;height:78%;z-index:0;pointer-events:none;
+      filter:blur(40px);opacity:.6;animation:drift 26s ease-in-out infinite alternate;
+      background:radial-gradient(38% 50% at 30% 32%,var(--glow-a),transparent 62%),
+                radial-gradient(44% 56% at 74% 42%,var(--glow-b),transparent 62%);}
+    body::after{content:"";position:fixed;inset:0;z-index:0;pointer-events:none;opacity:.11;mix-blend-mode:overlay;
+      background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");}
+    @keyframes drift{from{transform:translate3d(-3%,-1%,0) scale(1);}to{transform:translate3d(4%,2%,0) scale(1.08);}}
+
+    .wp-slide{position:absolute;inset:0;z-index:1;display:none;flex-direction:column;justify-content:center;
+      padding:clamp(28px,5vw,90px);opacity:0;transition:opacity .45s var(--ease);}
+    .wp-slide.live{display:flex;opacity:1;}
+    .wp-eyebrow{font-family:var(--font-mono);font-size:clamp(12px,1.4vw,16px);letter-spacing:.2em;
+      text-transform:uppercase;color:var(--accent);font-weight:700;margin-bottom:clamp(14px,2vw,22px);}
+    .wp-h{font-family:var(--font-display);font-weight:800;line-height:1.02;letter-spacing:-.01em;font-size:clamp(38px,7vw,88px);margin:0;}
+    .wp-h2{font-family:var(--font-display);font-weight:800;line-height:1.05;letter-spacing:-.01em;font-size:clamp(30px,5.2vw,58px);margin:0 0 clamp(14px,2.4vw,26px);}
+    .wp-sub{color:var(--muted);font-size:clamp(16px,2.2vw,24px);line-height:1.5;margin-top:clamp(14px,2vw,24px);max-width:44ch;}
+    .wp-body{font-size:clamp(17px,2.4vw,28px);line-height:1.45;max-width:24ch;font-weight:600;}
+    .wp-body.wide{max-width:34ch;}
+    .wp-accent{color:var(--accent);} .wp-accent2{color:var(--accent2);}
+    .wp-row{display:flex;flex-wrap:wrap;gap:clamp(9px,1.2vw,14px);margin-top:clamp(18px,2.6vw,30px);}
+    .wp-pill{display:inline-flex;align-items:center;gap:9px;font-family:var(--font-mono);font-weight:700;
+      font-size:clamp(13px,1.5vw,18px);padding:9px 16px;border-radius:999px;background:var(--stat-solid);border:1px solid var(--line);color:var(--ink);}
+    .wp-dot{width:10px;height:10px;border-radius:50%;flex:none;}
+    .wp-card{background:var(--card-solid);border:1px solid var(--line);border-radius:22px;padding:clamp(20px,2.4vw,30px);box-shadow:var(--shadow);flex:1;min-width:min(100%,300px);}
+    .wp-cards{display:flex;flex-wrap:wrap;gap:clamp(14px,1.6vw,22px);margin-top:clamp(20px,2.6vw,32px);}
+    .wp-hero{display:flex;align-items:center;gap:clamp(24px,4vw,64px);flex-wrap:wrap;}
+    .wp-hero>.wp-htext{flex:1;min-width:min(100%,380px);}
+    .wp-orb{width:clamp(180px,26vw,320px);height:clamp(180px,26vw,320px);position:relative;flex:none;}
+    .wp-orb svg{width:100%;height:100%;filter:drop-shadow(0 0 26px color-mix(in srgb,var(--ready) 42%,transparent));}
+    .wp-orb .wp-oc{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;}
+    .wp-oc .wp-score{font-family:var(--font-mono);font-weight:800;font-size:clamp(46px,7vw,86px);line-height:1;font-variant-numeric:tabular-nums;}
+    .wp-oc .wp-state{font-family:var(--font-display);font-weight:800;font-size:clamp(18px,2.6vw,30px);color:var(--accent);margin-top:4px;}
+    .wp-oc .wp-ossub{font-family:var(--font-mono);font-size:clamp(9px,1vw,12px);letter-spacing:.2em;text-transform:uppercase;color:var(--muted);margin-top:6px;}
+    .wp-arch{display:flex;align-items:center;justify-content:center;gap:clamp(12px,1.8vw,26px);flex-wrap:wrap;margin-top:clamp(24px,3vw,40px);}
+    .wp-box{background:var(--card-solid);border:1px solid var(--line);border-radius:18px;padding:clamp(14px,1.8vw,22px) clamp(18px,2.2vw,28px);text-align:center;min-width:clamp(120px,16vw,190px);}
+    .wp-box .t{font-family:var(--font-display);font-weight:800;font-size:clamp(20px,2.6vw,28px);}
+    .wp-box .s{font-family:var(--font-mono);font-size:clamp(11px,1.1vw,13px);color:var(--muted);margin-top:6px;}
+    .wp-arrows{display:flex;flex-direction:column;gap:clamp(8px,1.4vw,22px);font-family:var(--font-mono);color:var(--accent);font-size:clamp(16px,2vw,26px);}
+    .wp-big{font-family:var(--font-mono);font-weight:800;font-size:clamp(52px,9vw,120px);line-height:1;color:var(--accent);font-variant-numeric:tabular-nums;}
+    .wp-metrics{display:flex;gap:clamp(24px,5vw,80px);flex-wrap:wrap;margin-top:clamp(20px,3vw,36px);}
+    .wp-metrics .lbl{font-family:var(--font-mono);font-size:clamp(12px,1.4vw,16px);color:var(--muted);letter-spacing:.06em;margin-top:10px;text-transform:uppercase;}
+    .wp-steps{list-style:none;margin:clamp(20px,2.6vw,30px) 0 0;padding:0;display:flex;flex-direction:column;gap:clamp(12px,1.6vw,18px);}
+    .wp-steps li{display:flex;align-items:center;gap:16px;font-size:clamp(16px,2.2vw,26px);}
+    .wp-steps .n{font-family:var(--font-mono);font-weight:800;font-size:clamp(13px,1.4vw,17px);width:clamp(30px,3.4vw,40px);height:clamp(30px,3.4vw,40px);border-radius:50%;display:flex;align-items:center;justify-content:center;background:var(--stat-solid);border:1px solid var(--line);color:var(--accent);flex:none;}
+    .wp-url{font-family:var(--font-mono);color:var(--accent);font-size:clamp(15px,2vw,22px);font-weight:700;}
+    .wp-brand{position:absolute;top:clamp(20px,3vw,40px);left:clamp(28px,5vw,90px);display:flex;align-items:center;gap:12px;z-index:3;}
+    .wp-bdot{width:30px;height:30px;border-radius:50%;flex:none;background:radial-gradient(circle at 33% 28%,color-mix(in srgb,var(--accent) 92%,#fff),var(--accent) 42%,var(--accent2) 92%);box-shadow:0 0 18px color-mix(in srgb,var(--accent) 55%,transparent);}
+    .wp-bname{font-family:var(--font-mono);font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);}
+    .wp-foot{position:absolute;bottom:clamp(18px,2.6vw,34px);left:clamp(28px,5vw,90px);right:clamp(28px,5vw,90px);display:flex;justify-content:space-between;align-items:center;font-family:var(--font-mono);font-size:clamp(10px,1.1vw,13px);letter-spacing:.1em;text-transform:uppercase;color:var(--muted);z-index:3;gap:12px;}
+    .wp-foot .who{color:var(--accent);}
+    .wp-nav{position:absolute;bottom:clamp(46px,6vw,74px);left:0;right:0;display:flex;align-items:center;justify-content:center;gap:14px;z-index:4;}
+    .wp-dots{display:flex;gap:9px;}
+    .wp-dots button{width:9px;height:9px;border-radius:50%;border:none;padding:0;background:var(--line);cursor:pointer;transition:all .2s var(--ease);}
+    .wp-dots button.on{background:var(--accent);width:24px;border-radius:6px;}
+    .wp-arrow{width:46px;height:46px;border-radius:50%;border:1px solid var(--line);background:color-mix(in srgb,var(--card-solid) 70%,transparent);color:var(--ink);cursor:pointer;font-size:20px;display:flex;align-items:center;justify-content:center;-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);}
+    .wp-arrow:disabled{opacity:.3;cursor:default;}
+    .wp-exit{position:absolute;top:clamp(20px,3vw,40px);right:clamp(28px,5vw,90px);z-index:4;width:40px;height:40px;border-radius:50%;border:1px solid var(--line);background:color-mix(in srgb,var(--card-solid) 70%,transparent);color:var(--muted);cursor:pointer;font-size:20px;text-decoration:none;display:flex;align-items:center;justify-content:center;}
+    @media (max-width:720px){ .wp-slide{justify-content:flex-start;padding-top:clamp(76px,16vw,110px);} .wp-hero{gap:20px;} .wp-arch{gap:12px;} }
+    @media (prefers-reduced-motion:reduce){ .wp-slide{transition:none;} body::before{animation:none;} }
+  </style>
+</head>
+<body>
+  <div class="wp-brand"><span class="wp-bdot"></span><span class="wp-bname">Work Smarter, Not Harder</span></div>
+  <a class="wp-exit" href="/" title="Open the app" aria-label="Open the app">&times;</a>
+
+  <!-- 1 · Title -->
+  <section class="wp-slide" data-note="SHIRI · opens. 'We're Git Push & Pray — Shiri, Lior, Elad. Work Smarter, Not Harder is an AI training-readiness coach, LIVE on Azure. Scan the QR / open the link and follow along.'">
+    <div class="wp-hero">
+      <div class="wp-htext">
+        <div class="wp-eyebrow">An AI training-readiness coach</div>
+        <h1 class="wp-h">Work Smarter,<br><span class="wp-accent">Not Harder</span>.</h1>
+        <div class="wp-row">
+          <span class="wp-pill"><span class="wp-dot" style="background:var(--ready)"></span>Ready</span>
+          <span class="wp-pill"><span class="wp-dot" style="background:var(--moderate)"></span>Moderate</span>
+          <span class="wp-pill"><span class="wp-dot" style="background:var(--rest)"></span>Rest</span>
+        </div>
+        <p class="wp-sub" style="max-width:40ch"><b class="wp-accent2">Git Push &amp; Pray</b> — Shiri · Lior · Elad<br><span style="font-size:.8em">WSML Final Project · Technion · <span class="wp-url">app.worksmarternotharder.dev</span></span></p>
+      </div>
+      <div class="wp-orb">
+        <svg viewBox="0 0 100 100" aria-hidden="true"><circle cx="50" cy="50" r="42" fill="none" stroke="rgba(255,255,255,.08)" stroke-width="8"/>
+          <circle cx="50" cy="50" r="42" fill="none" stroke="var(--ready)" stroke-width="8" stroke-linecap="round" stroke-dasharray="264" stroke-dashoffset="37" transform="rotate(-90 50 50)"/></svg>
+        <div class="wp-oc"><div class="wp-score">86</div><div class="wp-state">Ready</div><div class="wp-ossub">live</div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 2 · 01 The problem (Shiri) -->
+  <section class="wp-slide" data-note="SHIRI · 0:00–0:40. 'Push today, or recover? Athletes rarely know — we answer it every morning. A 30-second check-in → an AI readiness verdict → today's plan.'">
+    <div class="wp-eyebrow">01 · The problem</div>
+    <h2 class="wp-h2">Push today &mdash; or <span class="wp-accent">recover?</span></h2>
+    <p class="wp-sub" style="max-width:44ch;margin-top:0">Athletes rarely know. We answer it every morning.</p>
+    <div class="wp-cards">
+      <div class="wp-card"><div class="wp-eyebrow" style="margin-bottom:12px">30-second check-in</div>
+        <p style="font-size:clamp(15px,1.8vw,21px);line-height:1.5">One tiny morning form: <b>sleep · fatigue · soreness · training load</b></p></div>
+      <div class="wp-card"><div class="wp-eyebrow" style="margin-bottom:12px">AI readiness verdict</div>
+        <div class="wp-row" style="margin-top:2px">
+          <span class="wp-pill"><span class="wp-dot" style="background:var(--ready)"></span>Ready</span>
+          <span class="wp-pill"><span class="wp-dot" style="background:var(--moderate)"></span>Moderate</span>
+          <span class="wp-pill"><span class="wp-dot" style="background:var(--rest)"></span>Rest</span></div></div>
+      <div class="wp-card"><div class="wp-eyebrow" style="margin-bottom:12px">Today's plan</div>
+        <p style="font-size:clamp(15px,1.8vw,21px);line-height:1.5">Practical recommendations: <b>intensity · recovery · calories</b></p></div>
+    </div>
+  </section>
+
+  <!-- 3 · 02 The model (Shiri) -->
+  <section class="wp-slide" data-note="SHIRI · 0:40–1:25 (→ hand to Elad). 'Data: PMData, real wearables. Inputs: sleep, fatigue, soreness, training load. A Random Forest — many trees vote — returns Rest / Moderate / Ready. Validated per participant so there's no leakage, and it runs inside the AI container — no external API.'">
+    <div class="wp-eyebrow">02 · The model</div>
+    <h2 class="wp-h2">A local <span class="wp-accent">AI brain</span></h2>
+    <div class="wp-cards" style="margin-top:clamp(16px,2vw,24px)">
+      <div class="wp-card"><div class="wp-eyebrow" style="margin-bottom:10px">Data</div><p style="font-size:clamp(14px,1.7vw,20px)"><b>PMData</b> · real wearables</p></div>
+      <div class="wp-card"><div class="wp-eyebrow" style="margin-bottom:10px">Inputs</div><p style="font-size:clamp(14px,1.7vw,20px)">sleep · fatigue · soreness · training load</p></div>
+      <div class="wp-card"><div class="wp-eyebrow" style="margin-bottom:10px">Random Forest</div><p style="font-size:clamp(14px,1.7vw,20px)">many trees <b>vote</b></p></div>
+      <div class="wp-card"><div class="wp-eyebrow" style="margin-bottom:10px">Verdict</div>
+        <div class="wp-row" style="margin-top:2px"><span class="wp-pill"><span class="wp-dot" style="background:var(--rest)"></span>Rest</span><span class="wp-pill"><span class="wp-dot" style="background:var(--moderate)"></span>Moderate</span><span class="wp-pill"><span class="wp-dot" style="background:var(--ready)"></span>Ready</span></div></div>
+    </div>
+    <p class="wp-sub" style="max-width:100%;margin-top:clamp(16px,2vw,22px)"><span class="wp-accent">Validated per participant</span> — no leakage · <span class="wp-accent">runs inside the AI container</span> — no external API.</p>
+  </section>
+
+  <!-- 4 · 03 Architecture (Elad) -->
+  <section class="wp-slide" data-note="ELAD · 1:25–2:05. 'Three containers, one exposed. You hit WEB over HTTPS — Flask, UI, auth — the only public door. On an internal network with no host ports sit AI (a job queue → process pool → the Random Forest, model baked into the image) and DB (MongoDB — users, check-ins, history). Fault-tolerant: web keeps serving even when ai or db goes down.'">
+    <div class="wp-eyebrow">03 · Architecture</div>
+    <h2 class="wp-h2">Three containers, one <span class="wp-accent">exposed</span></h2>
+    <div class="wp-arch">
+      <div class="wp-box"><div class="s" style="margin:0 0 6px">you &nbsp;&rarr;&nbsp; HTTPS</div><div class="t wp-accent">web</div><div class="s">Flask · UI · auth<br>the only public door</div></div>
+      <div class="wp-arrows"><span>&rarr; ai</span><span>&rarr; db</span></div>
+      <div style="display:flex;flex-direction:column;gap:14px">
+        <div class="wp-box"><div class="t wp-accent2">ai</div><div class="s">job queue &rarr; process pool<br>&rarr; RF · model in the image</div></div>
+        <div class="wp-box"><div class="t" style="color:#8fb4ff">db</div><div class="s">MongoDB · users ·<br>check-ins · history</div></div>
+      </div>
+    </div>
+    <p class="wp-sub" style="max-width:100%"><span class="wp-accent">Internal network — no host ports.</span> Fault-tolerant: web keeps serving when ai or db goes down.</p>
+  </section>
+
+  <!-- 5 · 04 Live demo (Lior) -->
+  <section class="wp-slide" data-note="LIOR · 2:05–4:25. THE DEMO. Switch to the live app (a second tab). One clean path: 1) sign in with a ready-made athlete profile; 2) morning check-in — sleep · fatigue · soreness · load (use sleep 8 / HR 52 / fatigue 2 / soreness 2 / load 3 → a clean READY); 3) readiness verdict + confidence; 4) recommendations + calories; 5) dashboard & history. 'Follow along on your phone.'">
+    <div class="wp-eyebrow">04 · Live demo</div>
+    <h2 class="wp-h2">One clean path, <span class="wp-accent">live</span></h2>
+    <ol class="wp-steps">
+      <li><span class="n">1</span><b>Sign in</b> &nbsp;·&nbsp; ready-made athlete profile</li>
+      <li><span class="n">2</span><b>Morning check-in</b> &nbsp;·&nbsp; sleep · fatigue · soreness · load</li>
+      <li><span class="n">3</span><b class="wp-accent">Readiness verdict</b> &nbsp;·&nbsp; Ready / Moderate / Rest + confidence</li>
+      <li><span class="n">4</span><b>Recommendations</b> &nbsp;·&nbsp; training plan + calories</li>
+      <li><span class="n">5</span><b>Dashboard &amp; history</b> &nbsp;·&nbsp; the story over time</li>
+    </ol>
+    <p class="wp-sub" style="max-width:100%"><span class="wp-url">app.worksmarternotharder.dev</span> &mdash; follow along on your phone.</p>
+  </section>
+
+  <!-- 6 · 05 The result (Team) -->
+  <section class="wp-slide" data-note="TEAM · 4:25–5:00. 'A complete, local AI coaching flow: your input → prediction → recommendations → persistence → deployment. Scan it, try it — and vote for us if you liked the idea.'">
+    <div class="wp-eyebrow">05 · The result</div>
+    <h2 class="wp-h2">A complete, local <span class="wp-accent">AI coaching flow</span></h2>
+    <div class="wp-row" style="margin-top:clamp(20px,3vw,32px)">
+      <span class="wp-pill">your input</span><span class="wp-pill">&rarr;</span><span class="wp-pill wp-accent">prediction</span>
+      <span class="wp-pill">&rarr;</span><span class="wp-pill">recommendations</span><span class="wp-pill">&rarr;</span>
+      <span class="wp-pill">persistence</span><span class="wp-pill">&rarr;</span><span class="wp-pill wp-accent2">deployment</span>
+    </div>
+    <p class="wp-sub" style="max-width:100%;margin-top:clamp(22px,3vw,34px)">Scan it, try it &mdash; and <b class="wp-accent">vote for us</b> if you liked the idea. &nbsp;<span class="wp-url">app.worksmarternotharder.dev</span></p>
+  </section>
+
+  <!-- 7 · Backup — Community & Security -->
+  <section class="wp-slide" data-note="BACKUP · if asked. Community & security. Forum: posts/comments with media, up/down-votes + vote notifications, direct messages with live push, anonymity toggle + anti-spam limits. Security & testing: hashed passwords, 2-step verification, NoSQL-injection + CSRF defended, rate limits on public routes, all 5 test types + cross-container E2E gate.">
+    <div class="wp-eyebrow">Backup · if asked</div>
+    <h2 class="wp-h2">Beyond the demo</h2>
+    <div class="wp-cards">
+      <div class="wp-card"><div class="wp-eyebrow" style="margin-bottom:12px">Online forum</div>
+        <p style="font-size:clamp(14px,1.7vw,20px);line-height:1.55">Posts · comments · media · up/down-votes + vote notifications · direct messages with live push · anonymity toggle · anti-spam limits</p></div>
+      <div class="wp-card"><div class="wp-eyebrow" style="margin-bottom:12px">Security &amp; testing</div>
+        <p style="font-size:clamp(14px,1.7vw,20px);line-height:1.55">Hashed passwords · 2-step verification · NoSQL-injection + CSRF defended · rate limits on public routes · <span class="wp-accent">all 5 test types + cross-container E2E gate</span></p></div>
+    </div>
+  </section>
+
+  <!-- 8 · Backup — Scaling & Pipeline -->
+  <section class="wp-slide" data-note="BACKUP · if asked. Scaling & pipeline, measured not guessed. 2.86x throughput from a process pool 1→4 workers; 1.60x from scaling to 2 AI replicas. Pipeline: push → test → build → deploy to Azure → HTTPS live, with auto-rollback if the new version fails its ready check.">
+    <div class="wp-eyebrow">Backup · if asked</div>
+    <h2 class="wp-h2">Measured, not <span class="wp-accent">guessed</span></h2>
+    <div class="wp-metrics">
+      <div><div class="wp-big">2.86&times;</div><div class="lbl">throughput · process pool 1&rarr;4</div></div>
+      <div><div class="wp-big">1.60&times;</div><div class="lbl">throughput · 2 AI replicas</div></div>
+    </div>
+    <div class="wp-row" style="margin-top:clamp(20px,3vw,30px)">
+      <span class="wp-pill">push</span><span class="wp-pill">test</span><span class="wp-pill">build</span>
+      <span class="wp-pill wp-accent">deploy to Azure</span><span class="wp-pill">HTTPS live</span>
+    </div>
+    <p class="wp-sub" style="max-width:100%"><span class="wp-accent">Auto-rollback</span> if the new version fails its ready check.</p>
+  </section>
+
+  <div class="wp-foot"><span class="who" id="wp-who">Work Smarter, Not Harder</span><span id="wp-page">1 / 8</span></div>
+  <div class="wp-nav">
+    <button class="wp-arrow" id="wp-prev" aria-label="Previous slide">&#8249;</button>
+    <div class="wp-dots" id="wp-dots" role="tablist"></div>
+    <button class="wp-arrow" id="wp-next" aria-label="Next slide">&#8250;</button>
+  </div>
+
+  <script>
+    (function () {
+      // Pure, self-contained deck controller. No network, no app code, no user data. The ONLY external
+      // input is ?slide=N — parsed to an int and clamped to a valid slide index (never used as HTML).
+      var slides = Array.prototype.slice.call(document.querySelectorAll(".wp-slide"));
+      var total = slides.length, i = 0;
+      var dotsBox = document.getElementById("wp-dots");
+      var who = document.getElementById("wp-who"), page = document.getElementById("wp-page");
+      var prevB = document.getElementById("wp-prev"), nextB = document.getElementById("wp-next");
+      slides.forEach(function (s, n) {
+        var b = document.createElement("button"); b.setAttribute("role", "tab"); b.setAttribute("aria-label", "Slide " + (n + 1));
+        b.addEventListener("click", function () { go(n); }); dotsBox.appendChild(b);
+      });
+      var dots = Array.prototype.slice.call(dotsBox.children);
+      function speakerFor(n){ var m = (slides[n].getAttribute("data-note")||"").match(/^\s*(SHIRI|LIOR|ELAD|TEAM|BACKUP)/i); return m ? m[1] : "Git Push & Pray"; }
+      function render() {
+        slides.forEach(function (s, n) { s.classList.toggle("live", n === i); });
+        dots.forEach(function (d, n) { d.classList.toggle("on", n === i); });
+        page.textContent = (i + 1) + " / " + total;
+        who.textContent = speakerFor(i);
+        prevB.disabled = i === 0; nextB.disabled = i === total - 1;
+      }
+      function go(n) { i = Math.max(0, Math.min(total - 1, n)); render(); }
+      prevB.addEventListener("click", function () { go(i - 1); });
+      nextB.addEventListener("click", function () { go(i + 1); });
+      document.addEventListener("keydown", function (e) {
+        if (e.key === "ArrowRight" || e.key === " " || e.key === "PageDown") { e.preventDefault(); go(i + 1); }
+        else if (e.key === "ArrowLeft" || e.key === "PageUp") { e.preventDefault(); go(i - 1); }
+        else if (e.key === "Home") { go(0); } else if (e.key === "End") { go(total - 1); }
+        else if (e.key === "Escape") { location.href = "/"; }
+      });
+      var x0 = null;
+      document.addEventListener("touchstart", function (e) { x0 = e.touches[0].clientX; }, { passive: true });
+      document.addEventListener("touchend", function (e) {
+        if (x0 === null) return; var dx = e.changedTouches[0].clientX - x0;
+        if (Math.abs(dx) > 45) { go(dx < 0 ? i + 1 : i - 1); } x0 = null;
+      }, { passive: true });
+      var start = parseInt(new URLSearchParams(location.search).get("slide"), 10);   // ?slide=N deep-link
+      go(Number.isFinite(start) ? start - 1 : 0);
+    })();
+  </script>
+</body>
+</html>

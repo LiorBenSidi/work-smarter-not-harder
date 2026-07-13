@@ -342,6 +342,14 @@ def create_app(config=Config, *, users=None, profiles=None, history=None, forum=
         return render_template("index.html", preview=bool(request.args.get("preview"))), 200, \
             {"Cache-Control": "no-cache, no-store, must-revalidate"}
 
+    @app.get("/presentation")
+    def presentation():
+        # The project's pitch deck, rendered by the app in its own visual tone. DELIBERATELY ISOLATED from
+        # the SPA: a standalone template that shares NO code with the app (no auth, no API, no session, no
+        # user-supplied data is rendered — the only input is ?slide=N, parsed to an int client-side and
+        # clamped to a slide index). Public and read-only, so it can't be an attack surface into the app.
+        return render_template("presentation.html"), 200, {"Cache-Control": "no-cache"}
+
     @app.get("/health")
     def health():
         return jsonify(status="ok", service="web")
