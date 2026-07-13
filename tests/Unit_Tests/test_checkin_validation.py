@@ -76,7 +76,17 @@ def test_rejects_out_of_range(validate, field, bad):
         validate(p)
 
 
-@pytest.mark.parametrize("field,lo,hi", [("fatigue", 1, 10), ("training_load", 0, 10), ("resting_hr", 30, 220)])
+@pytest.mark.parametrize("bad", [0, 0.5])
+def test_rejects_sub_one_sleep_to_match_the_model_contract(validate, bad):
+    # Regression: the ai readiness model rejects sleep_hours < 1 (ai/app.py READINESS_FIELDS). The check-in
+    # once accepted sleep_hours >= 0, so a "0 hours" entry validated and was stored, then every /predict on
+    # it 400'd -> a STICKY false "AI service down" on the dashboard until a new check-in with sleep >= 1.
+    # The producer's range must not exceed what the model accepts; sub-1 sleep is refused here.
+    with pytest.raises(ValueError):
+        validate({**_ok(), "sleep_hours": bad})
+
+
+@pytest.mark.parametrize("field,lo,hi", [("sleep_hours", 1, 24), ("fatigue", 1, 10), ("training_load", 0, 10), ("resting_hr", 30, 220)])
 def test_accepts_the_exact_boundaries(validate, field, lo, hi):
     for value in (lo, hi):
         assert validate({**_ok(), field: value})[field] == value

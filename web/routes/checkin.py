@@ -24,7 +24,7 @@ checkin_bp = Blueprint("checkin", __name__)
 
 # (name, low, high, integer) — the daily readiness inputs. Single source of truth; change here only.
 CHECKIN_FIELDS = [
-    ("sleep_hours", 0, 24, False),
+    ("sleep_hours", 1, 24, False),   # min 1 (not 0): the ai model's validator requires sleep_hours >= 1
     ("resting_hr", 30, 220, True),
     ("fatigue", 1, 10, True),
     ("soreness", 1, 10, True),
