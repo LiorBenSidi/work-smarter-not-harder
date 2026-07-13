@@ -169,5 +169,10 @@ These confirm the production knobs; **no retune was needed**:
   so a full 32-deep backlog drains in ≈ 0.22 s — the worst-case fully-queued `/predict` still answers
   ~100× inside its 30 s deadline. The bound sheds load long before callers time out.
 
-Caveat, as Shiri flagged: this covers the Random Forest inference only. The recommendation engine is not
-built yet; the timeout headroom is deliberately kept for it, and these knobs get re-measured when it lands.
+Shiri's caveat at measurement time — "this covers the Random Forest inference only; the recommendation
+engine is not built yet, re-measure when it lands" — is now closed. The engine landed with the model merge
+(`ai/recommendations.py`: rule-based state/feature lookups + a calorie estimate, no model call), and the
+promised re-measure (10,000 calls per state, 2026-07-13) puts it at **~2.5 µs per
+`generate_recommendations` call + ~1.7 µs per `calculate_calories` call, worst observed spike 240 µs** —
+four orders of magnitude below the ~27 ms RF inference it rides on. It moves `predict_one`'s latency by
+roughly 0.01 %, so every headroom figure above stands unchanged and **the knobs stay as they are**.
