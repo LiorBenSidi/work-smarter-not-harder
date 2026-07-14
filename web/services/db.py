@@ -333,13 +333,15 @@ def _shape(post):
     """Public projection of a forum post — drops the raw _id and the internal votes lists (post + comments)."""
     return {"id": post["id"], "author": post["author"], "anonymous": post.get("anonymous", False),
             "title": post["title"], "body": post["body"], "score": post.get("score", 0),
+            "created_at": post.get("created_at", 0),
             "comments": [_comment_public(c) for c in post.get("comments", [])]}
 
 
 def forum_create_post(db, author, title, body, anonymous):
     """Insert a post and return its public shape (opaque string id)."""
     post = {"id": uuid.uuid4().hex, "author": author, "anonymous": anonymous,
-            "title": title, "body": body, "score": 0, "comments": [], "votes": []}
+            "title": title, "body": body, "score": 0, "comments": [], "votes": [],
+            "created_at": time.time()}
     db.forum_posts.insert_one(post)
     return _shape(post)
 

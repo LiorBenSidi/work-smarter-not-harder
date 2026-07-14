@@ -10,7 +10,12 @@
   <link rel="preload" href="/static/fonts/bricolage-800-latin-v1.woff2" as="font" type="font/woff2" crossorigin>
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <!-- `default` (not black-translucent): iOS insets the web view BELOW the status bar and renders a native,
+       theme-adaptive status bar (legible clock/battery in BOTH light + dark themes). black-translucent forced
+       WHITE status text over the light-mode background, so the clock/battery were invisible and the header sat
+       under the notch — this is the fix for that. env(safe-area-inset-top) then reads 0 and the header's
+       safe-area padding stays a harmless no-op that still covers landscape cutouts. -->
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="Work Smarter">
   <title>Work Smarter, Not Harder</title>
   <style>
@@ -215,7 +220,7 @@
     /* Dropdown reveal: a subtle scale-pop from the button (top-right), not a generic slide. Disabled under prefers-reduced-motion via the global rule below. */
     @keyframes menuPop { from { opacity:0; transform: translateY(-6px) scale(.96); } to { opacity:1; transform: translateY(0) scale(1); } }
 
-    main { max-width:560px; margin:0 auto; padding:22px 18px 92px; }   /* bottom clears the floating pill nav */
+    main { max-width:560px; margin:0 auto; padding:22px 18px calc(92px + env(safe-area-inset-bottom)); }   /* bottom clears the floating pill nav — +safe-area so a home-indicator iPhone's nav can't ride up onto content (e.g. the DM composer) */
     /* content card: SOLID (glass is a nav-layer material only, iOS 26) — no backdrop-filter, opaque surface */
     .card { background:var(--card-solid); border:1px solid var(--line); border-radius:24px; padding:22px; margin-bottom:18px;
       box-shadow:var(--shadow); animation: rise .6s cubic-bezier(.2,.7,.2,1) both; }
@@ -416,6 +421,8 @@
     .chip.active { color:var(--on-accent); border-color:transparent;
       background: linear-gradient(135deg, var(--accent), color-mix(in srgb, var(--accent) 55%, var(--accent2))); }
     .chip:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+    /* Sort-direction toggle: a plain (never-"active") chip pushed to the row's end; its ↓/↑ label carries the state. */
+    .chip.dir { margin-left:auto; font-variant-numeric:tabular-nums; }
     /* Illustrated empty states: a friendly icon + guidance instead of a bare grey line (Wolt's empty cards) */
     /* Skeleton shimmer for loading states (Bluesky/OSS pattern) — a placeholder that pulses instead of a bare
        "Loading…". Reduced-motion safe. Both mobile + desktop. */
@@ -683,6 +690,14 @@
       align-items:center; justify-content:center; padding:24px; cursor:zoom-out; }
     .lightbox img { max-width:min(94vw,900px); max-height:92vh; width:auto; height:auto; border-radius:12px;
       box-shadow:0 18px 60px rgba(0,0,0,.5); }
+    /* An explicit ✕ affordance (desktop + mobile) — the overlay/Esc still close, but a visible button is
+       clearer, especially on touch. Kept clear of the notch via the top/right safe-area insets. */
+    .lightbox-close { position:absolute; top:calc(14px + env(safe-area-inset-top)); right:calc(14px + env(safe-area-inset-right));
+      width:42px; height:42px; border-radius:50%; display:inline-flex; align-items:center; justify-content:center;
+      font-size:26px; line-height:1; color:#fff; cursor:pointer; padding:0;
+      background:rgba(16,22,40,.62); border:1px solid rgba(255,255,255,.24);
+      -webkit-backdrop-filter:blur(10px); backdrop-filter:blur(10px); transition:background .15s var(--ease), transform .15s var(--ease); }
+    .lightbox-close:hover, .lightbox-close:focus-visible { background:rgba(44,56,86,.92); transform:scale(1.06); }
     /* date separator between days in a thread */
     .dm-daysep { align-self:center; margin:8px 0 4px; }
     .dm-daysep span { font-size:11px; color:var(--muted); background:var(--field); border:1px solid var(--line); padding:2px 11px; border-radius:999px; }
@@ -715,7 +730,7 @@
     @keyframes breathe { 0%,100% { transform: scale(1); } 50% { transform: scale(1.045); } }
     @keyframes rise { from { opacity:0; transform: translateY(12px); } to { opacity:1; transform:none; } }
     @media (max-width: 640px) { .brand-tag { display:none; } }
-    @media (max-width: 560px) { .row { grid-template-columns:1fr; } main { padding:16px 14px 92px; } #who-name { display:none; } }
+    @media (max-width: 560px) { .row { grid-template-columns:1fr; } main { padding:16px 14px calc(92px + env(safe-area-inset-bottom)); } #who-name { display:none; } }
     /* Kill transitions for the instant of a theme switch so the palette change is atomic — otherwise
        each element animates its color/background at its own rate and the switch reads as a flicker. */
     html.theme-switching, html.theme-switching *, html.theme-switching *::before, html.theme-switching *::after {
@@ -963,6 +978,7 @@
             <button class="chip active" type="button" data-sort="recent">Recent</button>
             <button class="chip" type="button" data-sort="top">Top</button>
             <button class="chip" type="button" data-sort="mine">Mine</button>
+            <button id="forum-dir" class="chip dir" type="button" aria-label="Reverse sort order">↓ Newest</button>
           </div>
           <div id="forum-list"><div class="sk" style="height:64px"></div><div class="sk" style="height:64px"></div><div class="sk" style="height:64px"></div></div>
           <div id="forum-detail" hidden></div>
@@ -1011,7 +1027,7 @@
               <span id="dm-files-hint" class="muted" style="font-size:12px"></span>
               <div class="dm-attach-hint muted">PNG · JPEG · WebP · GIF · MP4 · up to 10 MB</div>
               <div id="dm-reply-flash" class="flash" aria-live="polite"></div>
-              <div id="lightbox" class="lightbox" hidden role="dialog" aria-modal="true" aria-label="Enlarged photo"><img id="lightbox-img" src="" alt="Shared photo, enlarged"></div>
+              <div id="lightbox" class="lightbox" hidden role="dialog" aria-modal="true" aria-label="Enlarged photo"><button type="button" class="lightbox-close" aria-label="Close photo">&times;</button><img id="lightbox-img" src="" alt="Shared photo, enlarged"></div>
             </div>
           </div>
         </section>
@@ -2139,7 +2155,7 @@
     let currentPost = null;
     let currentUser = null;
 
-    let forumPosts = [], forumSort = "recent";
+    let forumPosts = [], forumSort = "recent", forumDir = "desc";   // desc = newest / highest first (the default)
     // Supersede-guards: a slower OLDER re-render must not overwrite a newer one. vote()/voteComment() fire
     // openPost()+loadForum() un-awaited, so rapid up/down clicks launch overlapping fetches whose responses
     // can arrive out of order and momentarily paint a stale score (#SPA3). The latest call always wins.
@@ -2167,15 +2183,18 @@
       const el = $("forum-list"); if (!el) return;
       stashDetail();                                          // move an open post's detail out before we wipe the list, then re-slot it below
       if (!forumPosts.length) { el.innerHTML = emptyState(EMPTY_ICONS.forum, "Quiet in here", "Start the conversation. Share something above."); return; }
-      let list = forumPosts.slice();                         // "recent" keeps the server order (newest first)
-      if (forumSort === "top") list.sort((a, b) => (b.score || 0) - (a.score || 0));
-      else if (forumSort === "mine") list = list.filter((p) => p.mine);
+      let list = forumPosts.slice();
+      if (forumSort === "mine") list = list.filter((p) => p.mine);
+      const sign = forumDir === "asc" ? 1 : -1;              // desc (default): newest / highest first
+      if (forumSort === "top") list.sort((a, b) => sign * ((a.score || 0) - (b.score || 0)) || (b.created_at || 0) - (a.created_at || 0));
+      else list.sort((a, b) => sign * ((a.created_at || 0) - (b.created_at || 0)));   // recent + mine order by time
       if (!list.length) { el.innerHTML = emptyState(EMPTY_ICONS.pencil, "You haven't posted yet", "Your posts will show up here once you share something."); return; }
       el.innerHTML = list.map((p) =>
         '<div class="post' + (p.id === currentPostId ? ' open' : '') + '" data-id="' + escapeHtml(p.id) + '" role="button" tabindex="0" aria-expanded="' + (p.id === currentPostId ? 'true' : 'false') + '">'
         + '<div class="post-top"><strong>' + escapeHtml(p.title) + '</strong>'
         + '<span class="post-right"><span class="pill">' + ICON.up + ' ' + escapeHtml(p.score) + '</span><span class="post-chev" aria-hidden="true">' + ICON.chev + '</span></span></div>'
-        + '<span class="muted byline">' + avatarHtml(p.author, 20) + 'by ' + escapeHtml(p.author) + ' · ' + escapeHtml(p.comments) + ' comment' + (p.comments === 1 ? '' : 's') + '</span></div>'
+        + '<span class="muted byline">' + avatarHtml(p.author, 20) + 'by ' + escapeHtml(p.author) + ' · ' + escapeHtml(p.comments) + ' comment' + (p.comments === 1 ? '' : 's')
+        + (p.created_at ? ' · ' + escapeHtml(timeAgo(p.created_at)) : '') + '</span></div>'
       ).join("");
       el.querySelectorAll(".post").forEach((d) => {
         d.addEventListener("click", () => togglePost(d.dataset.id));
@@ -2196,12 +2215,26 @@
       const post = Array.prototype.find.call(el.querySelectorAll(".post"), (d) => d.dataset.id === currentPostId);
       if (post) post.insertAdjacentElement("afterend", detail);
     }
+    // The ↓/↑ label spells out what the current sort's direction means (time for recent/mine, score for top).
+    function updateForumDirLabel() {
+      const b = $("forum-dir"); if (!b) return;
+      const asc = forumDir === "asc";
+      const word = forumSort === "top" ? (asc ? "Lowest" : "Highest") : (asc ? "Oldest" : "Newest");
+      b.textContent = (asc ? "↑ " : "↓ ") + word;
+      b.setAttribute("aria-label", "Sort order: " + word + " first — tap to reverse");
+    }
     $("forum-sorts").addEventListener("click", (e) => {
       const chip = e.target.closest(".chip"); if (!chip) return;
-      forumSort = chip.dataset.sort;
-      $("forum-sorts").querySelectorAll(".chip").forEach((c) => c.classList.toggle("active", c === chip));
+      if (chip.id === "forum-dir") {                          // the direction toggle — flip asc/desc, keep the mode
+        forumDir = forumDir === "asc" ? "desc" : "asc";
+      } else {                                                // a sort-mode chip (recent / top / mine)
+        forumSort = chip.dataset.sort;
+        $("forum-sorts").querySelectorAll(".chip[data-sort]").forEach((c) => c.classList.toggle("active", c === chip));
+      }
+      updateForumDirLabel();
       renderForumList();
     });
+    updateForumDirLabel();                                    // initial "↓ Newest"
 
     // A failed open must NEVER wedge the forum. currentPostId is set BEFORE the fetch, so any bail after it
     // (a rejected fetch on a flaky mobile network, a non-ok response, or a body without .post) that leaves it
@@ -2593,6 +2626,7 @@
       const open = (el) => { lbImg.src = el.getAttribute("data-full") || el.src; lb.hidden = false; };
       const close = () => { lb.hidden = true; lbImg.src = ""; };
       document.addEventListener("click", (e) => {
+        if (e.target.closest && e.target.closest(".lightbox-close")) { close(); return; }   // the explicit ✕ button
         const img = e.target.closest && e.target.closest(".dm-img");
         if (img) { open(img); return; }
         if (e.target === lb || e.target === lbImg) close();      // click the overlay or the enlarged image closes it

@@ -20,6 +20,17 @@ def test_create_then_list_posts(forum_client):
     assert posts[0]["score"] == 0
 
 
+def test_list_posts_carry_created_at_in_creation_order(forum_client):
+    # The client sorts the forum by created_at (newest-first by default) and renders each post's age, so the
+    # summary must expose a positive, strictly-increasing created_at per creation order.
+    _login(forum_client)
+    _new_post(forum_client, "one", "a")
+    _new_post(forum_client, "two", "b")
+    posts = {p["title"]: p for p in forum_client.get("/forum/posts").get_json()["posts"]}
+    assert posts["one"]["created_at"] > 0 and posts["two"]["created_at"] > 0
+    assert posts["two"]["created_at"] > posts["one"]["created_at"]   # the later post is strictly newer
+
+
 def test_get_post_with_its_comments(forum_client):
     _login(forum_client)
     pid = _new_post(forum_client, "T", "b").get_json()["post"]["id"]
