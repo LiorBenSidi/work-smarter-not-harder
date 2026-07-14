@@ -626,6 +626,11 @@
       animation: breathe 2.6s ease-in-out infinite; flex:none; }
     .tab .dm-dot { position:absolute; top:6px; right:calc(50% - 17px); }
     .navlink .dm-dot { position:absolute; top:7px; right:10px; }
+    /* Desktop Home button — shown in the top nav (left of History) only when off Today, mirroring the mobile
+       Home FAB. Toggled by updateCtxBack(); icon + label, styled like the other navlinks. */
+    .nav-home { display:inline-flex; align-items:center; gap:6px; }
+    .nav-home[hidden] { display:none; }
+    .nav-home svg { width:16px; height:16px; stroke:currentColor; fill:none; stroke-width:2.2; }
     @media (min-width: 860px) {
       .tabbar { display:none; }
       .topnav.nav-on { display:flex; }          /* only when signed in (nav-on) — not on the logged-out auth screen */
@@ -786,6 +791,7 @@
       </a>
     </div>
     <nav id="topnav" class="topnav" role="tablist" aria-label="Sections">
+      <button id="nav-home" class="navlink nav-home" type="button" aria-label="Go to Today" title="Home" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11l9-8 9 8M5 10v10h5v-6h4v6h5V10"/></svg><span>Home</span></button>
       <button class="navlink" data-screen="history" role="tab" aria-selected="false">History</button>
       <button class="navlink" data-screen="forum" role="tab" aria-selected="false">Forum</button>
       <button class="navlink" data-screen="messages" role="tab" aria-selected="false">Chat<span class="dm-dot" hidden></span></button>
@@ -1436,10 +1442,14 @@
       const offHome = currentScreen !== "today", btn = $("ctx-back");
       btn.hidden = !offHome;
       if (offHome) { btn.innerHTML = CTX_HOME_ICON; btn.setAttribute("aria-label", "Go to Today"); }
+      const navHome = $("nav-home"); if (navHome) navHome.hidden = !offHome;   // desktop Home button (left of History), off-Today only
       // Desktop mirror: the logo shows a home icon (and is clickable-to-Today) whenever we're off Today.
       document.querySelector("header").classList.toggle("off-home", offHome);
     }
     $("ctx-back").addEventListener("click", () => showScreen("today"));   // the Home FAB always goes to Today
+    // Desktop Home button — wired directly (NOT via data-screen) so Today stays out of the tab model (it's a
+    // home action, reached by the FAB/logo/this button, never a section tab).
+    $("nav-home").addEventListener("click", () => showScreen("today"));
     // The logo IS the home button when signed in: go to Today in-app (no full reload). Logged out -> href="/".
     document.querySelector(".brand").addEventListener("click", (e) => {
       if (currentUser) { e.preventDefault(); showScreen("today"); }
