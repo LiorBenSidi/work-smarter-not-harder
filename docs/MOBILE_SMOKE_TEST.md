@@ -1,9 +1,11 @@
 # Mobile smoke test — run on a real iPhone before a release
 
-Automated guards (`tests/Unit_Tests/test_frontend_mobile_guards.py`) fail CI if the code behind a
-mobile fix is removed — but **no headless tool reproduces iOS Safari** (rubber-band overscroll, the
-PWA home-screen name, `100dvh`, `position:fixed` quirks). So a **2-minute human check on an iPhone**
-is the release gate for those. Do it against the live URL after a deploy that touched `web/`.
+Static security/contract guards (`tests/Unit_Tests/test_frontend_mobile_guards.py`) + the browser E2E
+nav/responsive scenarios (`tests/E2E_Tests`) cover what's automatable. The cosmetic UX greps that used
+to live in the guards file were removed (a test must assert a real invariant, not mirror the CSS) — and
+**no headless tool reproduces iOS Safari** anyway (rubber-band overscroll, the PWA home-screen name,
+`100dvh`, `position:fixed` quirks). So this **2-minute human check on an iPhone** is the release gate for
+the mobile UX. Do it against the live URL after a deploy that touched `web/`.
 
 ## The checklist (app.worksmarternotharder.dev, on an iPhone)
 - [ ] **Overscroll** — swipe past the top and bottom of any screen → shows the **app colour** (dark/light), never white.
