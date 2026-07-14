@@ -16,8 +16,68 @@ import ssl
 import threading
 from email.message import EmailMessage
 from email.utils import formataddr, formatdate, make_msgid
+from html import escape as _escape
 
 logger = logging.getLogger(__name__)
+
+_BRAND = "Work Smarter, Not Harder"
+
+
+def _email_shell(inner_html):
+    """Wrap content in an Outlook-safe email shell: table layout + inline styles ONLY (no <style> block,
+    no flexbox/grid — Outlook renders with Word and drops all of it), matching the app's dark identity."""
+    return (
+        '<!DOCTYPE html><html lang="en"><body style="margin:0;padding:0;background:#0b1120;">'
+        '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#0b1120;'
+        'padding:26px 12px;font-family:Arial,Helvetica,sans-serif;"><tr><td align="center">'
+        '<table role="presentation" width="460" cellpadding="0" cellspacing="0" style="max-width:460px;'
+        'width:100%;background:#141c31;border:1px solid #26304a;border-radius:14px;">'
+        '<tr><td style="padding:26px 30px 0;">'
+        '<div style="color:#7ff0cf;font-size:17px;font-weight:bold;">' + _BRAND + '</div>'
+        '<div style="color:#8792a8;font-size:12px;padding-top:2px;">readiness, every morning</div></td></tr>'
+        '<tr><td style="padding:16px 30px 28px;">' + inner_html + '</td></tr></table>'
+        '<div style="color:#5b6478;font-size:11px;line-height:1.5;padding:16px 8px 0;max-width:460px;">'
+        'Work Smarter, Not Harder &middot; worksmarternotharder.dev</div>'
+        '</td></tr></table></body></html>'
+    )
+
+
+def code_email_html(code, minutes, intro, why):
+    """Branded HTML for a one-time code. The code is shown big + monospace so it's trivially
+    select-to-copy (long-press on mobile, double-click on desktop) and recognized by iOS/Android OTP
+    autofill. Email clients strip JS, so a real one-click 'copy' button is impossible — this is the
+    universal equivalent. `intro`/`why` are plain text (escaped)."""
+    safe_code = _escape("".join(ch for ch in str(code) if ch.isalnum()))
+    inner = (
+        '<div style="color:#c7d0e0;font-size:15px;line-height:1.55;">' + _escape(intro) + '</div>'
+        '<div style="text-align:center;padding:22px 0 8px;"><span style="display:inline-block;'
+        'background:#0b1120;border:1px solid #2c374f;border-radius:10px;padding:14px 22px;'
+        'font-family:\'Courier New\',Courier,monospace;font-size:32px;line-height:1;letter-spacing:8px;'
+        'color:#ffffff;font-weight:bold;">' + safe_code + '</span></div>'
+        '<div style="color:#8792a8;font-size:12.5px;line-height:1.5;padding-bottom:16px;">'
+        'Tap and hold (phone) or double-click (computer) the code to copy it — on most phones your '
+        'keyboard will offer to fill it in for you. It expires in ' + str(int(minutes)) + ' minutes.</div>'
+        '<div style="border-top:1px solid #26304a;padding-top:14px;color:#6b7488;font-size:12px;'
+        'line-height:1.5;">' + _escape(why) + '</div>'
+    )
+    return _email_shell(inner)
+
+
+def link_email_html(intro, link, button_label, why):
+    """Branded HTML with a single action button (e.g. password reset). Uses an <a> styled as a button —
+    Outlook-safe (no JS). `link` is our own signed-token URL; `intro`/`why`/`button_label` are text."""
+    safe_link = _escape(link, quote=True)
+    inner = (
+        '<div style="color:#c7d0e0;font-size:15px;line-height:1.55;">' + _escape(intro) + '</div>'
+        '<div style="text-align:center;padding:22px 0 10px;"><a href="' + safe_link + '" '
+        'style="display:inline-block;background:#7ff0cf;color:#0b1120;text-decoration:none;font-weight:bold;'
+        'font-size:15px;padding:13px 26px;border-radius:10px;">' + _escape(button_label) + '</a></div>'
+        '<div style="color:#8792a8;font-size:12px;line-height:1.5;padding-bottom:16px;word-break:break-all;">'
+        'Or paste this link into your browser:<br>' + _escape(link) + '</div>'
+        '<div style="border-top:1px solid #26304a;padding-top:14px;color:#6b7488;font-size:12px;'
+        'line-height:1.5;">' + _escape(why) + '</div>'
+    )
+    return _email_shell(inner)
 
 
 _FALLBACK_ADDR = "no-reply@worksmarter.local"   # used only if MAIL_FROM has no usable address (broken config)
@@ -40,9 +100,13 @@ def _split_sender(raw):
     return "", raw                                                     # bare address (no brackets)
 
 
-def send_email(config, to, subject, body, force_mock=False):
+def send_email(config, to, subject, body, html=None, force_mock=False):
     """Send `body` to `to`. SMTP when ``SMTP_HOST`` is configured, else the log backend. Returns
     True if handed off (or logged), False if a configured SMTP send failed — never raises.
+
+    ``html`` (optional) adds a rich HTML alternative to the plaintext ``body`` (multipart/alternative):
+    clients that render HTML show it, everything else falls back to ``body`` — so a client that strips
+    HTML, or a broken template, still delivers the code/link. The plaintext ``body`` stays authoritative.
 
     ``force_mock`` (the gated dev email-mock override) forces the log backend even where SMTP is
     configured: nothing is sent, the message (incl. the code) is only logged. The caller then returns
@@ -70,7 +134,9 @@ def send_email(config, to, subject, body, force_mock=False):
         msg["Date"] = formatdate(localtime=True)
         msg["Message-ID"] = make_msgid(domain=addr.rsplit("@", 1)[-1] if "@" in addr else None)
         msg["Reply-To"] = addr
-        msg.set_content(body)
+        msg.set_content(body)                    # plaintext part (authoritative fallback)
+        if html:
+            msg.add_alternative(html, subtype="html")   # richer HTML part; clients pick the best they render
         with smtplib.SMTP(host, int(config.get("SMTP_PORT") or 587), timeout=10) as server:
             server.ehlo()
             if config.get("SMTP_STARTTLS", True):
@@ -88,7 +154,7 @@ def send_email(config, to, subject, body, force_mock=False):
         return False
 
 
-def send_email_async(config, to, subject, body, force_mock=False):
+def send_email_async(config, to, subject, body, html=None, force_mock=False):
     """Fire-and-forget send for the account-enumeration-sensitive paths (forgot-password, register).
 
     Closes the AUTH-H1/H2 response-time side channel: a synchronous SMTP send makes the branch that emails
@@ -102,8 +168,8 @@ def send_email_async(config, to, subject, body, force_mock=False):
     (``send_email`` swallows every error); the code/link is valid server-side whether or not delivery lands."""
     host = None if force_mock else config.get("SMTP_HOST")
     if not host:                                   # log backend: fast + no oracle -> keep it sync (tests/dev rely on this)
-        return send_email(config, to, subject, body, force_mock=force_mock)
+        return send_email(config, to, subject, body, html=html, force_mock=force_mock)
     snapshot = dict(config)                        # decouple from the request thread's app/config context
     threading.Thread(target=send_email, args=(snapshot, to, subject, body),
-                     kwargs={"force_mock": force_mock}, daemon=True, name="email-send").start()
+                     kwargs={"html": html, "force_mock": force_mock}, daemon=True, name="email-send").start()
     return True
