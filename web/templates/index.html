@@ -628,19 +628,20 @@
       box-shadow:0 0 8px color-mix(in srgb, var(--accent) 55%, transparent); animation: breathe 2.6s ease-in-out infinite; flex:none; }
     .tab .dm-dot { position:absolute; top:2px; right:calc(50% - 23px); }
     .navlink .dm-dot { position:absolute; top:1px; right:2px; }
-    /* Recent-chats avatar row (Slack's DMs top strip) — one-tap access to recent conversations. */
-    .dm-avatars { display:flex; gap:22px; overflow-x:auto; padding:6px 2px 15px; margin:2px 0 10px; scrollbar-width:none;
-      border-bottom:1px solid var(--line); }                 /* divider separates the strip from the list below */
+    /* Recent-chats avatar row (Slack's DMs top strip) — one-tap access. Each user is a CARD (chip) so users
+       are clearly separated and each unread count unambiguously belongs to its avatar; the single username
+       shows in full (truncates only if very long). */
+    .dm-avatars { display:flex; gap:12px; overflow-x:auto; padding:4px 2px 10px; margin:2px 0 8px; scrollbar-width:none; }
     .dm-avatars::-webkit-scrollbar { display:none; }
-    .dm-av { flex:none; width:60px; background:none; border:0; padding:0; cursor:pointer; position:relative;
-      display:flex; flex-direction:column; align-items:center; gap:8px; }
-    .dm-av .avatar { transition:transform .12s var(--ease); }
-    .dm-av:hover .avatar { transform:translateY(-2px); }
-    .dm-av-name { font-size:11.5px; font-weight:600; color:var(--muted); max-width:60px; text-align:center;
+    .dm-av { flex:none; width:76px; background:var(--field); border:1px solid var(--line); border-radius:16px;
+      padding:11px 5px 9px; cursor:pointer; position:relative; display:flex; flex-direction:column; align-items:center; gap:8px;
+      transition:transform .12s var(--ease), border-color .15s; }
+    .dm-av:hover { transform:translateY(-2px); border-color:color-mix(in srgb, var(--accent) 45%, transparent); }
+    .dm-av-name { font-size:11px; font-weight:600; color:var(--muted); max-width:66px; text-align:center;
       overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-    .dm-av-badge { position:absolute; top:-3px; right:6px; min-width:17px; height:17px; padding:0 4px; border-radius:999px;
+    .dm-av-badge { position:absolute; top:6px; right:9px; min-width:17px; height:17px; padding:0 4px; border-radius:999px;
       background:linear-gradient(135deg,var(--accent),var(--accent2)); color:var(--on-accent); font-size:10px; font-weight:800;
-      line-height:17px; text-align:center; box-shadow:0 0 0 2px var(--card-solid); }
+      line-height:17px; text-align:center; box-shadow:0 0 0 2px var(--field); }
     /* Frosted backdrop behind the open account menu (Slack's sheet frost) — dims + blurs the content below. */
     .menu-backdrop { position:fixed; inset:0; z-index:29; background:rgba(6,10,20,.28);
       -webkit-backdrop-filter:blur(3px) saturate(1.1); backdrop-filter:blur(3px) saturate(1.1); animation:fadeIn .16s var(--ease); }
@@ -2460,11 +2461,10 @@
     function renderAvatarStrip(cs) {
       const strip = $("dm-avatar-strip"); if (!strip) return;
       strip.hidden = !cs.length;
-      const firstName = (n) => (String(n || "").trim().split(/\s+/)[0] || String(n || ""));   // one word fits under the avatar
       strip.innerHTML = cs.slice(0, 12).map((c) =>
         '<button type="button" class="dm-av" data-peer="' + escapeHtml(c.peer) + '" aria-label="Open chat with ' + escapeHtml(c.peer_name || c.peer) + '">'
-        + avatarHtml(c.peer, 48) + (c.unread ? '<span class="dm-av-badge">' + escapeHtml(c.unread) + '</span>' : '')
-        + '<span class="dm-av-name">' + escapeHtml(firstName(c.peer_name || c.peer)) + '</span></button>'
+        + avatarHtml(c.peer, 46) + (c.unread ? '<span class="dm-av-badge">' + escapeHtml(c.unread) + '</span>' : '')
+        + '<span class="dm-av-name">' + escapeHtml(c.peer_name || c.peer) + '</span></button>'   // full single username (truncates via CSS)
       ).join("");
       strip.querySelectorAll(".dm-av").forEach((b) => b.addEventListener("click", () => openThread(b.dataset.peer)));
     }
