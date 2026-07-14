@@ -51,6 +51,20 @@ def test_checkin_rejects_bad_metrics_400(make_client, fake_users, fake_profiles,
     _login(c)
     assert c.post("/checkin", json={"sleep_hours": 7.5}).status_code == 400          # missing fields
     assert c.post("/checkin", json={**_metrics(), "fatigue": {"$gt": ""}}).status_code == 400  # injection
+    assert c.post("/checkin", json={**_metrics(), "fatigue": 999}).status_code == 400  # out of range
+    assert c.post("/checkin", json={**_metrics(), "resting_hr": "55"}).status_code == 400  # string, not a number
+    assert c.post("/checkin", json={**_metrics(), "sleep_hours": True}).status_code == 400  # bool
+
+
+def test_checkin_ignores_url_query_params(make_client, fake_users, fake_profiles, fake_history, monkeypatch):
+    # UI-bypass guard: /checkin reads ONLY the JSON body, so smuggling metrics in the URL query string can't
+    # work. A hostile query is ignored (a valid body still succeeds), and an out-of-range BODY is still
+    # rejected regardless of the query string — a curl / URL-param bypass of the client-side validation fails.
+    _set_predict(monkeypatch, {"state": "Ready", "calories": 2000})
+    c = _client(make_client, fake_users, fake_profiles, fake_history)
+    _login(c)
+    assert c.post("/checkin?fatigue=999&sleep_hours=0", json=_metrics()).status_code == 201       # query ignored
+    assert c.post("/checkin?fatigue=3", json={**_metrics(), "fatigue": 999}).status_code == 400   # body still validated
 
 
 def test_checkin_still_saved_when_ai_down(make_client, fake_users, fake_profiles, fake_history, monkeypatch):
