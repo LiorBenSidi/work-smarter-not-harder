@@ -352,6 +352,15 @@ def test_forum_create_then_get_and_list(db_mod, db):
     assert len(db_mod.forum_list_posts(db)) == 1
 
 
+def test_forum_post_carries_a_created_at_timestamp(db_mod, db):
+    # The forum orders newest-first by default + shows each post's age, so every post must carry a positive
+    # created_at that survives get + list (it's the field the client sorts on and renders).
+    post = db_mod.forum_create_post(db, "alice", "T", "B", False)
+    assert isinstance(post["created_at"], (int, float)) and post["created_at"] > 0
+    assert db_mod.forum_get_post(db, post["id"])["created_at"] == post["created_at"]
+    assert db_mod.forum_list_posts(db)[0]["created_at"] == post["created_at"]
+
+
 def test_forum_get_missing_post_is_none(db_mod, db):
     assert db_mod.forum_get_post(db, "does-not-exist") is None
 

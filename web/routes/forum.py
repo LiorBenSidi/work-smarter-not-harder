@@ -68,7 +68,7 @@ def _summary(post, me):
     # tolerate partial/seed rows from the store: a missing score/comments degrades this row to a
     # default rather than 500-ing the whole list.
     return {"id": post.get("id"), "title": post.get("title"), "author": _author(post),
-            "mine": _mine(post, me),
+            "mine": _mine(post, me), "created_at": post.get("created_at", 0),
             "score": post.get("score", 0), "comments": len(post.get("comments") or [])}
 
 

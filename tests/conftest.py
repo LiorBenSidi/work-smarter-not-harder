@@ -221,7 +221,8 @@ class FakeForum:
         self._seq += 1
         pid = str(self._seq)
         self._posts[pid] = {"id": pid, "author": author, "anonymous": anonymous,
-                            "title": title, "body": body, "score": 0, "comments": [], "votes": {}}
+                            "title": title, "body": body, "score": 0, "comments": [], "votes": {},
+                            "created_at": time.time() + self._seq * 1e-6}   # monotonic per creation order
         return self._posts[pid]
 
     def list_posts(self):
