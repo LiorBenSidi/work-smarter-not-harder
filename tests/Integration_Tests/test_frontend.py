@@ -105,6 +105,20 @@ def test_daily_checkin_section_present_and_wired(client):
         assert f'name="{field}"' in html
 
 
+def test_checkin_scales_and_live_validation_are_wired(client):
+    # The 1–10/0–10 fields are colour-coded tap scales backed by a hidden input (same POST body); the two
+    # typed fields validate live, and Submit stays greyed (aria-disabled) until every field is valid.
+    html = client.get("/").get_data(as_text=True)
+    for field in ["fatigue", "soreness", "training_load"]:
+        assert f'data-field="{field}"' in html                     # the scale builds from this
+        assert f'type="hidden" id="{field}"' in html               # hidden input carries the chosen value
+    assert "function buildScales(" in html and "function validateCheckin(" in html
+    assert "function updateCheckinValidity(" in html
+    assert 'button type="submit" class="block" aria-disabled="true"' in html   # greyed until valid
+    assert 'class="field-err" data-for="sleep_hours"' in html      # live per-field error
+    assert 'class="field-err" data-for="resting_hr"' in html
+
+
 def test_register_hints_are_fetched_from_the_config_endpoint(client):
     # the credential hints are JS-driven from /auth/config (single source of truth), not hardcoded.
     html = client.get("/").get_data(as_text=True)
