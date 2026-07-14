@@ -658,8 +658,18 @@
     .bubble.tail.them { border-bottom-left-radius:5px; }
     .bubble.tail.me { border-bottom-right-radius:5px; }
     .bubble.cont { margin-top:-5px; }
-    /* WhatsApp-style bubble meta: a small time (+ "Seen" on my most recent read message) under the text */
-    .dm-meta { display:block; margin-top:3px; font-size:10.5px; font-family:var(--font-mono); text-align:right; opacity:.7; }
+    /* WhatsApp-style bubble meta: a small time + delivery ticks under the message */
+    .dm-meta { display:flex; gap:4px; align-items:center; justify-content:flex-end; margin-top:3px; font-size:10.5px; font-family:var(--font-mono); opacity:.7; }
+    /* Delivery ticks on MY messages: sent (single ✓) -> delivered (double ✓✓) -> read (double ✓✓, tinted). */
+    .dm-tick { font-family:var(--font-mono); font-size:11px; line-height:1; letter-spacing:-2px; opacity:.85; }
+    .dm-tick.read { color:#4ea1ff; opacity:1; }        /* read = blue, like WhatsApp; time/ticks inherit on-accent otherwise */
+    .bubble.me .dm-tick:not(.read) { color:var(--on-accent); }
+    /* Inline media bubble: the image sits in the sender's column at the moment it was shared (not a strip). */
+    .bubble.media { padding:4px; overflow:hidden; }
+    .bubble.media .dm-media-link { display:block; line-height:0; }
+    .bubble.media img { display:block; max-width:min(230px,62vw); max-height:270px; width:auto; height:auto;
+      border-radius:12px; object-fit:cover; cursor:zoom-in; }
+    .bubble.media .dm-meta { padding:2px 6px 0; }
     /* date separator between days in a thread */
     .dm-daysep { align-self:center; margin:8px 0 4px; }
     .dm-daysep span { font-size:11px; color:var(--muted); background:var(--field); border:1px solid var(--line); padding:2px 11px; border-radius:999px; }
@@ -2398,45 +2408,73 @@
       clearInterval(dmThreadTimer); dmThreadTimer = setInterval(renderThread, 15000);  // backstop; SSE pushes replies instantly
     }
 
+    // WhatsApp-style delivery ticks for MY sent messages: sent (single ✓) -> delivered (✓✓) -> read (✓✓ blue).
+    function dmTick(m) {
+      const read = !!m.read, delivered = read || !!m.delivered;
+      const label = read ? "Read" : delivered ? "Delivered" : "Sent";
+      return '<span class="dm-tick' + (read ? " read" : "") + '" title="' + label + '" aria-label="' + label
+        + '">' + (delivered ? "✓✓" : "✓") + "</span>";
+    }
+
+    // One inline shared image (or a link for a non-image blob); opens full-size in a new tab.
+    function dmMediaHtml(a) {
+      const url = escapeHtml(a.url || ""), isImg = String(a.mime || "").indexOf("image/") === 0;
+      return '<a class="dm-media-link" href="' + url + '" target="_blank" rel="noopener">'
+        + (isImg ? '<img src="' + url + '" alt="Shared photo" loading="lazy">' : "Shared file") + "</a>";
+    }
+
     async function renderThread() {
       if (!dmPeer) return;
       const u = currentUser, peer = dmPeer;                  // snapshot session + which thread
-      const r = await api("/conversations/" + encodeURIComponent(dmPeer));
+      // Fetch the thread AND its shared images together, so we can weave them into one ordered timeline.
+      const [r, ar] = await Promise.all([
+        api("/conversations/" + encodeURIComponent(dmPeer)),
+        api("/messages/" + encodeURIComponent(dmPeer) + "/attachments"),
+      ]);
       if (sessionChanged(u, "renderThread") || peer !== dmPeer) return;   // logged out / switched user or thread mid-flight -> don't paint a private thread into the wrong view
       const box = $("dm-thread");
       if (!r.ok) { box.innerHTML = '<p class="flash error">Could not load this conversation.</p>'; return; }
       // header shows the server-resolved display name (correct even for a brand-new thread); avatar keyed
       // on the handle so two same-named people still read as distinct.
       setHtmlIfChanged($("dm-thread-peer"), avatarHtml(dmPeer, 30) + "<span>" + escapeHtml((r.data && r.data.peer_name) || dmPeer) + "</span>");
+      const atc = $("dm-atts"); if (atc) atc.innerHTML = "";   // media is now inline in the timeline, not a separate strip below
       const nearBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 40;   // don't yank the reader up
       const msgs = (r.data && r.data.messages) || [];
-      let lastMine = -1; msgs.forEach((m, i) => { if (m.sender === currentUser) lastMine = i; });   // "Seen" rides my most recent sent msg
+      const atts = (ar.ok && ar.data && ar.data.attachments) || [];
+      // Weave text + shared images into ONE chronological timeline: each image sits in ITS sender's column
+      // at the moment it was shared (the bind carries owner + created_at). A run = consecutive items from the
+      // same sender on the same day (Signal grouping); the time rides the last bubble, ticks ride my bubbles.
+      const items = msgs.map((m) => ({ kind: "msg", sender: m.sender, at: m.created_at, m }))
+        .concat(atts.map((a) => ({ kind: "media", sender: a.owner, at: a.created_at, a })))
+        .sort((x, y) => (x.at || 0) - (y.at || 0));
       let lastDay = null;
-      const changed = setHtmlIfChanged(box, msgs.length
-        ? msgs.map((m, i) => {
-            const dk = dayKey(m.created_at);
-            const sep = dk !== lastDay ? (lastDay = dk, '<div class="dm-daysep"><span>' + escapeHtml(dayLabel(m.created_at)) + "</span></div>") : "";
-            const mine = m.sender === currentUser;
-            const prev = msgs[i - 1], next = msgs[i + 1];
-            // Signal grouping: a run = consecutive msgs from the same sender on the same day. The tail + the
-            // time/Seen meta ride only the LAST bubble of a run; a run-continuation bubble tucks up tighter.
-            const cont = prev && prev.sender === m.sender && dayKey(prev.created_at) === dk;
-            const runEnd = !next || next.sender !== m.sender || dayKey(next.created_at) !== dk;
-            const meta = runEnd ? '<span class="dm-meta">' + escapeHtml(clockTime(m.created_at)) + (mine && i === lastMine && m.read ? " · Seen" : "") + "</span>" : "";
-            const cls = "bubble " + (mine ? "me" : "them") + (runEnd ? " tail" : "") + (cont ? " cont" : "");
-            return sep + '<div class="' + cls + '">' + escapeHtml(m.body) + meta + "</div>";
+      const changed = setHtmlIfChanged(box, items.length
+        ? items.map((it, i) => {
+            const dk = dayKey(it.at);
+            const sep = dk !== lastDay ? (lastDay = dk, '<div class="dm-daysep"><span>' + escapeHtml(dayLabel(it.at)) + "</span></div>") : "";
+            const mine = it.sender === currentUser;
+            const prev = items[i - 1], next = items[i + 1];
+            const cont = prev && prev.sender === it.sender && dayKey(prev.at) === dk;
+            const runEnd = !next || next.sender !== it.sender || dayKey(next.at) !== dk;
+            const timeHtml = runEnd ? '<span class="dm-time">' + escapeHtml(clockTime(it.at)) + "</span>" : "";
+            const cls = "bubble " + (it.kind === "media" ? "media " : "") + (mine ? "me" : "them")
+              + (runEnd ? " tail" : "") + (cont ? " cont" : "");
+            if (it.kind === "media") {
+              const meta = timeHtml ? '<span class="dm-meta">' + timeHtml + "</span>" : "";
+              return sep + '<div class="' + cls + '">' + dmMediaHtml(it.a) + meta + "</div>";
+            }
+            // my bubble always carries a delivery tick; the time rides the last bubble of a run (either sender)
+            const inner = mine ? timeHtml + dmTick(it.m) : timeHtml;
+            const meta = inner ? '<span class="dm-meta">' + inner + "</span>" : "";
+            return sep + '<div class="' + cls + '">' + escapeHtml(it.m.body) + meta + "</div>";
           }).join("")
         : '<p class="muted">No messages yet — say hi.</p>');
-      if (changed && nearBottom) box.scrollTop = box.scrollHeight;   // only re-anchor when the thread actually changed (poll no-op -> no flash)
-      // Shared media for this conversation (best-effort). Attachments bind to the conversation, not a single
-      // message (Elad's backend), so they render as a labelled strip below the thread rather than inline.
-      api("/messages/" + encodeURIComponent(peer) + "/attachments").then((ar) => {
-        if (peer !== dmPeer) return;                           // switched thread mid-flight -> don't paint stale media
-        const atts = (ar.ok && ar.data && ar.data.attachments) || [];
-        const el = $("dm-atts");
-        if (el) el.innerHTML = atts.length
-          ? '<div class="muted" style="font-size:11px;letter-spacing:.06em;text-transform:uppercase;margin:8px 0 0">Shared media</div>' + attsHtml(atts) : "";
-      });
+      if (changed && nearBottom) {
+        box.scrollTop = box.scrollHeight;   // re-anchor only when the thread actually changed (poll no-op -> no flash)
+        box.querySelectorAll(".bubble.media img").forEach((img) => {   // a late-loading image shifts height -> keep pinned to newest
+          if (!img.complete) img.addEventListener("load", () => { if (peer === dmPeer) box.scrollTop = box.scrollHeight; }, { once: true });
+        });
+      }
     }
 
     function closeThread() {

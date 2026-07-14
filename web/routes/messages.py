@@ -147,6 +147,12 @@ def search_users_route():
 def list_conversations():
     me = session["username"]
     try:
+        # Loading the inbox means every message addressed to me has reached my device -> mark it delivered
+        # (the ticks' middle state). Best-effort: a hiccup here must not fail the inbox read.
+        try:
+            _messages().mark_delivered(me)
+        except Exception:
+            logger.warning("could not mark messages delivered for %s", me, exc_info=True)
         convos = _messages().list_conversations(me)
         names = display_names([c["peer"] for c in convos])   # resolve all peers in one pass
         for c in convos:

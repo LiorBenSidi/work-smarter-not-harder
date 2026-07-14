@@ -51,6 +51,19 @@ def test_attach_to_dm_then_list(media_client):
     assert [a["id"] for a in listing] == [mid]
 
 
+def test_dm_attachment_carries_owner_and_created_at_for_inline_placement(media_client):
+    # The DM view weaves each image into the message timeline in the SENDER's column at the moment it was
+    # shared, so the listing must expose the uploader (owner) and a created_at to sort/position by.
+    c = media_client
+    _login(c, "alice")
+    mid = _upload_png(c).get_json()["id"]
+    c.post("/messages/bob/attachments", json={"attachment_ids": [mid]})
+    att = c.get("/messages/bob/attachments").get_json()["attachments"][0]
+    assert att["owner"] == "alice"                 # -> renders in alice's column
+    assert isinstance(att["created_at"], (int, float)) and att["created_at"] > 0   # -> sorts into the timeline
+    assert att["url"] == f"/media/{mid}" and att["mime"] == "image/png"
+
+
 def test_cannot_attach_someone_elses_blob(media_client, make_client, fake_users, fake_forum,
                                           fake_messages, fake_media, fake_notifications, tmp_path):
     # alice uploads; bob (a second client sharing the same fake stores) can't bind alice's blob.

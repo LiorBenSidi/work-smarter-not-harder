@@ -207,6 +207,10 @@ class _DbMessages(_DbStore):
         db_module, handle = self._resolve()
         return db_module.message_mark_read(handle, user, peer)
 
+    def mark_delivered(self, user):
+        db_module, handle = self._resolve()
+        return db_module.message_mark_delivered(handle, user)
+
     def count_since(self, user, since):
         db_module, handle = self._resolve()
         return db_module.message_count_since(handle, user, since)

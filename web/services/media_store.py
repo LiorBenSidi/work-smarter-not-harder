@@ -38,7 +38,7 @@ class DbMedia:
     def _public(doc):
         return {"id": doc["_id"], "owner": doc["owner"], "mime": doc["mime"], "size": doc["size"],
                 "target_type": doc.get("target_type"), "target_id": doc.get("target_id"),
-                "peers": doc.get("peers")}
+                "peers": doc.get("peers"), "created_at": doc.get("created_at", 0)}
 
     def add(self, media_id, owner, mime, size):
         self._collection().insert_one({

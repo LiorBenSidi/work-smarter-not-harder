@@ -42,6 +42,40 @@ def test_conversation_list_and_unread_clears_on_open(messages_client):
     assert c.get("/conversations").get_json()["conversations"][0]["unread"] == 0
 
 
+def test_dm_read_receipt_lifecycle(messages_client):
+    # The sender's ticks progress sent -> delivered (recipient loads inbox) -> read (recipient opens thread).
+    c = messages_client
+    _setup(c, "alice", "bob")
+    _login(c, "alice")
+    c.post("/messages", json={"to": "bob", "body": "yo"})
+    sent = c.get("/conversations/bob").get_json()["messages"][0]     # alice's own view of her sent msg
+    assert sent["delivered"] is False and sent["read"] is False       # just sent
+    _login(c, "bob")
+    c.get("/conversations")                                          # bob loads his inbox -> delivered
+    _login(c, "alice")
+    delivered = c.get("/conversations/bob").get_json()["messages"][0]
+    assert delivered["delivered"] is True and delivered["read"] is False
+    _login(c, "bob")
+    c.get("/conversations/alice")                                    # bob opens the thread -> read
+    _login(c, "alice")
+    read = c.get("/conversations/bob").get_json()["messages"][0]
+    assert read["read"] is True and read["delivered"] is True
+
+
+def test_dm_read_always_implies_delivered(messages_client):
+    # Opening a thread straight from a notification (without loading the inbox first) must still leave the
+    # message delivered=True — a message can never be read-but-not-delivered (the middle tick is never skipped).
+    c = messages_client
+    _setup(c, "alice", "bob")
+    _login(c, "alice")
+    c.post("/messages", json={"to": "bob", "body": "hi"})
+    _login(c, "bob")
+    c.get("/conversations/alice")                                    # open directly, no inbox load
+    _login(c, "alice")
+    m = c.get("/conversations/bob").get_json()["messages"][0]
+    assert m["read"] is True and m["delivered"] is True
+
+
 def test_dm_creates_a_notification_for_the_recipient(messages_client):
     c = messages_client
     _setup(c, "alice", "bob")
