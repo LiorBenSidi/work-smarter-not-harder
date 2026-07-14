@@ -662,7 +662,11 @@
     @keyframes fadeIn { from { opacity:0; } to { opacity:1; } }
     /* Desktop Home button — text only (matches the other nav items: History/Forum/Chat). Shown in the top
        nav (left of History) only when off Today, mirroring the mobile Home FAB. Toggled by updateCtxBack(). */
-    .nav-home[hidden] { display:none; }
+    /* Reserve the Home slot even when hidden (visibility, not display) so showing/hiding it never shifts
+       History/Forum/Chat sideways — the header stays put whether or not you're on Today. Needs !important
+       to beat the global `[hidden]{display:none!important}` reset below; on mobile the parent .topnav is
+       display:none so this is a no-op there. */
+    #nav-home[hidden] { display:inline-block !important; visibility:hidden; pointer-events:none; }
     @media (min-width: 860px) {
       .tabbar { display:none; }
       .topnav.nav-on { display:flex; }          /* only when signed in (nav-on) — not on the logged-out auth screen */
