@@ -667,9 +667,19 @@
     /* Inline media bubble: the image sits in the sender's column at the moment it was shared (not a strip). */
     .bubble.media { padding:4px; overflow:hidden; }
     .bubble.media .dm-media-link { display:block; line-height:0; }
-    .bubble.media img { display:block; max-width:min(230px,62vw); max-height:270px; width:auto; height:auto;
+    .bubble.media img, .bubble.media .dm-img { display:block; max-width:min(230px,62vw); max-height:270px; width:auto; height:auto;
       border-radius:12px; object-fit:cover; cursor:zoom-in; }
     .bubble.media .dm-meta { padding:2px 6px 0; }
+    /* Attach control: a clean paperclip glyph (was a raw emoji) that lifts on hover/focus. */
+    .dm-attach { cursor:pointer; display:inline-flex; align-items:center; justify-content:center; flex:none;
+      width:38px; height:38px; border-radius:10px; color:var(--muted); transition:color .15s, background .15s; }
+    .dm-attach:hover, .dm-attach:focus-within { color:var(--accent); background:var(--field); }
+    .dm-attach-hint { font-size:11px; margin-top:5px; letter-spacing:.02em; }
+    /* Lightbox: tap an inline image to view it enlarged IN-PAGE (not a new tab). Click anywhere / Esc closes. */
+    .lightbox { position:fixed; inset:0; z-index:1000; background:rgba(6,10,20,.86); display:flex;
+      align-items:center; justify-content:center; padding:24px; cursor:zoom-out; }
+    .lightbox img { max-width:min(94vw,900px); max-height:92vh; width:auto; height:auto; border-radius:12px;
+      box-shadow:0 18px 60px rgba(0,0,0,.5); }
     /* date separator between days in a thread */
     .dm-daysep { align-self:center; margin:8px 0 4px; }
     .dm-daysep span { font-size:11px; color:var(--muted); background:var(--field); border:1px solid var(--line); padding:2px 11px; border-radius:999px; }
@@ -992,11 +1002,13 @@
               <div id="dm-thread" class="dm-thread"><div class="sk" style="height:42px;width:62%;border-radius:16px"></div><div class="sk" style="height:42px;width:72%;margin-left:auto;border-radius:16px"></div></div>
               <div id="dm-atts"></div>
               <form id="dm-reply-form">
-                <label style="cursor:pointer;display:inline-flex;align-items:center;justify-content:center;flex:none;font-size:18px" title="Attach photo"><input type="file" id="dm-files" accept="image/png,image/jpeg,image/webp,image/gif,video/mp4" multiple hidden>📎</label>
+                <label class="dm-attach" title="Attach a photo or clip — PNG, JPEG, WebP, GIF or MP4, up to 10 MB"><input type="file" id="dm-files" accept="image/png,image/jpeg,image/webp,image/gif,video/mp4" multiple hidden><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg></label>
                 <textarea id="dm-reply" name="body" placeholder="Message…" rows="1" autocomplete="off" maxlength="2000"></textarea>
                 <button type="submit">Send</button></form>
               <span id="dm-files-hint" class="muted" style="font-size:12px"></span>
+              <div class="dm-attach-hint muted">PNG · JPEG · WebP · GIF · MP4 · up to 10 MB</div>
               <div id="dm-reply-flash" class="flash" aria-live="polite"></div>
+              <div id="lightbox" class="lightbox" hidden role="dialog" aria-modal="true" aria-label="Enlarged photo"><img id="lightbox-img" src="" alt="Shared photo, enlarged"></div>
             </div>
           </div>
         </section>
@@ -2416,11 +2428,15 @@
         + '">' + (delivered ? "✓✓" : "✓") + "</span>";
     }
 
-    // One inline shared image (or a link for a non-image blob); opens full-size in a new tab.
+    // One inline shared image (opens enlarged in-page via the lightbox) or a link for a non-image blob.
+    // No loading="lazy": the thread re-renders its whole HTML on every new message, and a freshly-created
+    // lazy image that isn't in view never loads -> the bubble collapsed to a sliver. Eager load (cached
+    // after first paint) keeps it visible across re-renders.
     function dmMediaHtml(a) {
       const url = escapeHtml(a.url || ""), isImg = String(a.mime || "").indexOf("image/") === 0;
-      return '<a class="dm-media-link" href="' + url + '" target="_blank" rel="noopener">'
-        + (isImg ? '<img src="' + url + '" alt="Shared photo" loading="lazy">' : "Shared file") + "</a>";
+      return isImg
+        ? '<img class="dm-img" src="' + url + '" data-full="' + url + '" alt="Shared photo" tabindex="0" role="button">'
+        : '<a class="dm-media-link" href="' + url + '" target="_blank" rel="noopener">Shared file</a>';
     }
 
     async function renderThread() {
@@ -2456,17 +2472,15 @@
             const prev = items[i - 1], next = items[i + 1];
             const cont = prev && prev.sender === it.sender && dayKey(prev.at) === dk;
             const runEnd = !next || next.sender !== it.sender || dayKey(next.at) !== dk;
-            const timeHtml = runEnd ? '<span class="dm-time">' + escapeHtml(clockTime(it.at)) + "</span>" : "";
+            const timeHtml = '<span class="dm-time">' + escapeHtml(clockTime(it.at)) + "</span>";   // time on EVERY message
             const cls = "bubble " + (it.kind === "media" ? "media " : "") + (mine ? "me" : "them")
               + (runEnd ? " tail" : "") + (cont ? " cont" : "");
             if (it.kind === "media") {
-              const meta = timeHtml ? '<span class="dm-meta">' + timeHtml + "</span>" : "";
-              return sep + '<div class="' + cls + '">' + dmMediaHtml(it.a) + meta + "</div>";
+              return sep + '<div class="' + cls + '">' + dmMediaHtml(it.a) + '<span class="dm-meta">' + timeHtml + "</span></div>";
             }
-            // my bubble always carries a delivery tick; the time rides the last bubble of a run (either sender)
+            // every bubble shows its own time; my bubbles also carry a delivery tick
             const inner = mine ? timeHtml + dmTick(it.m) : timeHtml;
-            const meta = inner ? '<span class="dm-meta">' + inner + "</span>" : "";
-            return sep + '<div class="' + cls + '">' + escapeHtml(it.m.body) + meta + "</div>";
+            return sep + '<div class="' + cls + '">' + escapeHtml(it.m.body) + '<span class="dm-meta">' + inner + "</span></div>";
           }).join("")
         : '<p class="muted">No messages yet — say hi.</p>');
       if (changed && nearBottom) {
@@ -2568,6 +2582,24 @@
       const t = $("dm-reply"); if (!t) return;
       t.addEventListener("input", () => autoGrow(t));
       t.addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); $("dm-reply-form").requestSubmit(); } });
+    })();
+    // Lightbox: tap an inline DM image to view it enlarged IN-PAGE (not a new tab); click the overlay or
+    // press Esc to close. Delegated so it works for images added on every thread re-render.
+    (function () {
+      const lb = $("lightbox"), lbImg = $("lightbox-img"); if (!lb || !lbImg) return;
+      const open = (el) => { lbImg.src = el.getAttribute("data-full") || el.src; lb.hidden = false; };
+      const close = () => { lb.hidden = true; lbImg.src = ""; };
+      document.addEventListener("click", (e) => {
+        const img = e.target.closest && e.target.closest(".dm-img");
+        if (img) { open(img); return; }
+        if (e.target === lb || e.target === lbImg) close();      // click the overlay or the enlarged image closes it
+      });
+      document.addEventListener("keydown", (e) => {
+        if (e.key === "Escape" && !lb.hidden) { close(); return; }
+        if ((e.key === "Enter" || e.key === " ") && e.target.classList && e.target.classList.contains("dm-img")) {
+          e.preventDefault(); open(e.target);                    // keyboard-open a focused image
+        }
+      });
     })();
 
     $("dm-refresh").addEventListener("click", loadConversations);
