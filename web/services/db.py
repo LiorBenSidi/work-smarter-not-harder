@@ -331,9 +331,17 @@ def _comment_public(c):
 
 def _shape(post):
     """Public projection of a forum post — drops the raw _id and the internal votes lists (post + comments)."""
+    created = post.get("created_at") or 0
+    if not created:                                    # a post created BEFORE created_at existed has none: derive it
+        oid = post.get("_id")                          # from the Mongo _id (an ObjectId embeds its insertion time),
+        if oid is not None and hasattr(oid, "generation_time"):   # so old posts still sort by recency + show an age
+            try:                                       # (else every old post is created_at=0 and the sort/direction is a no-op).
+                created = oid.generation_time.timestamp()
+            except Exception:
+                created = 0
     return {"id": post["id"], "author": post["author"], "anonymous": post.get("anonymous", False),
             "title": post["title"], "body": post["body"], "score": post.get("score", 0),
-            "created_at": post.get("created_at", 0),
+            "created_at": created,
             "comments": [_comment_public(c) for c in post.get("comments", [])]}
 
 
