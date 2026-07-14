@@ -27,7 +27,11 @@ def _email_shell(inner_html):
     """Wrap content in an Outlook-safe email shell: table layout + inline styles ONLY (no <style> block,
     no flexbox/grid — Outlook renders with Word and drops all of it), matching the app's dark identity."""
     return (
-        '<!DOCTYPE html><html lang="en"><body style="margin:0;padding:0;background:#0b1120;">'
+        '<!DOCTYPE html><html lang="en"><head>'
+        # Tell Outlook / Apple Mail this design is dark ON PURPOSE, so their dark modes don't re-tint the
+        # near-black card to a washed-out grey (the "background too light/grey" part of #270).
+        '<meta name="color-scheme" content="dark"><meta name="supported-color-schemes" content="dark">'
+        '</head><body style="margin:0;padding:0;background:#0b1120;">'
         '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#0b1120;'
         'padding:26px 12px;font-family:Arial,Helvetica,sans-serif;"><tr><td align="center">'
         '<table role="presentation" width="460" cellpadding="0" cellspacing="0" style="max-width:460px;'
@@ -50,9 +54,11 @@ def code_email_html(code, minutes, intro, why):
     safe_code = _escape("".join(ch for ch in str(code) if ch.isalnum()))
     inner = (
         '<div style="color:#c7d0e0;font-size:15px;line-height:1.55;">' + _escape(intro) + '</div>'
+        # Mint border so the code POPS against the dark card (matches the reset email's mint button); white
+        # digits on the near-black fill stay maximally legible even if a client re-tints the surrounding card.
         '<div style="text-align:center;padding:22px 0 8px;"><span style="display:inline-block;'
-        'background:#0b1120;border:1px solid #2c374f;border-radius:10px;padding:14px 22px;'
-        'font-family:\'Courier New\',Courier,monospace;font-size:32px;line-height:1;letter-spacing:8px;'
+        'background:#0b1120;border:2px solid #7ff0cf;border-radius:12px;padding:16px 26px;'
+        'font-family:\'Courier New\',Courier,monospace;font-size:34px;line-height:1;letter-spacing:9px;'
         'color:#ffffff;font-weight:bold;">' + safe_code + '</span></div>'
         '<div style="color:#8792a8;font-size:12.5px;line-height:1.5;padding-bottom:16px;">'
         'Tap and hold (phone) or double-click (computer) the code to copy it — on most phones your '
