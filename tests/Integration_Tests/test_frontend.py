@@ -105,6 +105,20 @@ def test_daily_checkin_section_present_and_wired(client):
         assert f'name="{field}"' in html
 
 
+def test_checkin_scales_and_live_validation_are_wired(client):
+    # The 1–10/0–10 fields are colour-coded tap scales backed by a hidden input (same POST body); the two
+    # typed fields validate live, and Submit stays greyed (aria-disabled) until every field is valid.
+    html = client.get("/").get_data(as_text=True)
+    for field in ["fatigue", "soreness", "training_load"]:
+        assert f'data-field="{field}"' in html                     # the scale builds from this
+        assert f'type="hidden" id="{field}"' in html               # hidden input carries the chosen value
+    assert "function buildScales(" in html and "function validateCheckin(" in html
+    assert "function updateCheckinValidity(" in html
+    assert 'button type="submit" class="block" aria-disabled="true"' in html   # greyed until valid
+    assert 'class="field-err" data-for="sleep_hours"' in html      # live per-field error
+    assert 'class="field-err" data-for="resting_hr"' in html
+
+
 def test_slack_inspired_polish_present(client):
     # Slack-style polish: an unread COUNT on the Chat nav (not just a dot), a recent-chats avatar strip,
     # and a frosted backdrop behind the open account menu.
@@ -295,12 +309,23 @@ def test_responsive_dual_nav_present(client):
     assert 'class="tabbar"' in html                                # the mobile bottom bar still exists
     for screen in ("history", "forum", "messages"):
         assert html.count(f'data-screen="{screen}"') >= 2          # each section in BOTH navs (mobile pill + desktop top-nav)
-    assert html.count('data-screen="today"') == 0                  # Today dropped -> Home reached via the FAB (mobile) / logo (desktop)
+    assert html.count('data-screen="today"') == 0                  # Today dropped -> Home reached via the FAB (mobile) / logo + Home button (desktop)
     assert "@media (min-width: 860px)" in html                     # the desktop breakpoint (the Request-Desktop switch)
     assert "max-width:920px" in html                               # wider desktop content
     assert 'document.querySelectorAll("[data-screen]")' in html    # showScreen + clicks drive both navs
     assert "function setDmDot(" in html                            # the Chat unread pulse toggles on both navs
     assert ".topnav.nav-on" in html                                # top-nav appears only when signed in
+
+
+def test_desktop_home_button_present_and_wired(client):
+    # Desktop mirror of the mobile Home FAB: a Home button in the top nav (left of History) that appears only
+    # off-Today and routes to Today. Wired DIRECTLY (not via data-screen), so Today stays out of the tab model
+    # (the dual-nav invariant above still holds).
+    html = client.get("/").get_data(as_text=True)
+    assert 'id="nav-home"' in html and 'class="navlink nav-home"' in html
+    assert 'data-screen' not in html.split('id="nav-home"')[1].split(">")[0]   # NOT a data-screen tab
+    assert '$("nav-home").addEventListener("click", () => showScreen("today"))' in html
+    assert "navHome.hidden = !offHome" in html                     # shown only off-Today, like the mobile FAB
 
 
 def test_home_fab_is_always_a_home_button(client):
