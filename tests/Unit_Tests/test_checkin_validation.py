@@ -76,6 +76,15 @@ def test_rejects_out_of_range(validate, field, bad):
         validate(p)
 
 
+@pytest.mark.parametrize("bad", [float("inf"), float("-inf"), float("nan")])
+def test_rejects_non_finite_numbers(validate, bad):
+    # Python's json.loads accepts Infinity/NaN (a non-standard extension), so a hand-crafted curl body can
+    # smuggle them past the type check — the explicit math.isfinite guard rejects them before any range
+    # comparison (a naive lo<=NaN<=hi is always False, but the guard makes the intent explicit) or AI call.
+    with pytest.raises(ValueError):
+        validate({**_ok(), "sleep_hours": bad})
+
+
 @pytest.mark.parametrize("bad", [0, 0.5])
 def test_rejects_sub_one_sleep_to_match_the_model_contract(validate, bad):
     # Regression: the ai readiness model rejects sleep_hours < 1 (ai/app.py READINESS_FIELDS). The check-in
