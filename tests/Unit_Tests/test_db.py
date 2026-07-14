@@ -361,6 +361,18 @@ def test_forum_post_carries_a_created_at_timestamp(db_mod, db):
     assert db_mod.forum_list_posts(db)[0]["created_at"] == post["created_at"]
 
 
+def test_shape_backfills_created_at_from_the_object_id(db_mod):
+    # A post created BEFORE the created_at field existed has none -> it must still get a real, positive
+    # created_at (derived from the Mongo _id's embedded insertion time), else the sort/direction toggle is a
+    # no-op on old posts and the age doesn't render. Regression for the "↓ Newest / ↑ Oldest does nothing" bug.
+    from bson import ObjectId
+    oid = ObjectId()
+    shaped = db_mod._shape({"_id": oid, "id": "p1", "author": "a", "title": "t", "body": "b"})   # no created_at
+    assert shaped["created_at"] == oid.generation_time.timestamp() and shaped["created_at"] > 0
+    # an explicit created_at always wins over the _id fallback
+    assert db_mod._shape({"_id": oid, "id": "p2", "author": "a", "title": "t", "body": "b", "created_at": 123.5})["created_at"] == 123.5
+
+
 def test_forum_get_missing_post_is_none(db_mod, db):
     assert db_mod.forum_get_post(db, "does-not-exist") is None
 
