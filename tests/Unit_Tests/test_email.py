@@ -57,7 +57,7 @@ def _fake_smtp(seen):
 
         def send_message(self, msg, from_addr=None, to_addrs=None):
             seen.update(to=msg["To"], subject=msg["Subject"], from_header=str(msg["From"]),
-                        envelope_from=from_addr, to_addrs=to_addrs,
+                        envelope_from=from_addr, to_addrs=to_addrs, msg=msg,
                         date=msg["Date"], message_id=msg["Message-ID"], reply_to=msg["Reply-To"])
 
     return FakeSMTP
@@ -158,6 +158,53 @@ def test_control_chars_in_recipient_abort_the_send(monkeypatch):
     ok = email_mod.send_email({"SMTP_HOST": "relay.test", "MAIL_FROM": "C <c@x.co>"},
                               "victim@x.co\r\nRCPT TO:<evil@x.co>", "s", "b")
     assert ok is False and sent["connected"] is False   # never even opened the SMTP connection
+
+
+def test_html_alternative_is_attached_with_plaintext_fallback(monkeypatch):
+    # When `html` is provided the message is multipart/alternative: HTML-capable clients render the rich
+    # version, everything else falls back to the plaintext — so the code always arrives either way. Both
+    # parts carry the code, and the deliverability headers stay on the multipart root.
+    seen = {}
+    monkeypatch.setattr(email_mod.smtplib, "SMTP", _fake_smtp(seen))
+    html = email_mod.code_email_html("246813", 10, "Here's your login code:", "why you got this")
+    ok = email_mod.send_email(
+        {"SMTP_HOST": "relay.test", "MAIL_FROM": "Work Smarter <no-reply@worksmarternotharder.dev>"},
+        "user@outlook.com", "Your login code", "Your login code is: 246813", html=html)
+    assert ok is True
+    msg = seen["msg"]
+    assert msg.get_content_type() == "multipart/alternative"
+    plain = msg.get_body(preferencelist=("plain",))
+    rich = msg.get_body(preferencelist=("html",))
+    assert plain is not None and "246813" in plain.get_content()     # plaintext fallback keeps the code
+    assert rich is not None and "246813" in rich.get_content()       # HTML part shows the code too
+    assert msg["Date"] and msg["Message-ID"] and msg["Reply-To"]     # headers survive on the root
+
+
+def test_no_html_stays_single_part_plaintext(monkeypatch):
+    # Backward compatible: without `html`, the message is a plain text/plain single part (the pre-existing
+    # behaviour) — a client stripping HTML, or a caller that passes no template, is unaffected.
+    seen = {}
+    monkeypatch.setattr(email_mod.smtplib, "SMTP", _fake_smtp(seen))
+    ok = email_mod.send_email(
+        {"SMTP_HOST": "relay.test", "MAIL_FROM": "W <no-reply@worksmarternotharder.dev>"},
+        "u@z.co", "s", "plain body only")
+    assert ok is True
+    assert seen["msg"].get_content_type() == "text/plain"
+
+
+def test_code_email_html_shows_the_code_and_select_to_copy_hint():
+    html = email_mod.code_email_html("135790", 7, "Here's your code:", "a reason line")
+    assert "135790" in html                                          # the code is rendered
+    assert "copy" in html.lower()                                    # select-to-copy guidance (email has no JS)
+    assert "expires in 7 minutes" in html
+    assert "a reason line" in html                                   # the why-you-got-this footer
+
+
+def test_link_email_html_has_a_button_and_the_raw_link():
+    link = "https://app.worksmarternotharder.dev/?reset_token=abc.def"
+    html = email_mod.link_email_html("Reset it:", link, "Reset your password", "a reason")
+    assert 'href="' + link in html and "Reset your password" in html  # a real <a> button (Outlook-safe, no JS)
+    assert link in html                                               # raw link too, for clients that block buttons
 
 
 def test_send_email_async_stays_sync_for_the_log_backend(caplog):
