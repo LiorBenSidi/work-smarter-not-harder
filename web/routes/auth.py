@@ -18,7 +18,7 @@ from werkzeug.security import check_password_hash, generate_password_hash
 
 from ratelimit import limiter
 from services.db import DuplicateEmailError
-from services.email import send_email, send_email_async
+from services.email import code_email_html, link_email_html, send_email, send_email_async
 from services.identity import display_name
 
 logger = logging.getLogger(__name__)
@@ -561,7 +561,13 @@ def forgot_password():
         # unregistered (no-send) branch: no forgot-password enumeration via latency (AUTH-H1).
         send_email_async(current_app.config, email, "Reset your Work Smarter, Not Harder password",
                          f"Reset your password with this link (valid {minutes} min):\n\n{link}\n\n"
-                         "If you didn't request this, you can ignore this email.", force_mock=mock)
+                         "If you didn't request this, you can ignore this email.",
+                         html=link_email_html(f"Click below to choose a new password (valid {minutes} minutes):",
+                                              link, "Reset your password",
+                                              "You received this because a password reset was requested for your "
+                                              "Work Smarter, Not Harder account. If it wasn't you, you can ignore "
+                                              "this email — your password stays unchanged."),
+                         force_mock=mock)
         if _surface_dev_codes(mock):   # dev/mock (log backend) ONLY — prod (SECURE) fails closed, never surfaces
             body["dev_reset_link"] = "/?reset_token=" + token   # RELATIVE -> the click stays on the current host
     # In real (SMTP) mode the body is IDENTICAL whether or not the email was registered -> no account
@@ -672,7 +678,11 @@ def _issue_reg_code(display, pw_hash, email):
     send_email_async(current_app.config, email, "Confirm your Work Smarter, Not Harder email",
                      f"Your Work Smarter, Not Harder confirmation code is: {code}\n\n"
                      f"Enter it to finish creating your account. It expires in {minutes} min.\n"
-                     "If you didn't request this, you can ignore this email.", force_mock=mock)
+                     "If you didn't request this, you can ignore this email.",
+                     html=code_email_html(code, minutes, "Enter this code to finish creating your account:",
+                                          "You received this because this email was used to sign up for Work "
+                                          "Smarter, Not Harder. If it wasn't you, you can ignore this email."),
+                     force_mock=mock)
     return code if _surface_dev_codes(mock) else None
 
 
@@ -689,7 +699,11 @@ def _issue_otp(username, email):
     mock = _debug_email_mock()
     send_email(current_app.config, email or "(no email on file)", "Your Work Smarter, Not Harder login code",
                f"Your Work Smarter, Not Harder login code is: {code}\n\n"
-               f"It expires in {minutes} min. If this wasn't you, you can ignore this email.", force_mock=mock)
+               f"It expires in {minutes} min. If this wasn't you, you can ignore this email.",
+               html=code_email_html(code, minutes, "Here's your login code:",
+                                    "You received this because someone signed in to Work Smarter, Not Harder "
+                                    "with this email. If it wasn't you, you can safely ignore this email."),
+               force_mock=mock)
     return code if _surface_dev_codes(mock) else None
 
 
