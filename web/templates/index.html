@@ -2610,7 +2610,7 @@
       const el = $("dm-conversations");
       const r = await api("/conversations");
       if (sessionChanged(u, "loadConversations")) return;    // stale session -> don't paint another user's inbox
-      if (!r.ok) { el.innerHTML = '<p class="flash error">Could not load conversations.</p>'; renderAvatarStrip([]); return; }
+      if (!r.ok) { el.innerHTML = '<p class="flash error">Could not load conversations.</p>'; el.__lastHtml = undefined; renderAvatarStrip([]); return; }   // invalidate the cache so recovery repaints the list
       const cs = (r.data && r.data.conversations) || [];
       renderAvatarStrip(cs);                                 // Slack-style recent-chats row above the list
       if (!cs.length) { setHtmlIfChanged(el, emptyState(EMPTY_ICONS.chat, "No conversations yet", "Send a message above to start one.")); return; }
@@ -2630,6 +2630,11 @@
       // and name until renderThread's async load resolves. Skeleton rows stand in while this thread loads.
       $("dm-thread").innerHTML = '<div class="sk" style="height:42px;width:62%;border-radius:16px"></div><div class="sk" style="height:42px;width:72%;margin-left:auto;border-radius:16px"></div>';
       $("dm-thread-peer").textContent = "";
+      // We just stomped both nodes' DOM directly (skeletons + empty header). setHtmlIfChanged caches the
+      // last HTML it wrote (__lastHtml); a direct write leaves that cache stale, so RE-opening an UNCHANGED
+      // thread computes identical HTML, hits the cache, skips the repaint, and leaves the skeletons up
+      // (works the 1st time, blank the 2nd). Invalidate the cache so renderThread always repaints on open.
+      $("dm-thread").__lastHtml = $("dm-thread-peer").__lastHtml = undefined;
       updateCtxBack();                                       // a thread is open -> show the Back chevron
       await renderThread();                     // renders messages AND sets the peer header from the resolved name
       $("dm-reply").focus();
@@ -2665,7 +2670,7 @@
       ]);
       if (sessionChanged(u, "renderThread") || peer !== dmPeer) return;   // logged out / switched user or thread mid-flight -> don't paint a private thread into the wrong view
       const box = $("dm-thread");
-      if (!r.ok) { box.innerHTML = '<p class="flash error">Could not load this conversation.</p>'; return; }
+      if (!r.ok) { box.innerHTML = '<p class="flash error">Could not load this conversation.</p>'; box.__lastHtml = undefined; return; }   // invalidate the cache so a later successful render repaints (not skipped as "unchanged")
       // header shows the server-resolved display name (correct even for a brand-new thread); avatar keyed
       // on the handle so two same-named people still read as distinct.
       setHtmlIfChanged($("dm-thread-peer"), avatarHtml(dmPeer, 30) + "<span>" + escapeHtml((r.data && r.data.peer_name) || dmPeer) + "</span>");
