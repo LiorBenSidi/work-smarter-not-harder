@@ -2630,6 +2630,11 @@
       // and name until renderThread's async load resolves. Skeleton rows stand in while this thread loads.
       $("dm-thread").innerHTML = '<div class="sk" style="height:42px;width:62%;border-radius:16px"></div><div class="sk" style="height:42px;width:72%;margin-left:auto;border-radius:16px"></div>';
       $("dm-thread-peer").textContent = "";
+      // We just stomped both nodes' DOM directly (skeletons + empty header). setHtmlIfChanged caches the
+      // last HTML it wrote (__lastHtml); a direct write leaves that cache stale, so RE-opening an UNCHANGED
+      // thread computes identical HTML, hits the cache, skips the repaint, and leaves the skeletons up
+      // (works the 1st time, blank the 2nd). Invalidate the cache so renderThread always repaints on open.
+      $("dm-thread").__lastHtml = $("dm-thread-peer").__lastHtml = undefined;
       updateCtxBack();                                       // a thread is open -> show the Back chevron
       await renderThread();                     // renders messages AND sets the peer header from the resolved name
       $("dm-reply").focus();
