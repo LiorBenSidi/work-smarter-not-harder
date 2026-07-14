@@ -337,12 +337,12 @@ class FakeMessages:
         self._seq = 0
 
     def _public(self, m):
-        return {k: m[k] for k in ("id", "sender", "recipient", "body", "created_at", "read")}
+        return {k: m[k] for k in ("id", "sender", "recipient", "body", "created_at", "delivered", "read")}
 
     def send(self, sender, recipient, body):
         self._seq += 1
         m = {"id": str(self._seq), "sender": sender, "recipient": recipient, "body": body,
-             "created_at": time.time() + self._seq * 1e-6, "read": False}
+             "created_at": time.time() + self._seq * 1e-6, "delivered": False, "read": False}
         self._msgs.append(m)
         return self._public(m)
 
@@ -362,10 +362,16 @@ class FakeMessages:
                 row["unread"] += 1
         return sorted(convos.values(), key=lambda c: c["last_at"], reverse=True)
 
+    def mark_delivered(self, user):
+        for m in self._msgs:
+            if m["recipient"] == user:
+                m["delivered"] = True
+
     def mark_read(self, user, peer):
         for m in self._msgs:
             if m["sender"] == peer and m["recipient"] == user:
                 m["read"] = True
+                m["delivered"] = True          # read implies delivered
 
     def count_since(self, user, since):
         return sum(1 for m in self._msgs if m["sender"] == user and m["created_at"] >= since)
@@ -417,10 +423,13 @@ class FakeMedia:
 
     def __init__(self):
         self._by_id = {}
+        self._seq = 0
 
     def add(self, media_id, owner, mime, size):
+        self._seq += 1
         self._by_id[media_id] = {"id": media_id, "owner": owner, "mime": mime, "size": int(size),
-                                 "target_type": None, "target_id": None, "peers": None}
+                                 "target_type": None, "target_id": None, "peers": None,
+                                 "created_at": time.time() + self._seq * 1e-6}
 
     def get(self, media_id):
         rec = self._by_id.get(media_id)

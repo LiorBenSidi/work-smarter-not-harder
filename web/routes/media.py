@@ -119,9 +119,12 @@ def _attach(target_type, target_id, peers=None):
 
 
 def _list(target_type, target_id):
+    # `owner` + `created_at` let the DM view weave each image into the message timeline (right column for
+    # the sender, at the moment it was shared) instead of a separate strip. The forum grid ignores them.
     recs = _media().list_for_target(target_type, target_id)
-    return jsonify(attachments=[{"id": r["id"], "url": f"/media/{r['id']}", "mime": r["mime"]}
-                                for r in recs]), 200
+    return jsonify(attachments=[{"id": r["id"], "url": f"/media/{r['id']}", "mime": r["mime"],
+                                 "owner": r.get("owner"), "created_at": r.get("created_at", 0)}
+                                for r in sorted(recs, key=lambda r: r.get("created_at", 0))]), 200
 
 
 @media_bp.post("/forum/posts/<post_id>/attachments")
