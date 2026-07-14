@@ -493,10 +493,22 @@
     .trend-axis { display:flex; flex-direction:column; justify-content:space-between; text-align:right;
       font-size:9px; font-weight:800; letter-spacing:.04em; text-transform:uppercase; color:var(--muted);
       padding:2px 0; white-space:nowrap; }
+    /* Taller on desktop so the Rest↔Ready swing reads clearly (66px stretched full-width looked flat/squished). */
+    @media (min-width: 860px) { .trend svg { height:120px; } }
+    /* x-axis (time) labels under the plot — indented past the level labels so they sit under the line. */
+    .trend-xaxis { display:flex; justify-content:space-between; margin:5px 0 0 50px;
+      font-size:9.5px; font-weight:700; color:var(--muted); font-family:var(--font-mono); }
     /* Readiness calendar heatmap (FitTrackee pattern) — a GitHub-style grid, one cell per day over the last
        N weeks, tinted by that day's readiness state (mint/amber/pink) or dim if no check-in. Both platforms. */
     .heat { margin:0 0 16px; }
-    .heatgrid { display:grid; grid-auto-flow:column; grid-template-rows:repeat(7, 1fr); gap:3px; margin:2px 0 0; }
+    /* [day-of-week labels][grid] side by side; the grid's 8 week-columns stretch to fill the width. */
+    .heat-plot { display:flex; gap:6px; align-items:stretch; margin-top:2px; }
+    .heat-days { display:grid; grid-template-rows:repeat(7, 1fr); gap:3px; font-size:9px; font-weight:800; color:var(--muted); }
+    .heat-days span { display:flex; align-items:center; justify-content:flex-end; line-height:1; min-width:11px; }
+    .heatgrid { display:grid; grid-auto-flow:column; grid-auto-columns:1fr; grid-template-rows:repeat(7, 1fr); gap:3px; flex:1; min-width:0; }
+    /* x-axis (weeks) direction under the grid, indented past the day labels. */
+    .heat-xaxis { display:flex; justify-content:space-between; margin:6px 0 0 17px; font-size:9px; font-weight:700;
+      letter-spacing:.04em; text-transform:uppercase; color:var(--muted); }
     .heat-cell { aspect-ratio:1; border-radius:3px; background:var(--field); }
     .heat-cell.on { background: color-mix(in srgb, var(--st) 60%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--st) 40%, transparent); }
     .heat-cell.future { opacity:.2; }
@@ -725,6 +737,26 @@
 
     /* per-field explanatory helper text under a check-in / profile input */
     .hint { display:block; margin-top:5px; font-size:11.5px; line-height:1.3; color:var(--muted); }
+    /* Check-in scales — segmented 0/1–10 pickers (Fatigue/Soreness/Training load). Tap over typing: bigger
+       targets on mobile, and the value can never be out of range. `--h` (set inline per button) tints the scale
+       green→red for the "bad" tone (higher = worse) and a neutral mint for "load". */
+    .range-tag { display:inline-block; margin-left:7px; padding:1px 8px; border-radius:999px; font-size:11px; font-weight:700;
+      color:var(--muted); background:var(--field); border:1px solid var(--line); vertical-align:middle; }
+    .scale-field { margin-top:14px; }
+    .scale { display:flex; flex-wrap:wrap; gap:6px; margin-top:7px; }
+    .scale button { flex:1 1 0; min-width:32px; min-height:42px; padding:0; border-radius:12px; font-family:var(--font-mono);
+      font-size:14px; font-weight:800; color:var(--ink); cursor:pointer; box-shadow:none;
+      background:color-mix(in srgb, hsl(var(--h) 72% 52%) 13%, var(--field));
+      border:1px solid var(--line); transition:transform .1s var(--ease), box-shadow .15s, background .15s, color .15s; }
+    .scale button:hover { background:color-mix(in srgb, hsl(var(--h) 72% 52%) 26%, var(--field)); filter:none; }
+    .scale button.sel { color:#fff; border-color:transparent; transform:translateY(-1px);
+      background:hsl(var(--h) 66% 46%); box-shadow:0 7px 18px -7px hsl(var(--h) 66% 46% / .65); }
+    .scale button:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+    /* Live validation on the typed fields: red rim + a hint the moment a NON-empty value is out of range. */
+    .field-err { display:block; margin-top:5px; font-size:11.5px; line-height:1.3; color:#e5484d; font-weight:600; }
+    input.invalid { border-color:#e5484d !important; }
+    /* Submit stays greyed (but still clickable, to surface WHY) until every field is valid. */
+    button.block:disabled, button.block[aria-disabled="true"] { opacity:.42; filter:grayscale(.45); box-shadow:none; cursor:not-allowed; }
     /* greyed "example" readiness card shown before the first check-in (the no-profile empty state) */
     .ex { opacity:.5; filter:grayscale(.35); pointer-events:none; margin-top:6px; }
     .ex-tag { display:inline-block; margin-bottom:10px; padding:2px 9px; border-radius:999px; font-size:11px;
@@ -924,18 +956,37 @@
             <h2><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20V10M6 20v-4M18 20V6"/></svg><span class="grow">Daily check-in</span></h2>
             <form id="checkin-form">
               <div class="row">
-                <div><label for="sleep_hours">Sleep (hours)</label><input id="sleep_hours" name="sleep_hours" type="number" min="1" max="24" step="0.1" required>
-                  <small class="hint">How long you slept last night.</small></div>
-                <div><label for="resting_hr">Resting HR (bpm)</label><input id="resting_hr" name="resting_hr" type="number" min="30" max="220" required>
-                  <small class="hint">Beats per minute before getting up. Above your norm signals fatigue.</small></div>
-                <div><label for="fatigue">Fatigue (1–10)</label><input id="fatigue" name="fatigue" type="number" min="1" max="10" required>
-                  <small class="hint">How drained you feel: 1 fresh, 10 exhausted.</small></div>
-                <div><label for="soreness">Soreness (1–10)</label><input id="soreness" name="soreness" type="number" min="1" max="10" required>
-                  <small class="hint">Muscle soreness right now: 1 none, 10 very sore.</small></div>
-                <div><label for="training_load">Training load (0–10)</label><input id="training_load" name="training_load" type="number" min="0" max="10" required>
-                  <small class="hint">Yesterday's effort: 0 rest day, 10 max session.</small></div>
+                <div><label for="sleep_hours">Sleep <span class="range-tag">1–24 h</span></label>
+                  <input id="sleep_hours" name="sleep_hours" type="number" min="1" max="24" step="0.1" inputmode="decimal" required>
+                  <small class="hint">How long you slept last night.</small>
+                  <small class="field-err" data-for="sleep_hours" hidden>Enter a number from 1 to 24.</small></div>
+                <div><label for="resting_hr">Resting HR <span class="range-tag">30–220 bpm</span></label>
+                  <input id="resting_hr" name="resting_hr" type="number" min="30" max="220" inputmode="numeric" required>
+                  <small class="hint">Beats per minute before getting up. Above your norm signals fatigue.</small>
+                  <small class="field-err" data-for="resting_hr" hidden>Enter a number from 30 to 220.</small></div>
               </div>
-              <div style="margin-top:16px"><button type="submit" class="block">Submit check-in</button></div>
+              <!-- Fatigue / Soreness / Training load: tap a number on a colour-coded scale (green→red = higher/worse
+                   for fatigue+soreness; neutral mint for load). A hidden input carries the value so the POST body is
+                   unchanged; a picker can't hold an out-of-range value, so these are valid the moment they're set. -->
+              <div class="scale-field">
+                <label id="fatigue-lab">Fatigue <span class="range-tag">1–10</span></label>
+                <div class="scale" role="radiogroup" aria-labelledby="fatigue-lab" data-field="fatigue" data-min="1" data-max="10" data-tone="bad"></div>
+                <input type="hidden" id="fatigue" name="fatigue">
+                <small class="hint">How drained you feel: 1 fresh, 10 exhausted.</small>
+              </div>
+              <div class="scale-field">
+                <label id="soreness-lab">Soreness <span class="range-tag">1–10</span></label>
+                <div class="scale" role="radiogroup" aria-labelledby="soreness-lab" data-field="soreness" data-min="1" data-max="10" data-tone="bad"></div>
+                <input type="hidden" id="soreness" name="soreness">
+                <small class="hint">Muscle soreness right now: 1 none, 10 very sore.</small>
+              </div>
+              <div class="scale-field">
+                <label id="load-lab">Training load <span class="range-tag">0–10</span></label>
+                <div class="scale" role="radiogroup" aria-labelledby="load-lab" data-field="training_load" data-min="0" data-max="10" data-tone="load"></div>
+                <input type="hidden" id="training_load" name="training_load">
+                <small class="hint">Yesterday's effort: 0 rest day, 10 max session.</small>
+              </div>
+              <div style="margin-top:16px"><button type="submit" class="block" aria-disabled="true">Submit check-in</button></div>
               <div id="checkin-flash" class="flash" aria-live="polite"></div>
             </form>
           </div>
@@ -970,10 +1021,13 @@
               <textarea name="body" placeholder="Share something…" aria-label="Post body" rows="2" required style="margin-top:8px;resize:vertical"></textarea>
               <label style="display:flex;align-items:center;gap:8px;margin-top:8px;font-weight:600"><input type="checkbox" name="anonymous" style="width:auto"> Post anonymously</label>
               <div style="display:flex;align-items:center;gap:10px;margin-top:10px;flex-wrap:wrap">
-                <label class="ghost" style="cursor:pointer;display:inline-flex;align-items:center;gap:6px;padding:8px 12px;border-radius:10px;font-weight:600;font-size:14px">
-                  <input type="file" id="forum-files" accept="image/png,image/jpeg,image/webp,image/gif,video/mp4" multiple hidden>📎 Add photos</label>
+                <label class="ghost" style="cursor:pointer;display:inline-flex;align-items:center;gap:7px;padding:8px 12px;border-radius:10px;font-weight:600;font-size:14px" title="Attach photos or a clip — PNG, JPEG, WebP, GIF or MP4, up to 10 MB">
+                  <input type="file" id="forum-files" accept="image/png,image/jpeg,image/webp,image/gif,video/mp4" multiple hidden>
+                  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+                  <span>Add photos</span></label>
                 <span id="forum-files-hint" class="muted" style="font-size:12px"></span>
               </div>
+              <div class="dm-attach-hint muted" style="margin-top:6px">PNG · JPEG · WebP · GIF · MP4 · up to 10 MB</div>
               <div style="margin-top:10px"><button type="submit" class="block">Post</button></div>
               <div id="forum-flash" class="flash" aria-live="polite"></div>
             </form>
@@ -1704,7 +1758,68 @@
     });
 
     // ---- Daily check-in ----
+    // ---- Daily check-in: colour-coded tap scales + live validation ----
+    const CI_RANGE = { sleep_hours: [1, 24], resting_hr: [30, 220] };   // the two typed (continuous) fields
+    // Build each 0/1–10 scale from its data-min/max/tone; a hidden input carries the chosen value.
+    function buildScales() {
+      document.querySelectorAll(".scale").forEach((sc) => {
+        const min = +sc.dataset.min, max = +sc.dataset.max, bad = sc.dataset.tone === "bad";
+        let html = "";
+        for (let v = min; v <= max; v++) {
+          const t = (v - min) / (max - min);                       // 0..1 along the scale
+          const h = bad ? Math.round(150 * (1 - t)) : 168;         // green→red for "bad"; mint for "load"
+          html += '<button type="button" role="radio" aria-checked="false" data-v="' + v + '" style="--h:' + h + '">' + v + '</button>';
+        }
+        sc.innerHTML = html;
+        const input = $(sc.dataset.field);
+        sc.addEventListener("click", (e) => {
+          const b = e.target.closest("button[data-v]"); if (!b) return;
+          sc.querySelectorAll("button").forEach((x) => { x.classList.toggle("sel", x === b); x.setAttribute("aria-checked", x === b ? "true" : "false"); });
+          input.value = b.dataset.v;
+          updateCheckinValidity();
+        });
+      });
+    }
+    function ciNumValid(id) {
+      const el = $(id), v = Number(el.value), [lo, hi] = CI_RANGE[id];
+      return el.value.trim() !== "" && !Number.isNaN(v) && v >= lo && v <= hi;
+    }
+    function validateCheckin() {
+      return ciNumValid("sleep_hours") && ciNumValid("resting_hr")
+        && $("fatigue").value !== "" && $("soreness").value !== "" && $("training_load").value !== "";
+    }
+    // Grey the Submit button (via aria-disabled — kept separate from onSubmit's in-flight `disabled` so they
+    // never fight) until every field is valid. It stays clickable so a tap can still surface WHY it's greyed.
+    function updateCheckinValidity() {
+      const btn = document.querySelector("#checkin-form button[type=submit]");
+      if (btn) btn.setAttribute("aria-disabled", validateCheckin() ? "false" : "true");
+    }
+    function resetCheckinScales() {
+      document.querySelectorAll("#checkin-form .scale button.sel").forEach((b) => { b.classList.remove("sel"); b.setAttribute("aria-checked", "false"); });
+      document.querySelectorAll("#checkin-form .scale").forEach((sc) => { const i = $(sc.dataset.field); if (i) i.value = ""; });
+      ["sleep_hours", "resting_hr"].forEach((id) => $(id).classList.remove("invalid"));
+      document.querySelectorAll("#checkin-form .field-err").forEach((e) => (e.hidden = true));
+    }
+    buildScales();
+    ["sleep_hours", "resting_hr"].forEach((id) => {
+      const el = $(id), err = document.querySelector('.field-err[data-for="' + id + '"]');
+      el.addEventListener("input", () => {
+        const ok = ciNumValid(id), empty = el.value.trim() === "";
+        el.classList.toggle("invalid", !empty && !ok);            // only flag a NON-empty out-of-range value
+        if (err) err.hidden = ok || empty;
+        updateCheckinValidity();
+      });
+    });
+    updateCheckinValidity();                                       // start greyed — nothing filled yet
+
     onSubmit("checkin-form", async (f) => {
+      if (!validateCheckin()) {                                    // clicked while greyed → say why, don't POST
+        ["sleep_hours", "resting_hr"].forEach((id) => {
+          if (!ciNumValid(id)) { $(id).classList.add("invalid"); const e = document.querySelector('.field-err[data-for="' + id + '"]'); if (e) e.hidden = false; }
+        });
+        flash("checkin-flash", "Fill every field with a valid value first.");
+        return;
+      }
       const body = {
         sleep_hours: Number(f.sleep_hours.value),
         resting_hr: Number.parseInt(f.resting_hr.value, 10),
@@ -1714,7 +1829,7 @@
       };
       const r = await api("/checkin", { method: "POST", body });
       if (r.ok) {
-        flash("checkin-flash", "Check-in saved.", "ok"); f.reset();
+        flash("checkin-flash", "Check-in saved.", "ok"); f.reset(); resetCheckinScales(); updateCheckinValidity();
         // Await BOTH loaders (each rebuilds the stat strip) so the count-up runs once, after they settle —
         // no re-render race. fresh:true triggers the recs cascade + is the only path that animates.
         await Promise.all([loadDashboard({ fresh: true }), loadHistory()]);
@@ -2110,8 +2225,11 @@
     function renderTrend(items) {
       const el = $("history-trend"); if (!el) return;
       const level = (a) => { const [c] = readinessClass(a); return c === "ready" ? 3 : c === "moderate" ? 2 : c === "rest" ? 1 : 0; };
-      const pts = items.map((it) => level(it && it.assessment)).filter((v) => v > 0);
-      if (pts.length < 2) { el.innerHTML = ""; return; }
+      const leveled = items.map((it) => ({ v: level(it && it.assessment), t: (it && it.timestamp) || "" })).filter((o) => o.v > 0);
+      if (leveled.length < 2) { el.innerHTML = ""; return; }
+      const pts = leveled.map((o) => o.v);
+      const fmtD = (ts) => { const d = new Date(ts); return isNaN(d.getTime()) ? "" : d.toLocaleDateString([], { month: "short", day: "numeric" }); };
+      const xFrom = fmtD(leveled[0].t) || "Earlier", xTo = fmtD(leveled[leveled.length - 1].t) || "Latest";
       const W = 100, H = 26, n = pts.length;
       const xy = pts.map((v, i) => [i * (W / (n - 1)), H - ((v - 1) / 2) * H]);
       const path = xy.map((c, i) => (i ? "L" : "M") + c[0].toFixed(1) + " " + c[1].toFixed(1)).join(" ");
@@ -2124,7 +2242,8 @@
         + '<div class="trend-axis" aria-hidden="true"><span>Ready</span><span>Moderate</span><span>Rest</span></div>'
         + '<div class="readiness ' + cls + '"><svg viewBox="0 0 ' + W + " " + H + '" preserveAspectRatio="none" role="img" aria-label="Readiness trend over the last ' + n + ' check-ins, moving between Rest, Moderate and Ready">'
         + '<path d="' + path + '" fill="none" stroke="var(--st)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>'
-        + dots + "</svg></div></div>";
+        + dots + "</svg></div></div>"
+        + '<div class="trend-xaxis" aria-hidden="true"><span>' + escapeHtml(xFrom) + '</span><span>' + escapeHtml(xTo) + '</span></div>';
     }
     // Readiness calendar heatmap (FitTrackee) — one cell per day over the last WEEKS weeks, tinted by that
     // day's readiness state. Column-major 7-row grid = GitHub-style; start aligned to a Sunday so rows are
@@ -2147,7 +2266,10 @@
           + '" title="' + k + (cls ? " · " + cls : "") + '"></span>';
         cur.setDate(cur.getDate() + 1);
       }
-      el.innerHTML = '<p class="trend-cap">Last ' + WEEKS + ' weeks</p><div class="heatgrid">' + cells + "</div>"
+      el.innerHTML = '<p class="trend-cap">Last ' + WEEKS + ' weeks</p>'
+        + '<div class="heat-plot"><div class="heat-days" aria-hidden="true"><span>S</span><span>M</span><span>T</span><span>W</span><span>T</span><span>F</span><span>S</span></div>'
+        + '<div class="heatgrid">' + cells + '</div></div>'
+        + '<div class="heat-xaxis" aria-hidden="true"><span>' + WEEKS + ' weeks ago</span><span>This week</span></div>'
         + '<div class="heat-legend"><span class="readiness ready"><i style="--lc:var(--ready)"></i></span>Ready'
         + '<span class="readiness moderate"><i style="--lc:var(--moderate)"></i></span>Moderate'
         + '<span class="readiness rest"><i style="--lc:var(--rest)"></i></span>Rest</div>';
@@ -2458,6 +2580,10 @@
     async function openThread(peer) {
       dmPeer = peer;
       $("dm-list-view").hidden = true; $("dm-thread-view").hidden = false;
+      // Clear the PREVIOUS thread BEFORE the fetch — otherwise switching DMs flashes the last peer's messages
+      // and name until renderThread's async load resolves. Skeleton rows stand in while this thread loads.
+      $("dm-thread").innerHTML = '<div class="sk" style="height:42px;width:62%;border-radius:16px"></div><div class="sk" style="height:42px;width:72%;margin-left:auto;border-radius:16px"></div>';
+      $("dm-thread-peer").textContent = "";
       updateCtxBack();                                       // a thread is open -> show the Back chevron
       await renderThread();                     // renders messages AND sets the peer header from the resolved name
       $("dm-reply").focus();
@@ -2770,6 +2896,7 @@
       // a previous account's residue must not survive a same-browser user switch (reset BEFORE we
       // repopulate the display-name field below, so the reset can't wipe the fresh value)
       ["profile-form", "checkin-form", "forum-form", "dm-new-form", "password-form"].forEach((id) => $(id).reset());
+      resetCheckinScales(); updateCheckinValidity();   // form.reset() clears the hidden inputs but not the scale UI/validity — sync them
       ["profile-flash", "checkin-flash", "forum-flash", "dm-new-flash", "displayname-flash", "password-flash", "privacy-flash"].forEach((id) => flash(id, "", "ok"));
       resetDeleteUI();                          // collapse the delete-account card + clear any typed "DELETE" from a prior session
       setShownName(name || handle);             // the non-unique DISPLAY name (what people see)
