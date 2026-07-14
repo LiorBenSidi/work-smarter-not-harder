@@ -1005,10 +1005,13 @@
               <textarea name="body" placeholder="Share something…" aria-label="Post body" rows="2" required style="margin-top:8px;resize:vertical"></textarea>
               <label style="display:flex;align-items:center;gap:8px;margin-top:8px;font-weight:600"><input type="checkbox" name="anonymous" style="width:auto"> Post anonymously</label>
               <div style="display:flex;align-items:center;gap:10px;margin-top:10px;flex-wrap:wrap">
-                <label class="ghost" style="cursor:pointer;display:inline-flex;align-items:center;gap:6px;padding:8px 12px;border-radius:10px;font-weight:600;font-size:14px">
-                  <input type="file" id="forum-files" accept="image/png,image/jpeg,image/webp,image/gif,video/mp4" multiple hidden>📎 Add photos</label>
+                <label class="ghost" style="cursor:pointer;display:inline-flex;align-items:center;gap:7px;padding:8px 12px;border-radius:10px;font-weight:600;font-size:14px" title="Attach photos or a clip — PNG, JPEG, WebP, GIF or MP4, up to 10 MB">
+                  <input type="file" id="forum-files" accept="image/png,image/jpeg,image/webp,image/gif,video/mp4" multiple hidden>
+                  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+                  <span>Add photos</span></label>
                 <span id="forum-files-hint" class="muted" style="font-size:12px"></span>
               </div>
+              <div class="dm-attach-hint muted" style="margin-top:6px">PNG · JPEG · WebP · GIF · MP4 · up to 10 MB</div>
               <div style="margin-top:10px"><button type="submit" class="block">Post</button></div>
               <div id="forum-flash" class="flash" aria-live="polite"></div>
             </form>
@@ -2550,6 +2553,10 @@
     async function openThread(peer) {
       dmPeer = peer;
       $("dm-list-view").hidden = true; $("dm-thread-view").hidden = false;
+      // Clear the PREVIOUS thread BEFORE the fetch — otherwise switching DMs flashes the last peer's messages
+      // and name until renderThread's async load resolves. Skeleton rows stand in while this thread loads.
+      $("dm-thread").innerHTML = '<div class="sk" style="height:42px;width:62%;border-radius:16px"></div><div class="sk" style="height:42px;width:72%;margin-left:auto;border-radius:16px"></div>';
+      $("dm-thread-peer").textContent = "";
       updateCtxBack();                                       // a thread is open -> show the Back chevron
       await renderThread();                     // renders messages AND sets the peer header from the resolved name
       $("dm-reply").focus();
