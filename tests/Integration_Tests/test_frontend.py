@@ -105,6 +105,16 @@ def test_daily_checkin_section_present_and_wired(client):
         assert f'name="{field}"' in html
 
 
+def test_slack_inspired_polish_present(client):
+    # Slack-style polish: an unread COUNT on the Chat nav (not just a dot), a recent-chats avatar strip,
+    # and a frosted backdrop behind the open account menu.
+    html = client.get("/").get_data(as_text=True)
+    assert 'id="dm-avatar-strip"' in html and "function renderAvatarStrip(" in html   # recent-chats avatar row
+    assert 'id="menu-backdrop"' in html and 'class="menu-backdrop"' in html            # menu frost element
+    assert "bd.hidden = false" in html and "bd.hidden = true" in html                  # backdrop toggled with the menu
+    assert "d.textContent = n > 0 ? label" in html                                     # the nav badge shows a count, not just a dot
+
+
 def test_register_hints_are_fetched_from_the_config_endpoint(client):
     # the credential hints are JS-driven from /auth/config (single source of truth), not hardcoded.
     html = client.get("/").get_data(as_text=True)

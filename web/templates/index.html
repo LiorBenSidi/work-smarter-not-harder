@@ -622,10 +622,28 @@
     .navlink.active { color:var(--brand); background: color-mix(in srgb, var(--brand) 13%, transparent); }
     .navlink:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
     /* notification "pulse" on the Chat entry (either nav) — a calm breathing mint dot, not a red count bubble */
-    .dm-dot { width:8px; height:8px; border-radius:50%; background:var(--accent); box-shadow:0 0 8px var(--accent);
-      animation: breathe 2.6s ease-in-out infinite; flex:none; }
-    .tab .dm-dot { position:absolute; top:6px; right:calc(50% - 17px); }
-    .navlink .dm-dot { position:absolute; top:7px; right:10px; }
+    /* Unread COUNT badge (Slack's count pill) — the Chat nav shows the number of unread items, not just a dot. */
+    .dm-dot { min-width:16px; height:16px; padding:0 4px; border-radius:999px; background:var(--accent); color:var(--on-accent);
+      font-family:var(--font-mono); font-size:10px; font-weight:800; line-height:16px; text-align:center;
+      box-shadow:0 0 8px color-mix(in srgb, var(--accent) 55%, transparent); animation: breathe 2.6s ease-in-out infinite; flex:none; }
+    .tab .dm-dot { position:absolute; top:2px; right:calc(50% - 23px); }
+    .navlink .dm-dot { position:absolute; top:1px; right:2px; }
+    /* Recent-chats avatar row (Slack's DMs top strip) — one-tap access to recent conversations. */
+    .dm-avatars { display:flex; gap:14px; overflow-x:auto; padding:2px 2px 12px; margin:2px 0 4px; scrollbar-width:none; }
+    .dm-avatars::-webkit-scrollbar { display:none; }
+    .dm-av { flex:none; width:58px; background:none; border:0; padding:0; cursor:pointer; position:relative;
+      display:flex; flex-direction:column; align-items:center; gap:6px; }
+    .dm-av .avatar { transition:transform .12s var(--ease); }
+    .dm-av:hover .avatar { transform:translateY(-2px); }
+    .dm-av-name { font-size:11px; font-weight:600; color:var(--muted); max-width:58px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .dm-av-badge { position:absolute; top:-3px; right:6px; min-width:17px; height:17px; padding:0 4px; border-radius:999px;
+      background:linear-gradient(135deg,var(--accent),var(--accent2)); color:var(--on-accent); font-size:10px; font-weight:800;
+      line-height:17px; text-align:center; box-shadow:0 0 0 2px var(--card-solid); }
+    /* Frosted backdrop behind the open account menu (Slack's sheet frost) — dims + blurs the content below. */
+    .menu-backdrop { position:fixed; inset:0; z-index:29; background:rgba(6,10,20,.28);
+      -webkit-backdrop-filter:blur(3px) saturate(1.1); backdrop-filter:blur(3px) saturate(1.1); animation:fadeIn .16s var(--ease); }
+    .menu-backdrop[hidden] { display:none; }
+    @keyframes fadeIn { from { opacity:0; } to { opacity:1; } }
     @media (min-width: 860px) {
       .tabbar { display:none; }
       .topnav.nav-on { display:flex; }          /* only when signed in (nav-on) — not on the logged-out auth screen */
@@ -1006,6 +1024,7 @@
             <div class="card">
               <h2><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H8l-4 4V5a2 2 0 0 1 2-2h13a2 2 0 0 1 2 2z"/></svg><span class="grow">Conversations</span>
                 <button id="dm-refresh" class="ghost mini">Refresh</button></h2>
+              <div id="dm-avatar-strip" class="dm-avatars" hidden></div>
               <div id="dm-conversations"><div class="sk" style="height:60px"></div><div class="sk" style="height:60px"></div></div>
             </div>
             <div class="card">
@@ -1143,6 +1162,8 @@
        backdrop-filter, which would make it the containing block for this position:fixed button and pin it to
        the header instead of the viewport. Kept out here so `bottom:12px` is viewport-relative. -->
   <button id="ctx-back" class="ctx-back" type="button" hidden aria-label="Go to Today"></button>
+  <!-- Frosted backdrop behind the open account menu (body-level so its blur covers the whole viewport). -->
+  <div id="menu-backdrop" class="menu-backdrop" hidden></div>
 
   <!-- Debug tools (DEBUG only, never in live mode / inside the preview iframe). See wireDebugTools().
        Omitted server-side when this shell is the mobile-preview iframe (?preview=1): the preview must
@@ -1426,7 +1447,10 @@
     }
     document.querySelectorAll("[data-screen]").forEach((t) => t.addEventListener("click", () => showScreen(t.dataset.screen)));
     // the Chat unread "pulse" now lives on both navs (mobile bottom pill + desktop top-nav) -> toggle every .dm-dot
-    function setDmDot(on) { document.querySelectorAll(".dm-dot").forEach((d) => { d.hidden = !on; }); }
+    function setDmDot(count) {
+      const n = Math.max(0, Number(count) || 0), label = n > 99 ? "99+" : String(n);   // count pill; hidden at 0
+      document.querySelectorAll(".dm-dot").forEach((d) => { d.hidden = n <= 0; d.textContent = n > 0 ? label : ""; });
+    }
 
     // ---- Home FAB: shown off-Today, hidden on Today — the "home button only when not home" pattern (Wolt).
     // ALWAYS a Home icon (a back chevron there read as confusing) and ALWAYS goes to Today; the drill-in
@@ -2430,13 +2454,25 @@
         + escapeHtml(init) + '</span>';
     }
 
+    // Recent-chats avatar row (Slack's DMs top strip): one-tap access to recent conversations. Hidden when empty.
+    function renderAvatarStrip(cs) {
+      const strip = $("dm-avatar-strip"); if (!strip) return;
+      strip.hidden = !cs.length;
+      strip.innerHTML = cs.slice(0, 12).map((c) =>
+        '<button type="button" class="dm-av" data-peer="' + escapeHtml(c.peer) + '" aria-label="Open chat with ' + escapeHtml(c.peer_name || c.peer) + '">'
+        + avatarHtml(c.peer, 46) + (c.unread ? '<span class="dm-av-badge">' + escapeHtml(c.unread) + '</span>' : '')
+        + '<span class="dm-av-name">' + escapeHtml(c.peer_name || c.peer) + '</span></button>'
+      ).join("");
+      strip.querySelectorAll(".dm-av").forEach((b) => b.addEventListener("click", () => openThread(b.dataset.peer)));
+    }
     async function loadConversations() {
       const u = currentUser;
       const el = $("dm-conversations");
       const r = await api("/conversations");
       if (sessionChanged(u, "loadConversations")) return;    // stale session -> don't paint another user's inbox
-      if (!r.ok) { el.innerHTML = '<p class="flash error">Could not load conversations.</p>'; return; }
+      if (!r.ok) { el.innerHTML = '<p class="flash error">Could not load conversations.</p>'; renderAvatarStrip([]); return; }
       const cs = (r.data && r.data.conversations) || [];
+      renderAvatarStrip(cs);                                 // Slack-style recent-chats row above the list
       if (!cs.length) { setHtmlIfChanged(el, emptyState(EMPTY_ICONS.chat, "No conversations yet", "Send a message above to start one.")); return; }
       const changed = setHtmlIfChanged(el, cs.map((c) =>
         '<div class="dm-row" data-peer="' + escapeHtml(c.peer) + '">' + avatarHtml(c.peer, 40)
@@ -2695,7 +2731,7 @@
       const r = await api("/notifications");
       if (sessionChanged(u, "pollNotifications")) return;  // session switched mid-flight -> ignore this stale poll
       if (r.ok && r.data) {
-        setDmDot(r.data.unread > 0);
+        setDmDot(r.data.unread);
         if (!$("screen-messages").hidden) renderActivity(r.data.notifications || []);  // live-refresh while open
       }
     }
@@ -2735,7 +2771,7 @@
         const dmIds = notes.filter((n) => n.type === "dm" && !n.read).map((n) => n.id);
         if (dmIds.length) await api("/notifications/read", { method: "POST", body: { ids: dmIds } });
         if (sessionChanged(u, "openMessages")) return;
-        setDmDot(notes.filter((n) => n.type !== "dm" && !n.read).length > 0);
+        setDmDot(notes.filter((n) => n.type !== "dm" && !n.read).length);
         renderActivity(notes);                             // vote interactions live in the Activity feed
       }
     }
@@ -2857,10 +2893,12 @@
     function closeUserMenu() {
       const p = $("user-menu-panel"); if (p) p.hidden = true;
       const b = $("user-menu-btn"); if (b) b.setAttribute("aria-expanded", "false");
+      const bd = $("menu-backdrop"); if (bd) bd.hidden = true;   // drop the frosted backdrop
     }
     function openUserMenu() {
       $("user-menu-panel").hidden = false;
       $("user-menu-btn").setAttribute("aria-expanded", "true");
+      const bd = $("menu-backdrop"); if (bd) bd.hidden = false;  // frost the content behind the menu
     }
     (function initUserMenu() {
       const btn = $("user-menu-btn"), panel = $("user-menu-panel");
