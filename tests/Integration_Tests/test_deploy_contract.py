@@ -174,3 +174,13 @@ def test_media_bytes_live_on_a_volume_mounted_by_web_alone():
     assert compose.count("- media-data:/app/media") == 1, "exactly one service (web) mounts media-data"
     # ...and the mount must resolve to a declared named volume, not an implicit host path.
     assert compose.count("media-data") == 2, "media-data must be mounted once and declared once (named volume)"
+
+
+def test_prod_media_bytes_persist_on_the_same_web_volume(prod):
+    # The check above guarded only the BASE compose — so when the prod stack diverged (the media volume
+    # was never added to docker-compose.prod.yml), attachment bytes lived in web's ephemeral layer and
+    # vanished on every redeploy (the Mongo `media` records survived but pointed at 404s). That gap
+    # shipped a whole release before a live redeploy surfaced it. This closes the blind spot: PROD must
+    # mount AND declare the same named volume, so persistence holds on the deployed stack too.
+    assert prod.count("- media-data:/app/media") == 1, "prod web must mount media-data (else uploads are ephemeral)"
+    assert prod.count("media-data") == 2, "prod must MOUNT and DECLARE the media-data named volume"
