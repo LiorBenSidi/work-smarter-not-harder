@@ -17,6 +17,11 @@ logger = logging.getLogger(__name__)
 
 dashboard_bp = Blueprint("dashboard", __name__)
 
+# How many recent check-ins to forward to the AI for trend-aware recommendations. The engine only
+# inspects the last few entries; a small window keeps the /predict body well within the ai container's
+# limit while covering every trend rule (the longest looks back three entries).
+_HISTORY_WINDOW = 10
+
 
 def _finite_number(v):
     """True iff `v` is a real finite number (int/float, not bool, not NaN/Infinity).
@@ -58,9 +63,23 @@ def dashboard():
         return jsonify(profile=profile, readiness=None, calories=None, ai_status="skipped",
                        needs_checkin=True, needs_profile=profile is None), 200
 
+    # Recent history unlocks the AI's trend-aware recommendations (a 3x Rest streak -> "schedule a
+    # recovery day", declining sleep, rising fatigue, a sharp load spike). The engine reads only
+    # entry.metrics + entry.assessment, so we forward exactly those two fields per entry: a small,
+    # JSON-safe payload that's insulated from the rest of the stored entry shape. Bounded to the most
+    # recent window so the request stays well under the ai container's body limit. Fewer than three
+    # entries simply yields no trend items (the engine no-ops), so a new athlete is unaffected.
+    trend_history = [
+        {"metrics": e.get("metrics"), "assessment": e.get("assessment")}
+        for e in entries[-_HISTORY_WINDOW:] if isinstance(e, dict)
+    ]
+
     # profile may be None -> score on the metrics alone ({**{}, **metrics} is just the metrics).
-    prediction = ai_client.predict(current_app.config["AI_URL"], {**(profile or {}), **metrics},
-                                   timeout=current_app.config["AI_CLIENT_TIMEOUT"])
+    prediction = ai_client.predict(
+        current_app.config["AI_URL"],
+        {**(profile or {}), **metrics, "history": trend_history},
+        timeout=current_app.config["AI_CLIENT_TIMEOUT"],
+    )
     if not isinstance(prediction, dict):
         # ai unreachable (None) or a malformed non-object response -> degrade gracefully, never crash
         return jsonify(profile=profile, readiness=None, calories=None, ai_status="unavailable",
