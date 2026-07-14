@@ -493,10 +493,22 @@
     .trend-axis { display:flex; flex-direction:column; justify-content:space-between; text-align:right;
       font-size:9px; font-weight:800; letter-spacing:.04em; text-transform:uppercase; color:var(--muted);
       padding:2px 0; white-space:nowrap; }
+    /* Taller on desktop so the Rest↔Ready swing reads clearly (66px stretched full-width looked flat/squished). */
+    @media (min-width: 860px) { .trend svg { height:120px; } }
+    /* x-axis (time) labels under the plot — indented past the level labels so they sit under the line. */
+    .trend-xaxis { display:flex; justify-content:space-between; margin:5px 0 0 50px;
+      font-size:9.5px; font-weight:700; color:var(--muted); font-family:var(--font-mono); }
     /* Readiness calendar heatmap (FitTrackee pattern) — a GitHub-style grid, one cell per day over the last
        N weeks, tinted by that day's readiness state (mint/amber/pink) or dim if no check-in. Both platforms. */
     .heat { margin:0 0 16px; }
-    .heatgrid { display:grid; grid-auto-flow:column; grid-template-rows:repeat(7, 1fr); gap:3px; margin:2px 0 0; }
+    /* [day-of-week labels][grid] side by side; the grid's 8 week-columns stretch to fill the width. */
+    .heat-plot { display:flex; gap:6px; align-items:stretch; margin-top:2px; }
+    .heat-days { display:grid; grid-template-rows:repeat(7, 1fr); gap:3px; font-size:9px; font-weight:800; color:var(--muted); }
+    .heat-days span { display:flex; align-items:center; justify-content:flex-end; line-height:1; min-width:11px; }
+    .heatgrid { display:grid; grid-auto-flow:column; grid-auto-columns:1fr; grid-template-rows:repeat(7, 1fr); gap:3px; flex:1; min-width:0; }
+    /* x-axis (weeks) direction under the grid, indented past the day labels. */
+    .heat-xaxis { display:flex; justify-content:space-between; margin:6px 0 0 17px; font-size:9px; font-weight:700;
+      letter-spacing:.04em; text-transform:uppercase; color:var(--muted); }
     .heat-cell { aspect-ratio:1; border-radius:3px; background:var(--field); }
     .heat-cell.on { background: color-mix(in srgb, var(--st) 60%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--st) 40%, transparent); }
     .heat-cell.future { opacity:.2; }
@@ -2205,8 +2217,11 @@
     function renderTrend(items) {
       const el = $("history-trend"); if (!el) return;
       const level = (a) => { const [c] = readinessClass(a); return c === "ready" ? 3 : c === "moderate" ? 2 : c === "rest" ? 1 : 0; };
-      const pts = items.map((it) => level(it && it.assessment)).filter((v) => v > 0);
-      if (pts.length < 2) { el.innerHTML = ""; return; }
+      const leveled = items.map((it) => ({ v: level(it && it.assessment), t: (it && it.timestamp) || "" })).filter((o) => o.v > 0);
+      if (leveled.length < 2) { el.innerHTML = ""; return; }
+      const pts = leveled.map((o) => o.v);
+      const fmtD = (ts) => { const d = new Date(ts); return isNaN(d.getTime()) ? "" : d.toLocaleDateString([], { month: "short", day: "numeric" }); };
+      const xFrom = fmtD(leveled[0].t) || "Earlier", xTo = fmtD(leveled[leveled.length - 1].t) || "Latest";
       const W = 100, H = 26, n = pts.length;
       const xy = pts.map((v, i) => [i * (W / (n - 1)), H - ((v - 1) / 2) * H]);
       const path = xy.map((c, i) => (i ? "L" : "M") + c[0].toFixed(1) + " " + c[1].toFixed(1)).join(" ");
@@ -2219,7 +2234,8 @@
         + '<div class="trend-axis" aria-hidden="true"><span>Ready</span><span>Moderate</span><span>Rest</span></div>'
         + '<div class="readiness ' + cls + '"><svg viewBox="0 0 ' + W + " " + H + '" preserveAspectRatio="none" role="img" aria-label="Readiness trend over the last ' + n + ' check-ins, moving between Rest, Moderate and Ready">'
         + '<path d="' + path + '" fill="none" stroke="var(--st)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>'
-        + dots + "</svg></div></div>";
+        + dots + "</svg></div></div>"
+        + '<div class="trend-xaxis" aria-hidden="true"><span>' + escapeHtml(xFrom) + '</span><span>' + escapeHtml(xTo) + '</span></div>';
     }
     // Readiness calendar heatmap (FitTrackee) — one cell per day over the last WEEKS weeks, tinted by that
     // day's readiness state. Column-major 7-row grid = GitHub-style; start aligned to a Sunday so rows are
@@ -2242,7 +2258,10 @@
           + '" title="' + k + (cls ? " · " + cls : "") + '"></span>';
         cur.setDate(cur.getDate() + 1);
       }
-      el.innerHTML = '<p class="trend-cap">Last ' + WEEKS + ' weeks</p><div class="heatgrid">' + cells + "</div>"
+      el.innerHTML = '<p class="trend-cap">Last ' + WEEKS + ' weeks</p>'
+        + '<div class="heat-plot"><div class="heat-days" aria-hidden="true"><span>S</span><span>M</span><span>T</span><span>W</span><span>T</span><span>F</span><span>S</span></div>'
+        + '<div class="heatgrid">' + cells + '</div></div>'
+        + '<div class="heat-xaxis" aria-hidden="true"><span>' + WEEKS + ' weeks ago</span><span>This week</span></div>'
         + '<div class="heat-legend"><span class="readiness ready"><i style="--lc:var(--ready)"></i></span>Ready'
         + '<span class="readiness moderate"><i style="--lc:var(--moderate)"></i></span>Moderate'
         + '<span class="readiness rest"><i style="--lc:var(--rest)"></i></span>Rest</div>';
