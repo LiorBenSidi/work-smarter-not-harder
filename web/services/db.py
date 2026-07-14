@@ -502,14 +502,17 @@ def forum_delete_post(db, post_id, username):
 # ever read a thread they are part of — that IS the DM-privacy guarantee. Inputs are type-validated first.
 
 def _message_shape(m):
+    # `delivered` + `read` drive the WhatsApp-style sender ticks: sent (stored) -> delivered (reached the
+    # recipient's inbox) -> read (recipient opened the thread). `read` always implies `delivered`.
     return {"id": m["id"], "sender": m["sender"], "recipient": m["recipient"],
-            "body": m["body"], "created_at": m.get("created_at", 0), "read": m.get("read", False)}
+            "body": m["body"], "created_at": m.get("created_at", 0),
+            "delivered": m.get("delivered", False), "read": m.get("read", False)}
 
 
 def message_send(db, sender, recipient, body):
     """Store a direct message and return its public shape."""
     msg = {"id": uuid.uuid4().hex, "sender": sender, "recipient": recipient, "body": body,
-           "created_at": time.time(), "read": False}
+           "created_at": time.time(), "delivered": False, "read": False}
     db.messages.insert_one(msg)
     return _message_shape(msg)
 
@@ -534,9 +537,18 @@ def message_list_conversations(db, user):
     return sorted(convos.values(), key=lambda c: c["last_at"], reverse=True)
 
 
+def message_mark_delivered(db, user):
+    """Mark every message `user` has RECEIVED as delivered (their inbox now holds it) — the ticks' middle
+    state. Idempotent; only flips messages not already delivered. Read messages are already delivered."""
+    db.messages.update_many({"recipient": user, "delivered": {"$ne": True}},
+                            {"$set": {"delivered": True}})
+
+
 def message_mark_read(db, user, peer):
-    """Mark every message `user` RECEIVED from `peer` as read (opening the thread clears it)."""
-    db.messages.update_many({"sender": peer, "recipient": user}, {"$set": {"read": True}})
+    """Mark every message `user` RECEIVED from `peer` as read (opening the thread clears it). Reading a
+    message also means it was delivered, so set both — a message can never be read-but-not-delivered."""
+    db.messages.update_many({"sender": peer, "recipient": user},
+                            {"$set": {"read": True, "delivered": True}})
 
 
 def message_count_since(db, user, since):
