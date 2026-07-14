@@ -106,6 +106,53 @@ def test_dashboard_scores_from_the_latest_checkin_metrics(dash_client, monkeypat
     assert seen["goal"] == "maintain"                    # profile context merged in too
 
 
+def test_dashboard_forwards_recent_history_for_trend_recs(dash_client, monkeypatch):
+    # P1: the dashboard forwards recent check-in history to the AI so its trend-aware recommendations
+    # can fire (a 3x Rest streak, declining sleep, rising fatigue, a load spike). We forward ONLY the two
+    # fields the engine reads per entry — {metrics, assessment} — so the payload stays small and JSON-safe
+    # (the raw stored entry also carries a timestamp/calories the engine never looks at). The engine's own
+    # streak logic is covered in test_ai_recommendations; here we prove the WIRING delivers the history.
+    seen = {}
+
+    def capture(url, features, **kw):
+        seen.clear()
+        seen.update(features)
+        return {"state": "Rest", "proba": {"Rest": 0.8}, "recommendations": ["recover"]}
+
+    monkeypatch.setattr(sys.modules["services.ai_client"], "predict", capture)
+    _login(dash_client)
+    dash_client.post("/profile", json=_profile())
+    for _ in range(3):                                   # three Rest check-ins -> a streak to detect
+        _checkin(dash_client, sleep_hours=5, fatigue=8, soreness=6, training_load=7)
+    dash_client.get("/dashboard")                        # the call whose payload we inspect (fires last)
+
+    history = seen.get("history")
+    assert isinstance(history, list) and len(history) == 3
+    for entry in history:                                # each entry is exactly the two fields the engine uses
+        assert set(entry) == {"metrics", "assessment"}
+        assert entry["assessment"] == "Rest"             # stored from the mocked predict state
+        assert isinstance(entry["metrics"], dict) and entry["metrics"]["fatigue"] == 8
+
+
+def test_dashboard_history_forwarded_is_bounded_and_empty_history_is_harmless(dash_client, monkeypatch):
+    # A single check-in yields a one-entry history (no trend, engine no-ops) and the payload still carries a
+    # `history` list — proving a brand-new athlete is unaffected and the key is always well-formed.
+    seen = {}
+
+    def capture(url, features, **kw):
+        seen.clear()
+        seen.update(features)
+        return {"state": "Ready", "proba": {"Ready": 0.9}, "recommendations": ["go"], "calories": 2500}
+
+    monkeypatch.setattr(sys.modules["services.ai_client"], "predict", capture)
+    _login(dash_client)
+    dash_client.post("/profile", json=_profile())
+    _checkin(dash_client)
+    dash_client.get("/dashboard")
+    assert seen.get("history") == [{"metrics": {"sleep_hours": 8, "resting_hr": 55, "fatigue": 3,
+                                                 "soreness": 2, "training_load": 5}, "assessment": "Ready"}]
+
+
 def test_dashboard_uses_the_most_recent_checkin(dash_client, monkeypatch):
     # Two check-ins: the dashboard scores the LATEST (oldest-first history -> [-1]).
     seen = {}
