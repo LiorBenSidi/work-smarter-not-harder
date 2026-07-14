@@ -400,6 +400,19 @@ def test_filter_sort_chips_present_and_wired(client):
     assert "historyFilter" in html and "forumSort" in html         # the filter/sort state drives the render
 
 
+def test_dm_reopen_repaints_even_when_the_thread_is_unchanged(client):
+    # Regression (live bug, 2026-07-15): openThread resets #dm-thread to skeletons with a direct innerHTML=,
+    # which leaves setHtmlIfChanged's per-node __lastHtml cache stale. Re-opening an UNCHANGED thread then
+    # made renderThread compute identical HTML, hit the cache, skip the repaint, and leave the skeletons up
+    # (the thread rendered the FIRST time it was opened and was blank every time after). openThread must
+    # invalidate that cache when it stomps the DOM, so renderThread always repaints on open.
+    html = client.get("/").get_data(as_text=True)
+    start = html.index("async function openThread(")
+    body = html[start:html.index("async function renderThread(", start)]   # the openThread function body
+    assert "__lastHtml" in body and "undefined" in body, \
+        "openThread must clear the setHtmlIfChanged __lastHtml cache when it resets #dm-thread to skeletons"
+
+
 def test_illustrated_empty_states(client):
     # Friendly illustrated empty states (icon + title + guidance) instead of a bare grey line, across
     # History / Forum / DM / the filtered lists (Wolt's empty cards).
