@@ -650,7 +650,10 @@
     .dm-thread-head { display:flex; align-items:center; gap:12px; margin-bottom:14px; }
     .dm-peer { display:flex; align-items:center; gap:10px; font-weight:800; }
     .dm-thread { display:flex; flex-direction:column; gap:8px; max-height:52vh; overflow-y:auto; padding:4px 2px; }
-    .bubble { max-width:78%; padding:9px 13px; border-radius:16px; font-size:14px; line-height:1.35; overflow-wrap:anywhere; }
+    /* flex-shrink:0 — the thread is a flex column; without this, a tall bubble (an image, a long message)
+       gets SHRUNK to fit when the thread overflows, and with overflow:hidden that clips it to a sliver.
+       Bubbles must keep their content height and let the thread SCROLL instead. (Fixes the vanishing image.) */
+    .bubble { max-width:78%; padding:9px 13px; border-radius:16px; font-size:14px; line-height:1.35; overflow-wrap:anywhere; flex-shrink:0; }
     .bubble.them { align-self:flex-start; background:var(--field); border:1px solid var(--line); }
     .bubble.me { align-self:flex-end; color:var(--on-accent); background:var(--accent); }
     /* Signal-style grouping: the TAIL (pointed corner) is only on the LAST bubble of a same-sender run; and
