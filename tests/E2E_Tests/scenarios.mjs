@@ -138,13 +138,47 @@ export const SCENARIOS = [
       assert(shown, "post detail did not render on open");
     },
   },
-  // NOTE: the "attach a photo … renders in the detail" browser scenario was removed. On GitHub's Ubuntu
-  // headless Chrome a file placed on <input type=file> by SCRIPT is dropped when the form submits (a
-  // security measure — real user picks are unaffected), so the upload never fires: green locally, red on CI.
-  // The media contract is covered for real, deterministically, by the HTTP integration + security tests:
-  // tests/Integration_Tests/test_media.py (upload→serve exact bytes, attach-to-post/DM, foreign blob/post →
-  // 403/404) and tests/Security_Tests/test_media_limits.py (413/400/401, DM privacy). See also
-  // test_elad_lane_journey.py. The frontend render itself is verified live + in local headed Chrome.
+  {
+    // REAL media test through the browser. The old version drove the file PICKER + form submit, which
+    // headless CI Chrome breaks: a file placed on <input type=file> by SCRIPT is dropped on form submit
+    // (a browser security measure — genuine user picks are unaffected), so no upload fired → green locally,
+    // red on CI. This version uploads + attaches through the app's REAL endpoints over fetch (a script-built
+    // File in FormData is a normal request, NOT a file-input submit, so it is unaffected), then asserts the
+    // REAL frontend RENDER path: open the post and check an <img src="/media/…"> actually paints in the DOM.
+    name: "forum: media attaches via the real endpoints and renders in the post detail",
+    tags: ["forum", "media"],
+    async fn(b) {
+      await registerAndLogin(b);
+      const setup = await b.pageExec(`(async () => {
+        const csrf = (document.cookie.match(/(?:^|; )csrf_token=([^;]+)/) || [])[1] || "";
+        const jhdr = { "Content-Type": "application/json", "X-CSRF-Token": csrf };
+        const pr = await fetch("/forum/posts", { method: "POST", credentials: "same-origin", headers: jhdr,
+          body: JSON.stringify({ title: "Media render " + Date.now(), body: "attach + render", anonymous: false }) });
+        if (!pr.ok) return { step: "create", status: pr.status };
+        const post = (await pr.json()).post;
+        // a minimal but real PNG (magic + IHDR + IEND); declared image/png, uploaded over fetch
+        const bytes = new Uint8Array([0x89,0x50,0x4e,0x47,0x0d,0x0a,0x1a,0x0a, 0,0,0,13, 0x49,0x48,0x44,0x52,
+          0,0,0,1, 0,0,0,1, 8,6,0,0,0, 0x1f,0x15,0xc4,0x89, 0,0,0,0, 0x49,0x45,0x4e,0x44, 0xae,0x42,0x60,0x82]);
+        const fd = new FormData(); fd.append("file", new File([bytes], "pixel.png", { type: "image/png" }));
+        const mr = await fetch("/media", { method: "POST", credentials: "same-origin", headers: { "X-CSRF-Token": csrf }, body: fd });
+        if (!mr.ok) return { step: "upload", status: mr.status };
+        const media = await mr.json();
+        const ar = await fetch("/forum/posts/" + post.id + "/attachments", { method: "POST", credentials: "same-origin", headers: jhdr,
+          body: JSON.stringify({ attachment_ids: [media.id] }) });
+        if (!ar.ok) return { step: "attach", status: ar.status };
+        return { ok: true, postId: post.id, mediaId: media.id, bound: (await ar.json()).bound };
+      })()`);
+      assert(setup && setup.ok, "media upload+attach via the real endpoints failed: " + JSON.stringify(setup));
+      assert(Array.isArray(setup.bound) && setup.bound.length === 1, "attachment was not bound: " + JSON.stringify(setup));
+      // the REAL frontend render path: reload the forum, open the post, assert the <img> paints from /media/
+      await gotoScreen(b, "forum");
+      await b.waitFor("#forum-list .post");
+      await b.click("#forum-list .post", 1200);
+      await b.waitFor("#post-atts img", { timeout: 7000 });
+      const ok = await b.evaluate(`() => { const im = document.querySelector("#post-atts img"); return !!im && /\\/media\\//.test(im.getAttribute("src") || ""); }`);
+      assert(ok, "the attached photo did not render in the post detail (#post-atts img with a /media/ src)");
+    },
+  },
   {
     name: "forum REGRESSION: voting does not wedge the forum (#forum-detail survives)",
     tags: ["forum", "regression"],

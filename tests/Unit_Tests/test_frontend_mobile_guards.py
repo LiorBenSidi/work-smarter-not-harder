@@ -1,5 +1,10 @@
 """Frontend guard tests — pin the mobile UX fixes so a future edit can't silently regress them.
 
+⚠️ CHEAP EXISTENCE-GUARDS, NOT BEHAVIOR TESTS — they assert markers are PRESENT in the source, not that the
+UX renders correctly. Real interaction/layout behavior is covered by the browser E2E nav/responsive
+scenarios (tests/E2E_Tests); device-specific rendering still needs a human (docs/MOBILE_SMOKE_TEST.md).
+These only catch the "someone deleted the fix" failure mode.
+
 These assert on the *served* template + static assets (structural markers, not pixels). They can't
 prove the iOS-only behaviors render correctly on a real iPhone (overscroll colour, the home-screen
 name), but they DO fail CI the moment the code that produces those behaviors is removed — which is

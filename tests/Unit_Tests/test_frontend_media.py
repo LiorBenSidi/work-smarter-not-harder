@@ -1,8 +1,13 @@
 """Guard the frontend wiring for media attachments (Elad's backend: POST /media -> bind -> serve). OWNER: Lior.
 
-The media BACKEND was complete but had no UI. These pin the frontend integration so it can't silently
-regress: a file picker on the forum-post + DM composers, a multipart uploader (api() is JSON-only), the
-attach calls, and the render of a post's / conversation's attachments.
+⚠️ CHEAP EXISTENCE-GUARDS, NOT BEHAVIOR TESTS. These grep index.html for the presence of the media wiring
+(uploader, file pickers, attach calls, render helpers) — they prove the code EXISTS, not that it WORKS.
+Their only job is to catch an accidental DELETION of critical wiring. The REAL, behavior-level coverage:
+  - tests/E2E_Tests scenario "forum: media attaches via the real endpoints and renders in the post detail"
+    — a real browser proves upload -> attach -> the <img src=/media/…> actually PAINTS in the DOM;
+  - tests/Integration_Tests/test_media.py + tests/Security_Tests/test_media_limits.py — real HTTP:
+    upload->serve EXACT bytes, attach, 403/404/413/401, DM privacy.
+Once that browser render test is trusted in CI, these greps become redundant and can be removed.
 """
 import re
 from pathlib import Path
