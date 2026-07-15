@@ -62,7 +62,7 @@ class Config:
     # takeover). Flip it on only while YOU personally test, then off for the demo.
     AUTH_DEBUG_EMAIL = os.environ.get("AUTH_DEBUG_EMAIL", "0") == "1"
     # Signed-token lifetimes (seconds): password-reset link and (PR-C) the login OTP.
-    RESET_TOKEN_MAX_AGE = _int_env("RESET_TOKEN_MAX_AGE", 1800)     # 30 min
+    RESET_TOKEN_MAX_AGE = _int_env("RESET_TOKEN_MAX_AGE", 600)      # 10 min — a stale reset link (old email) can't reset; matches the OTP window
     # 2-step verification (email OTP on login). On by default in real runs; the test suite turns it off
     # (see the login route) so the existing username+password login tests stay valid.
     OTP_ENABLED = os.environ.get("OTP_ENABLED", "1") == "1"
