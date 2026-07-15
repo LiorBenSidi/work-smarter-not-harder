@@ -2923,7 +2923,7 @@
         if (!$("screen-messages").hidden) renderActivity(r.data.notifications || []);  // live-refresh while open
       }
     }
-    function startDmPolling() { pollNotifications(); clearInterval(dmPollTimer); dmPollTimer = setInterval(pollNotifications, 15000); }
+    function startDmPolling() { pollBackstop(); clearInterval(dmPollTimer); dmPollTimer = setInterval(pollBackstop, 15000); }   // no-SSE fallback also keeps the forum in sync
     function stopDmPolling() { clearInterval(dmPollTimer); clearInterval(dmThreadTimer); dmPollTimer = dmThreadTimer = null; dmPeer = null; }
 
     // ---- Real-time via Server-Sent Events (a persistent server->client push; polling is the fallback) ----
@@ -2946,6 +2946,19 @@
         if (!typing) openPost(currentPostId);                      // detail: new comments / live votes
       }
     }
+    // The 45s poll backstop. Besides the DM/notify catch-up, it SELF-HEALS real-time: EventSource
+    // auto-reconnects a dropped stream (readyState CONNECTING), but a FATAL error leaves it CLOSED
+    // (readyState 2) with no further retries — after which pushes silently stop. If we find it closed,
+    // restart it. And because the forum (unlike DM/notify) has no other backstop, re-sync the forum list
+    // whenever its screen is active while the push path isn't OPEN — so a dropped/late `forum` event can
+    // never leave a stale feed for more than one interval. A no-op while SSE is healthy (readyState 1).
+    function pollBackstop() {
+      if (typeof EventSource !== "undefined" && evtSource && evtSource.readyState === 2) {
+        dbg("SSE was CLOSED — restarting the stream"); startEvents(); return;   // re-arms this timer + reconnects
+      }
+      pollNotifications();                                          // DM/notify pulse (unchanged behaviour)
+      if (currentScreen === "forum" && (!evtSource || evtSource.readyState !== 1)) loadForum({ quiet: true });
+    }
     function startEvents() {
       pollNotifications();                                         // initial pulse from the normal endpoint
       if (typeof EventSource === "undefined") { dbg("SSE unsupported -> polling"); startDmPolling(); return; }   // old browser -> poll
@@ -2954,8 +2967,8 @@
       evtSource.addEventListener("forum", onForumEvent);          // pushed when any forum post/comment/vote changes
       evtSource.onopen = () => dbg("SSE connected");
       evtSource.onerror = () => dbg("SSE error — auto-reconnecting (45s poll is the backstop)");
-      // EventSource auto-reconnects on a drop; a slow poll is the backstop if a proxy buffers the stream.
-      clearInterval(dmPollTimer); dmPollTimer = setInterval(pollNotifications, 45000);
+      // EventSource auto-reconnects on a drop; the poll backstop covers a proxy-buffered OR fatally-closed stream.
+      clearInterval(dmPollTimer); dmPollTimer = setInterval(pollBackstop, 45000);
     }
     function stopEvents() { if (evtSource) { evtSource.close(); evtSource = null; } stopDmPolling(); }
 
