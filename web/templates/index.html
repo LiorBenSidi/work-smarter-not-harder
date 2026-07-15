@@ -1860,12 +1860,25 @@
     });
     updateCheckinValidity();                                       // start greyed — nothing filled yet
 
+    // A check-in is one row per UTC day (#5): a second one today REPLACES today's reading. `today` here is
+    // the UTC date — the exact key the server dedups on — so the warning matches what actually gets replaced.
+    function hasCheckedInToday() {
+      const utcToday = new Date().toISOString().slice(0, 10);
+      return (historyItems || []).some((it) => String((it && it.timestamp) || "").slice(0, 10) === utcToday);
+    }
     onSubmit("checkin-form", async (f) => {
       if (!validateCheckin()) {                                    // clicked while greyed → say why, don't POST
         ["sleep_hours", "resting_hr"].forEach((id) => {
           if (!ciNumValid(id)) { $(id).classList.add("invalid"); const e = document.querySelector('.field-err[data-for="' + id + '"]'); if (e) e.hidden = false; }
         });
         flash("checkin-flash", "Fill every field with a valid value first.");
+        return;
+      }
+      // Make the one-per-day consequence explicit: a second check-in today overwrites today's reading
+      // (readiness + calorie target), it doesn't add a second row. Confirm before replacing.
+      if (hasCheckedInToday() && !confirm(
+        "You've already checked in today.\n\nSubmitting will REPLACE today's reading (readiness + calorie target) with this new one — it won't add a second entry.\n\nReplace today's check-in?")) {
+        flash("checkin-flash", "Kept your earlier check-in for today.", "ok");
         return;
       }
       const body = {
@@ -2317,7 +2330,7 @@
     // days of the week. Empty (no check-in) days stay dim; future cells in the current week are ghosted.
     function renderHeat(items) {
       const el = $("history-heat"); if (!el) return;
-      const WEEKS = 8;
+      const WEEKS = 7;                                        // 7 weeks x 7 days = a square grid (column-major, auto-columns)
       const byDay = {};
       (items || []).forEach((it) => {
         const d = String((it && it.timestamp) || "").slice(0, 10);

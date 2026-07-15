@@ -530,7 +530,7 @@ def test_checkin_submit_frees_the_form_on_save_not_after_the_refresh(client):
     # with the values still selected. On save we reset + re-enable immediately; the refresh + count-up follow.
     html = client.get("/").get_data(as_text=True)
     start = html.index('onSubmit("checkin-form"')
-    handler = html[start:start + 2000]                                            # the check-in submit handler body
+    handler = html[start:start + 2800]                                            # the check-in submit handler body
     assert '"Saving…"' in handler                                                 # in-flight feedback
     assert "await Promise.all([loadDashboard" not in handler                      # the refresh is NOT awaited
     assert "Promise.all([loadDashboard({ fresh: true }), loadHistory()]).then(countUpKcal)" in handler  # ...it's backgrounded
@@ -547,6 +547,25 @@ def test_reset_link_survives_a_service_worker_reload(client):
     assert 'sessionStorage.getItem("pending_reset_token")' in init                # recovered after a reload
     assert 'sessionStorage.removeItem("pending_reset_token")' in init             # ...and consumed (survives ONE reload, no trap)
     assert 'sessionStorage.removeItem("pending_reset_token")' in html[html.index('onSubmit("reset-form"'):html.index('onSubmit("reset-form"') + 500]  # cleared on success
+
+
+def test_history_heatmap_is_seven_weeks(client):
+    # The readiness heatmap is a 7x7 square (7 weeks x 7 days), driven by the single WEEKS constant.
+    html = client.get("/").get_data(as_text=True)
+    render = html[html.index("function renderHeat("):html.index("function renderHeat(") + 900]
+    assert "const WEEKS = 7;" in render and "const WEEKS = 8;" not in render
+
+
+def test_second_same_day_checkin_asks_to_confirm_the_replace(client):
+    # #5 consequence made explicit: a second check-in today REPLACES today's reading (one row/day). The
+    # submit handler confirms before overwriting, keyed on the UTC day (the server's dedup key).
+    html = client.get("/").get_data(as_text=True)
+    assert "function hasCheckedInToday()" in html
+    hc = html[html.index("function hasCheckedInToday()"):html.index("function hasCheckedInToday()") + 400]
+    assert "new Date().toISOString().slice(0, 10)" in hc                          # UTC day = the server replace key (#5)
+    handler = html[html.index('onSubmit("checkin-form"'):html.index('onSubmit("checkin-form"') + 1400]
+    assert "hasCheckedInToday() && !confirm(" in handler                          # confirm before replacing
+    assert "REPLACE today's reading" in handler                                   # the consequence is spelled out
 
 
 def test_illustrated_empty_states(client):

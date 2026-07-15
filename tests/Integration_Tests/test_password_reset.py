@@ -98,3 +98,22 @@ def test_deeply_nested_json_is_400_not_500(client):
     depth = 6000
     resp = client.post("/register", data="[" * depth + "]" * depth, content_type="application/json")
     assert resp.status_code == 400
+
+
+def test_reset_token_window_is_ten_minutes():
+    # The reset link must expire 10 min after the email is sent (matches the OTP window) so an old email
+    # can't be used to reset. The value is the single source of truth for both enforcement + the email copy.
+    from config import Config
+    assert Config.RESET_TOKEN_MAX_AGE == 600
+
+
+def test_reset_link_expires_after_its_max_age(client, auth_module, monkeypatch):
+    # A stale reset email (older than the window) is rejected: the token embeds its issue time and the route
+    # validates it against RESET_TOKEN_MAX_AGE. Shrinking that below the fresh token's age -> "expired".
+    _register(client)
+    token = re.search(r"reset_token=([\w.\-]+)", _capture_reset(client, auth_module, monkeypatch)["body"]).group(1)
+    monkeypatch.setitem(client.raw.application.config, "RESET_TOKEN_MAX_AGE", -1)   # the just-issued token is now "too old"
+    r = client.post("/reset-password", json={"token": token, "password": "newpass123"})
+    assert r.status_code == 400 and "expired" in (r.get_json() or {}).get("error", "")
+    # the password did NOT change (still the original)
+    assert client.post("/login", json={"username": "alice", "password": "s3cretpw!"}).status_code == 200
