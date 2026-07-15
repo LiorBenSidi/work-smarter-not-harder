@@ -437,6 +437,27 @@ def test_enter_drops_a_line_in_chat_forum_and_comments(client):
     assert '<input name="body"' not in html                                                               # no single-line body input remains (would submit on Enter)
 
 
+def test_mutations_and_uploads_surface_their_failures(client):
+    # Robustness (2026-07-15): a failed action must never look like a success. Four sites used to swallow
+    # errors — deletePost / editPost-save had no else branch (a 429/network drop = a click that did nothing),
+    # and the forum-post + DM-reply attachment paths flashed "Posted."/cleared the flash even when every
+    # upload failed (the text landed, the photo vanished silently). Each now surfaces the failure.
+    html = client.get("/").get_data(as_text=True)
+    # deletePost: an in-flight guard (no false error on a double-click) + a failure flash.
+    dp = html[html.index("async function deletePost("):html.index("function editPost(")]
+    assert "deleteInFlight" in dp                                                   # guards the double-click 404
+    assert 'flash("forum-flash"' in dp and "Couldn't delete" in dp                  # failure is surfaced
+    # editPost save: a failure flash on a bad PATCH.
+    ep = html[html.index("function editPost("):html.index("function cancelEdit(")]
+    assert "Couldn't save your changes" in ep and 'flash("forum-flash"' in ep
+    # forum-post upload: a dropped attachment downgrades the clean "Posted." to a warning.
+    assert "couldn't be attached." in html                                         # the attachment-failure copy exists
+    assert 'attachWarn ? "warn" : "ok"' in html                                    # forum + DM both branch the flash kind on the warn
+    # DM reply: a dropped attachment must not clear the flash to a silent success.
+    dm = html[html.index('onSubmit("dm-reply-form"'):html.index('$("dm-files").addEventListener')]
+    assert "attachWarn" in dm and 'flash("dm-reply-flash", attachWarn' in dm
+
+
 def test_illustrated_empty_states(client):
     # Friendly illustrated empty states (icon + title + guidance) instead of a bare grey line, across
     # History / Forum / DM / the filtered lists (Wolt's empty cards).
