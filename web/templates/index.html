@@ -1040,11 +1040,12 @@
               <button id="history-refresh" class="ghost mini">Refresh</button></h2>
             <div id="history-trend" class="trend"></div>
             <div id="history-heat" class="heat"></div>
-            <div id="history-filters" class="chips" role="group" aria-label="Filter by readiness">
+            <div id="history-filters" class="chips" role="group" aria-label="Filter and sort readiness">
               <button class="chip active" type="button" data-filter="all">All</button>
               <button class="chip" type="button" data-filter="ready">Ready</button>
               <button class="chip" type="button" data-filter="moderate">Moderate</button>
               <button class="chip" type="button" data-filter="rest">Rest</button>
+              <button id="history-dir" class="chip dir" type="button" aria-label="Reverse sort order">↓ Newest</button>
             </div>
             <div id="history"><div class="sk" style="height:64px"></div><div class="sk" style="height:64px"></div><div class="sk" style="height:64px"></div></div>
           </div>
@@ -2225,7 +2226,7 @@
     }
 
     // ---- History ----
-    let historyItems = [], historyFilter = "all";
+    let historyItems = [], historyFilter = "all", historyDir = "desc";   // desc = newest first (default)
     async function loadHistory() {
       const u = currentUser;
       const el = $("history"); el.innerHTML = sk("rows");
@@ -2247,9 +2248,14 @@
       const items = historyFilter === "all" ? historyItems
         : historyItems.filter((it) => readinessClass(it && it.assessment)[0] === historyFilter);
       if (!items.length) { el.innerHTML = emptyState(EMPTY_ICONS.filter, "Nothing here", "No " + historyFilter + " days in your history yet."); return; }
+      // Sort the DISPLAY list by timestamp (ISO strings sort chronologically); default newest-first. A copy,
+      // so the trend/heatmap/streak — which rely on stored chronological order — are untouched.
+      const sign = historyDir === "asc" ? 1 : -1;
+      const ordered = items.slice().sort((a, b) =>
+        sign * String((a && a.timestamp) || "").localeCompare(String((b && b.timestamp) || "")));
       // Each row reads as a colour-coded score line (Whoop trend tier): a state dot + the numeric readiness
       // score + the verdict word + kcal, with a relative timestamp. Scannable as a coloured column.
-      el.innerHTML = '<ul class="hlist">' + items.map((it, i) => {
+      el.innerHTML = '<ul class="hlist">' + ordered.map((it, i) => {
         const [cls, pct] = readinessClass(it.assessment);
         return '<li class="hrow reveal-item readiness ' + cls + '" style="animation-delay:' + Math.min(i * 35, 280) + 'ms">'
           + '<span class="hrow-score">' + pct + '</span>'
@@ -2258,12 +2264,23 @@
           + '<span class="hrow-time muted">' + escapeHtml(timeAgoStr(it.timestamp)) + "</span></li>";
       }).join("") + "</ul>";
     }
+    function updateHistoryDirLabel() {
+      const b = $("history-dir"); if (!b) return;
+      const asc = historyDir === "asc";
+      b.textContent = (asc ? "↑ Oldest" : "↓ Newest");
+      b.setAttribute("aria-label", "Sort order: " + (asc ? "oldest" : "newest") + " first — tap to reverse");
+    }
     $("history-filters").addEventListener("click", (e) => {
       const chip = e.target.closest(".chip"); if (!chip) return;
+      if (chip.id === "history-dir") {                          // the direction toggle — flip asc/desc, keep the filter
+        historyDir = historyDir === "asc" ? "desc" : "asc";
+        updateHistoryDirLabel(); renderHistoryList(); return;
+      }
       historyFilter = chip.dataset.filter;
-      $("history-filters").querySelectorAll(".chip").forEach((c) => c.classList.toggle("active", c === chip));
+      $("history-filters").querySelectorAll(".chip[data-filter]").forEach((c) => c.classList.toggle("active", c === chip));
       renderHistoryList();
     });
+    updateHistoryDirLabel();                                    // initial "↓ Newest"
 
     // Sparkline of the readiness assessments over time (Ready=3 / Moderate=2 / Rest=1). Coordinates are
     // computed from numbers only (no innerHTML injection), colored by the latest state.
