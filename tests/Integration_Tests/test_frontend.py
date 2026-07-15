@@ -458,6 +458,19 @@ def test_mutations_and_uploads_surface_their_failures(client):
     assert "attachWarn" in dm and 'flash("dm-reply-flash", attachWarn' in dm
 
 
+def test_forum_realtime_sse_is_wired_on_the_client(client):
+    # Real-time forum (2026-07-15): the client subscribes to the SSE `forum` push and, ONLY on the forum
+    # screen, refreshes the list + the open post's detail — but never over a draft (a focused/non-empty
+    # comment or edit body is preserved, so a teammate's live change can't wipe what the user is typing).
+    html = client.get("/").get_data(as_text=True)
+    assert 'addEventListener("forum", onForumEvent)' in html            # subscribed to the forum push
+    assert "function onForumEvent()" in html
+    body = html[html.index("function onForumEvent()"):html.index("function startEvents()")]
+    assert 'currentScreen !== "forum"' in body and "loadForum()" in body        # scoped to the forum screen
+    assert "openPost(currentPostId)" in body                                    # refreshes the open post
+    assert "document.activeElement" in body and ".value.trim()" in body         # ...but not over a live draft
+
+
 def test_illustrated_empty_states(client):
     # Friendly illustrated empty states (icon + title + guidance) instead of a bare grey line, across
     # History / Forum / DM / the filtered lists (Wolt's empty cards).

@@ -2930,11 +2930,25 @@
       if (dmPeer) renderThread();                                 // in a thread -> pull the peer's new message
       else if (!$("screen-messages").hidden) loadConversations(); // on the inbox -> refresh the list
     }
+    // A forum push (any post/comment/vote by anyone). Only the forum screen cares — refresh the list, and
+    // the open post's detail (new comments / live score). Never re-render over a draft: if the user is mid-
+    // comment or mid-edit (the detail's body field is focused or non-empty), skip the detail repaint so a
+    // teammate's change can't wipe what they're typing. The next tick (or their own submit) picks it up.
+    function onForumEvent() {
+      if (currentScreen !== "forum") return;
+      loadForum();                                                 // list: new posts / deletes / score changes
+      if (currentPostId) {
+        const draft = document.querySelector('#forum-detail [name="body"]');
+        const typing = draft && (document.activeElement === draft || draft.value.trim());
+        if (!typing) openPost(currentPostId);                      // detail: new comments / live votes
+      }
+    }
     function startEvents() {
       pollNotifications();                                         // initial pulse from the normal endpoint
       if (typeof EventSource === "undefined") { dbg("SSE unsupported -> polling"); startDmPolling(); return; }   // old browser -> poll
       try { evtSource = new EventSource("/events"); } catch (_) { dbg("SSE construct failed -> polling"); startDmPolling(); return; }
       evtSource.addEventListener("notify", onRealtimeEvent);      // pushed the instant a notification lands
+      evtSource.addEventListener("forum", onForumEvent);          // pushed when any forum post/comment/vote changes
       evtSource.onopen = () => dbg("SSE connected");
       evtSource.onerror = () => dbg("SSE error — auto-reconnecting (45s poll is the backstop)");
       // EventSource auto-reconnects on a drop; a slow poll is the backstop if a proxy buffers the stream.

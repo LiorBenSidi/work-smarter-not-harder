@@ -216,6 +216,10 @@ class FakeForum:
     def __init__(self):
         self._posts = {}
         self._seq = 0
+        self._rev = 0        # forum revision (real-time): every successful mutation bumps it; get_rev() reads it
+
+    def get_rev(self):
+        return self._rev
 
     def create_post(self, author, title, body, anonymous=False):
         self._seq += 1
@@ -223,6 +227,7 @@ class FakeForum:
         self._posts[pid] = {"id": pid, "author": author, "anonymous": anonymous,
                             "title": title, "body": body, "score": 0, "comments": [], "votes": {},
                             "created_at": time.time() + self._seq * 1e-6}   # monotonic per creation order
+        self._rev += 1
         return self._posts[pid]
 
     def list_posts(self):
@@ -238,6 +243,7 @@ class FakeForum:
         self._seq += 1
         comment = {"id": "c" + str(self._seq), "author": author, "body": body, "votes": {}, "score": 0}
         post["comments"].append(comment)
+        self._rev += 1
         return {"id": comment["id"], "author": author, "body": body, "score": 0}   # public shape (no votes)
 
     def vote_comment(self, post_id, comment_id, username, value):
@@ -249,6 +255,7 @@ class FakeForum:
             return None
         comment.setdefault("votes", {})[username] = value  # one vote per user; re-voting replaces
         comment["score"] = sum(comment["votes"].values())
+        self._rev += 1
         return comment["score"]
 
     def vote(self, post_id, username, value):
@@ -257,6 +264,7 @@ class FakeForum:
             return None
         post["votes"][username] = value  # one vote per user; re-voting replaces
         post["score"] = sum(post["votes"].values())
+        self._rev += 1
         return post["score"]
 
     def received_engagement(self, username):
@@ -287,6 +295,7 @@ class FakeForum:
         if post["author"] != username:
             return "forbidden"
         post["title"], post["body"] = title, body
+        self._rev += 1
         return post
 
     def delete_post(self, post_id, username):
@@ -296,6 +305,7 @@ class FakeForum:
         if post["author"] != username:
             return "forbidden"
         del self._posts[post_id]
+        self._rev += 1
         return True
 
     def purge_user(self, username):

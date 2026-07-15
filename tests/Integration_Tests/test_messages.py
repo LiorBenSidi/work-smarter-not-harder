@@ -217,6 +217,46 @@ def test_events_stream_releases_its_slot_when_it_ends(messages_client, monkeypat
     assert all(regained)                                            # all slots re-acquirable -> nothing leaked
 
 
+def test_events_pushes_a_forum_ping_when_the_forum_rev_changes(messages_client, monkeypatch):
+    # Real-time forum (the "wow"): the SSE stream reads forum.get_rev() each tick and pushes `event: forum`
+    # when it moves, so every open client re-fetches. Inject a forum whose rev advances once after the
+    # stream's baseline read -> exactly one forum ping. Tiny deadline + zero tick keeps the test instant.
+    from routes import messages
+    monkeypatch.setattr(messages, "EVENTS_MAX_SECONDS", 0.05)
+    monkeypatch.setattr(messages, "EVENTS_TICK_SECONDS", 0)
+    c = messages_client
+    _setup(c, "alice")
+    _login(c, "alice")
+
+    class _RevForum:                                                # get_rev(): 0 at baseline, then 1 (one change)
+        def __init__(self):
+            self._n = 0
+
+        def get_rev(self):
+            n = self._n
+            self._n = min(self._n + 1, 1)
+            return n
+
+    monkeypatch.setattr(messages, "_forum", lambda stub=_RevForum(): stub)
+    body = c.get("/events").get_data(as_text=True)
+    assert "event: forum" in body                                   # the forum change pushed a forum ping
+    assert "event: notify" not in body                              # no notifications happened -> no false notify ping
+
+
+def test_events_does_not_push_forum_when_the_rev_is_steady(messages_client, monkeypatch):
+    # No forum change -> no forum ping (the stream must not spam every client on keepalive ticks).
+    from routes import messages
+    monkeypatch.setattr(messages, "EVENTS_MAX_SECONDS", 0.05)
+    monkeypatch.setattr(messages, "EVENTS_TICK_SECONDS", 0)
+    c = messages_client
+    _setup(c, "alice")
+    _login(c, "alice")
+    monkeypatch.setattr(messages, "_forum", lambda: type("_Steady", (), {"get_rev": lambda self: 7})())
+    body = c.get("/events").get_data(as_text=True)
+    assert "event: forum" not in body                               # steady rev -> no ping
+    assert ": keepalive" in body                                    # ...just keepalives
+
+
 # ---- directory search for the DM picker (GET /users/search) ----
 import pytest  # noqa: E402
 
