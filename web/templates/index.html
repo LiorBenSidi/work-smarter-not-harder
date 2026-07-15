@@ -1710,6 +1710,7 @@
       if (r.ok) {
         f.reset();
         resetToken = null;                                   // the token is single-use + now consumed — don't retain a spent secret in JS state
+        try { sessionStorage.removeItem("pending_reset_token"); } catch (_) { /* private mode */ }   // drop any surviving stash
         flash("reset-flash", "Password updated — you can log in now.", "ok");
         setTimeout(() => { history.replaceState({}, "", "/"); showTab("login"); }, 1000);
       } else { flash("reset-flash", (r.data && r.data.error) || "Could not reset your password"); }
@@ -1874,15 +1875,16 @@
         soreness: Number.parseInt(f.soreness.value, 10),
         training_load: Number.parseInt(f.training_load.value, 10),
       };
+      flash("checkin-flash", "Saving…", "ok");                     // the button is disabled while the POST is in flight
       const r = await api("/checkin", { method: "POST", body });
-      if (r.ok) {
-        flash("checkin-flash", "Check-in saved.", "ok"); f.reset(); resetCheckinScales(); updateCheckinValidity();
-        // Await BOTH loaders (each rebuilds the stat strip) so the count-up runs once, after they settle —
-        // no re-render race. fresh:true triggers the recs cascade + is the only path that animates.
-        await Promise.all([loadDashboard({ fresh: true }), loadHistory()]);
-        countUpKcal();
-      }
-      else { flash("checkin-flash", (r.data && r.data.error) || "Could not save check-in"); }
+      if (!r.ok) { flash("checkin-flash", (r.data && r.data.error) || "Could not save check-in"); return; }
+      // Saved. Reset the form + surface success NOW and let onSubmit re-enable the button as this handler
+      // returns — do NOT keep it disabled through the AI-backed dashboard reload (a slow/backed-up /predict,
+      // or a request that stalls, would otherwise leave Submit stuck-grey with the values still selected).
+      // The refresh runs in the background; the count-up fires once both loaders settle. Each loader has its
+      // own error handling + session guard, so a background failure degrades in-panel, never wedges the form.
+      flash("checkin-flash", "Check-in saved.", "ok"); f.reset(); resetCheckinScales(); updateCheckinValidity();
+      Promise.all([loadDashboard({ fresh: true }), loadHistory()]).then(countUpKcal).catch(() => {});
     });
 
     async function loadProfile() {
@@ -3171,12 +3173,20 @@
     // ---- Boot: am I already logged in? (GET /me) ----
     (async function init() {
       applyCredentialHints();
-      const t = new URLSearchParams(location.search).get("reset_token");
+      let t = new URLSearchParams(location.search).get("reset_token");
       if (t) {
-        resetToken = t;                                    // hold it in JS; the form reads this, not the URL
-        history.replaceState({}, "", "/");                 // scrub the token from the address bar + history NOW, not only after a successful reset
-        showView("auth"); showReset(); return;
+        // First load from the email link. The service worker may auto-reload the page moments later (a new
+        // build claims it — see the controllerchange reload below); since we scrub the token from the URL
+        // right away (don't leave a secret in history), stash it in sessionStorage so it SURVIVES that one
+        // reload. Without this the reload lands on login and the reset only works on the 2nd click.
+        try { sessionStorage.setItem("pending_reset_token", t); } catch (_) { /* private mode */ }
+        history.replaceState({}, "", "/");                 // scrub the token from the address bar + history NOW
+      } else {
+        // A reload (e.g. the SW claiming a new build) landed here with no URL token — recover the stash and
+        // CONSUME it, so it survives exactly one reload and can never trap the user on the reset screen.
+        try { t = sessionStorage.getItem("pending_reset_token"); if (t) sessionStorage.removeItem("pending_reset_token"); } catch (_) { t = null; }
       }
+      if (t) { resetToken = t; showView("auth"); showReset(); return; }   // form reads resetToken, not the URL
       const r = await api("/me");
       if (r.ok && r.data && r.data.username) { enterApp(r.data.username, r.data.display_name); } else { showView("auth"); }
     })();

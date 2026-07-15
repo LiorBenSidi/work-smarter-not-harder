@@ -88,7 +88,10 @@ def test_in_app_password_form_also_blocks_native_get():
 def test_reset_token_is_scrubbed_from_the_url_immediately():
     # L3: the reset token must leave the address bar/history as soon as it's captured at boot, not only
     # after a successful reset (the form reads the JS var, not the URL).
-    assert re.search(r'get\("reset_token"\)[\s\S]{0,200}history\.replaceState\(\{\},\s*"",\s*"/"\)', INDEX), \
+    # (window widened for the SW-reload hardening: the token is stashed in sessionStorage first — so it
+    # survives a service-worker auto-reload that would otherwise drop the reset to login — then the URL is
+    # scrubbed. Both still happen at capture, before any /me call.)
+    assert re.search(r'get\("reset_token"\)[\s\S]{0,700}history\.replaceState\(\{\},\s*"",\s*"/"\)', INDEX), \
         "init() must replaceState to strip reset_token from the URL right after capturing it"
 
 

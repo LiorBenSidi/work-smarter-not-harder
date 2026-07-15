@@ -524,6 +524,31 @@ def test_history_has_a_sort_direction_toggle_defaulting_newest_first(client):
     assert 'querySelectorAll(".chip[data-filter]")' in html                     # dir button isn't toggled "active"
 
 
+def test_checkin_submit_frees_the_form_on_save_not_after_the_refresh(client):
+    # #6: the Submit button is disabled only while the /checkin POST is in flight. The AI-backed dashboard
+    # reload runs in the BACKGROUND (un-awaited), so a slow/backed-up /predict can't leave Submit stuck-grey
+    # with the values still selected. On save we reset + re-enable immediately; the refresh + count-up follow.
+    html = client.get("/").get_data(as_text=True)
+    start = html.index('onSubmit("checkin-form"')
+    handler = html[start:start + 2000]                                            # the check-in submit handler body
+    assert '"Saving…"' in handler                                                 # in-flight feedback
+    assert "await Promise.all([loadDashboard" not in handler                      # the refresh is NOT awaited
+    assert "Promise.all([loadDashboard({ fresh: true }), loadHistory()]).then(countUpKcal)" in handler  # ...it's backgrounded
+    assert 'f.reset(); resetCheckinScales(); updateCheckinValidity();' in handler  # form reset on save
+
+
+def test_reset_link_survives_a_service_worker_reload(client):
+    # #3: the reset email link opened the reset form but a service-worker auto-reload (a new build claims the
+    # page) then dropped it to login, because the token was scrubbed from the URL. Now the token is stashed in
+    # sessionStorage so it survives exactly one reload, and is consumed on restore so it can't trap the user.
+    html = client.get("/").get_data(as_text=True)
+    init = html[html.index("async function init()"):html.index("async function init()") + 1400]
+    assert 'sessionStorage.setItem("pending_reset_token"' in init                 # stashed before the URL is scrubbed
+    assert 'sessionStorage.getItem("pending_reset_token")' in init                # recovered after a reload
+    assert 'sessionStorage.removeItem("pending_reset_token")' in init             # ...and consumed (survives ONE reload, no trap)
+    assert 'sessionStorage.removeItem("pending_reset_token")' in html[html.index('onSubmit("reset-form"'):html.index('onSubmit("reset-form"') + 500]  # cleared on success
+
+
 def test_illustrated_empty_states(client):
     # Friendly illustrated empty states (icon + title + guidance) instead of a bare grey line, across
     # History / Forum / DM / the filtered lists (Wolt's empty cards).
