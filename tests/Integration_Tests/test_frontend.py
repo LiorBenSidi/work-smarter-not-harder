@@ -475,6 +475,22 @@ def test_forum_realtime_sse_is_wired_on_the_client(client):
     assert "opts && opts.quiet" in lf and 'sk("rows")' in lf                    # quiet -> no skeleton paint
 
 
+def test_forum_realtime_has_a_self_healing_poll_backstop(client):
+    # Robustness (2026-07-15): EventSource auto-reconnects a dropped stream, but a FATAL error leaves it
+    # CLOSED (readyState 2) with no retries — after which real-time silently dies. Unlike DM/notify, the
+    # forum had no other backstop. The 45s poll now (a) restarts a CLOSED stream and (b) re-syncs the forum
+    # list whenever its screen is active while SSE isn't OPEN — so a dropped stream self-heals in <= one tick.
+    html = client.get("/").get_data(as_text=True)
+    assert "function pollBackstop()" in html
+    assert "setInterval(pollBackstop, 45000)" in html                        # the SSE backstop runs it
+    assert "setInterval(pollBackstop, 15000)" in html                        # the no-SSE fallback runs it too
+    body = html[html.index("function pollBackstop()"):html.index("function startEvents()")]
+    assert "evtSource.readyState === 2" in body and "startEvents()" in body  # a CLOSED stream is restarted
+    assert 'currentScreen === "forum"' in body and "evtSource.readyState !== 1" in body \
+        and "loadForum({ quiet: true })" in body                             # forum re-syncs while SSE is down
+    assert "pollNotifications()" in body                                     # DM/notify catch-up preserved
+
+
 def test_illustrated_empty_states(client):
     # Friendly illustrated empty states (icon + title + guidance) instead of a bare grey line, across
     # History / Forum / DM / the filtered lists (Wolt's empty cards).
