@@ -2953,10 +2953,11 @@
     // whenever its screen is active while the push path isn't OPEN — so a dropped/late `forum` event can
     // never leave a stale feed for more than one interval. A no-op while SSE is healthy (readyState 1).
     function pollBackstop() {
-      if (typeof EventSource !== "undefined" && evtSource && evtSource.readyState === 2) {
-        dbg("SSE was CLOSED — restarting the stream"); startEvents(); return;   // re-arms this timer + reconnects
-      }
-      pollNotifications();                                          // DM/notify pulse (unchanged behaviour)
+      const dead = typeof EventSource !== "undefined" && evtSource && evtSource.readyState === 2;
+      if (dead) { dbg("SSE was CLOSED — restarting the stream"); startEvents(); }   // reconnect + re-arm this timer
+      else pollNotifications();                                     // DM/notify pulse (startEvents already re-runs it)
+      // Forum catch-up: a restarted stream's baseline already includes anything that changed DURING the outage,
+      // so those won't push — re-sync the list here whenever SSE isn't OPEN and the forum is the active screen.
       if (currentScreen === "forum" && (!evtSource || evtSource.readyState !== 1)) loadForum({ quiet: true });
     }
     function startEvents() {
