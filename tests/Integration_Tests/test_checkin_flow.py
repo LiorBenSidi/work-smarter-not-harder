@@ -107,3 +107,39 @@ def test_checkin_nulls_non_finite_calories(make_client, fake_users, fake_profile
                parse_constant=lambda tok: (_ for _ in ()).throw(ValueError(f"non-finite JSON token: {tok}")))
     assert resp.get_json()["entry"]["calories"] is None                      # non-finite -> null in the response
     assert c.get("/history").get_json()["history"][0]["calories"] is None    # and never persisted to history
+
+
+def test_checkin_persists_proba_for_the_real_history_score(make_client, fake_users, fake_profiles, fake_history, monkeypatch):
+    # issue #1: History showed the band level (100/66/33) because only the state word was stored. The
+    # check-in must persist the per-state proba too, so History can compute the SAME 0-100 score the
+    # dashboard shows. Only finite numbers are kept (a NaN/Infinity proba is dropped).
+    _set_predict(monkeypatch, {"state": "Ready", "calories": 2200,
+                               "proba": {"Ready": 0.82, "Moderate": 0.1, "Rest": 0.08, "bogus": float("nan")}})
+    c = _client(make_client, fake_users, fake_profiles, fake_history)
+    _login(c)
+    entry = c.post("/checkin", json=_metrics()).get_json()["entry"]
+    assert entry["proba"] == {"Ready": 0.82, "Moderate": 0.1, "Rest": 0.08}   # finite kept, NaN dropped
+    stored = c.get("/history").get_json()["history"][0]
+    assert stored["proba"]["Ready"] == 0.82                                   # ...and it's persisted
+
+
+def test_checkin_missing_proba_persists_none(make_client, fake_users, fake_profiles, fake_history, monkeypatch):
+    _set_predict(monkeypatch, {"state": "Ready", "calories": 2000})           # no proba in the AI response
+    c = _client(make_client, fake_users, fake_profiles, fake_history)
+    _login(c)
+    assert c.post("/checkin", json=_metrics()).get_json()["entry"]["proba"] is None
+
+
+def test_second_checkin_same_day_replaces_the_days_entry(make_client, fake_users, fake_profiles, fake_history, monkeypatch):
+    # issue #5: a daily-readiness log is one row per day. A second check-in the same UTC day REPLACES the
+    # first, so History doesn't accrue several rows for one day (both submits are stamped the same UTC day).
+    c = _client(make_client, fake_users, fake_profiles, fake_history)
+    _login(c)
+    _set_predict(monkeypatch, {"state": "Rest", "calories": 2100})
+    c.post("/checkin", json={**_metrics(), "fatigue": 9})
+    _set_predict(monkeypatch, {"state": "Ready", "calories": 2600})
+    c.post("/checkin", json={**_metrics(), "fatigue": 2})
+    hist = c.get("/history").get_json()["history"]
+    assert len(hist) == 1                                                     # one row for today, not two
+    assert hist[0]["assessment"] == "Ready" and hist[0]["calories"] == 2600   # the LATEST wins
+    assert hist[0]["metrics"]["fatigue"] == 2

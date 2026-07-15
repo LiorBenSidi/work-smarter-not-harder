@@ -2256,9 +2256,12 @@
       // Each row reads as a colour-coded score line (Whoop trend tier): a state dot + the numeric readiness
       // score + the verdict word + kcal, with a relative timestamp. Scannable as a coloured column.
       el.innerHTML = '<ul class="hlist">' + ordered.map((it, i) => {
-        const [cls, pct] = readinessClass(it.assessment);
+        const [cls] = readinessClass(it.assessment);
+        // The SAME real 0-100 score the dashboard shows (from the stored per-state proba), not the band
+        // level. An older entry with no stored proba falls back to its band centre (readinessScore's default).
+        const score = readinessScore({ state: it.assessment, proba: it.proba });
         return '<li class="hrow reveal-item readiness ' + cls + '" style="animation-delay:' + Math.min(i * 35, 280) + 'ms">'
-          + '<span class="hrow-score">' + pct + '</span>'
+          + '<span class="hrow-score">' + score + '</span>'
           + '<span class="hrow-main"><strong>' + escapeHtml(it.assessment || "—") + "</strong>"
           + (it.calories != null ? '<span class="muted"> · ' + escapeHtml(it.calories) + " kcal</span>" : "") + "</span>"
           + '<span class="hrow-time muted">' + escapeHtml(timeAgoStr(it.timestamp)) + "</span></li>";

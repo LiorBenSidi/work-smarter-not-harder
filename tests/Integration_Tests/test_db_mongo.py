@@ -294,3 +294,17 @@ def test_seed_is_idempotent(db_mod, real_db):
     second = seed.seed(uri)                                      # already seeded -> no-op
     assert first == len(seed.SEED_POSTS) and second == 0
     assert real_db.forum_posts.count_documents({}) == len(seed.SEED_POSTS)
+
+
+def test_add_history_replaces_the_same_day_entry_against_mongo(db_mod, real_db):
+    # issue #5: one row per UTC day. Two check-ins the same day -> the second REPLACES the first; a
+    # different day is kept. Pinned on real Mongo because the same-day match is a nested-path $regex the
+    # in-memory fake can't run. list_history returns entries oldest-first.
+    db_mod.add_history(real_db, "alice", {"timestamp": "2026-07-15T06:00:00+00:00", "assessment": "Rest"})
+    db_mod.add_history(real_db, "alice", {"timestamp": "2026-07-15T21:00:00+00:00", "assessment": "Ready"})
+    db_mod.add_history(real_db, "alice", {"timestamp": "2026-07-16T07:00:00+00:00", "assessment": "Moderate"})
+    hist = db_mod.list_history(real_db, "alice")
+    assert [e["assessment"] for e in hist] == ["Ready", "Moderate"]   # the 15th's Rest was replaced by Ready
+    # an entry without a parseable timestamp is appended, never dropped (defensive)
+    db_mod.add_history(real_db, "alice", {"assessment": "Ready"})
+    assert len(db_mod.list_history(real_db, "alice")) == 3

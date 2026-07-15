@@ -79,10 +79,19 @@ def checkin():
     calories = prediction.get("calories") if ok else None
     if not (isinstance(calories, (int, float)) and not isinstance(calories, bool) and math.isfinite(calories)):
         calories = None
+    # Persist the per-state confidence too, so History can show the SAME real 0-100 readiness score the
+    # dashboard shows (issue: History was falling back to the band level 100/66/33 because only the state
+    # word was stored). Finite numbers only — a NaN/Infinity proba would corrupt the entry + serialise as
+    # invalid JSON (mirrors the calories + dashboard guards). Absent/garbage -> None (History band-centres it).
+    proba_raw = prediction.get("proba") if ok else None
+    proba = ({str(k): float(v) for k, v in proba_raw.items()
+              if isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v)}
+             if isinstance(proba_raw, dict) else None)
     entry = {
         "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
         "metrics": metrics,
         "assessment": prediction.get("state") if ok else None,
+        "proba": proba,
         "calories": calories,
     }
 
