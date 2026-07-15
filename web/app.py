@@ -10,6 +10,7 @@ import secrets
 import time
 
 from flask import Flask, g, jsonify, render_template, request, send_from_directory
+from werkzeug.exceptions import HTTPException
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 from config import Config
@@ -306,6 +307,32 @@ def create_app(config=Config, *, users=None, profiles=None, history=None, forum=
         # swallows ValueError/BadRequest but NOT RecursionError (it's a RuntimeError), so without this it
         # would 500 on any endpoint. Treat it as the malformed input it is: 400, not a server error.
         return jsonify(error="request body is malformed or too deeply nested"), 400
+
+    # The API contract is JSON everywhere. Without these, a raised HTTP error (a 404 on a stray path, a 405,
+    # a 413 oversize upload, or a flask-limiter 429 breach) would fall through to Werkzeug's HTML page, which
+    # the SPA's fetch layer can't parse (it reads {"error": ...}) — so the user sees a generic fallback
+    # instead of the real reason. Map every HTTP error to the same JSON shape the hand-written errors use.
+    _FRIENDLY_HTTP = {
+        404: "not found",
+        405: "that action isn't allowed here",
+        413: "that file is too large",
+        429: "you're doing that too fast — please slow down and try again",
+    }
+
+    @app.errorhandler(HTTPException)
+    def _http_error_as_json(exc):
+        return jsonify(error=_FRIENDLY_HTTP.get(exc.code, exc.description or exc.name)), exc.code
+
+    @app.errorhandler(Exception)
+    def _unexpected_error_as_json(exc):
+        # Last-resort safety net: an unhandled exception (e.g. a disk/store failure in a route that didn't
+        # wrap it) must never leak a traceback or an HTML 500 to the user. Log it WITH context here (Flask's
+        # default logging is bypassed once we handle it), then return a generic JSON 500. HTTPExceptions are
+        # more specific and handled above; this only catches the genuinely-unexpected.
+        if isinstance(exc, HTTPException):     # belt-and-suspenders: never swallow an HTTP status into a 500
+            return _http_error_as_json(exc)
+        logger.exception("unhandled exception on %s %s", request.method, request.path)
+        return jsonify(error="something went wrong on our end — please try again"), 500
 
     # Register the timer FIRST — before CSRF — so a request short-circuited by the CSRF check (403)
     # still gets a start stamp and therefore an access-log line (before_request runs in registration
