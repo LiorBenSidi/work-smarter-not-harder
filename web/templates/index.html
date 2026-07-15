@@ -2490,10 +2490,15 @@
       currentPostId = null; currentPost = null; updateCtxBack();
     }
 
+    let deleteInFlight = false;
     async function deletePost() {
-      if (!currentPost) return;
-      const r = await api("/forum/posts/" + currentPost.id, { method: "DELETE" });
-      if (r.ok) { closePost(); loadForum(); }
+      if (!currentPost || deleteInFlight) return;    // guard a double-click: a 2nd DELETE 404s and would flash a false error
+      deleteInFlight = true;
+      try {
+        const r = await api("/forum/posts/" + currentPost.id, { method: "DELETE" });
+        if (r.ok) { closePost(); loadForum(); }
+        else flash("forum-flash", (r.data && r.data.error) || "Couldn't delete — please try again.");
+      } finally { deleteInFlight = false; }
     }
 
     function editPost() {
@@ -2511,6 +2516,7 @@
         const r = await api("/forum/posts/" + currentPost.id,
           { method: "PATCH", body: { title: f.elements.title.value, body: f.elements.body.value } });
         if (r.ok) openPost(currentPost.id);
+        else flash("forum-flash", (r.data && r.data.error) || "Couldn't save your changes — please try again.");
       });
     }
 
@@ -2576,13 +2582,23 @@
       const r = await api("/forum/posts", { method: "POST", body: { title: f.title.value, body: f.body.value, anonymous: f.anonymous.checked } });
       if (!r.ok) { flash("forum-flash", (r.data && r.data.error) || "Could not post"); return; }
       const post = r.data && r.data.post, picker = $("forum-files");
+      let attachWarn = "";   // non-empty => some/all photos didn't attach; shown instead of a clean "Posted."
       if (post && post.id && picker && picker.files && picker.files.length) {
+        const picked = picker.files.length;
         flash("forum-flash", "Uploading…", "ok");
-        const ids = await uploadAll(picker.files);
-        if (ids.length) await api("/forum/posts/" + post.id + "/attachments", { method: "POST", body: { attachment_ids: ids } });
+        const ids = await uploadAll(picker.files);          // uploadMedia() -> null on any upload failure, so ids can come back short
+        let bound = ids.length;
+        if (ids.length) {
+          const ar = await api("/forum/posts/" + post.id + "/attachments", { method: "POST", body: { attachment_ids: ids } });
+          if (!ar.ok) bound = 0;                             // stored but the bind failed -> nothing is actually on the post
+        }
+        if (bound < picked) attachWarn = bound              // the post itself is up; only the photos fell short -> don't claim a clean success
+          ? "Posted — but " + (picked - bound) + " of " + picked + " photos couldn't be attached."
+          : "Posted — but your photo" + (picked === 1 ? "" : "s") + " couldn't be attached.";
         picker.value = "";
       }
-      f.reset(); filesHint($("forum-files"), "forum-files-hint"); flash("forum-flash", "Posted.", "ok"); loadForum();
+      f.reset(); filesHint($("forum-files"), "forum-files-hint");
+      flash("forum-flash", attachWarn || "Posted.", attachWarn ? "warn" : "ok"); loadForum();
     });
     $("forum-files").addEventListener("change", () => filesHint($("forum-files"), "forum-files-hint"));
     $("forum-refresh").addEventListener("click", loadForum);
@@ -2798,13 +2814,22 @@
         const r = await api("/messages", { method: "POST", body: { to: dmPeer, body: text } });
         if (!r.ok) { flash("dm-reply-flash", (r.data && r.data.error) || "Could not send"); return; }   // surface 429 / errors
       }
+      let attachWarn = "";   // non-empty => the file(s) didn't attach; shown instead of silently clearing the flash
       if (hasFiles) {
+        const picked = picker.files.length;
         flash("dm-reply-flash", "Uploading…", "ok");
         const ids = await uploadAll(picker.files);            // attachments bind to the conversation, not a single message
-        if (ids.length) await api("/messages/" + encodeURIComponent(dmPeer) + "/attachments", { method: "POST", body: { attachment_ids: ids } });
+        let bound = ids.length;
+        if (ids.length) {
+          const ar = await api("/messages/" + encodeURIComponent(dmPeer) + "/attachments", { method: "POST", body: { attachment_ids: ids } });
+          if (!ar.ok) bound = 0;                              // stored but the bind failed -> nothing reached the conversation
+        }
+        if (bound < picked) attachWarn = "Sent" + (text ? " your message" : "") + ", but "   // never claim a silent success when a photo dropped
+          + (bound ? (picked - bound) + " of " + picked + " photos couldn't be attached." : "your photo" + (picked === 1 ? "" : "s") + " couldn't be attached.");
         picker.value = ""; filesHint(picker, "dm-files-hint");
       }
-      f.reset(); autoGrow($("dm-reply")); flash("dm-reply-flash", "", "ok"); renderThread();
+      f.reset(); autoGrow($("dm-reply"));
+      flash("dm-reply-flash", attachWarn, attachWarn ? "warn" : "ok"); renderThread();
     });
     $("dm-files").addEventListener("change", () => filesHint($("dm-files"), "dm-files-hint"));
     // Growing compose: the reply textarea grows with its content (capped by CSS max-height). Enter inserts a
