@@ -426,12 +426,13 @@ def test_open_dm_thread_is_a_pinned_single_scroll_chat_pane(client):
 
 def test_enter_drops_a_line_in_chat_forum_and_comments(client):
     # UX (2026-07-15): Enter must insert a newline (line drop), not send/post, in the chat reply, forum post
-    # body, and comments. The DM reply textarea only submits on Cmd/Ctrl+Enter (plain Enter = newline); every
+    # body, and comments. The DM reply textarea sends only on Shift+Enter (plain Enter = newline); every
     # composer body is a <textarea> (a textarea never submits its form on Enter), including the comment field
-    # which used to be a single-line <input> (Enter submitted it).
+    # which used to be a single-line <input> (Enter submitted it). Login + regular single-line forms keep the
+    # default Enter=submit (they were never touched).
     html = client.get("/").get_data(as_text=True)
-    assert '(e.metaKey || e.ctrlKey)) { e.preventDefault(); $("dm-reply-form").requestSubmit()' in html   # send only on modifier+Enter
-    assert 'Enter" && !e.shiftKey) { e.preventDefault(); $("dm-reply-form")' not in html                  # the old send-on-plain-Enter is gone
+    assert 'e.shiftKey) { e.preventDefault(); $("dm-reply-form").requestSubmit()' in html                 # chat sends on Shift+Enter
+    assert '&& !e.shiftKey) { e.preventDefault(); $("dm-reply-form")' not in html                         # the old send-on-plain-Enter is gone
     assert '<textarea name="body" placeholder="Add a comment"' in html                                    # comment is a textarea now
     assert '<input name="body"' not in html                                                               # no single-line body input remains (would submit on Enter)
 

@@ -2808,12 +2808,12 @@
     });
     $("dm-files").addEventListener("change", () => filesHint($("dm-files"), "dm-files-hint"));
     // Growing compose: the reply textarea grows with its content (capped by CSS max-height). Enter inserts a
-    // newline (line drop); Cmd/Ctrl+Enter sends. Sending is also always available via the Send button.
+    // newline (line drop); Shift+Enter sends. Sending is also always available via the Send button.
     function autoGrow(t) { if (!t) return; t.style.height = "auto"; t.style.height = Math.min(t.scrollHeight, 132) + "px"; }
     (function () {
       const t = $("dm-reply"); if (!t) return;
       t.addEventListener("input", () => autoGrow(t));
-      t.addEventListener("keydown", (e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); $("dm-reply-form").requestSubmit(); } });   // Enter = newline; Cmd/Ctrl+Enter sends
+      t.addEventListener("keydown", (e) => { if (e.key === "Enter" && e.shiftKey) { e.preventDefault(); $("dm-reply-form").requestSubmit(); } });   // Enter = newline (line drop); Shift+Enter sends
     })();
     // Lightbox: tap an inline DM image to view it enlarged IN-PAGE (not a new tab); click the overlay or
     // press Esc to close. Delegated so it works for images added on every thread re-render.
