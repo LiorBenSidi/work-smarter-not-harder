@@ -466,9 +466,13 @@ def test_forum_realtime_sse_is_wired_on_the_client(client):
     assert 'addEventListener("forum", onForumEvent)' in html            # subscribed to the forum push
     assert "function onForumEvent()" in html
     body = html[html.index("function onForumEvent()"):html.index("function startEvents()")]
-    assert 'currentScreen !== "forum"' in body and "loadForum()" in body        # scoped to the forum screen
+    assert 'currentScreen !== "forum"' in body                                  # scoped to the forum screen
+    assert "loadForum({ quiet: true })" in body                                 # ...refreshed IN PLACE (no skeleton flash)
     assert "openPost(currentPostId)" in body                                    # refreshes the open post
     assert "document.activeElement" in body and ".value.trim()" in body         # ...but not over a live draft
+    # loadForum must actually honour the quiet flag (skip the skeleton) — else the guard above is cosmetic.
+    lf = html[html.index("async function loadForum("):html.index("function renderForumList()")]
+    assert "opts && opts.quiet" in lf and 'sk("rows")' in lf                    # quiet -> no skeleton paint
 
 
 def test_illustrated_empty_states(client):
