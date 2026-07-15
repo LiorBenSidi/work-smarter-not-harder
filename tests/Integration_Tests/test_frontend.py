@@ -489,6 +489,9 @@ def test_forum_realtime_has_a_self_healing_poll_backstop(client):
     assert 'currentScreen === "forum"' in body and "evtSource.readyState !== 1" in body \
         and "loadForum({ quiet: true })" in body                             # forum re-syncs while SSE is down
     assert "pollNotifications()" in body                                     # DM/notify catch-up preserved
+    # ...and the restart must NOT early-return before the forum catch-up — else changes made DURING the outage
+    # (already in the restarted stream's baseline, so never pushed) would leave the feed stale until a manual load.
+    assert "startEvents(); return" not in body
 
 
 def test_illustrated_empty_states(client):
