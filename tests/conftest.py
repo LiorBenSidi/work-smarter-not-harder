@@ -203,7 +203,13 @@ class FakeHistory:
         return self._by_user.get(username, [])
 
     def add(self, username, entry):
-        self._by_user.setdefault(username, []).append(entry)
+        # Mirror db.add_history: a second check-in the same UTC day REPLACES that day's entry (one row/day).
+        entries = self._by_user.setdefault(username, [])
+        ts = entry.get("timestamp")
+        day = ts[:10] if isinstance(ts, str) and len(ts) >= 10 else None
+        if day:
+            entries[:] = [e for e in entries if str(e.get("timestamp") or "")[:10] != day]
+        entries.append(entry)
 
     def delete(self, username):
         self._by_user.pop(username, None)

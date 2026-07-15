@@ -498,6 +498,18 @@ def test_forum_realtime_has_a_self_healing_poll_backstop(client):
     assert "startEvents(); return" not in body
 
 
+def test_history_rows_show_the_real_readiness_score_not_the_band_level(client):
+    # issue #1: History used to show the band LEVEL (readinessClass -> 100/66/33). It now shows the SAME
+    # 0-100 score the dashboard computes, from each entry's stored proba (band-centre fallback for old
+    # entries with no proba) — so the dashboard's 84 and History agree instead of showing 84 vs 100.
+    html = client.get("/").get_data(as_text=True)
+    render = html[html.index("function renderHistoryList()"):html.index("function updateHistoryDirLabel()")]
+    assert "readinessScore({ state: it.assessment, proba: it.proba })" in render   # real score from stored proba
+    assert 'class="hrow-score">\' + score' in render                               # ...is what the row prints
+    assert "] = readinessClass(it.assessment)" in render                           # class still drives the colour
+    assert "+ pct +" not in render                                                 # the old band-level number is gone
+
+
 def test_history_has_a_sort_direction_toggle_defaulting_newest_first(client):
     # UX (2026-07-15): History gained a Forum-style asc/desc toggle, defaulting to newest-on-top. The sort
     # is display-only (a .slice() copy) so the trend/heatmap/streak keep their stored chronological order.

@@ -6,8 +6,10 @@ def _login(c, username="alice"):
     c.post("/login", json={"username": username, "password": "s3cretpw!"})
 
 
-def _entry(state="Ready"):
-    return {"assessment": state, "recommendations": ["rest"], "calories": 2500, "timestamp": "2026-06-28T10:00:00Z"}
+def _entry(state="Ready", ts="2026-06-28T10:00:00Z"):
+    # ts is per-day: history is now one row per UTC day (a second same-day check-in replaces the first), so a
+    # multi-entry test must use DISTINCT days to represent distinct check-ins.
+    return {"assessment": state, "recommendations": ["rest"], "calories": 2500, "timestamp": ts}
 
 
 def test_history_empty_when_none_saved(history_client):
@@ -18,8 +20,8 @@ def test_history_empty_when_none_saved(history_client):
 
 
 def test_history_returns_the_users_entries(history_client, fake_history):
-    fake_history.add("alice", _entry("Ready"))
-    fake_history.add("alice", _entry("Recovery-Needed"))
+    fake_history.add("alice", _entry("Ready", "2026-06-27T10:00:00Z"))
+    fake_history.add("alice", _entry("Recovery-Needed", "2026-06-28T10:00:00Z"))   # distinct day -> both kept
     _login(history_client, "alice")
     entries = history_client.get("/history").get_json()["history"]
     assert len(entries) == 2

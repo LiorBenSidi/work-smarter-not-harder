@@ -319,7 +319,14 @@ def list_history(db, username):
 
 
 def add_history(db, username, entry):
-    """Append one analysis-history entry for the user (written by the daily check-in)."""
+    """Store one daily check-in. A second check-in the SAME calendar day (UTC) REPLACES that day's entry,
+    so history is a one-row-per-day readiness log (not an append log) — the dashboard/heatmap already treat
+    a day as a single reading. The timestamp is a UTC ISO string; its ``YYYY-MM-DD`` prefix is the day key."""
+    ts = entry.get("timestamp")
+    day = ts[:10] if isinstance(ts, str) and len(ts) >= 10 else None
+    if day:                                   # drop any earlier entry from the same day before writing the new one
+        db.analysis_history.delete_many(
+            {"username": username, "entry.timestamp": {"$regex": "^" + re.escape(day)}})
     db.analysis_history.insert_one({"username": username, "entry": entry})
 
 

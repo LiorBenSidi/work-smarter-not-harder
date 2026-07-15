@@ -106,12 +106,13 @@ def test_dashboard_scores_from_the_latest_checkin_metrics(dash_client, monkeypat
     assert seen["goal"] == "maintain"                    # profile context merged in too
 
 
-def test_dashboard_forwards_recent_history_for_trend_recs(dash_client, monkeypatch):
+def test_dashboard_forwards_recent_history_for_trend_recs(dash_client, fake_history, monkeypatch):
     # P1: the dashboard forwards recent check-in history to the AI so its trend-aware recommendations
     # can fire (a 3x Rest streak, declining sleep, rising fatigue, a load spike). We forward ONLY the two
     # fields the engine reads per entry — {metrics, assessment} — so the payload stays small and JSON-safe
     # (the raw stored entry also carries a timestamp/calories the engine never looks at). The engine's own
     # streak logic is covered in test_ai_recommendations; here we prove the WIRING delivers the history.
+    # A real streak is across DISTINCT days (history is one row per day now), so seed three days directly.
     seen = {}
 
     def capture(url, features, **kw):
@@ -122,8 +123,10 @@ def test_dashboard_forwards_recent_history_for_trend_recs(dash_client, monkeypat
     monkeypatch.setattr(sys.modules["services.ai_client"], "predict", capture)
     _login(dash_client)
     dash_client.post("/profile", json=_profile())
-    for _ in range(3):                                   # three Rest check-ins -> a streak to detect
-        _checkin(dash_client, sleep_hours=5, fatigue=8, soreness=6, training_load=7)
+    day_metrics = {"sleep_hours": 5, "resting_hr": 55, "fatigue": 8, "soreness": 6, "training_load": 7}
+    for day in ("2026-06-26", "2026-06-27", "2026-06-28"):   # three DISTINCT days -> a genuine 3x Rest streak
+        fake_history.add("alice", {"timestamp": day + "T07:00:00+00:00", "assessment": "Rest",
+                                   "metrics": dict(day_metrics)})
     dash_client.get("/dashboard")                        # the call whose payload we inspect (fires last)
 
     history = seen.get("history")
