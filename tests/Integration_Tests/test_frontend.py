@@ -498,6 +498,20 @@ def test_forum_realtime_has_a_self_healing_poll_backstop(client):
     assert "startEvents(); return" not in body
 
 
+def test_history_has_a_sort_direction_toggle_defaulting_newest_first(client):
+    # UX (2026-07-15): History gained a Forum-style asc/desc toggle, defaulting to newest-on-top. The sort
+    # is display-only (a .slice() copy) so the trend/heatmap/streak keep their stored chronological order.
+    html = client.get("/").get_data(as_text=True)
+    assert 'id="history-dir"' in html                                           # the toggle exists in the filter row
+    assert 'historyDir = "desc"' in html                                        # default = newest first
+    render = html[html.index("function renderHistoryList()"):html.index("function updateHistoryDirLabel()")]
+    assert "items.slice().sort(" in render and "historyDir" in render           # display list is sorted (on a copy)
+    assert "localeCompare" in render and ".timestamp" in render                 # ...by timestamp
+    # the toggle flips direction and re-renders; filter chips stay scoped to [data-filter]
+    assert 'chip.id === "history-dir"' in html                                  # the toggle branch is wired
+    assert 'querySelectorAll(".chip[data-filter]")' in html                     # dir button isn't toggled "active"
+
+
 def test_illustrated_empty_states(client):
     # Friendly illustrated empty states (icon + title + guidance) instead of a bare grey line, across
     # History / Forum / DM / the filtered lists (Wolt's empty cards).
