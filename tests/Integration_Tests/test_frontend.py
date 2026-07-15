@@ -413,6 +413,17 @@ def test_dm_reopen_repaints_even_when_the_thread_is_unchanged(client):
         "openThread must clear the setHtmlIfChanged __lastHtml cache when it resets #dm-thread to skeletons"
 
 
+def test_open_dm_thread_is_a_pinned_single_scroll_chat_pane(client):
+    # UX fix (2026-07-15): an open DM thread must be a fixed-height chat pane — the header (Back + peer) and
+    # the composer stay PINNED and the message list is the ONLY scroll (no page-scroll AND inner-scroll, and
+    # the Back button never scrolls away). Scoped to #dm-thread-view; toggled via a `thread-open` class.
+    html = client.get("/").get_data(as_text=True)
+    assert "#dm-thread-view > .card" in html and "flex-direction:column" in html      # the flex chat pane
+    assert "#dm-thread-view .dm-thread { flex:1 1 auto; max-height:none; }" in html    # the message list is the single scroll
+    assert "#screen-messages.thread-open .screen-head { display:none; }" in html       # redundant title hidden while in a thread
+    assert 'classList.add("thread-open")' in html and 'classList.remove("thread-open")' in html   # toggled on open/close
+
+
 def test_illustrated_empty_states(client):
     # Friendly illustrated empty states (icon + title + guidance) instead of a bare grey line, across
     # History / Forum / DM / the filtered lists (Wolt's empty cards).
