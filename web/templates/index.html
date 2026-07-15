@@ -2343,11 +2343,14 @@
       const detail = $("forum-detail"), el = $("forum-list");
       if (detail && el && detail.parentNode === el) el.parentNode.appendChild(detail);
     }
-    async function loadForum() {
+    async function loadForum(opts) {
       const u = currentUser, seq = ++forumLoadSeq;
       const el = $("forum-list");
       stashDetail();                                          // preserve an open post's detail across the wipe
-      el.innerHTML = sk("rows");
+      // A background (real-time SSE) refresh updates the list IN PLACE — no skeleton flash — so a teammate's
+      // live post/vote lands smoothly. Only a user-initiated load (open tab / Refresh) shows the skeleton.
+      // (opts is a MouseEvent when wired straight to the Refresh button's click — its .quiet is undefined.)
+      if (!(opts && opts.quiet)) el.innerHTML = sk("rows");
       const r = await api("/forum/posts");
       if (sessionChanged(u, "loadForum") || seq !== forumLoadSeq) return;   // stale session OR superseded -> don't paint
       if (!r.ok) { el.innerHTML = '<p class="flash error">Could not load the forum.</p>'; return; }
@@ -2936,7 +2939,7 @@
     // teammate's change can't wipe what they're typing. The next tick (or their own submit) picks it up.
     function onForumEvent() {
       if (currentScreen !== "forum") return;
-      loadForum();                                                 // list: new posts / deletes / score changes
+      loadForum({ quiet: true });                                  // list: new posts / deletes / score changes (in place, no skeleton flash)
       if (currentPostId) {
         const draft = document.querySelector('#forum-detail [name="body"]');
         const typing = draft && (document.activeElement === draft || draft.value.trim());
