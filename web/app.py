@@ -186,6 +186,12 @@ class _DbForum(_DbStore):
         db_module, handle = self._resolve()
         return db_module.forum_export_user(handle, username)
 
+    def get_rev(self):
+        # The forum revision the SSE stream watches (routes/messages.py). DB-backed so it broadcasts
+        # across gunicorn workers; every forum mutation above bumps it in db.forum_bump_rev.
+        db_module, handle = self._resolve()
+        return db_module.forum_get_rev(handle)
+
 
 class _DbMessages(_DbStore):
     """Seam Lior implements: ``message_send`` / ``message_list_conversation`` /

@@ -73,6 +73,10 @@ def _users():
     return current_app.config["USERS"]
 
 
+def _forum():
+    return current_app.config["FORUM"]
+
+
 def validate_dm(data):
     """Return ``(recipient, body)`` for a well-formed DM payload, else raise ``ValueError``.
 
@@ -243,6 +247,7 @@ def events():
     always keep a free thread. The client's poll backstop covers real-time while it waits to reconnect."""
     me = session["username"]
     notifications = _notifications()
+    forum = _forum()
 
     if not _sse_slots.acquire(blocking=False):
         # This worker is at its SSE cap: don't pin a thread. Tell the browser to reconnect in 60s; its
@@ -255,6 +260,10 @@ def events():
         try:
             yield "retry: 3000\n\n"                        # browser reconnect delay after a drop
             cursor = time.time()                           # only ping on notifications created after the stream opened
+            try:
+                forum_rev = forum.get_rev()                # baseline: only ping on forum changes AFTER the stream opened
+            except Exception:
+                forum_rev = None                           # forum-rev unavailable -> just skip the forum ping (DM stream unaffected)
             deadline = time.time() + EVENTS_MAX_SECONDS
             while time.time() < deadline:
                 try:
@@ -264,10 +273,24 @@ def events():
                     yield ": store-unavailable\n\n"
                     time.sleep(2)
                     continue
+                pinged = False
                 if fresh:
                     cursor = max(n["created_at"] for n in fresh)
                     yield "event: notify\ndata: {}\n\n"    # a change ping; the client re-fetches via the normal endpoints
-                else:
+                    pinged = True
+                # Forum push: any post/comment/vote anywhere bumps the shared rev; ping every open client so
+                # the forum re-fetches. Guarded on its own — a forum-rev read failure must never end the stream.
+                if forum_rev is not None:
+                    try:
+                        rev = forum.get_rev()
+                        if rev != forum_rev:
+                            forum_rev = rev
+                            yield "event: forum\ndata: {}\n\n"
+                            pinged = True
+                    except Exception:
+                        logger.warning("forum-rev read failed during SSE stream", exc_info=True)
+                        forum_rev = None                   # stop polling a broken forum-rev; DM pings continue
+                if not pinged:
                     yield ": keepalive\n\n"                 # comment line keeps the connection warm through proxies
                 time.sleep(EVENTS_TICK_SECONDS)
         finally:

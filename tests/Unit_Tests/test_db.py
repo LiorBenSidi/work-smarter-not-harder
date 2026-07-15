@@ -103,11 +103,15 @@ class _FakeColl:
                 d.update(update.get("$set", {}))
                 for key, val in update.get("$push", {}).items():
                     d.setdefault(key, []).append(val)
+                for key, val in update.get("$inc", {}).items():   # forum_bump_rev's atomic counter
+                    d[key] = d.get(key, 0) + val
                 return SimpleNamespace(matched_count=1, upserted_id=None)
         if upsert:
             new = dict(filt)
             new.update(update.get("$setOnInsert", {}))
             new.update(update.get("$set", {}))
+            for key, val in update.get("$inc", {}).items():       # first bump upserts {_id, v: <val>}
+                new[key] = new.get(key, 0) + val
             self.docs.append(new)
             return SimpleNamespace(matched_count=0, upserted_id="fake")
         return SimpleNamespace(matched_count=0, upserted_id=None)
@@ -129,6 +133,7 @@ class _FakeDB:
         self.forum_posts = _FakeColl()
         self.messages = _FakeColl()
         self.notifications = _FakeColl()
+        self.meta = _FakeColl()                  # the forum_rev counter lives here (real-time push)
         self.commands = []                       # records db.command(...) calls (ensure_schema)
 
     def command(self, command, value=None, **kwargs):
@@ -423,6 +428,32 @@ def test_forum_delete_post_by_non_author_is_forbidden(db_mod, db):
 
 def test_forum_delete_missing_post_is_none(db_mod, db):
     assert db_mod.forum_delete_post(db, "nope", "alice") is None
+
+
+def test_forum_rev_starts_at_zero_and_every_mutation_bumps_it(db_mod, db):
+    # Real-time push contract: the SSE stream watches forum_get_rev; each MUTATION must advance it so open
+    # clients re-fetch. (vote / vote_comment run a Mongo pipeline the fake can't execute — their bump is
+    # pinned against real Mongo in test_db_mongo.py. Here: create / comment / update / delete.)
+    assert db_mod.forum_get_rev(db) == 0                       # nothing happened yet
+    pid = db_mod.forum_create_post(db, "alice", "T", "B", False)["id"]
+    assert db_mod.forum_get_rev(db) == 1                       # a new post is a change
+    db_mod.forum_add_comment(db, pid, "bob", "nice")
+    assert db_mod.forum_get_rev(db) == 2                       # a comment is a change
+    db_mod.forum_update_post(db, pid, "alice", "T2", "B2")
+    assert db_mod.forum_get_rev(db) == 3                       # an edit is a change
+    db_mod.forum_delete_post(db, pid, "alice")
+    assert db_mod.forum_get_rev(db) == 4                       # a delete is a change
+
+
+def test_forum_rev_does_not_move_on_a_no_op_mutation(db_mod, db):
+    # A rejected mutation is NOT a change — an unknown post or a non-author edit/delete must leave the rev
+    # untouched, so the stream doesn't ping every client for a write that never landed.
+    pid = db_mod.forum_create_post(db, "alice", "T", "B", False)["id"]
+    rev = db_mod.forum_get_rev(db)
+    assert db_mod.forum_add_comment(db, "nope", "bob", "x") is None
+    assert db_mod.forum_update_post(db, pid, "mallory", "X", "y") == db_mod.FORBIDDEN
+    assert db_mod.forum_delete_post(db, pid, "mallory") == db_mod.FORBIDDEN
+    assert db_mod.forum_get_rev(db) == rev                     # no successful write -> no bump
 
 
 # ---- robustness fixes (from the adversarial review) ----

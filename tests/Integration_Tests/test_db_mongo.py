@@ -197,6 +197,23 @@ def test_forum_vote_behaviour_against_mongo(db_mod, real_db):
     assert db_mod.forum_vote_comment(real_db, pid, cid, "carol", -1) == -1  # same user replaces on the comment too
 
 
+def test_forum_vote_paths_bump_the_realtime_rev_against_mongo(db_mod, real_db):
+    # Real-time push (SSE `event: forum`): the two vote mutations run the Mongo pipeline the fake can't, so
+    # their rev-bump is pinned here. A successful post OR comment vote advances forum_get_rev; a vote on an
+    # unknown post does NOT (nothing changed -> no ping).
+    pid = db_mod.forum_create_post(real_db, "alice", "T", "B", False)["id"]
+    cid = db_mod.forum_add_comment(real_db, pid, "bob", "hi")["id"]
+    r0 = db_mod.forum_get_rev(real_db)
+    assert db_mod.forum_vote(real_db, pid, "carol", 1) == 1
+    r1 = db_mod.forum_get_rev(real_db)
+    assert r1 == r0 + 1                                             # a post vote is a change
+    assert db_mod.forum_vote_comment(real_db, pid, cid, "carol", 1) == 1
+    assert db_mod.forum_get_rev(real_db) == r1 + 1                  # a comment vote is a change
+    before = db_mod.forum_get_rev(real_db)
+    assert db_mod.forum_vote(real_db, "nope", "carol", 1) is None   # unknown post -> no write
+    assert db_mod.forum_get_rev(real_db) == before                  # ...and no bump
+
+
 def test_forum_vote_is_atomic_under_concurrency(db_mod, real_db):
     # The atomic pipeline update must let many simultaneous voters on ONE hot post all succeed with the
     # correct final tally and NO spurious error. The old read-rebuild-CAS-retry loop could exhaust its

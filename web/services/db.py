@@ -345,12 +345,41 @@ def _shape(post):
             "comments": [_comment_public(c) for c in post.get("comments", [])]}
 
 
+# ---- Forum revision counter (real-time push) --------------------------------------------------
+# One monotonic integer in db.meta ({_id: "forum_rev"}). Every forum MUTATION bumps it; the SSE stream
+# (routes/messages.py) reads it each tick and pushes `event: forum` when it moves, so every open client
+# re-fetches — no client polling of the forum. DB-backed on purpose: prod runs 1 gunicorn worker and
+# CI/dev run 2, so an in-process counter couldn't broadcast across workers. Both bump and read are
+# best-effort: a meta hiccup must NEVER fail the underlying post/vote/comment write, nor kill the stream.
+_FORUM_REV_ID = "forum_rev"
+
+
+def forum_bump_rev(db):
+    """Advance the forum revision so open SSE streams notice a change. Best-effort — never raises: a meta
+    hiccup must not fail the post/vote/comment write that triggered it (the change still landed; clients
+    just miss the instant push and catch it on their next poll/refresh)."""
+    try:
+        db.meta.update_one({"_id": _FORUM_REV_ID}, {"$inc": {"v": 1}}, upsert=True)
+    except Exception:
+        logger.warning("forum_bump_rev failed — real-time push skipped for this change", exc_info=True)
+
+
+def forum_get_rev(db):
+    """Return the current forum revision (0 before the first bump / on any read error)."""
+    try:
+        doc = db.meta.find_one({"_id": _FORUM_REV_ID})
+    except Exception:
+        return 0
+    return int(doc.get("v", 0)) if doc else 0
+
+
 def forum_create_post(db, author, title, body, anonymous):
     """Insert a post and return its public shape (opaque string id)."""
     post = {"id": uuid.uuid4().hex, "author": author, "anonymous": anonymous,
             "title": title, "body": body, "score": 0, "comments": [], "votes": [],
             "created_at": time.time()}
     db.forum_posts.insert_one(post)
+    forum_bump_rev(db)
     return _shape(post)
 
 
@@ -370,7 +399,10 @@ def forum_add_comment(db, post_id, author, body):
     the post is unknown. The id lets a comment be up/downvoted independently of its post."""
     comment = {"id": uuid.uuid4().hex, "author": author, "body": body, "votes": [], "score": 0}
     result = db.forum_posts.update_one({"id": post_id}, {"$push": {"comments": comment}})
-    return _comment_public(comment) if result.matched_count else None
+    if not result.matched_count:
+        return None
+    forum_bump_rev(db)
+    return _comment_public(comment)
 
 
 def forum_vote_comment(db, post_id, comment_id, username, value):
@@ -409,6 +441,7 @@ def forum_vote_comment(db, post_id, comment_id, username, value):
     )
     if not post:
         return None
+    forum_bump_rev(db)
     target = next((c for c in post.get("comments", []) if c.get("id") == comment_id), None)
     return target["score"] if target else None
 
@@ -438,7 +471,10 @@ def forum_vote(db, post_id, username, value):
         ],
         return_document=ReturnDocument.AFTER,
     )
-    return post["score"] if post else None
+    if post is None:
+        return None
+    forum_bump_rev(db)
+    return post["score"]
 
 
 def forum_received_engagement(db, username):
@@ -488,6 +524,7 @@ def forum_update_post(db, post_id, username, title, body):
     result = db.forum_posts.update_one({"id": post_id}, {"$set": {"title": title, "body": body}})
     if not result.matched_count:
         return None                       # concurrently deleted between the author check and the write
+    forum_bump_rev(db)
     post["title"], post["body"] = title, body
     return _shape(post)
 
@@ -500,6 +537,7 @@ def forum_delete_post(db, post_id, username):
     if post.get("author") != username:
         return FORBIDDEN
     db.forum_posts.delete_one({"id": post_id})
+    forum_bump_rev(db)
     return True
 
 
