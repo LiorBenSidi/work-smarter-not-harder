@@ -470,6 +470,10 @@ def test_forum_realtime_sse_is_wired_on_the_client(client):
     assert "loadForum({ quiet: true })" in body                                 # ...refreshed IN PLACE (no skeleton flash)
     assert "openPost(currentPostId)" in body                                    # refreshes the open post
     assert "document.activeElement" in body and ".value.trim()" in body         # ...but not over a live draft
+    # If the OPEN post was deleted live, close it with an accurate note — NOT re-fetch it (a 404 -> the
+    # generic "couldn't open, try again", which is misleading when the post is simply gone).
+    assert "forumPosts.some((p) => p.id === currentPostId)" in body             # detect the open post vanished
+    assert "This post was removed." in body                                     # accurate copy for a live delete
     # loadForum must actually honour the quiet flag (skip the skeleton) — else the guard above is cosmetic.
     lf = html[html.index("async function loadForum("):html.index("function renderForumList()")]
     assert "opts && opts.quiet" in lf and 'sk("rows")' in lf                    # quiet -> no skeleton paint

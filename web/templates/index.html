@@ -2937,14 +2937,19 @@
     // the open post's detail (new comments / live score). Never re-render over a draft: if the user is mid-
     // comment or mid-edit (the detail's body field is focused or non-empty), skip the detail repaint so a
     // teammate's change can't wipe what they're typing. The next tick (or their own submit) picks it up.
-    function onForumEvent() {
+    async function onForumEvent() {
       if (currentScreen !== "forum") return;
-      loadForum({ quiet: true });                                  // list: new posts / deletes / score changes (in place, no skeleton flash)
-      if (currentPostId) {
-        const draft = document.querySelector('#forum-detail [name="body"]');
-        const typing = draft && (document.activeElement === draft || draft.value.trim());
-        if (!typing) openPost(currentPostId);                      // detail: new comments / live votes
+      await loadForum({ quiet: true });                            // list: new posts / deletes / score changes (in place, no skeleton flash)
+      if (!currentPostId) return;
+      // If the post I'm viewing is gone from the refreshed list, someone deleted it — close it with an
+      // accurate note. (Re-fetching a deleted post 404s -> the generic "couldn't open, try again", which is
+      // misleading here.) Only act on a fresh list: if the refresh itself failed, forumPosts is unchanged.
+      if (Array.isArray(forumPosts) && !forumPosts.some((p) => p.id === currentPostId)) {
+        closePost(); flash("forum-flash", "This post was removed.", "warn"); return;
       }
+      const draft = document.querySelector('#forum-detail [name="body"]');
+      const typing = draft && (document.activeElement === draft || draft.value.trim());
+      if (!typing) openPost(currentPostId);                        // detail: new comments / live votes
     }
     // The 45s poll backstop. Besides the DM/notify catch-up, it SELF-HEALS real-time: EventSource
     // auto-reconnects a dropped stream (readyState CONNECTING), but a FATAL error leaves it CLOSED
