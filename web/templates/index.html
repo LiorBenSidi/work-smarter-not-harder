@@ -2346,7 +2346,10 @@
       });
       const key = (d) => d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
       const today = new Date(); today.setHours(0, 0, 0, 0);
-      const start = new Date(today); start.setDate(today.getDate() - (WEEKS * 7 - 1)); start.setDate(start.getDate() - start.getDay());
+      // Anchor the grid so the LAST column is the CURRENT week (Sun–Sat containing today): jump to this
+      // week's Sunday, then back WEEKS-1 weeks. (The old math ended the grid at the *previous* Saturday, so
+      // today — and the whole current week — never rendered except on Saturdays.)
+      const start = new Date(today); start.setDate(today.getDate() - today.getDay() - (WEEKS - 1) * 7);
       let cells = "", cur = new Date(start);
       for (let i = 0; i < WEEKS * 7; i++) {
         const k = key(cur), cls = byDay[k], future = cur > today;
