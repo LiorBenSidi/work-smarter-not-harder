@@ -103,6 +103,18 @@ def test_comment_flood_is_rate_limited(rate_limited_forum_client):
     assert last.status_code == 429
 
 
+def test_media_upload_is_rate_limited_after_a_flood(rate_limited_media_client):
+    # 20/min on POST /media (issue #313): the per-file 10 MB cap alone leaves disk-fill unbounded —
+    # an authenticated upload flood from one IP must be throttled like the other write routes.
+    import io
+    c = rate_limited_media_client
+    _login_forum(c)
+    last = None
+    for _ in range(25):
+        last = c.post("/media", data={"file": (io.BytesIO(b"\x89PNG\r\n\x1a\nx"), "p.png", "image/png")})
+    assert last.status_code == 429
+
+
 def test_normal_forum_traffic_is_not_rate_limited(forum_client):
     # the default forum_client (limiter OFF) — a handful of posts never 429 (the caps are opt-in)
     forum_client.post("/register", json={"username": "regular", "password": "s3cretpw!", "email": "r@ex.com"})
