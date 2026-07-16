@@ -390,9 +390,16 @@ def forum_create_post(db, author, title, body, anonymous):
     return _shape(post)
 
 
-def forum_list_posts(db):
-    """Return every post in public shape."""
-    return [_shape(p) for p in db.forum_posts.find()]
+# Cap the forum-feed read. The 10/min create cap slows growth but doesn't bound the total, so an unbounded
+# `find()` means a determined post-flood would make EVERY /forum/posts read progressively slower for everyone
+# (a real DoS-amplification vector under a stress test). 200 latest is ample for a course forum, the client
+# still applies the user's chosen sort/filter on top, and it's behaviour-neutral until the feed exceeds 200.
+FORUM_LIST_MAX = 200
+
+
+def forum_list_posts(db, limit=FORUM_LIST_MAX):
+    """Return the most-recent `limit` posts (newest first), in public shape — a bounded read."""
+    return [_shape(p) for p in db.forum_posts.find().sort("created_at", -1).limit(limit)]
 
 
 def forum_get_post(db, post_id):

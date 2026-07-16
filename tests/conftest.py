@@ -223,6 +223,7 @@ class FakeForum:
         self._posts = {}
         self._seq = 0
         self._rev = 0        # forum revision (real-time): every successful mutation bumps it; get_rev() reads it
+        self.list_cap = 200  # mirrors db.FORUM_LIST_MAX (bounded feed read); a test can lower it
 
     def get_rev(self):
         return self._rev
@@ -237,7 +238,8 @@ class FakeForum:
         return self._posts[pid]
 
     def list_posts(self):
-        return list(self._posts.values())
+        # mirror db.forum_list_posts: newest-first + capped (bounded read)
+        return sorted(self._posts.values(), key=lambda p: p.get("created_at", 0), reverse=True)[:self.list_cap]
 
     def get_post(self, post_id):
         return self._posts.get(post_id)

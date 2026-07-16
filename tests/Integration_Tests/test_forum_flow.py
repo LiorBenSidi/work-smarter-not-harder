@@ -20,6 +20,19 @@ def test_create_then_list_posts(forum_client):
     assert posts[0]["score"] == 0
 
 
+def test_forum_feed_read_is_bounded_newest_first(forum_client, fake_forum):
+    # Robustness / DoS-amplification guard: the feed read is CAPPED (newest-first), so a post-flood can't make
+    # every /forum/posts read unboundedly slow for everyone. list_cap mirrors db.FORUM_LIST_MAX (200),
+    # lowered here to keep the test small. Behaviour-neutral below the cap (all posts returned).
+    fake_forum.list_cap = 3
+    _login(forum_client)
+    for i in range(6):
+        assert _new_post(forum_client, f"p{i}", "b").status_code == 201
+    posts = forum_client.get("/forum/posts").get_json()["posts"]
+    assert len(posts) == 3                                      # capped, not all 6
+    assert [p["title"] for p in posts] == ["p5", "p4", "p3"]    # the newest 3, newest first
+
+
 def test_list_posts_carry_created_at_in_creation_order(forum_client):
     # The client sorts the forum by created_at (newest-first by default) and renders each post's age, so the
     # summary must expose a positive, strictly-increasing created_at per creation order.

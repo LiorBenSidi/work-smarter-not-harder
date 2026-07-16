@@ -37,6 +37,10 @@ class _FakeCursor:
             self._coll.last_limit = n
         return _FakeCursor(self._rows[:n] if n else self._rows, self._coll)
 
+    def sort(self, field, direction=1):
+        rows = sorted(self._rows, key=lambda d: d.get(field, 0), reverse=(direction < 0))
+        return _FakeCursor(rows, self._coll)
+
     def __iter__(self):
         return iter(self._rows)
 
