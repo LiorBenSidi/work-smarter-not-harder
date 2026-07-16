@@ -134,6 +134,7 @@ jobs:
             echo "OTP_ENABLED=0"
             echo "SMTP_HOST="
             echo "SESSION_COOKIE_SECURE=0"
+            echo "RATELIMIT_ENABLED=0"
           } > .env
 
       - name: Boot the stack (detached) and wait for it to serve

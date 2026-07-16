@@ -12,6 +12,7 @@ services:
       AI_URL: http://ai:5000
       FLASK_DEBUG: ${FLASK_DEBUG:-0}
       TESTING: ${TESTING:-0}
+      RATELIMIT_ENABLED: ${RATELIMIT_ENABLED:-1}          # 1 = anti-abuse caps on (prod default); browser-E2E .env sets 0
       SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-0}   # set to 1 in production (HTTPS)
       ENABLE_LOGGING: ${ENABLE_LOGGING:-1}                 # 0 -> suppress logging (Lab-9.1 cost toggle)
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
