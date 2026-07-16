@@ -33,6 +33,30 @@ def test_forgot_password_is_rate_limited_after_a_flood(rate_limited_client):
     assert last.status_code == 429
 
 
+def test_checkin_is_rate_limited_after_a_flood(make_client, fake_users, fake_profiles, fake_history, monkeypatch):
+    # 30/min on /checkin: it hits the ai queue, so one client mustn't hog predictions (the queue's 503 is the
+    # real backstop; this is the fairness fence). AI is mocked so the cap — not an AI error — is what trips.
+    import sys
+    monkeypatch.setattr(sys.modules["services.ai_client"], "predict",
+                        lambda url, features, **kw: {"state": "Ready", "calories": 2000})
+    c = make_client(fake_users, fake_profiles, history=fake_history)
+    app = c.raw.application
+    app.config["RATELIMIT_ENABLED"] = True
+    from ratelimit import limiter
+    with app.app_context():
+        try:
+            limiter.reset()
+        except Exception:
+            pass
+    c.post("/register", json={"username": "floodcheck", "password": "s3cretpw!", "email": "fc@ex.com"})
+    c.post("/login", json={"username": "floodcheck", "password": "s3cretpw!"})
+    metrics = {"sleep_hours": 7.5, "resting_hr": 55, "fatigue": 3, "soreness": 2, "training_load": 6}
+    last = None
+    for _ in range(35):
+        last = c.post("/checkin", json=metrics)
+    assert last.status_code == 429
+
+
 def test_normal_traffic_is_not_rate_limited(client):
     # the default client (limiter OFF) proves the suite isn't throttled — a handful of logins never 429
     for _ in range(30):
