@@ -83,6 +83,41 @@ def test_prod_services_all_self_heal(prod):
     assert prod.count("restart: unless-stopped") == 4, "every prod service needs restart: unless-stopped"
 
 
+def test_prod_web_worker_count_is_env_tunable(prod):
+    # #324: the web worker count must stay env-tunable (WEB_WORKERS) so the SAME GHCR image scales onto a
+    # bigger VM with one .env line — no rebuild. Default 1 keeps today's behaviour exactly; a hardcoded
+    # "--workers", "1" would silently drop the knob. (Raising it loosens the per-process memory:// rate
+    # caps N× — see the compose comment; that trade-off is an ops note, not this test's concern.)
+    assert '"--workers", "${WEB_WORKERS:-1}"' in prod, \
+        "prod web must size gunicorn workers via ${WEB_WORKERS:-1} so the image scales without a rebuild"
+    # #324 threads: 16 is the measured knee (8->16 = +56% throughput under load; 16->32 flat). Tunable so a
+    # bigger VM can raise it; 1 worker x threads uses the cores (scrypt releases the GIL) and keeps caps exact.
+    assert '"--threads", "${WEB_THREADS:-16}"' in prod, \
+        "prod web must size gunicorn threads via ${WEB_THREADS:-16} (the measured knee) and stay tunable"
+
+
+def _web_gunicorn_command(compose_filename):
+    """The web service's gunicorn `command:` line from a compose file (uniquely `wsgi:app` + `gthread` —
+    the ai/scale commands use `app:create_app()`), or None. Used to prove dev and prod run the same web."""
+    for line in (ROOT / compose_filename).read_text().splitlines():
+        s = line.strip()
+        if s.startswith("command:") and "wsgi:app" in s and "gthread" in s:
+            return s
+    return None
+
+
+def test_dev_and_prod_web_run_the_same_gunicorn_command():
+    # #324 (mirror): what you run locally must be what deploys to the VM — a divergent worker/thread sizing
+    # is exactly why Elad's dev-stack stress numbers (2×4) didn't describe prod (1×8). Both compose files must
+    # carry the IDENTICAL, WEB_WORKERS-tunable web command so local mirrors the VM and can't silently drift.
+    dev = _web_gunicorn_command("docker-compose.yml")
+    prod = _web_gunicorn_command("docker-compose.prod.yml")
+    assert dev is not None, "dev docker-compose.yml must define the web gunicorn command (mirror prod)"
+    assert prod is not None, "prod docker-compose.prod.yml must define the web gunicorn command"
+    assert dev == prod, ("local must mirror the VM — dev and prod web gunicorn commands must be identical.\n"
+                         f"  dev : {dev}\n  prod: {prod}")
+
+
 # --------------------------------------------------------------------------- test stack (the runner)
 
 def test_test_stack_defines_a_test_runner(test_stack):

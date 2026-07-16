@@ -4,6 +4,12 @@
 services:
   web:
     build: ./web
+    # Mirror prod: local and the VM run the SAME gunicorn command so what you test locally is what deploys
+    # (issue #324). Identical to docker-compose.prod.yml's web command — a contract test enforces they match.
+    # Two env knobs (default = the tuned 1 worker x 16 threads): WEB_WORKERS (1 keeps memory:// rate caps exact)
+    # and WEB_THREADS (16 = the measured knee; 8->16 gave +56% throughput under load). Scale on a bigger host
+    # with one .env line — no rebuild.
+    command: ["gunicorn", "--bind", "0.0.0.0:5000", "--worker-class", "gthread", "--workers", "${WEB_WORKERS:-1}", "--threads", "${WEB_THREADS:-16}", "--timeout", "45", "--max-requests", "1000", "--max-requests-jitter", "100", "wsgi:app"]
     ports:
       - "8000:5000"                 # the ONLY published port
     environment:
@@ -13,6 +19,7 @@ services:
       FLASK_DEBUG: ${FLASK_DEBUG:-0}
       TESTING: ${TESTING:-0}
       RATELIMIT_ENABLED: ${RATELIMIT_ENABLED:-1}          # 1 = anti-abuse caps on (prod default); browser-E2E .env sets 0
+      WEB_THREADS: ${WEB_THREADS:-16}                      # mirrors gunicorn --threads; the SSE cap clamps to threads//2
       SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-0}   # set to 1 in production (HTTPS)
       ENABLE_LOGGING: ${ENABLE_LOGGING:-1}                 # 0 -> suppress logging (Lab-9.1 cost toggle)
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
