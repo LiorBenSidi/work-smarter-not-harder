@@ -29,15 +29,21 @@ services:
   web:                                     # NO host port now — only Caddy reaches it, over the internal network
     image: ghcr.io/${IMAGE_OWNER:?set IMAGE_OWNER}/work-smarter-web:${IMAGE_TAG:-latest}   # CI pins the exact SHA (R5.2)
     restart: unless-stopped                # self-heal + survive a VM reboot (R5.4)
-    # PROD: 1 gthread worker x 8 threads = 8 concurrent I/O-bound requests (web waits on Mongo + ai, and those
-    # socket waits release the GIL, so threads — not processes — are the right lever). 8 = the VM's thread count
-    # (4 vCPU x 2). Comfortably exceeds EVENTS_MAX_STREAMS so SSE streams can't starve /health.
+    # PROD: 1 gthread worker x 16 threads. The web tier is I/O-bound (waits on Mongo + ai; those socket waits
+    # release the GIL, so THREADS — not processes — are the lever), and scrypt hashing also releases the GIL, so
+    # ONE worker already spreads hashing across all 4 vCPUs. Measured (#324): 8->16 threads = +56% throughput /
+    # -36% p95 under a concurrent burst; 16->32 is flat, so 16 is the knee. ONE worker keeps ratelimit.py's
+    # memory:// caps EXACT (more workers loosen them N×). 16 >> EVENTS_MAX_STREAMS so SSE can't starve /health.
     # --timeout 45 > AI_CLIENT_TIMEOUT (33s) so a slow /predict degrades gracefully instead of a worker SIGKILL.
-    command: ["gunicorn", "--bind", "0.0.0.0:5000", "--worker-class", "gthread", "--workers", "1", "--threads", "8", "--timeout", "45", "--max-requests", "1000", "--max-requests-jitter", "100", "wsgi:app"]
+    # Both levers are env-tunable (WEB_WORKERS / WEB_THREADS) so the SAME image scales onto a bigger VM with one
+    # .env line — no rebuild. CAVEAT: raising WEB_WORKERS>1 needs RATELIMIT_STORAGE_URI at a shared backend, else
+    # the anti-abuse caps go N× looser. Compose interpolates the defaults at parse time.
+    command: ["gunicorn", "--bind", "0.0.0.0:5000", "--worker-class", "gthread", "--workers", "${WEB_WORKERS:-1}", "--threads", "${WEB_THREADS:-16}", "--timeout", "45", "--max-requests", "1000", "--max-requests-jitter", "100", "wsgi:app"]
     environment:
       SECRET_KEY: ${SECRET_KEY:?set SECRET_KEY}
       MONGO_URI: ${MONGO_URI:-mongodb://db:27017/worksmarter}
       AI_URL: http://ai:5000
+      WEB_THREADS: ${WEB_THREADS:-16}                       # mirrors gunicorn --threads; the SSE cap clamps to threads//2
       SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-1}   # prod is HTTPS -> mark the session cookie Secure
       ENABLE_LOGGING: ${ENABLE_LOGGING:-1}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
