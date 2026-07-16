@@ -552,7 +552,7 @@ def test_reset_link_survives_a_service_worker_reload(client):
 def test_history_heatmap_is_seven_weeks(client):
     # The readiness heatmap is a 7x7 square (7 weeks x 7 days), driven by the single WEEKS constant.
     html = client.get("/").get_data(as_text=True)
-    render = html[html.index("function renderHeat("):html.index("function renderHeat(") + 1200]
+    render = html[html.index("function renderHeat("):html.index("function renderHeat(") + 1600]
     assert "const WEEKS = 7;" in render and "const WEEKS = 8;" not in render
 
 
@@ -561,9 +561,20 @@ def test_history_heatmap_last_column_is_the_current_week(client):
     # today), or today's check-in never renders. The old math (`WEEKS * 7 - 1` start offset) ended the grid
     # on the PREVIOUS Saturday, so the whole current week was missing except on Saturdays.
     html = client.get("/").get_data(as_text=True)
-    render = html[html.index("function renderHeat("):html.index("function renderHeat(") + 1200]
-    assert "today.getDate() - today.getDay() - (WEEKS - 1) * 7" in render   # anchor last column to this week
-    assert "WEEKS * 7 - 1" not in render                                    # the old (buggy) start offset is gone
+    render = html[html.index("function renderHeat("):html.index("function renderHeat(") + 1600]
+    assert "today.getUTCDate() - today.getUTCDay() - (WEEKS - 1) * 7" in render   # anchor last column to this week, in UTC
+    assert "WEEKS * 7 - 1" not in render                                          # the old (buggy) start offset is gone
+
+
+def test_streak_and_heatmap_group_days_in_utc_not_local(client):
+    # Check-ins are stored + de-duplicated by UTC day, so the client must group by UTC day too — else a
+    # non-UTC user's evening/early check-in lands on the wrong day (ghost "future" cell, broken streak,
+    # nag-after-checkin). CI runs in UTC so a LOCAL-date regression is invisible here — hence this guard.
+    html = client.get("/").get_data(as_text=True)
+    for fn in ("function computeStreak(", "function renderHeat("):
+        block = html[html.index(fn):html.index(fn) + 1200]
+        assert "setUTCHours" in block and "getUTCDate" in block          # uses the UTC clock
+        assert "setHours(" not in block and ".getDate()" not in block    # ...and not the LOCAL clock
 
 
 def test_second_same_day_checkin_asks_to_confirm_the_replace(client):
