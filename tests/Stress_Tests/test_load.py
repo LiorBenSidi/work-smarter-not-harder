@@ -25,6 +25,7 @@ from concurrent.futures import ThreadPoolExecutor
 import pytest
 
 requests = pytest.importorskip("requests")
+urllib3 = pytest.importorskip("urllib3")   # requests' own transport — present wherever requests is
 
 BASE = os.environ.get("E2E_BASE_URL", "").rstrip("/")
 pytestmark = pytest.mark.skipif(not BASE, reason="set E2E_BASE_URL to stress a live stack")
@@ -35,7 +36,7 @@ TIMEOUT = 10
 
 
 def _session():
-    """A Session whose connection pool matches the burst CONCURRENCY.
+    """A Session whose connection pool matches the burst CONCURRENCY — with keep-alive-drop retries.
 
     requests' default urllib3 pool holds 10 connections; a 16-thread burst through it forces the
     extra threads onto freshly-opened TCP connections every call, which on a slow/loaded CI runner
@@ -43,9 +44,19 @@ def _session():
     exists to catch (issue #215: three of these tests flaked on a docs-only PR). Sizing the pool to
     the concurrency keeps every thread on a kept-alive connection, so a `-1` again means the SERVER
     dropped us. The burst itself is unchanged — same request count, timeouts and assertions.
+
+    RETRIES (the second `-1` masquerade, found in the 2026-07-16 stress baseline): gunicorn's
+    deliberate `--max-requests` worker recycling gracefully closes the exiting worker's KEEP-ALIVE
+    connections. A real browser retries that close transparently; a bare requests.Session surfaces
+    it as RemoteDisconnected -> `-1`, so on a long-lived stack (counters near the recycle point) the
+    suite flaked without any real drop. A small connection-scope Retry mirrors the browser behaviour;
+    a server that truly stops answering still exhausts the retries and fails the `-1` guard.
     """
     s = requests.Session()
-    adapter = requests.adapters.HTTPAdapter(pool_connections=CONCURRENCY, pool_maxsize=CONCURRENCY)
+    retry = urllib3.util.retry.Retry(total=3, connect=3, read=2, redirect=0, status=0,
+                                     allowed_methods=None, backoff_factor=0.1)
+    adapter = requests.adapters.HTTPAdapter(pool_connections=CONCURRENCY, pool_maxsize=CONCURRENCY,
+                                            max_retries=retry)
     s.mount("http://", adapter)
     s.mount("https://", adapter)
     return s
@@ -55,6 +66,34 @@ def _csrf_session():
     s = _session()
     s.get(f"{BASE}/health", timeout=TIMEOUT)   # seed the double-submit CSRF cookie
     return s
+
+
+def _signup_signin(session, headers, user, pw):
+    """Register + end up SIGNED IN on either stack mode (so the flood test isn't TESTING-stack-only).
+
+    TESTING stack (compose-e2e): register creates the account directly -> plain /login (OTP is
+    gated off under TESTING). Prod-mode stack (email-verify ON, mock email — the default
+    `docker compose up`): register returns ``verify_required`` + the dev-surfaced ``dev_code``;
+    ``/register/verify`` then creates the account AND signs the session straight in (never touch
+    /login here — prod-mode login answers with an OTP challenge, not a session). A live-SMTP stack
+    surfaces no code at all -> skip, a mailbox is out of scope for a stress run.
+    """
+    r = session.post(f"{BASE}/register",
+                     json={"username": user, "password": pw, "email": user + "@example.com"},
+                     headers=headers, timeout=TIMEOUT)
+    assert r.status_code in (200, 201), f"register failed: {r.status_code}"
+    body = r.json() if "application/json" in r.headers.get("Content-Type", "") else {}
+    if body.get("status") == "verify_required":
+        code = body.get("dev_code")
+        if not code:
+            pytest.skip("live-SMTP stack: completing signup needs a mailbox (mock-email/TESTING stacks run this)")
+        v = session.post(f"{BASE}/register/verify", json={"code": code}, headers=headers, timeout=TIMEOUT)
+        assert v.status_code == 201, f"register/verify failed: {v.status_code}"
+        session.get(f"{BASE}/health", timeout=TIMEOUT)     # verify rotates the session -> reseed CSRF
+        headers["X-CSRF-Token"] = session.cookies.get("csrf_token", "")
+        return
+    assert session.post(f"{BASE}/login", json={"username": user, "password": pw},
+                        headers=headers, timeout=TIMEOUT).status_code == 200
 
 
 def _burst(call):
@@ -98,11 +137,7 @@ def test_forum_post_flood_is_shed_with_429_never_5xx():
     session = _csrf_session()
     headers = {"X-CSRF-Token": session.cookies.get("csrf_token", "")}
     user, pw = "stress_" + uuid.uuid4().hex[:8], "s3cret-stress-pw!"
-    assert session.post(f"{BASE}/register",
-                        json={"username": user, "password": pw, "email": user + "@example.com"},
-                        headers=headers, timeout=TIMEOUT).status_code in (200, 201)
-    assert session.post(f"{BASE}/login", json={"username": user, "password": pw},
-                        headers=headers, timeout=TIMEOUT).status_code == 200
+    _signup_signin(session, headers, user, pw)
 
     created = []  # list.append is atomic, so worker threads may share it
 
