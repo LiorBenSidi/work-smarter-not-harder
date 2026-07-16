@@ -103,7 +103,10 @@ export class Browser {
   }
 
   // Poll until the selector exists (and is visible unless {visible:false}); throws on timeout.
-  async waitFor(selector, { timeout = 5000, visible = true } = {}) {
+  // Default 12s (was 5s): under a loaded CI runner the app-boot + first paint can exceed 5s, which
+  // showed up as flaky `waitFor timeout: #login-form` failures on random tests. A generous ceiling
+  // costs nothing on the happy path (it returns as soon as the element is visible) and kills the flake.
+  async waitFor(selector, { timeout = 12000, visible = true } = {}) {
     const start = Date.now();
     while (Date.now() - start < timeout) {
       const ok = await this.evaluate(`() => { const el = document.querySelector(${JSON.stringify(selector)}); if (!el) return false; if (${!visible}) return true; const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0 && getComputedStyle(el).visibility !== "hidden"; }`);
