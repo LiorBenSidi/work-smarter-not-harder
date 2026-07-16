@@ -552,8 +552,18 @@ def test_reset_link_survives_a_service_worker_reload(client):
 def test_history_heatmap_is_seven_weeks(client):
     # The readiness heatmap is a 7x7 square (7 weeks x 7 days), driven by the single WEEKS constant.
     html = client.get("/").get_data(as_text=True)
-    render = html[html.index("function renderHeat("):html.index("function renderHeat(") + 900]
+    render = html[html.index("function renderHeat("):html.index("function renderHeat(") + 1200]
     assert "const WEEKS = 7;" in render and "const WEEKS = 8;" not in render
+
+
+def test_history_heatmap_last_column_is_the_current_week(client):
+    # Regression guard: the grid must be anchored so its LAST column is the CURRENT week (Sun–Sat containing
+    # today), or today's check-in never renders. The old math (`WEEKS * 7 - 1` start offset) ended the grid
+    # on the PREVIOUS Saturday, so the whole current week was missing except on Saturdays.
+    html = client.get("/").get_data(as_text=True)
+    render = html[html.index("function renderHeat("):html.index("function renderHeat(") + 1200]
+    assert "today.getDate() - today.getDay() - (WEEKS - 1) * 7" in render   # anchor last column to this week
+    assert "WEEKS * 7 - 1" not in render                                    # the old (buggy) start offset is gone
 
 
 def test_second_same_day_checkin_asks_to_confirm_the_replace(client):
