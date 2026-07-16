@@ -31,6 +31,41 @@ def test_list_posts_carry_created_at_in_creation_order(forum_client):
     assert posts["two"]["created_at"] > posts["one"]["created_at"]   # the later post is strictly newer
 
 
+def test_forum_feed_pages_back_to_the_oldest_via_next_before(forum_client):
+    # #325: the feed is a bounded page + a `next_before` cursor. Walking the cursor must reach EVERY post,
+    # newest-first, exactly once — so a user reads even the oldest post without any unbounded read.
+    _login(forum_client)
+    for i in range(5):
+        _new_post(forum_client, f"p{i}", "b")
+    seen, before = [], None
+    for _ in range(10):                                   # bounded loop guard (5 posts / 2 per page = 3 pages)
+        url = "/forum/posts?limit=2" + (f"&before={before}" if before is not None else "")
+        data = forum_client.get(url).get_json()
+        seen += [p["title"] for p in data["posts"]]
+        before = data["next_before"]
+        if before is None:
+            break
+    assert seen == ["p4", "p3", "p2", "p1", "p0"]         # full newest-first walk, each post exactly once
+
+
+def test_forum_feed_last_page_has_no_next_cursor(forum_client):
+    # A page that isn't full means nothing older remains -> next_before is null, so the client stops paging.
+    _login(forum_client)
+    _new_post(forum_client, "only", "b")
+    data = forum_client.get("/forum/posts?limit=5").get_json()
+    assert len(data["posts"]) == 1
+    assert data["next_before"] is None
+
+
+def test_forum_feed_ignores_a_garbage_before_cursor(forum_client):
+    # A non-numeric cursor must fall back to the newest page — never a 500, never an unbounded scan.
+    _login(forum_client)
+    _new_post(forum_client, "hi", "b")
+    resp = forum_client.get("/forum/posts?before=not-a-number")
+    assert resp.status_code == 200
+    assert [p["title"] for p in resp.get_json()["posts"]] == ["hi"]
+
+
 def test_get_post_with_its_comments(forum_client):
     _login(forum_client)
     pid = _new_post(forum_client, "T", "b").get_json()["post"]["id"]

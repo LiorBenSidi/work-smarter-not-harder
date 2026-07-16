@@ -2384,6 +2384,7 @@
     let currentUser = null;
 
     let forumPosts = [], forumSort = "recent", forumDir = "desc";   // desc = newest / highest first (the default)
+    let forumNextBefore = null;   // pagination cursor (#325): created_at of the oldest loaded post; null = no more
     // Supersede-guards: a slower OLDER re-render must not overwrite a newer one. vote()/voteComment() fire
     // openPost()+loadForum() un-awaited, so rapid up/down clicks launch overlapping fetches whose responses
     // can arrive out of order and momentarily paint a stale score (#SPA3). The latest call always wins.
@@ -2408,7 +2409,22 @@
       if (sessionChanged(u, "loadForum") || seq !== forumLoadSeq) return;   // stale session OR superseded -> don't paint
       if (!r.ok) { el.innerHTML = '<p class="flash error">Could not load the forum.</p>'; return; }
       forumPosts = (r.data && r.data.posts) || [];
+      forumNextBefore = (r.data && r.data.next_before) || null;   // reset paging: a fresh load starts at page 1
       renderForumList();                                     // the visible list applies the active sort/filter
+    }
+    // #325: fetch the NEXT older page and append it (deduped). The feed read is paginated + index-backed, so
+    // this reaches the oldest post one bounded page at a time — no unbounded full-collection scan, ever.
+    async function loadMoreForum() {
+      if (!forumNextBefore) return;
+      const u = currentUser, cursor = forumNextBefore;
+      forumNextBefore = null;                                // guard: don't double-fire while this page is in flight
+      const r = await api("/forum/posts?before=" + encodeURIComponent(cursor));
+      if (sessionChanged(u, "loadMoreForum")) return;
+      if (!r.ok || !r.data) { forumNextBefore = cursor; return; }   // restore the cursor so the user can retry
+      const have = new Set(forumPosts.map((p) => p.id));
+      forumPosts = forumPosts.concat((r.data.posts || []).filter((p) => !have.has(p.id)));   // dedupe overlaps
+      forumNextBefore = r.data.next_before || null;
+      renderForumList();
     }
     function renderForumList() {
       const el = $("forum-list"); if (!el) return;
@@ -2431,6 +2447,15 @@
         d.addEventListener("click", () => togglePost(d.dataset.id));
         d.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); togglePost(d.dataset.id); } });
       });
+      if (forumNextBefore) {                                 // #325: more (older) posts to load — offer a bounded next page
+        const more = document.createElement("button");
+        more.type = "button";
+        more.className = "ghost forum-more";
+        more.style.cssText = "margin:12px auto 0;display:block";
+        more.textContent = "Load more posts";
+        more.addEventListener("click", loadMoreForum);
+        el.appendChild(more);
+      }
       placeDetail();                                         // if a post is open, drop its detail back in place under it
     }
     // Click an open post to collapse it; click a closed one to expand it in place.

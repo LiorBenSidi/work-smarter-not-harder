@@ -7,12 +7,14 @@ Input is validated + injection-safe before any query; the forum + notification s
 (the web->db seam). Anonymous posts hide the author in responses (but the owner is still notified).
 """
 import logging
+import math
 import time
 
 from flask import Blueprint, current_app, jsonify, request, session
 
 from ratelimit import limiter
 from routes.auth import login_required
+from services.db import FORUM_PAGE_DEFAULT, FORUM_PAGE_MAX
 from services.identity import display_name
 
 logger = logging.getLogger(__name__)
@@ -151,12 +153,24 @@ def _notify_comment_author_of_vote(post_id, comment_id, voter, value):
 @forum_bp.get("/forum/posts")
 @login_required
 def list_posts():
+    """One page of the forum feed, newest first (#325). `?before=<created_at>` pages back to older posts;
+    `?limit` is clamped to FORUM_PAGE_MAX so the read is always bounded + index-backed. The response carries
+    `next_before` — the cursor for the next older page, or null when this is the last page."""
+    before = request.args.get("before", type=float)
+    if before is not None and not math.isfinite(before):
+        before = None                                  # a garbage cursor (nan/inf) -> newest page, never a scan
+    limit = request.args.get("limit", type=int)        # None -> the store's default page size
+    effective = FORUM_PAGE_DEFAULT if limit is None else max(1, min(limit, FORUM_PAGE_MAX))
     try:
-        posts = _forum().list_posts()
+        posts = _forum().list_posts(before=before, limit=limit)
     except Exception:
         logger.exception("forum store unavailable")
         return jsonify(error="forum store unavailable"), 503
-    return jsonify(posts=[_summary(p, session["username"]) for p in posts]), 200
+    summaries = [_summary(p, session["username"]) for p in posts]
+    # Cursor for the NEXT older page = the oldest created_at we returned. Only offer it when the page came
+    # back FULL (a shorter page means there's nothing older), so the client knows when to stop paging.
+    next_before = summaries[-1]["created_at"] if len(summaries) == effective else None
+    return jsonify(posts=summaries, next_before=next_before), 200
 
 
 @forum_bp.post("/forum/posts")

@@ -147,9 +147,9 @@ class _DbForum(_DbStore):
         db_module, handle = self._resolve()
         return db_module.forum_create_post(handle, author, title, body, anonymous)
 
-    def list_posts(self):
+    def list_posts(self, before=None, limit=None):
         db_module, handle = self._resolve()
-        return db_module.forum_list_posts(handle)
+        return db_module.forum_list_posts(handle, before=before, limit=limit)
 
     def get_post(self, post_id):
         db_module, handle = self._resolve()
