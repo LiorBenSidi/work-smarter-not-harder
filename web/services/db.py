@@ -43,7 +43,9 @@ def ensure_indexes(db):
     atomic upsert (also guards direct DB writes); ``forum_posts.id`` keeps the opaque post ids unique;
     ``profiles.username`` enforces one profile per user (matches ``save_profile``'s upsert key).
     Performance: ``analysis_history.username`` makes ``list_history`` a per-user index scan rather than
-    a full-collection scan as history grows.
+    a full-collection scan as history grows. ``forum_posts.created_at`` backs the paginated feed read
+    (``forum_list_posts``) so the newest page is served straight off the index — O(log N + page) at any
+    forum size, instead of a full-collection load + in-memory sort (#325).
     """
     db.users.create_index("username", unique=True)
     # One account per email (the login identity). PARTIAL so the seed/legacy users WITHOUT an email don't
@@ -52,6 +54,7 @@ def ensure_indexes(db):
     # insert (the loser's insert raises -> create_user surfaces DuplicateEmailError -> the route 409s).
     db.users.create_index("email", unique=True, partialFilterExpression={"email": {"$exists": True}})
     db.forum_posts.create_index("id", unique=True)
+    db.forum_posts.create_index("created_at")     # newest-first paginated feed read (forum_list_posts, #325)
     db.profiles.create_index("username", unique=True)
     db.analysis_history.create_index("username")
     # Social layer: threads + inbox filter on the real sender/recipient username fields; poll on user.
@@ -390,9 +393,22 @@ def forum_create_post(db, author, title, body, anonymous):
     return _shape(post)
 
 
-def forum_list_posts(db):
-    """Return every post in public shape."""
-    return [_shape(p) for p in db.forum_posts.find()]
+FORUM_PAGE_DEFAULT = 50    # posts per page when the caller doesn't specify (Elad's suggested default, #325)
+FORUM_PAGE_MAX = 100       # hard cap: no single request can pull more than this, however large ?limit is
+
+
+def forum_list_posts(db, before=None, limit=None):
+    """Return ONE page of posts, newest first, in public shape — a bounded, INDEXED read (#325).
+
+    ``before`` is a ``created_at`` cursor: only posts strictly older than it are returned, so the client
+    can page back to the very oldest post one page at a time. ``limit`` defaults to ``FORUM_PAGE_DEFAULT``
+    and is clamped to ``[1, FORUM_PAGE_MAX]`` so no request — however crafted (``?limit=99999999``) — can
+    reopen the old unbounded full-collection scan. Backed by the ``created_at`` index (``ensure_indexes``),
+    so each page is O(log N + limit) regardless of how large the forum grows.
+    """
+    limit = FORUM_PAGE_DEFAULT if limit is None else max(1, min(int(limit), FORUM_PAGE_MAX))
+    query = {"created_at": {"$lt": before}} if before is not None else {}
+    return [_shape(p) for p in db.forum_posts.find(query).sort("created_at", -1).limit(limit)]
 
 
 def forum_get_post(db, post_id):

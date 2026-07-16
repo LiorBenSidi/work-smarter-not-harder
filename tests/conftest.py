@@ -236,8 +236,14 @@ class FakeForum:
         self._rev += 1
         return self._posts[pid]
 
-    def list_posts(self):
-        return list(self._posts.values())
+    def list_posts(self, before=None, limit=None):
+        # Mirror db.forum_list_posts: one page, newest first, `before` = created_at cursor, limit clamped.
+        from services.db import FORUM_PAGE_DEFAULT, FORUM_PAGE_MAX
+        limit = FORUM_PAGE_DEFAULT if limit is None else max(1, min(int(limit), FORUM_PAGE_MAX))
+        rows = sorted(self._posts.values(), key=lambda p: p.get("created_at", 0), reverse=True)
+        if before is not None:
+            rows = [p for p in rows if p.get("created_at", 0) < before]
+        return rows[:limit]
 
     def get_post(self, post_id):
         return self._posts.get(post_id)
