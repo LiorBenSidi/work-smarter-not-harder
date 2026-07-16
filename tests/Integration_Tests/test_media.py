@@ -64,6 +64,32 @@ def test_dm_attachment_carries_owner_and_created_at_for_inline_placement(media_c
     assert att["url"] == f"/media/{mid}" and att["mime"] == "image/png"
 
 
+def test_upload_rejected_once_total_disk_cap_reached(media_client):
+    # Issue #313: MEDIA_MAX_TOTAL_BYTES bounds the volume's TOTAL bytes, so a logged-in user can't fill
+    # the VM's disk 10 MB at a time (a full disk wedges Mongo writes + logging). The check runs before
+    # the write: once stored bytes are at/over the cap, the next upload 507s and nothing new is stored.
+    import os
+    c = media_client
+    _login(c)
+    app = c.raw.application
+    app.config["MEDIA_MAX_TOTAL_BYTES"] = len(_PNG)   # 1st upload fills the cap exactly
+    assert _upload_png(c).status_code == 201
+    r = _upload_png(c)
+    assert r.status_code == 507
+    assert "storage" in r.get_json()["error"]
+    stored = os.listdir(app.config["MEDIA_ROOT"])
+    assert len(stored) == 1                            # the rejected upload left no bytes behind
+
+
+def test_upload_allowed_while_under_total_disk_cap(media_client):
+    # Under the cap, uploads keep working — the default (500 MB) never trips for normal use.
+    c = media_client
+    _login(c)
+    c.raw.application.config["MEDIA_MAX_TOTAL_BYTES"] = 10 * 1024 * 1024
+    assert _upload_png(c).status_code == 201
+    assert _upload_png(c).status_code == 201
+
+
 def test_cannot_attach_someone_elses_blob(media_client, make_client, fake_users, fake_forum,
                                           fake_messages, fake_media, fake_notifications, tmp_path):
     # alice uploads; bob (a second client sharing the same fake stores) can't bind alice's blob.

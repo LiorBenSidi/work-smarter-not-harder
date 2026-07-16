@@ -85,5 +85,8 @@ class Config:
     # MAX_CONTENT_LENGTH above still guards the JSON routes); only the allowlisted MIME types are accepted.
     MEDIA_ROOT = os.environ.get("MEDIA_ROOT", "/app/media")
     MEDIA_MAX_BYTES = _int_env("MEDIA_MAX_BYTES", 10 * 1024 * 1024)   # 10 MB per file
+    # Volume-wide cap (issue #313): once MEDIA_ROOT holds this many bytes, further uploads 507 — so an
+    # authenticated flood can't fill the VM's disk 10 MB at a time (a full disk wedges Mongo + logging).
+    MEDIA_MAX_TOTAL_BYTES = _int_env("MEDIA_MAX_TOTAL_BYTES", 500 * 1024 * 1024)   # 500 MB total
     MEDIA_ALLOWED_MIME = os.environ.get(
         "MEDIA_ALLOWED_MIME", "image/png,image/jpeg,image/webp,image/gif,video/mp4")

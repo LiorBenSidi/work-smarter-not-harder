@@ -9,6 +9,8 @@ Size: the global ``MAX_CONTENT_LENGTH`` (64 KB) guards the small JSON routes and
 upload needs a bigger cap, so ``POST /media`` raises it to ``MEDIA_MAX_BYTES`` for that request only
 (Werkzeug 3.1 per-request ``request.max_content_length``); an oversize body then 413s before it's read.
 Type: only the ``MEDIA_ALLOWED_MIME`` allowlist is accepted (else 400).
+Flood (issue #313): ``POST /media`` is rate-limited (20/min per IP) and the volume's TOTAL bytes are
+capped by ``MEDIA_MAX_TOTAL_BYTES`` (507 once full) — so an authenticated flood can't fill the disk.
 Serve: an unbound blob is visible to its uploader only; a post/comment attachment to any logged-in user
 (the forum is public); a DM attachment only to the two participants (mirrors the DM privacy contract).
 """
@@ -18,6 +20,7 @@ import uuid
 
 from flask import Blueprint, current_app, jsonify, request, send_from_directory, session
 
+from ratelimit import limiter
 from routes.auth import login_required
 
 logger = logging.getLogger(__name__)
@@ -46,6 +49,15 @@ def _media_root():
     root = current_app.config["MEDIA_ROOT"]
     os.makedirs(root, exist_ok=True)
     return root
+
+
+def _disk_usage(root):
+    """Total bytes currently stored under MEDIA_ROOT (a flat dir — uploads never nest)."""
+    try:
+        with os.scandir(root) as entries:
+            return sum(e.stat().st_size for e in entries if e.is_file())
+    except OSError:                                  # unreadable/racing dir -> treat as empty, don't 500
+        return 0
 
 
 def _dm_key(a, b):
@@ -83,6 +95,7 @@ def _cap_upload_size():
 
 
 @media_bp.post("/media")
+@limiter.limit("20 per minute")   # issue #313: blunt an authenticated upload flood (mirrors the forum caps)
 @login_required
 def upload():
     file = request.files.get("file")
@@ -90,6 +103,12 @@ def upload():
         return jsonify(error="no file part named 'file'"), 400
     if file.mimetype not in _allowed_mimes():
         return jsonify(error="unsupported media type"), 400
+    # Issue #313: bound the volume's TOTAL bytes, not just the per-file cap, so uploads can't fill the
+    # VM's disk 10 MB at a time (a full disk wedges Mongo writes + logging). Checked before the write;
+    # worst-case overshoot is one file (<= MEDIA_MAX_BYTES) — negligible against the volume-wide cap.
+    if _disk_usage(_media_root()) >= current_app.config["MEDIA_MAX_TOTAL_BYTES"]:
+        logger.warning("media upload rejected: MEDIA_ROOT is at/over MEDIA_MAX_TOTAL_BYTES")
+        return jsonify(error="media storage is full"), 507
     media_id = uuid.uuid4().hex
     stored = media_id + _EXT.get(file.mimetype, "")
     file.save(os.path.join(_media_root(), stored))

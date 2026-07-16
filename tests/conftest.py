@@ -663,5 +663,24 @@ def rate_limited_forum_client(make_client, fake_users, fake_forum, fake_notifica
 
 
 @pytest.fixture
+def rate_limited_media_client(make_client, fake_users, fake_forum, fake_messages, fake_media,
+                              fake_notifications, tmp_path):
+    """Like `rate_limited_forum_client` but wired for the media routes (mirrors `media_client`, incl.
+    the throwaway MEDIA_ROOT): limiter ON + `reset()` so the upload-flood test sees the POST /media cap."""
+    c = make_client(fake_users, forum=fake_forum, messages=fake_messages, media=fake_media,
+                    notifications=fake_notifications)
+    app = c.raw.application
+    app.config["MEDIA_ROOT"] = str(tmp_path / "media")
+    app.config["RATELIMIT_ENABLED"] = True
+    from ratelimit import limiter
+    with app.app_context():
+        try:
+            limiter.reset()
+        except Exception:
+            pass
+    return c
+
+
+@pytest.fixture
 def otp_client(make_otp_client, fake_users):
     return make_otp_client(fake_users)
