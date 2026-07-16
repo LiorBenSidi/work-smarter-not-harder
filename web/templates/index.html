@@ -972,6 +972,9 @@
           <div id="otp-resend" style="margin-top:12px;display:flex;align-items:center;gap:8px;font-size:14px">
             <span id="otp-resend-timer" class="muted"></span>
             <button type="button" id="otp-resend-btn" class="ghost mini" hidden>Resend code</button></div>
+          <!-- Persistent nudge: email delivery is best-effort (a failed send is logged, never shown), so if the
+               code doesn't arrive the user isn't stranded — they know to check spam / resend rather than wait. -->
+          <p id="otp-nudge" class="hint" style="margin:8px 0 0">Didn't get the code? Check your spam folder — or resend it above once the timer ends.</p>
           <div id="otp-flash" class="flash" aria-live="polite"></div>
         </form>
       </div>
