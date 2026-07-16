@@ -28,6 +28,10 @@ class Config:
     AI_CLIENT_TIMEOUT = _int_env("AI_CLIENT_TIMEOUT_SECONDS", 33)
     DEBUG = os.environ.get("FLASK_DEBUG", "0") == "1"
     TESTING = os.environ.get("TESTING", "0") == "1"
+    # Per-IP rate limiting (flask-limiter). ON by default (prod-safe). Env-gated so the browser-E2E stack can
+    # turn it OFF (RATELIMIT_ENABLED=0): that suite registers a fresh user per scenario, which legitimately
+    # exceeds the anti-abuse caps and would 429 — the caps themselves are covered by test_rate_limit.py.
+    RATELIMIT_ENABLED = os.environ.get("RATELIMIT_ENABLED", "1") == "1"
 
     # Session-cookie hardening. HttpOnly + SameSite=Lax are always on; Secure is env-gated so local
     # dev + the HTTP test client work out of the box — set SESSION_COOKIE_SECURE=1 in production (HTTPS).

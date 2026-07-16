@@ -1988,15 +1988,18 @@
         const t = String((it && it.timestamp) || "").slice(0, 10);      // "YYYY-MM-DD"
         if (/^\d{4}-\d{2}-\d{2}$/.test(t)) days.add(t);                  // one entry per calendar day is enough
       }
-      const key = (d) => d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
-      const today = new Date(); today.setHours(0, 0, 0, 0);
-      const yest = new Date(today); yest.setDate(today.getDate() - 1);
+      // UTC day everywhere — check-ins are stored + de-duplicated by UTC day (server), and the `days`
+      // strings above come from timestamp.slice(0,10) (UTC). LOCAL dates here would disagree for a non-UTC
+      // user whose check-in lands on a different UTC day (the team is UTC+3), breaking streak / "logged today".
+      const key = (d) => d.getUTCFullYear() + "-" + String(d.getUTCMonth() + 1).padStart(2, "0") + "-" + String(d.getUTCDate()).padStart(2, "0");
+      const today = new Date(); today.setUTCHours(0, 0, 0, 0);
+      const yest = new Date(today); yest.setUTCDate(today.getUTCDate() - 1);
       const loggedToday = days.has(key(today));
       // a live streak must reach today or yesterday; older-than-yesterday means it's broken (0)
       const cursor = loggedToday ? new Date(today) : (days.has(key(yest)) ? new Date(yest) : null);
       if (!cursor) return { streak: 0, loggedToday: false, hasHistory: days.size > 0 };
       let streak = 0;
-      while (days.has(key(cursor))) { streak++; cursor.setDate(cursor.getDate() - 1); }
+      while (days.has(key(cursor))) { streak++; cursor.setUTCDate(cursor.getUTCDate() - 1); }
       return { streak, loggedToday, hasHistory: days.size > 0 };
     }
     function renderStreak(items) {
@@ -2344,18 +2347,19 @@
         const d = String((it && it.timestamp) || "").slice(0, 10);
         if (/^\d{4}-\d{2}-\d{2}$/.test(d)) byDay[d] = readinessClass(it.assessment)[0];   // last check-in that day wins
       });
-      const key = (d) => d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
-      const today = new Date(); today.setHours(0, 0, 0, 0);
+      // UTC day everywhere (byDay keys come from timestamp.slice(0,10) = UTC); a LOCAL grid would place a
+      // non-UTC user's cells on the wrong column — the same day-boundary class as the week-anchor bug. See computeStreak.
+      const key = (d) => d.getUTCFullYear() + "-" + String(d.getUTCMonth() + 1).padStart(2, "0") + "-" + String(d.getUTCDate()).padStart(2, "0");
+      const today = new Date(); today.setUTCHours(0, 0, 0, 0);
       // Anchor the grid so the LAST column is the CURRENT week (Sun–Sat containing today): jump to this
-      // week's Sunday, then back WEEKS-1 weeks. (The old math ended the grid at the *previous* Saturday, so
-      // today — and the whole current week — never rendered except on Saturdays.)
-      const start = new Date(today); start.setDate(today.getDate() - today.getDay() - (WEEKS - 1) * 7);
+      // week's Sunday, then back WEEKS-1 weeks. (The old math ended the grid at the *previous* Saturday.)
+      const start = new Date(today); start.setUTCDate(today.getUTCDate() - today.getUTCDay() - (WEEKS - 1) * 7);
       let cells = "", cur = new Date(start);
       for (let i = 0; i < WEEKS * 7; i++) {
         const k = key(cur), cls = byDay[k], future = cur > today;
         cells += '<span class="heat-cell' + (cls ? " readiness " + cls + " on" : "") + (future ? " future" : "")
           + '" title="' + k + (cls ? " · " + cls : "") + '"></span>';
-        cur.setDate(cur.getDate() + 1);
+        cur.setUTCDate(cur.getUTCDate() + 1);
       }
       el.innerHTML = '<p class="trend-cap">Last ' + WEEKS + ' weeks</p>'
         + '<div class="heat-plot"><div class="heat-days" aria-hidden="true"><span>S</span><span>M</span><span>T</span><span>W</span><span>T</span><span>F</span><span>S</span></div>'
