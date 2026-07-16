@@ -1468,15 +1468,20 @@
     }
 
     let otpMode = "login";                              // "login" (2FA) or "register" (email verification) — same UI
-    function showOtp(expiresIn, mode) {
+    function showOtp(expiresIn, mode, codeSent) {
       otpMode = mode === "register" ? "register" : "login";
       ["login-form", "register-form", "forgot-form", "reset-form"].forEach((id) => { $(id).hidden = true; });
       $("otp-form").hidden = false;
       document.querySelector(".tabs").hidden = true;
       const reg = otpMode === "register";
+      // codeSent === false means the server REUSED a still-valid code (a rapid repeat login) and sent no new
+      // email — so tell the user to use the code they already have, framed as intended behaviour, not a fault.
+      const sent = codeSent !== false;
       $("otp-intro").textContent = reg
         ? "We sent a 6-digit code to your email. Enter it to finish creating your account."
-        : "We sent a 6-digit code to your email. Enter it to finish signing in.";
+        : sent
+          ? "We sent a 6-digit code to your email. Enter it to finish signing in."
+          : "You already have a valid code in your email — enter it below to finish signing in. We don't send a new code for every attempt; tap Resend if you need a fresh one.";
       $("otp-remember-row").hidden = reg;               // "trust this browser" is a login-only option
       $("otp-submit").textContent = reg ? "Verify & create account" : "Verify & sign in";
       $("otp-code").value = "";
@@ -1593,7 +1598,7 @@
         if (r.data.dev_otp) { hint.textContent = "Dev mode — your code is " + r.data.dev_otp; hint.hidden = false; }
         else { hint.textContent = ""; hint.hidden = true; }
         flash("otp-flash", "", "ok");
-        showOtp(r.data.expires_in);
+        showOtp(r.data.expires_in, "login", r.data.code_sent);   // code_sent:false -> reused a live code (rapid repeat)
       } else if (r.ok) { enterApp(r.data.username, r.data.display_name); }
       else { flash("login-flash", (r.data && r.data.error) || "Login failed"); }
     });
@@ -1665,6 +1670,9 @@
         const dev = r.data.dev_code || r.data.dev_otp;   // register uses dev_code, login uses dev_otp
         if (dev) { hint.textContent = "Dev mode — your code is " + dev; hint.hidden = false; }
         $("otp-code").value = "";
+        // Resend always mints a FRESH code -> restore the plain "we sent a code" copy in case the intro was
+        // showing the reused-code message from a rapid-repeat login.
+        if (otpMode === "login") $("otp-intro").textContent = "We sent a fresh 6-digit code to your email. Enter it to finish signing in.";
         flash("otp-flash", "A new code is on its way.", "ok");
         startOtpTimers(r.data.expires_in);
         flashOtpReset();                            // highlight the refreshed countdown
