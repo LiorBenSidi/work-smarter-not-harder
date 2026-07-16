@@ -59,3 +59,4 @@ It builds `tests/Dockerfile`, waits for `web` + `db` to report healthy, then run
 | `System_Tests/test_ai_queue_live.py` | `AI_BASE_URL` | the job queue on the live `ai` container: real worker processes, concurrent `/predict`, a burst sheds with 503 |
 | `Stress_Tests/test_load.py` | `E2E_BASE_URL` | a concurrency burst sheds load with 429, never 5xx |
 | `Stress_Tests/locustfile.py` | run `locust` (CI: *Run workflow*) | ramped load; 429 = the rate-limit defending, 5xx = a real failure |
+| `Stress_Tests/locustfile_full_system.py` | run `locust` against a live stack | **whole-system capacity**: N distinct users exercising every feature at once; findings in `docs/STRESS_REPORT.md` |
