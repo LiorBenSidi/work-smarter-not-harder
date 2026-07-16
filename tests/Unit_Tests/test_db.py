@@ -32,6 +32,10 @@ class _FakeCursor:
         self._rows = rows
         self._coll = coll
 
+    def sort(self, field, direction=1):
+        rows = sorted(self._rows, key=lambda d: d.get(field, 0), reverse=(direction < 0))
+        return _FakeCursor(rows, self._coll)
+
     def limit(self, n):
         if self._coll is not None:
             self._coll.last_limit = n
@@ -67,6 +71,19 @@ class _FakeColl:
                     flags = re.IGNORECASE if "i" in v.get("$options", "") else 0
                     if val is None or re.search(v["$regex"], str(val), flags) is None:
                         return False
+            elif isinstance(v, dict) and any(op in v for op in ("$lt", "$lte", "$gt", "$gte")):
+                # range operators — the forum feed's created_at pagination cursor (`{"$lt": before}`)
+                val = doc.get(k)
+                if val is None:
+                    return False
+                if "$lt" in v and not val < v["$lt"]:
+                    return False
+                if "$lte" in v and not val <= v["$lte"]:
+                    return False
+                if "$gt" in v and not val > v["$gt"]:
+                    return False
+                if "$gte" in v and not val >= v["$gte"]:
+                    return False
             elif doc.get(k) != v:
                 return False
         return True
@@ -152,6 +169,7 @@ def test_ensure_indexes_creates_unique_constraints(db_mod, db):
     assert ("username", True) in db.users.indexes            # unique username
     assert ("email", True) in db.users.indexes               # unique email (partial) — one account per email
     assert ("id", True) in db.forum_posts.indexes            # unique forum post id
+    assert ("created_at", False) in db.forum_posts.indexes   # perf: newest-first paginated feed read (#325)
     assert ("username", True) in db.profiles.indexes         # one profile per user
     assert ("username", False) in db.analysis_history.indexes  # perf (non-unique) per-user history scan
 
@@ -364,6 +382,42 @@ def test_forum_post_carries_a_created_at_timestamp(db_mod, db):
     assert isinstance(post["created_at"], (int, float)) and post["created_at"] > 0
     assert db_mod.forum_get_post(db, post["id"])["created_at"] == post["created_at"]
     assert db_mod.forum_list_posts(db)[0]["created_at"] == post["created_at"]
+
+
+def test_forum_list_posts_is_a_bounded_newest_first_page(db_mod, db):
+    # #325: the feed read must be BOUNDED (a .limit() applied — never a full-collection scan) and newest-first.
+    for i in range(5):
+        db.forum_posts.insert_one({"id": f"p{i}", "author": "a", "title": f"t{i}", "body": "b",
+                                   "score": 0, "comments": [], "votes": [], "created_at": float(i)})
+    page = db_mod.forum_list_posts(db, limit=3)
+    assert [p["id"] for p in page] == ["p4", "p3", "p2"]      # newest (highest created_at) first, capped at 3
+    assert db.forum_posts.last_limit == 3                     # the read went through .limit() -> bounded
+
+
+def test_forum_list_posts_limit_is_clamped_to_the_max(db_mod, db):
+    # A hostile ?limit=99999999 must NOT reopen an unbounded scan: the store clamps to FORUM_PAGE_MAX.
+    db.forum_posts.insert_one({"id": "p", "author": "a", "title": "t", "body": "b",
+                               "score": 0, "comments": [], "votes": [], "created_at": 1.0})
+    db_mod.forum_list_posts(db, limit=99999999)
+    assert db.forum_posts.last_limit == db_mod.FORUM_PAGE_MAX  # clamped, not the caller's wild value
+
+
+def test_forum_list_posts_before_cursor_pages_to_older(db_mod, db):
+    # `before` = a created_at cursor: only STRICTLY-older posts come back, so the client can walk to the oldest.
+    for i in range(5):
+        db.forum_posts.insert_one({"id": f"p{i}", "author": "a", "title": f"t{i}", "body": "b",
+                                   "score": 0, "comments": [], "votes": [], "created_at": float(i)})
+    older = db_mod.forum_list_posts(db, before=2.0, limit=10)
+    assert [p["id"] for p in older] == ["p1", "p0"]           # only created_at < 2.0, newest-first
+    # walking the cursor from the newest page reaches every post exactly once (no gaps, no repeats)
+    seen, cursor = [], None
+    while True:
+        pg = db_mod.forum_list_posts(db, before=cursor, limit=2)
+        if not pg:
+            break
+        seen += [p["id"] for p in pg]
+        cursor = pg[-1]["created_at"]
+    assert seen == ["p4", "p3", "p2", "p1", "p0"]             # full descending walk, each post once
 
 
 def test_shape_backfills_created_at_from_the_object_id(db_mod):

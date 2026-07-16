@@ -10,7 +10,7 @@ class _BrokenForum:
     def create_post(self, *a, **k):
         raise RuntimeError("down")
 
-    def list_posts(self):
+    def list_posts(self, before=None, limit=None):
         raise RuntimeError("down")
 
     def get_post(self, *a):
@@ -26,7 +26,7 @@ class _BrokenForum:
 class _PartialForum:
     """Returns a row missing `score` and `comments` — a partial/seed row from a real store."""
 
-    def list_posts(self):
+    def list_posts(self, before=None, limit=None):
         return [{"id": "1", "title": "T", "author": "alice"}]  # no score, no comments
 
 
