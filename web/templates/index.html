@@ -966,7 +966,7 @@
           <label for="otp-code">Verification code</label>
           <input id="otp-code" name="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]*" maxlength="6" required>
           <p id="otp-expiry" class="muted" style="margin:8px 0 0" aria-live="polite"></p>
-          <label id="otp-remember-row" style="display:flex;align-items:center;gap:8px;margin-top:12px;font-weight:600"><input id="otp-remember" type="checkbox" style="width:auto"> Trust this browser for 30 days</label>
+          <label id="otp-remember-row" style="display:flex;align-items:center;gap:8px;margin-top:12px;font-weight:600"><input id="otp-remember" type="checkbox" style="width:auto" checked> Trust this browser for 30 days (skip the code next time)</label>
           <div style="margin-top:16px"><button type="submit" id="otp-submit">Verify &amp; sign in</button>
             <button type="button" class="ghost" onclick="showTab('login')">Back</button></div>
           <div id="otp-resend" style="margin-top:12px;display:flex;align-items:center;gap:8px;font-size:14px">
@@ -1468,15 +1468,20 @@
     }
 
     let otpMode = "login";                              // "login" (2FA) or "register" (email verification) — same UI
-    function showOtp(expiresIn, mode) {
+    function showOtp(expiresIn, mode, codeSent) {
       otpMode = mode === "register" ? "register" : "login";
       ["login-form", "register-form", "forgot-form", "reset-form"].forEach((id) => { $(id).hidden = true; });
       $("otp-form").hidden = false;
       document.querySelector(".tabs").hidden = true;
       const reg = otpMode === "register";
+      // codeSent === false means the server REUSED a still-valid code (a rapid repeat login) and sent no new
+      // email — so tell the user to use the code they already have, framed as intended behaviour, not a fault.
+      const sent = codeSent !== false;
       $("otp-intro").textContent = reg
-        ? "We sent a 6-digit code to your email. Enter it to finish creating your account."
-        : "We sent a 6-digit code to your email. Enter it to finish signing in.";
+        ? "We emailed you a 6-digit code — enter it to create your account."
+        : sent
+          ? "We emailed you a 6-digit code — enter it to sign in."
+          : "Use the code already in your email to sign in. We don't send a new one each time — tap Resend for a fresh code.";
       $("otp-remember-row").hidden = reg;               // "trust this browser" is a login-only option
       $("otp-submit").textContent = reg ? "Verify & create account" : "Verify & sign in";
       $("otp-code").value = "";
@@ -1593,7 +1598,7 @@
         if (r.data.dev_otp) { hint.textContent = "Dev mode — your code is " + r.data.dev_otp; hint.hidden = false; }
         else { hint.textContent = ""; hint.hidden = true; }
         flash("otp-flash", "", "ok");
-        showOtp(r.data.expires_in);
+        showOtp(r.data.expires_in, "login", r.data.code_sent);   // code_sent:false -> reused a live code (rapid repeat)
       } else if (r.ok) { enterApp(r.data.username, r.data.display_name); }
       else { flash("login-flash", (r.data && r.data.error) || "Login failed"); }
     });
@@ -1628,7 +1633,7 @@
 
     // ---- OTP: live countdown to code-expiry + Resend unlocked after 30s (like a real service) ----
     let otpTicker = null, otpExpiresAt = 0, otpResendAt = 0;
-    const OTP_RESEND_DELAY = 30;   // seconds before Resend unlocks
+    const OTP_RESEND_DELAY = 60;   // seconds before Resend unlocks (standard OTP cadence; server also caps 5/min)
     function fmtMMSS(s) { s = Math.max(0, Math.floor(s)); return String(Math.floor(s / 60)).padStart(2, "0") + ":" + String(s % 60).padStart(2, "0"); }
     function stopOtpTimers() { clearInterval(otpTicker); otpTicker = null; }
     function startOtpTimers(expiresIn) {
@@ -1665,6 +1670,9 @@
         const dev = r.data.dev_code || r.data.dev_otp;   // register uses dev_code, login uses dev_otp
         if (dev) { hint.textContent = "Dev mode — your code is " + dev; hint.hidden = false; }
         $("otp-code").value = "";
+        // Resend always mints a FRESH code -> restore the plain "we sent a code" copy in case the intro was
+        // showing the reused-code message from a rapid-repeat login.
+        if (otpMode === "login") $("otp-intro").textContent = "Fresh code sent — enter it to sign in.";
         flash("otp-flash", "A new code is on its way.", "ok");
         startOtpTimers(r.data.expires_in);
         flashOtpReset();                            // highlight the refreshed countdown

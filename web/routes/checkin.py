@@ -15,6 +15,7 @@ import math
 
 from flask import Blueprint, current_app, jsonify, request, session
 
+from ratelimit import limiter
 from routes.auth import login_required
 from services import ai_client
 
@@ -55,7 +56,8 @@ def validate_checkin(data):
 
 
 @checkin_bp.post("/checkin")
-@login_required
+@limiter.limit("30 per minute")   # fairness cap: check-in hits the ai queue; 30/min is far above any human's
+@login_required                   # daily use but stops one client hogging predictions (queue 503 is the real backstop)
 def checkin():
     try:
         metrics = validate_checkin(request.get_json(silent=True))

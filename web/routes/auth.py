@@ -137,7 +137,7 @@ def _allocate_handle(display, password_hash, email):
 
 
 @auth_bp.post("/register")
-@limiter.limit("10 per minute")   # anti-spam: bulk account creation from one IP
+@limiter.limit("5 per minute")   # anti-spam: unauthenticated + emails a confirm code -> cap mailbomb / Brevo-quota burn
 def register():
     data = request.get_json(silent=True)
     try:
@@ -269,12 +269,13 @@ def login():
         try:
             session.clear()
             session["pending_otp_user"] = username     # binds the challenge to THIS browser session
-            dev_code = _issue_otp(username, user.get("email"))
+            dev_code, expires_in, code_sent = _ensure_login_otp(username, user.get("email"))
         except Exception:
             logger.exception("failed to issue login OTP")
             return jsonify(error="could not start verification — please try again"), 503
         body = {"status": "otp_required", "username": username,
-                "expires_in": current_app.config["OTP_TTL_SECONDS"]}   # so the UI can count down to expiry
+                "expires_in": expires_in,              # real remaining time (a reused code keeps counting down)
+                "code_sent": code_sent}                # False = reused a live code (no new email) -> UI: "use the one you have"
         if dev_code is not None:                       # no SMTP configured -> surface the code (dev/grading)
             body["dev_otp"] = dev_code
         return jsonify(body), 200
@@ -346,7 +347,7 @@ def verify_otp():
 
 
 @auth_bp.post("/resend-otp")
-@limiter.limit("5 per minute")   # a fresh code is rare; cap resends (the UI also gates it to 1 / 30s)
+@limiter.limit("5 per minute")   # a fresh code is rare; cap resends (the UI also gates it to 1 / 60s)
 def resend_otp():
     """Re-issue the login code for the verification already in progress — a fresh code with a reset TTL
     and attempt counter. The pending user comes from the SESSION (never the body), so a caller can only
@@ -536,7 +537,7 @@ def _reset_serializer():
 
 
 @auth_bp.post("/forgot-password")
-@limiter.limit("10 per minute")   # unauthenticated + sends email/does a DB lookup -> throttle amplification
+@limiter.limit("5 per minute")   # unauthenticated + emails a reset link -> cap mailbomb / Brevo-quota burn (was 10)
 def forgot_password():
     """Email a reset link for a registered address. ALWAYS 200 with the same body -> no account
     enumeration (a caller can't tell whether the email is registered)."""
@@ -686,6 +687,33 @@ def _issue_reg_code(display, pw_hash, email):
     return code if _surface_dev_codes(mock) else None
 
 
+def _ensure_login_otp(username, email):
+    """Reuse a still-valid login code instead of minting a NEW one on every login attempt.
+
+    Each ``_issue_otp`` overwrites the stored challenge, so several logins in a row leave only the LAST
+    code valid — the earlier emails are already dead when they arrive, and the burst of sends can trip a
+    mail provider's rate limit (both observed live, 16 Jul). Reusing the live challenge collapses N rapid
+    logins to ONE code + ONE email. It keeps the original expiry and attempt counter (a re-login can't
+    reset the lockout clock or extend the window) and sends nothing — the already-emailed code still
+    matches the stored hash, so it stays usable.
+
+    Reuse applies ONLY in live-SMTP mode. The dev/log backend surfaces the plaintext code in the response
+    (grading/tests) and can't re-surface a code it only stored hashed, so there it always mints fresh.
+    Returns ``(dev_code_or_None, expires_in_seconds, code_sent)``; ``code_sent`` is False exactly when a
+    live code was reused, so the UI can say "use the code you already have" rather than imply a new email.
+    """
+    ttl = current_app.config["OTP_TTL_SECONDS"]
+    if not _surface_dev_codes(_debug_email_mock()):        # live mode: reuse a valid, unexpired, unlocked code
+        existing = _users().get_otp(username)
+        # Only reuse a challenge that is still USABLE: not expired AND not already at the lockout cap. A
+        # locked-but-not-yet-cleared slot (e.g. a concurrent verify that just hit the cap) must be re-minted,
+        # not reused — else the login->verify path would 429-loop on the dead code for the rest of the TTL.
+        if (existing and time.time() < existing.get("expires_at", 0)
+                and existing.get("attempts", 0) < current_app.config["OTP_MAX_ATTEMPTS"]):
+            return None, max(1, int(existing["expires_at"] - time.time())), False
+    return _issue_otp(username, email), ttl, True          # none / expired / locked (or dev surface) -> mint fresh
+
+
 def _issue_otp(username, email):
     """Generate a fresh code, store it HASHED with a TTL (attempts reset), and deliver it.
 
@@ -697,13 +725,23 @@ def _issue_otp(username, email):
     _users().set_otp(username, generate_password_hash(code), time.time() + ttl)
     minutes = max(1, ttl // 60)
     mock = _debug_email_mock()
-    send_email(current_app.config, email or "(no email on file)", "Your Work Smarter, Not Harder login code",
-               f"Your Work Smarter, Not Harder login code is: {code}\n\n"
-               f"It expires in {minutes} min. If this wasn't you, you can ignore this email.",
-               html=code_email_html(code, minutes, "Here's your login code:",
-                                    "You received this because someone signed in to Work Smarter, Not Harder "
-                                    "with this email. If it wasn't you, you can safely ignore this email."),
-               force_mock=mock)
+    ok = send_email(current_app.config, email or "(no email on file)", "Your Work Smarter, Not Harder login code",
+                    f"Your Work Smarter, Not Harder login code is: {code}\n\n"
+                    f"It expires in {minutes} min. If this wasn't you, you can ignore this email.",
+                    html=code_email_html(code, minutes, "Here's your login code:",
+                                         "You received this because someone signed in to Work Smarter, Not Harder "
+                                         "with this email. If it wasn't you, you can safely ignore this email."),
+                    force_mock=mock)
+    if not ok:
+        # A configured SMTP send failed (send_email swallows the error and returns False). Don't leave a
+        # stored challenge the user never received: clearing it means the NEXT login re-mints + re-sends,
+        # rather than _ensure_login_otp reusing a code that never arrived. Restores the per-login self-heal
+        # that minting-every-time used to give (reuse would otherwise suppress every retry). Dev/log backend
+        # always returns True, so this never fires there.
+        try:
+            _users().clear_otp(username)
+        except Exception:
+            logger.exception("failed to clear the OTP challenge after a failed send")
     return code if _surface_dev_codes(mock) else None
 
 
