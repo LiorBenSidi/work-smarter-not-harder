@@ -12,6 +12,7 @@ Project documents for **Work Smarter, Not Harder** (WSML 00950219 final project)
 | [`DESIGN.md`](DESIGN.md) | Living **design document** — architecture, data model, API contracts, decisions (distilled from the revised spec; open items flagged). |
 | [`ROADMAP.md`](ROADMAP.md) | **Phased build plan** — Phase 0 MVP → the 80 → Forum / Deploy (+10 / +10), each shippable. The plan we build by. |
 | [`REPORT.md`](REPORT.md) | **Project report** (the 23.08 deliverable) — app explanation + **feature × tests matrix drawn from the real suite** + **risk assessment**. Regenerated against `tests/` as the build advances. |
+| [`REVIEWER_NOTES.md`](REVIEWER_NOTES.md) | **For the reviewer/grader** — how grading runs locally (codes on-screen, no mailbox), and a **known-limitations / by-design** table so a documented constraint (429 under load, free-tier email delay, etc.) isn't logged as a bug. Indexes `REPORT.md` §5. |
 | [`ARCHITECTURE-REVIEW.md`](ARCHITECTURE-REVIEW.md) | **Pre-build architecture validation** (advisory) — what's sound, severity-tagged findings, rubric coverage, and the decisions needing a team / Noam call. Read before building your part. |
 | [`meeting-notes/`](meeting-notes/) | Per-meeting notes — copy [`meeting-notes/TEMPLATE.md`](meeting-notes/TEMPLATE.md). |
 
