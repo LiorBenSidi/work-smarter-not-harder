@@ -15,11 +15,21 @@ def test_login_is_rate_limited_after_a_flood(rate_limited_client):
 
 def test_register_is_rate_limited_after_a_flood(rate_limited_client):
     c = rate_limited_client
-    # 10/min on /register: bulk account creation from one IP is throttled
+    # 5/min on /register: bulk account creation (+ confirm-email spam / Brevo-quota burn) from one IP is throttled
     last = None
     for i in range(15):
         last = c.post("/register", json={"username": f"user{i:03d}", "password": "s3cretpw!",
                                          "email": f"u{i}@ex.com"})
+    assert last.status_code == 429
+
+
+def test_forgot_password_is_rate_limited_after_a_flood(rate_limited_client):
+    # 5/min on /forgot-password: it emails a reset link WITHOUT auth, so cap it to blunt mailbombing a
+    # victim's inbox / draining our Brevo daily quota. Always 200-bodied (enumeration-safe) until the cap.
+    c = rate_limited_client
+    last = None
+    for _ in range(15):
+        last = c.post("/forgot-password", json={"email": "victim@example.com"})
     assert last.status_code == 429
 
 
@@ -32,7 +42,7 @@ def test_normal_traffic_is_not_rate_limited(client):
 # --- Forum public routes (OWNER: Elad). auth is already limited above; DM has its own anti-spam.
 # These lock the forum anti-spam contract: a teammate loosening/removing a cap fails this suite in CI.
 def _login_forum(c):
-    # register+login stay well under the auth caps (10/min register, 20/min login), so they never 429.
+    # register+login stay well under the auth caps (5/min register, 20/min login), so they never 429.
     c.post("/register", json={"username": "flooder", "password": "s3cretpw!", "email": "f@ex.com"})
     c.post("/login", json={"username": "flooder", "password": "s3cretpw!"})
 

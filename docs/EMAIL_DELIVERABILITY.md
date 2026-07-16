@@ -82,6 +82,11 @@ mutation-tested — 6/6 seeded mutations killed.
   was shared to the whole course. The reuse fix sharply cuts login-email volume, which is the main lever
   we control. If delivery delays recur under load, the remaining lever is the Brevo plan/rate — check the
   dashboard's daily counter and sending limits.
+- **Anti-abuse caps (shipped with this change):** the two UNAUTHENTICATED email-senders — `/forgot-password`
+  and `/register` — are capped at **5 requests/min per IP** (down from 10) to blunt mailbombing a victim /
+  draining the daily quota. The OTP **Resend** cooldown is **60 s** (server also hard-caps `/resend-otp` at
+  5/min). Time windows for reference: login code + reset link both valid **10 min**; lockout after **5**
+  wrong code guesses; "remember this browser" **30 days**.
 - **`AUTH_DEBUG_EMAIL` must stay OFF.** With real users on the app, the on-screen-code mock is an
   account-takeover exposure. It's off by default and ignored under tests; do not enable it in production.
 - Verified fine and unchanged: SPF / DKIM (brevo1, brevo2) / DMARC all valid; domain verified;

@@ -137,7 +137,7 @@ def _allocate_handle(display, password_hash, email):
 
 
 @auth_bp.post("/register")
-@limiter.limit("10 per minute")   # anti-spam: bulk account creation from one IP
+@limiter.limit("5 per minute")   # anti-spam: unauthenticated + emails a confirm code -> cap mailbomb / Brevo-quota burn
 def register():
     data = request.get_json(silent=True)
     try:
@@ -347,7 +347,7 @@ def verify_otp():
 
 
 @auth_bp.post("/resend-otp")
-@limiter.limit("5 per minute")   # a fresh code is rare; cap resends (the UI also gates it to 1 / 30s)
+@limiter.limit("5 per minute")   # a fresh code is rare; cap resends (the UI also gates it to 1 / 60s)
 def resend_otp():
     """Re-issue the login code for the verification already in progress — a fresh code with a reset TTL
     and attempt counter. The pending user comes from the SESSION (never the body), so a caller can only
@@ -537,7 +537,7 @@ def _reset_serializer():
 
 
 @auth_bp.post("/forgot-password")
-@limiter.limit("10 per minute")   # unauthenticated + sends email/does a DB lookup -> throttle amplification
+@limiter.limit("5 per minute")   # unauthenticated + emails a reset link -> cap mailbomb / Brevo-quota burn (was 10)
 def forgot_password():
     """Email a reset link for a registered address. ALWAYS 200 with the same body -> no account
     enumeration (a caller can't tell whether the email is registered)."""
