@@ -1478,10 +1478,10 @@
       // email — so tell the user to use the code they already have, framed as intended behaviour, not a fault.
       const sent = codeSent !== false;
       $("otp-intro").textContent = reg
-        ? "We sent a 6-digit code to your email. Enter it to finish creating your account."
+        ? "We emailed you a 6-digit code — enter it to create your account."
         : sent
-          ? "We sent a 6-digit code to your email. Enter it to finish signing in."
-          : "You already have a valid code in your email — enter it below to finish signing in. We don't send a new code for every attempt; tap Resend if you need a fresh one.";
+          ? "We emailed you a 6-digit code — enter it to sign in."
+          : "Use the code already in your email to sign in. We don't send a new one each time — tap Resend for a fresh code.";
       $("otp-remember-row").hidden = reg;               // "trust this browser" is a login-only option
       $("otp-submit").textContent = reg ? "Verify & create account" : "Verify & sign in";
       $("otp-code").value = "";
@@ -1672,7 +1672,7 @@
         $("otp-code").value = "";
         // Resend always mints a FRESH code -> restore the plain "we sent a code" copy in case the intro was
         // showing the reused-code message from a rapid-repeat login.
-        if (otpMode === "login") $("otp-intro").textContent = "We sent a fresh 6-digit code to your email. Enter it to finish signing in.";
+        if (otpMode === "login") $("otp-intro").textContent = "Fresh code sent — enter it to sign in.";
         flash("otp-flash", "A new code is on its way.", "ok");
         startOtpTimers(r.data.expires_in);
         flashOtpReset();                            // highlight the refreshed countdown

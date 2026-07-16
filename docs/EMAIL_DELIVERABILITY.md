@@ -65,8 +65,10 @@ email the user already has stays valid. A burst of logins → **one code, one em
 - **Dev / no-SMTP** mode always mints fresh (it surfaces the code in the response for grading) — unchanged.
 - `/resend-otp` still always mints a fresh code — the explicit "I didn't get it" escape hatch.
 
-UI: the OTP screen shows *"You already have a valid code in your email … tap Resend if you need a fresh
-one"* when a code was reused, so a rapid repeat reads as intended behaviour, not a broken mailer.
+UI: on reuse the OTP screen shows *"Use the code already in your email to sign in. We don't send a new one
+each time — tap Resend for a fresh code."* so a rapid repeat reads as intended behaviour, not a broken
+mailer. The code's validity is shown two ways that always agree: the email says *"expires in 10 min"* and
+the screen shows a live *"Code expires in mm:ss"* countdown.
 
 Tests: `tests/Integration_Tests/test_login_otp_reuse.py` (reuse-sends-one-email, reused-code-verifies,
 expired→re-mint, attempt-counter-preserved, locked→re-mint, failed-send→re-attempt, dev-always-fresh,
