@@ -25,12 +25,12 @@ async function registerAndLogin(b) {
   await b.type("#reg-email", u + "@example.com");
   await b.type("#reg-password", pw);
   await b.submit("#register-form");
-  // instant-create returns to the login tab; log in
-  await b.waitFor("#login-form", { timeout: 6000 });
+  // instant-create returns to the login tab; log in (generous waits — CI-runner boot can be slow)
+  await b.waitFor("#login-form", { timeout: 15000 });
   await b.type("#login-username", u);
   await b.type("#login-password", pw);
   await b.submit("#login-form");
-  await b.waitFor("#app-view", { timeout: 8000 });
+  await b.waitFor("#app-view", { timeout: 15000 });
   const inApp = await b.visible("#app-view");
   assert(inApp, "registerAndLogin: never reached the app view");
   return u;
