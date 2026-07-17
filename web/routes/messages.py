@@ -276,14 +276,35 @@ def events():
         return Response("retry: 60000\n\n", mimetype="text/event-stream",
                         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
+    # Read the forum revision, or None if it can't be read *right now*. Never raises, and never gives up:
+    # a transient failure means "unknown this tick", not "disabled". (#342: the old code set forum_rev=None
+    # on any error and the `is not None` guard below then skipped the forum check for the stream's whole
+    # 90s life — silently, since the baseline read logged nothing. The stream stayed OPEN and notify kept
+    # working, so neither the client's readyState check nor the log revealed it.)
+    #
+    # None is the ONLY failure signal, on purpose: db.forum_get_rev raises rather than answering 0, because
+    # 0 is a real revision (a brand-new forum) and an in-band sentinel would make a blip look like a change.
+    rev_broken = False                                     # log an outage once, not every 1.5s tick
+
+    def read_rev():
+        nonlocal rev_broken
+        try:
+            value = forum.get_rev()
+        except Exception:
+            if not rev_broken:
+                logger.warning("forum-rev read failed during SSE stream — retrying every tick", exc_info=True)
+                rev_broken = True
+            return None
+        if rev_broken:
+            logger.info("forum-rev read recovered — forum pushes resume")
+            rev_broken = False
+        return value
+
     def stream():
         try:
             yield "retry: 3000\n\n"                        # browser reconnect delay after a drop
             cursor = time.time()                           # only ping on notifications created after the stream opened
-            try:
-                forum_rev = forum.get_rev()                # baseline: only ping on forum changes AFTER the stream opened
-            except Exception:
-                forum_rev = None                           # forum-rev unavailable -> just skip the forum ping (DM stream unaffected)
+            forum_rev = read_rev()                         # baseline: only ping on forum changes AFTER the stream opened
             deadline = time.time() + EVENTS_MAX_SECONDS
             while time.time() < deadline:
                 try:
@@ -299,17 +320,17 @@ def events():
                     yield "event: notify\ndata: {}\n\n"    # a change ping; the client re-fetches via the normal endpoints
                     pinged = True
                 # Forum push: any post/comment/vote anywhere bumps the shared rev; ping every open client so
-                # the forum re-fetches. Guarded on its own — a forum-rev read failure must never end the stream.
-                if forum_rev is not None:
-                    try:
-                        rev = forum.get_rev()
-                        if rev != forum_rev:
-                            forum_rev = rev
-                            yield "event: forum\ndata: {}\n\n"
-                            pinged = True
-                    except Exception:
-                        logger.warning("forum-rev read failed during SSE stream", exc_info=True)
-                        forum_rev = None                   # stop polling a broken forum-rev; DM pings continue
+                # the forum re-fetches. Guarded on its own — a forum-rev read failure must never end the stream,
+                # and must not disable the push either: an unreadable rev keeps the LAST known baseline and
+                # retries next tick, so the very next successful read still sees the change and pushes it.
+                rev = read_rev()
+                if rev is not None:
+                    if forum_rev is None:
+                        forum_rev = rev                    # (re)establish a baseline the open read couldn't get
+                    elif rev != forum_rev:
+                        forum_rev = rev
+                        yield "event: forum\ndata: {}\n\n"
+                        pinged = True
                 if not pinged:
                     yield ": keepalive\n\n"                 # comment line keeps the connection warm through proxies
                 time.sleep(EVENTS_TICK_SECONDS)

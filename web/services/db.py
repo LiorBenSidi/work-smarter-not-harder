@@ -400,11 +400,15 @@ def forum_bump_rev(db):
 
 
 def forum_get_rev(db):
-    """Return the current forum revision (0 before the first bump / on any read error)."""
-    try:
-        doc = db.meta.find_one({"_id": _FORUM_REV_ID})
-    except Exception:
-        return 0
+    """Return the current forum revision — 0 before the first bump.
+
+    RAISES if the read fails, deliberately (#342). This used to answer 0 on an error, but 0 is also the
+    legitimate value of a brand-new forum, so a caller could not tell "nothing has happened yet" from
+    "I could not read it". A blip then looked like a real change: a stream sitting at rev 47 read 0 and
+    pushed a bogus event, then read 47 again and pushed a second one. The SSE stream catches this instead,
+    keeps its last known baseline and retries next tick — so a failed read now costs nothing and, more
+    importantly, invents nothing. Its own guard is in routes/messages.py:read_rev."""
+    doc = db.meta.find_one({"_id": _FORUM_REV_ID})
     return int(doc.get("v", 0)) if doc else 0
 
 

@@ -347,3 +347,80 @@ def test_user_search_is_rate_limited(messages_client):
     _login(c, "alice")
     codes = [c.get("/users/search?q=bo").status_code for _ in range(messages.SEARCH_RATE_MAX + 5)]
     assert codes[0] == 200 and 429 in codes                        # a scripted flood eventually trips the throttle
+
+
+# ---- Forum push resilience (#342) -------------------------------------------------------------
+# A transient forum-rev read failure must not disable the forum push. It used to: any exception set
+# forum_rev=None, and the `is not None` guard then skipped the forum check for the stream's whole 90s
+# life. Silently — the baseline read logged nothing — while the stream stayed OPEN and notify kept
+# working, so neither the log nor the client's readyState check could reveal it. Elad hit exactly this
+# (#342 round 2): stream open, no forum refetch for 3+ minutes, no warning.
+#
+# get_rev() genuinely can raise: db.forum_get_rev swallows its own errors, but the store's
+# _resolve() -> get_db(MONGO_URI) does not — one Mongo hiccup at stream open was enough.
+
+
+class _ScriptedForum:
+    """A forum store whose get_rev() is scripted per call, so a read can fail and a change can land
+    at an exact point in the stream's life. Only get_rev is exercised by the SSE path."""
+
+    def __init__(self, revs, fail_on_calls=()):
+        self.revs = revs                      # rev value returned by call N (last value repeats)
+        self.fail_on_calls = set(fail_on_calls)
+        self.calls = 0
+
+    def get_rev(self):
+        self.calls += 1
+        if self.calls in self.fail_on_calls:
+            raise RuntimeError("simulated Mongo hiccup inside the store's _resolve()")
+        return self.revs[min(self.calls, len(self.revs)) - 1]
+
+
+def _stream_with(monkeypatch, make_client, fake_users, fake_messages, fake_notifications, forum):
+    from routes import messages
+    monkeypatch.setattr(messages, "EVENTS_MAX_SECONDS", 1)
+    monkeypatch.setattr(messages, "EVENTS_TICK_SECONDS", 0.05)
+    c = make_client(fake_users, forum=forum, messages=fake_messages, notifications=fake_notifications)
+    _register(c, "alice")
+    _login(c, "alice")
+    return c.get("/events").get_data(as_text=True)
+
+
+def test_events_pushes_forum_when_the_rev_moves(monkeypatch, make_client, fake_users, fake_messages,
+                                                fake_notifications):
+    # The control for the two regressions below: a healthy stream MUST push when the rev moves. Without
+    # this passing, "no push" in those tests would prove nothing (a broken harness looks identical).
+    forum = _ScriptedForum(revs=[0, 1])                              # baseline 0, then someone posts
+    body = _stream_with(monkeypatch, make_client, fake_users, fake_messages, fake_notifications, forum)
+    assert body.startswith("retry: 3000")                            # a real stream (not the at-capacity one)
+    assert "event: forum" in body
+
+
+def test_events_recovers_when_the_rev_baseline_read_fails(monkeypatch, make_client, fake_users,
+                                                          fake_messages, fake_notifications):
+    # #342: the baseline read raises (Mongo hiccup at stream open), then recovers. A change AFTER the
+    # baseline is re-established must still push. The old code left forum_rev=None forever -> silence.
+    forum = _ScriptedForum(revs=[0, 0, 1], fail_on_calls=[1])        # call 1 raises; rebaseline at 0; then 1
+    body = _stream_with(monkeypatch, make_client, fake_users, fake_messages, fake_notifications, forum)
+    assert body.startswith("retry: 3000")
+    assert "event: forum" in body, "a stream whose baseline read failed never pushed again"
+
+
+def test_events_recovers_when_a_rev_tick_read_fails(monkeypatch, make_client, fake_users, fake_messages,
+                                                    fake_notifications):
+    # Same defect on the tick path. The failed read must keep the LAST known baseline (not reset it), so
+    # the very next successful read still sees the change and pushes it — nothing is lost to one hiccup.
+    forum = _ScriptedForum(revs=[0, 1], fail_on_calls=[2])           # baseline 0; first tick raises; then 1
+    body = _stream_with(monkeypatch, make_client, fake_users, fake_messages, fake_notifications, forum)
+    assert body.startswith("retry: 3000")
+    assert "event: forum" in body, "one failed tick read disabled the push for the rest of the stream"
+
+
+def test_events_survives_a_rev_read_that_never_recovers(monkeypatch, make_client, fake_users,
+                                                        fake_messages, fake_notifications):
+    # The forum rev being unreadable for the whole stream must degrade to "no forum pushes", never to a
+    # dead stream: DM/notify keepalives keep flowing and the client's poll backstop covers the forum.
+    forum = _ScriptedForum(revs=[0], fail_on_calls=range(1, 100))
+    body = _stream_with(monkeypatch, make_client, fake_users, fake_messages, fake_notifications, forum)
+    assert body.startswith("retry: 3000")
+    assert ": keepalive" in body                                     # the stream lived out its full life

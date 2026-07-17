@@ -1529,7 +1529,12 @@
       window.scrollTo({ top: 0, behavior: "instant" });
       if (name === "messages") openMessages();
       else { clearInterval(dmThreadTimer); dmThreadTimer = null; }   // stop the 5s thread poll when leaving Chat
-      if (name === "forum") closePost();                            // re-entering Forum lands on the list, never a stale open post
+      // Re-entering Forum lands on the list, never a stale open post — and re-syncs it. onForumEvent drops
+      // pushes that land while the forum is off-screen (right call: there is nothing to repaint), so without
+      // this the list would still show whatever it held when you left. Cheap — the read is paginated and
+      // indexed (#332). This also covers a change landing inside the stream's ~3s reconnect gap, which the
+      // new stream's baseline absorbs and therefore never pushes. (#342)
+      if (name === "forum") { closePost(); loadForum({ quiet: true }); }
       updateCheckinCapsule();                                       // capsule only shows off-Today when a check-in is due
       updateCtxBack();                                              // Home/Back button reflects the current screen
       if (window.tabIndicatorSync) window.tabIndicatorSync();       // slide the nav selection capsule to the active tab
@@ -2385,6 +2390,11 @@
 
     let forumPosts = [], forumSort = "recent", forumDir = "desc";   // desc = newest / highest first (the default)
     let forumNextBefore = null;   // pagination cursor (#325): created_at of the oldest loaded post; null = no more
+    // True once "Load more posts" has pulled older pages in. loadForum() deliberately resets paging to page 1,
+    // so a BACKGROUND re-sync would silently collapse those pages while the user is reading them — the 45s
+    // backstop therefore skips while this is set. Cleared by loadForum() itself (entry / Refresh / submit),
+    // where starting again at page 1 is what the user asked for. (#342)
+    let forumPaged = false;
     // #331: comments live in their own collection, fetched paginated via GET /forum/posts/<id>/comments.
     // We accumulate the newest-first pages (deduped by id) and render them sorted OLDEST-first, so the
     // reading order matches the old embedded list; "Load more comments" pages back to older comments.
@@ -2411,6 +2421,11 @@
       if (!(opts && opts.quiet)) el.innerHTML = sk("rows");
       const r = await api("/forum/posts");
       if (sessionChanged(u, "loadForum") || seq !== forumLoadSeq) return;   // stale session OR superseded -> don't paint
+      // This load owns the list from here on: page 1 only, so any older pages are gone from the screen —
+      // including on the failure path below, which replaces the list with an error. Reset BEFORE that return,
+      // or a failed load would strand the flag at true and permanently silence the backstop that would have
+      // retried, leaving the user parked on "Could not load the forum." until a manual Refresh. (#342)
+      forumPaged = false;
       if (!r.ok) { el.innerHTML = '<p class="flash error">Could not load the forum.</p>'; return; }
       forumPosts = (r.data && r.data.posts) || [];
       forumNextBefore = (r.data && r.data.next_before) || null;   // reset paging: a fresh load starts at page 1
@@ -2420,11 +2435,18 @@
     // this reaches the oldest post one bounded page at a time — no unbounded full-collection scan, ever.
     async function loadMoreForum() {
       if (!forumNextBefore) return;
-      const u = currentUser, cursor = forumNextBefore;
+      const u = currentUser, cursor = forumNextBefore, wasPaged = forumPaged, seq = forumLoadSeq;
       forumNextBefore = null;                                // guard: don't double-fire while this page is in flight
+      // Claim "paged" NOW, before the await, not after the response: a backstop tick landing mid-flight would
+      // otherwise see forumPaged=false, start a page-1 load, and land AFTER us — wiping the page we just
+      // fetched. Restored below if this request fails, so a failed page can't silence the backstop. (#342)
+      forumPaged = true;
       const r = await api("/forum/posts?before=" + encodeURIComponent(cursor));
       if (sessionChanged(u, "loadMoreForum")) return;
-      if (!r.ok || !r.data) { forumNextBefore = cursor; return; }   // restore the cursor so the user can retry
+      // A full reload started after us and owns the list now (Refresh / forum entry / a push) — its page 1
+      // has already painted, so appending our older page onto it would resurrect a list it deliberately reset.
+      if (seq !== forumLoadSeq) return;
+      if (!r.ok || !r.data) { forumNextBefore = cursor; forumPaged = wasPaged; return; }   // restore: user can retry
       const have = new Set(forumPosts.map((p) => p.id));
       forumPosts = forumPosts.concat((r.data.posts || []).filter((p) => !have.has(p.id)));   // dedupe overlaps
       forumNextBefore = r.data.next_before || null;
@@ -3079,16 +3101,28 @@
     // The 45s poll backstop. Besides the DM/notify catch-up, it SELF-HEALS real-time: EventSource
     // auto-reconnects a dropped stream (readyState CONNECTING), but a FATAL error leaves it CLOSED
     // (readyState 2) with no further retries — after which pushes silently stop. If we find it closed,
-    // restart it. And because the forum (unlike DM/notify) has no other backstop, re-sync the forum list
-    // whenever its screen is active while the push path isn't OPEN — so a dropped/late `forum` event can
-    // never leave a stale feed for more than one interval. A no-op while SSE is healthy (readyState 1).
+    // restart it.
     function pollBackstop() {
       const dead = typeof EventSource !== "undefined" && evtSource && evtSource.readyState === 2;
       if (dead) { dbg("SSE was CLOSED — restarting the stream"); startEvents(); }   // reconnect + re-arm this timer
       else pollNotifications();                                     // DM/notify pulse (startEvents already re-runs it)
-      // Forum catch-up: a restarted stream's baseline already includes anything that changed DURING the outage,
-      // so those won't push — re-sync the list here whenever SSE isn't OPEN and the forum is the active screen.
-      if (currentScreen === "forum" && (!evtSource || evtSource.readyState !== 1)) loadForum({ quiet: true });
+      // Forum catch-up. Deliberately NOT conditioned on readyState: an OPEN stream is not proof that pushes
+      // still work. A stream whose forum-rev read failed once used to go silent for its whole life while
+      // staying OPEN, and even fixed, a rev bump landing in the reconnect gap is absorbed by the next
+      // stream's baseline and never sent. readyState only describes the CONNECTION, never the push path — so
+      // the forum, which has no other backstop, re-syncs on every tick its screen is active, bounding
+      // staleness at one interval however a push goes missing. Cheap: paginated + indexed read (#332), quiet
+      // (no skeleton flash), and only while the user is actually looking at the forum. Two deliberate skips:
+      //   * forumPaged — loadForum() restarts at page 1, so re-syncing would wipe older pages mid-read.
+      //   * typing in an open post — loadForum() -> stashDetail() RE-PARENTS the detail node, which blurs the
+      //     focused field and dismisses the mobile keyboard. A timer must never yank the caret out of a reply
+      //     someone is writing; their own submit (or the next tick once they blur) re-syncs them.
+      // Routed through onForumEvent, not loadForum, so a missed DELETE is handled too: it closes an open post
+      // that vanished with "This post was removed." — a bare loadForum would leave that detail orphaned on
+      // screen, in exactly the missed-push case this backstop exists to catch. (#342)
+      const detail = document.getElementById("forum-detail");
+      const typingHere = document.activeElement && detail && detail.contains(document.activeElement);
+      if (currentScreen === "forum" && !forumPaged && !typingHere) onForumEvent();
     }
     function startEvents() {
       pollNotifications();                                         // initial pulse from the normal endpoint

@@ -482,16 +482,31 @@ def test_forum_realtime_sse_is_wired_on_the_client(client):
 def test_forum_realtime_has_a_self_healing_poll_backstop(client):
     # Robustness (2026-07-15): EventSource auto-reconnects a dropped stream, but a FATAL error leaves it
     # CLOSED (readyState 2) with no retries — after which real-time silently dies. Unlike DM/notify, the
-    # forum had no other backstop. The 45s poll now (a) restarts a CLOSED stream and (b) re-syncs the forum
-    # list whenever its screen is active while SSE isn't OPEN — so a dropped stream self-heals in <= one tick.
+    # forum had no other backstop. The 45s poll (a) restarts a CLOSED stream and (b) re-syncs the forum list.
+    #
+    # #342 STRENGTHENED the (b) half. It used to re-sync only while `evtSource.readyState !== 1` — i.e. it
+    # trusted an OPEN stream to mean "pushes are working". That is false, provably: a stream whose forum-rev
+    # read failed once went silent for its whole life while staying OPEN (see the recovery tests in
+    # test_messages.py), and a rev bump landing in the reconnect gap is absorbed by the next stream's baseline
+    # and never sent. readyState describes the CONNECTION, never the push path — so the gate is now simply
+    # "is the user looking at the forum", which bounds staleness at one tick however a push goes missing.
     html = client.get("/").get_data(as_text=True)
     assert "function pollBackstop()" in html
     assert "setInterval(pollBackstop, 45000)" in html                        # the SSE backstop runs it
     assert "setInterval(pollBackstop, 15000)" in html                        # the no-SSE fallback runs it too
     body = html[html.index("function pollBackstop()"):html.index("function startEvents()")]
     assert "evtSource.readyState === 2" in body and "startEvents()" in body  # a CLOSED stream is restarted
-    assert 'currentScreen === "forum"' in body and "evtSource.readyState !== 1" in body \
-        and "loadForum({ quiet: true })" in body                             # forum re-syncs while SSE is down
+    assert 'currentScreen === "forum"' in body                               # the forum re-syncs on its screen
+    # The re-sync must NOT be gated on the stream merely looking healthy — that was the #342 defect.
+    assert "readyState !== 1" not in body, "the forum re-sync must not treat an OPEN stream as proof of pushes"
+    # It goes through onForumEvent, NOT a bare loadForum: onForumEvent also closes an open post that has
+    # vanished ("This post was removed."). A missed DELETE is exactly what this backstop catches, and a bare
+    # loadForum would leave that detail orphaned on screen. (Assert the CALL, not the mere absence of the
+    # word — "loadForum" legitimately appears in this function's comments.)
+    assert "!forumPaged && !typingHere) onForumEvent();" in body
+    # ...and it MUST skip in two cases, or the timer harms the user it is meant to help:
+    assert "!forumPaged" in body        # loadForum restarts at page 1 -> a re-sync would wipe older pages
+    assert "contains(document.activeElement)" in body   # stashDetail re-parents -> blurs a reply being typed
     assert "pollNotifications()" in body                                     # DM/notify catch-up preserved
     # ...and the restart must NOT early-return before the forum catch-up — else changes made DURING the outage
     # (already in the restarted stream's baseline, so never pushed) would leave the feed stale until a manual load.
@@ -625,8 +640,11 @@ def test_navigation_state_resets_on_reentry_and_switch(client):
     # Audit fixes: (HIGH-2) re-entering the Forum tab closes any stale open post-detail (so the list shows and
     # the FAB reads Home, not a wrong Back); (MED) switching accounts drops the DM search dropdown so a prior
     # user's results don't linger. Both mirror how Messages already resets its view on entry/switch.
+    # #342 added the second half of "lands on the list": entry also RE-SYNCS it. onForumEvent drops pushes
+    # that arrive while the forum is off-screen, so without a refetch on entry the list keeps showing whatever
+    # it held when the user left — stale with no recovery but the Refresh button.
     html = client.get("/").get_data(as_text=True)
-    assert 'if (name === "forum") closePost();' in html            # Forum tab-entry lands on the list
+    assert 'if (name === "forum") { closePost(); loadForum({ quiet: true }); }' in html   # entry: list + fresh
     assert "dmPeer = null; closeDmSuggest();" in html              # account-switch clears the search dropdown
 
 
