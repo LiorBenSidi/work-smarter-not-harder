@@ -1,5 +1,8 @@
 # AI container — runtime deps for the skeleton (enough to serve /health + the stub).
-flask==3.1.0
+# flask is pinned to the SAME version as web/requirements.txt on purpose. CI installs every manifest
+# into one environment (ci.yml "Install tooling + project deps"), so a divergent pin here silently
+# uninstalls web's flask and the whole suite then tests a version we don't ship. Keep these in step.
+flask==3.1.3
 gunicorn==23.0.0
 
 # ML stack pinned to the versions used to train model/model.pkl.
