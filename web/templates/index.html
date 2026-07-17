@@ -1535,6 +1535,11 @@
       // indexed (#332). This also covers a change landing inside the stream's ~3s reconnect gap, which the
       // new stream's baseline absorbs and therefore never pushes. (#342)
       if (name === "forum") { closePost(); loadForum({ quiet: true }); }
+      // Same staleness class, second instance (#342): the engagement strip is fetched once at boot, but the
+      // votes it counts are OTHER users' actions — they land while this user is anywhere else. Re-sync on
+      // entering Profile, so the "personal area" total is current when it's actually looked at. Cheap: the
+      // read is scoped to the user's own content + indexed (#331/#334).
+      if (name === "profile") loadEngagement(currentUser);
       updateCheckinCapsule();                                       // capsule only shows off-Today when a check-in is due
       updateCtxBack();                                              // Home/Back button reflects the current screen
       if (window.tabIndicatorSync) window.tabIndicatorSync();       // slide the nav selection capsule to the active tab
