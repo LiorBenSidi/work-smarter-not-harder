@@ -50,6 +50,31 @@ async function createPost(b, title, body, anonymous = false) {
   await b.submit("#forum-form", 1200);
 }
 
+// A SECOND user driven over plain HTTP from the runner (node fetch, own cookie jar) — for cross-user
+// scenarios where someone else's action must reach the browser user (votes, DMs). Assumes the E2E boot
+// env (OTP/verify OFF), same as registerAndLogin.
+async function apiUser(base) {
+  const jar = new Map();
+  const cookieHeader = () => [...jar.entries()].map(([k, v]) => `${k}=${v}`).join("; ");
+  const call = async (path, opts = {}) => {
+    const headers = { cookie: cookieHeader(), "X-CSRF-Token": jar.get("csrf_token") || "", ...(opts.body ? { "content-type": "application/json" } : {}), ...opts.headers };
+    const r = await fetch(base + path, { ...opts, headers });
+    for (const c of r.headers.getSetCookie?.() || []) {
+      const [pair] = c.split(";"); const eq = pair.indexOf("=");
+      jar.set(pair.slice(0, eq).trim(), pair.slice(eq + 1).trim());
+    }
+    let data = null; try { data = await r.json(); } catch { /* non-JSON */ }
+    return { status: r.status, data };
+  };
+  await call("/health");                                     // seed the csrf cookie
+  const u = uniq("e2eapi"), pw = "Passw0rd!23";
+  const reg = await call("/register", { method: "POST", body: JSON.stringify({ username: u, password: pw, email: u + "@example.com" }) });
+  if (reg.status !== 201) throw new Error(`apiUser register failed: ${reg.status}`);
+  const login = await call("/login", { method: "POST", body: JSON.stringify({ username: u, password: pw }) });
+  if (login.status !== 200) throw new Error(`apiUser login failed: ${login.status}`);
+  return { username: u, call };
+}
+
 // ---- scenarios ----
 
 export const SCENARIOS = [
@@ -248,6 +273,41 @@ export const SCENARIOS = [
       const dark = await bgFor("dark");     // force each explicitly -> deterministic regardless of the OS default
       const light = await bgFor("light");
       assert(dark && light && dark !== light, `dark and light --bg should differ (dark=${dark} light=${light})`);
+    },
+  },
+  {
+    // #342 (second instance): the engagement strip must be CURRENT when the user actually looks at it —
+    // another user's vote lands while I'm elsewhere; re-entering Profile re-syncs the strip instead of
+    // painting the boot-time snapshot forever.
+    name: "profile REGRESSION: engagement strip re-syncs on entry (another user's vote shows)",
+    tags: ["profile", "engagement"],
+    async fn(b, ctx) {
+      await registerAndLogin(b);
+      const title = uniq("Engage ");
+      await createPost(b, title, "vote bait");
+      // First profile visit: strip renders (zeros — nobody voted yet)
+      const openProfile = async () => {
+        await b.pageExec(`(() => { const btn = document.getElementById("user-menu-btn"); if (btn) btn.click(); return true; })()`);
+        await b.wait(300);
+        await b.pageExec(`(() => { const p = document.querySelector('[data-act="profile"]'); if (p) p.click(); return true; })()`);
+        await b.wait(700);                                   // let the entry re-sync land
+      };
+      await openProfile();
+      await b.waitFor("#engagement-strip");
+      const before = await b.text("#engagement-strip");
+      assert(before && !/[1-9]/.test(before), `expected an all-zero strip before any votes (got "${before}")`);
+      // Leave Profile (strip now cached), then a SECOND user upvotes my post over HTTP
+      await gotoScreen(b, "forum");
+      const other = await apiUser(ctx.base);
+      const posts = await other.call("/forum/posts");
+      const mine = (posts.data.posts || []).find((p) => p.title === title);
+      assert(mine, "second user could not see the post to vote on");
+      const vote = await other.call(`/forum/posts/${mine.id}/vote`, { method: "POST", body: JSON.stringify({ value: 1 }) });
+      assert(vote.status === 200, `second user's vote failed: ${vote.status}`);
+      // Re-enter Profile: the strip must show the received upvote, not the boot-time zeros
+      await openProfile();
+      const after = await b.text("#engagement-strip");
+      assert(/1/.test(after), `engagement strip still stale after re-entry (got "${after}")`);
     },
   },
   {
