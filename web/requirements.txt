@@ -1,5 +1,5 @@
 # Web container — runtime deps.
-flask==3.1.0
+flask==3.1.3
 gunicorn==23.0.0
 werkzeug==3.1.3        # password hashing (generate_password_hash / check_password_hash)
 pymongo==4.10.1        # MongoDB access
