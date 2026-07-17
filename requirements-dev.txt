@@ -4,4 +4,5 @@
 # One-time local setup:  sh scripts/setup-hooks.sh   then   pip install -r requirements-dev.txt
 ruff==0.15.17     # linter + the T20 no-print rule (config lives in pyproject.toml)
 bandit==1.9.4     # security scanner (exact invocation lives in the hooks + ci.yml)
-pytest==8.4.2     # test runner (local pre-push gate + CI)
+pytest==9.0.3     # test runner (local pre-push gate + CI). MUST equal tests/requirements.txt's pin —
+                  # tests/Integration_Tests/test_pin_contract.py fails CI if the two drift apart.

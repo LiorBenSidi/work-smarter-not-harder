@@ -89,6 +89,10 @@ pip install -r requirements-dev.txt        # in your venv: pinned ruff + bandit 
 ```
 `git commit` then runs ruff (incl. **no `print()`** — use `logging`) + bandit; `git push` runs the tests. Full detail: [`CONTRIBUTING.md`](CONTRIBUTING.md).
 
+> **That venv is for the *tooling*, not the app.** `requirements-dev.txt` pins only ruff/bandit/pytest — deliberately **not** flask/werkzeug/pymongo. **The app always runs in Docker** (*Run it*, below), which installs the exact pins from `web/requirements.txt` and `ai/requirements.txt` — so what runs is identical on every machine, in CI and on the VM, whatever your venv happens to contain. **Nobody needs to install the app's dependencies.**
+>
+> The trade-off to know: a local `python -m pytest` imports the app in-process, so it uses **your venv's** flask/werkzeug rather than the pinned ones. It's a fast, useful gate — but **CI and the container jobs are authoritative** for library versions, and if a local run ever disagrees with CI, CI is right. Pins that must match across manifests are enforced by [`tests/Integration_Tests/test_pin_contract.py`](tests/Integration_Tests/test_pin_contract.py).
+
 ## Run it
 ```sh
 cp .env.example .env            # sets SECRET_KEY (never commit .env)
