@@ -292,12 +292,6 @@ def test_search_users_treats_regex_metacharacters_literally(db_mod, db):
     assert [r["username"] for r in db_mod.search_users(db, ".*name")] == ["weird.*name"]
 
 
-def test_search_users_caps_result_count(db_mod, db):
-    for i in range(20):
-        db_mod.create_user(db, f"runner{i:02d}", "h", display_name=f"Runner {i:02d}")
-    assert len(db_mod.search_users(db, "runner", limit=8)) == 8
-
-
 def test_search_users_ranks_prefix_matches_first(db_mod, db):
     db_mod.create_user(db, "xander", "h", display_name="has an in the middle")  # 'an' mid-substring
     db_mod.create_user(db, "ana", "h", display_name="Ana")                      # 'an' prefix

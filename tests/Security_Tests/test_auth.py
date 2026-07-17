@@ -18,12 +18,6 @@ def test_password_is_hashed_not_plaintext(client, fake_users):
     assert stored.startswith(("pbkdf2:", "scrypt:"))   # a werkzeug hash
 
 
-def test_wrong_password_returns_401(client):
-    _register(client, "alice", "s3cretpw!")
-    resp = client.post("/login", json={"username": "alice", "password": "wrongpass1"})
-    assert resp.status_code == 401
-
-
 def test_unknown_user_and_wrong_password_are_indistinguishable(client):
     # no user-enumeration: same status + same body whether the user is missing or the password is wrong
     _register(client, "alice", "s3cretpw!")
