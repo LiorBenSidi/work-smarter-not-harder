@@ -19,6 +19,7 @@ import os
 import uuid
 
 from flask import Blueprint, current_app, jsonify, request, send_from_directory, session
+from werkzeug.exceptions import NotFound
 
 from ratelimit import limiter
 from routes.auth import login_required
@@ -125,7 +126,17 @@ def serve(media_id):
         return jsonify(error="not found"), 404
     if not _can_view(rec, session["username"]):
         return jsonify(error="forbidden"), 403
-    return send_from_directory(_media_root(), media_id + _EXT.get(rec["mime"], ""), mimetype=rec["mime"])
+    stored = media_id + _EXT.get(rec["mime"], "")
+    try:
+        # Explicit download_name so a saved attachment keeps its extension (#338 item 6) — don't rely on
+        # Werkzeug's implicit filename, which a version bump could drop. Stays `inline` (mimetype set), so
+        # <img>/<video> still render in-page; the id keeps the name unique + traceable.
+        return send_from_directory(_media_root(), stored, mimetype=rec["mime"], download_name=stored)
+    except NotFound:
+        # The record exists but the blob is gone from the volume (rotated/lost). Return the same clean JSON
+        # 404 as an unknown id (#338 item 7) and log it — a bound record with no file is an operational signal.
+        logger.warning("media %s has a record but no file on disk (lost/rotated volume?)", media_id)
+        return jsonify(error="not found"), 404
 
 
 def _attach(target_type, target_id, peers=None):
