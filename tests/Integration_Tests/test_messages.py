@@ -217,6 +217,24 @@ def test_events_stream_releases_its_slot_when_it_ends(messages_client, monkeypat
     assert all(regained)                                            # all slots re-acquirable -> nothing leaked
 
 
+def test_sse_cap_is_clamped_below_thread_count_so_streams_cant_starve_the_worker():
+    # An SSE stream pins one gthread thread for its whole life. If the cap ever reached --threads, a burst of
+    # streams could hold EVERY thread and starve /health -> failed healthcheck -> container restart (a self-
+    # inflicted DoS). _safe_stream_cap must clamp the cap to <= threads//2 (>= half the pool always free for
+    # requests/health) no matter how EVENTS_MAX_STREAMS is (mis)configured, and never drop below 1.
+    from routes import messages
+    cap = messages._safe_stream_cap
+    assert cap(3, 16) == 3            # the shipped default: safe, unchanged
+    assert cap(100, 16) == 8         # wild misconfig: clamped to half the threads, not 100
+    assert cap(16, 16) == 8          # equal to the thread count would starve -> clamped to half
+    assert cap(3, 2) == 1            # tiny pool: floor at 1 so the app still boots
+    assert cap(5, 4) == 2            # general case: never exceeds threads//2
+    # invariant across the sane range: the effective cap always leaves >= half the threads for requests/health
+    for threads in (2, 4, 8, 16, 32):
+        for configured in (1, 3, threads, threads * 5):
+            assert 1 <= cap(configured, threads) <= max(1, threads // 2)
+
+
 def test_events_pushes_a_forum_ping_when_the_forum_rev_changes(messages_client, monkeypatch):
     # Real-time forum (the "wow"): the SSE stream reads forum.get_rev() each tick and pushes `event: forum`
     # when it moves, so every open client re-fetches. Inject a forum whose rev advances once after the

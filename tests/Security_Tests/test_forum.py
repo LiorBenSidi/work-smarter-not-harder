@@ -10,7 +10,7 @@ class _BrokenForum:
     def create_post(self, *a, **k):
         raise RuntimeError("down")
 
-    def list_posts(self):
+    def list_posts(self, before=None, limit=None):
         raise RuntimeError("down")
 
     def get_post(self, *a):
@@ -19,15 +19,21 @@ class _BrokenForum:
     def add_comment(self, *a):
         raise RuntimeError("down")
 
+    def list_comments(self, post_id, before=None, limit=None):
+        raise RuntimeError("down")
+
     def vote(self, *a):
         raise RuntimeError("down")
 
 
 class _PartialForum:
-    """Returns a row missing `score` and `comments` — a partial/seed row from a real store."""
+    """Returns a row missing `score` and `comment_count` — a partial/seed row from a real store."""
 
-    def list_posts(self):
-        return [{"id": "1", "title": "T", "author": "alice"}]  # no score, no comments
+    def list_posts(self, before=None, limit=None):
+        return [{"id": "1", "title": "T", "author": "alice"}]  # no score, no comment_count
+
+    def list_comments(self, post_id, before=None, limit=None):
+        return []
 
 
 def test_forum_list_requires_login(forum_client):

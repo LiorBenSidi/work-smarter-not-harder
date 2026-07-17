@@ -217,10 +217,12 @@ class FakeHistory:
 
 class FakeForum:
     """In-memory forum store — the `web -> db` seam Lior implements in db.py
-    (create_post / list_posts / get_post / add_comment / vote)."""
+    (create_post / list_posts / get_post / add_comment / list_comments / vote). Comments live in their OWN
+    dict keyed by comment id (mirrors the ``forum_comments`` collection, #331), never embedded in the post."""
 
     def __init__(self):
         self._posts = {}
+        self._comments = {}   # comment id -> {id, post_id, author, body, score, votes, created_at} (#331)
         self._seq = 0
         self._rev = 0        # forum revision (real-time): every successful mutation bumps it; get_rev() reads it
 
@@ -231,38 +233,66 @@ class FakeForum:
         self._seq += 1
         pid = str(self._seq)
         self._posts[pid] = {"id": pid, "author": author, "anonymous": anonymous,
-                            "title": title, "body": body, "score": 0, "comments": [], "votes": {},
+                            "title": title, "body": body, "score": 0, "comment_count": 0, "votes": {},
                             "created_at": time.time() + self._seq * 1e-6}   # monotonic per creation order
         self._rev += 1
         return self._posts[pid]
 
-    def list_posts(self):
-        return list(self._posts.values())
+    def list_posts(self, before=None, limit=None):
+        # Mirror db.forum_list_posts: one page, newest first, `before` = created_at cursor, limit clamped.
+        from services.db import FORUM_PAGE_DEFAULT, FORUM_PAGE_MAX
+        limit = FORUM_PAGE_DEFAULT if limit is None else max(1, min(int(limit), FORUM_PAGE_MAX))
+        rows = sorted(self._posts.values(), key=lambda p: p.get("created_at", 0), reverse=True)
+        if before is not None:
+            rows = [p for p in rows if p.get("created_at", 0) < before]
+        return rows[:limit]
 
     def get_post(self, post_id):
         return self._posts.get(post_id)
+
+    @staticmethod
+    def _comment_public(c):
+        # public shape: id/author/body/score/created_at, dropping the internal votes tally (mirrors db._comment_public)
+        return {"id": c["id"], "author": c["author"], "body": c["body"],
+                "score": c.get("score", 0), "created_at": c.get("created_at", 0)}
 
     def add_comment(self, post_id, author, body):
         post = self._posts.get(post_id)
         if post is None:
             return None
         self._seq += 1
-        comment = {"id": "c" + str(self._seq), "author": author, "body": body, "votes": {}, "score": 0}
-        post["comments"].append(comment)
+        cid = "c" + str(self._seq)
+        comment = {"id": cid, "post_id": post_id, "author": author, "body": body,
+                   "score": 0, "votes": {}, "created_at": time.time() + self._seq * 1e-6}
+        self._comments[cid] = comment
+        post["comment_count"] = post.get("comment_count", 0) + 1
         self._rev += 1
-        return {"id": comment["id"], "author": author, "body": body, "score": 0}   # public shape (no votes)
+        return self._comment_public(comment)
+
+    def list_comments(self, post_id, before=None, limit=None):
+        # Mirror db.forum_list_comments: one page, newest first, `before` = created_at cursor, limit clamped.
+        from services.db import COMMENT_PAGE_DEFAULT, COMMENT_PAGE_MAX
+        limit = COMMENT_PAGE_DEFAULT if limit is None else max(1, min(int(limit), COMMENT_PAGE_MAX))
+        rows = sorted((c for c in self._comments.values() if c["post_id"] == post_id),
+                      key=lambda c: c.get("created_at", 0), reverse=True)
+        if before is not None:
+            rows = [c for c in rows if c.get("created_at", 0) < before]
+        return [self._comment_public(c) for c in rows[:limit]]
+
+    def get_comment(self, post_id, comment_id):
+        c = self._comments.get(comment_id)
+        if c is None or c["post_id"] != post_id:
+            return None
+        return self._comment_public(c)
 
     def vote_comment(self, post_id, comment_id, username, value):
-        post = self._posts.get(post_id)
-        if post is None:
+        c = self._comments.get(comment_id)
+        if c is None or c["post_id"] != post_id:
             return None
-        comment = next((c for c in post["comments"] if c.get("id") == comment_id), None)
-        if comment is None:
-            return None
-        comment.setdefault("votes", {})[username] = value  # one vote per user; re-voting replaces
-        comment["score"] = sum(comment["votes"].values())
+        c.setdefault("votes", {})[username] = value  # one vote per user; re-voting replaces
+        c["score"] = sum(c["votes"].values())
         self._rev += 1
-        return comment["score"]
+        return c["score"]
 
     def vote(self, post_id, username, value):
         post = self._posts.get(post_id)
@@ -277,21 +307,21 @@ class FakeForum:
         """Mirrors db.forum_received_engagement: votes OTHERS cast on the user's posts/comments
         (self-votes excluded, counted per voted item's author). Counts only — no voter names."""
         up = down = 0
+        vote_maps = []
         for post in self._posts.values():
-            vote_maps = []
             if post["author"] == username:
                 vote_maps.append(post.get("votes", {}))
-            for comment in post.get("comments", []):
-                if comment.get("author") == username:
-                    vote_maps.append(comment.get("votes", {}))
-            for votes in vote_maps:
-                for voter, value in votes.items():
-                    if voter == username:
-                        continue
-                    if value > 0:
-                        up += 1
-                    elif value < 0:
-                        down += 1
+        for comment in self._comments.values():
+            if comment.get("author") == username:
+                vote_maps.append(comment.get("votes", {}))
+        for votes in vote_maps:
+            for voter, value in votes.items():
+                if voter == username:
+                    continue
+                if value > 0:
+                    up += 1
+                elif value < 0:
+                    down += 1
         return {"up": up, "down": down, "score": up - down}
 
     def update_post(self, post_id, username, title, body):
@@ -311,37 +341,42 @@ class FakeForum:
         if post["author"] != username:
             return "forbidden"
         del self._posts[post_id]
+        self._comments = {cid: c for cid, c in self._comments.items() if c["post_id"] != post_id}
         self._rev += 1
         return True
 
     def purge_user(self, username):
-        # GDPR erasure: drop the user's own posts, then strip their comments + votes (dict-keyed here)
-        # out of everyone else's posts, recomputing scores. Mirrors db.forum_purge_user.
+        # GDPR erasure (mirrors db.forum_purge_user): drop the user's own posts (and their comments), drop
+        # the user's comments under others' posts, then strip their votes out of everyone else's posts +
+        # comments, recomputing scores and each post's comment_count.
+        own = {pid for pid, p in self._posts.items() if p["author"] == username}
         self._posts = {pid: p for pid, p in self._posts.items() if p["author"] != username}
-        for p in self._posts.values():
-            p["comments"] = [c for c in p["comments"] if c.get("author") != username]
-            for c in p["comments"]:
-                c.get("votes", {}).pop(username, None)
-                c["score"] = sum(c.get("votes", {}).values())
+        self._comments = {cid: c for cid, c in self._comments.items()
+                          if c["post_id"] not in own and c["author"] != username}
+        for c in self._comments.values():
+            c.get("votes", {}).pop(username, None)
+            c["score"] = sum(c.get("votes", {}).values())
+        for pid, p in self._posts.items():
             p["votes"].pop(username, None)
             p["score"] = sum(p["votes"].values())
+            p["comment_count"] = sum(1 for c in self._comments.values() if c["post_id"] == pid)
 
     def export_user(self, username):
         posts, comments, votes = [], [], []
+        titles = {pid: p["title"] for pid, p in self._posts.items()}
         for p in self._posts.values():
             if p["author"] == username:
                 posts.append({"id": p["id"], "author": p["author"], "anonymous": p.get("anonymous", False),
                               "title": p["title"], "body": p["body"], "score": p["score"],
-                              "comments": [{"id": c["id"], "author": c["author"], "body": c["body"],
-                                            "score": c.get("score", 0)} for c in p["comments"]]})
+                              "comment_count": p.get("comment_count", 0)})
             if username in p.get("votes", {}):
                 votes.append({"post_id": p["id"], "value": p["votes"][username]})
-            for c in p["comments"]:
-                if c.get("author") == username:
-                    comments.append({"post_id": p["id"], "post_title": p["title"], "body": c["body"],
-                                     "score": c.get("score", 0)})
-                if username in c.get("votes", {}):
-                    votes.append({"post_id": p["id"], "comment_id": c["id"], "value": c["votes"][username]})
+        for c in self._comments.values():
+            if c.get("author") == username:
+                comments.append({"post_id": c["post_id"], "post_title": titles.get(c["post_id"]),
+                                 "body": c["body"], "score": c.get("score", 0)})
+            if username in c.get("votes", {}):
+                votes.append({"post_id": c["post_id"], "comment_id": c["id"], "value": c["votes"][username]})
         return {"posts": posts, "comments": comments, "votes": votes}
 
 
@@ -652,6 +687,25 @@ def rate_limited_forum_client(make_client, fake_users, fake_forum, fake_notifica
     can't drive the forum endpoints). Limiter ON + `reset()` so the forum-flood tests see the caps."""
     c = make_client(fake_users, forum=fake_forum, notifications=fake_notifications)
     app = c.raw.application
+    app.config["RATELIMIT_ENABLED"] = True
+    from ratelimit import limiter
+    with app.app_context():
+        try:
+            limiter.reset()
+        except Exception:
+            pass
+    return c
+
+
+@pytest.fixture
+def rate_limited_media_client(make_client, fake_users, fake_forum, fake_messages, fake_media,
+                              fake_notifications, tmp_path):
+    """Like `rate_limited_forum_client` but wired for the media routes (mirrors `media_client`, incl.
+    the throwaway MEDIA_ROOT): limiter ON + `reset()` so the upload-flood test sees the POST /media cap."""
+    c = make_client(fake_users, forum=fake_forum, messages=fake_messages, media=fake_media,
+                    notifications=fake_notifications)
+    app = c.raw.application
+    app.config["MEDIA_ROOT"] = str(tmp_path / "media")
     app.config["RATELIMIT_ENABLED"] = True
     from ratelimit import limiter
     with app.app_context():

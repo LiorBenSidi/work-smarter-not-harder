@@ -3,6 +3,19 @@
 All **5 course test types** live here, one directory each. **CI runs the whole suite on every PR** and the
 local **pre-push hook** runs it too — so these are enforced before anything reaches `main`.
 
+Two **additive** suites (OWNER: Elad) complement the 5 mandated types — both in-process (injected fakes +
+a mocked AI seam, no Docker), so they run in the per-PR gate:
+- **`Full_System_Tests/`** — the whole system in ONE app, focused on **cross-feature sync**:
+  `test_everything_together_sync.py` (what user A does, user B observes — check-in→History→Dashboard
+  agreement, vote→score+notification+engagement, DM→inbox+unread+ping, media visibility tracking its
+  binding, display-name ripple) and `test_parts_in_isolation.py` (each feature standalone with only its
+  own stores, then each store BROKEN — its feature degrades to a clean 503/best-effort while every
+  neighbour keeps serving; the per-feature grain of the container-level fault-isolation suite).
+- **`Negative_Tests/`** — the adversarial-input walls per part: every malformed payload, type trap
+  (bool-as-int votes), NoSQL-injection object, length/range boundary (one step out on each side),
+  unknown target, ownership breach and privacy breach, each earning its exact 4xx — never a 5xx,
+  never a silent write.
+
 ## Rules
 - **TDD-first.** Write your task's tests (the scaffolds below) *before/with* the implementation, then remove the
   `skip` and fill them. Failing tests block everyone, so scaffolds stay **skipped** until you fill them.
@@ -59,3 +72,4 @@ It builds `tests/Dockerfile`, waits for `web` + `db` to report healthy, then run
 | `System_Tests/test_ai_queue_live.py` | `AI_BASE_URL` | the job queue on the live `ai` container: real worker processes, concurrent `/predict`, a burst sheds with 503 |
 | `Stress_Tests/test_load.py` | `E2E_BASE_URL` | a concurrency burst sheds load with 429, never 5xx |
 | `Stress_Tests/locustfile.py` | run `locust` (CI: *Run workflow*) | ramped load; 429 = the rate-limit defending, 5xx = a real failure |
+| `Stress_Tests/locustfile_full_system.py` | run `locust` against a live stack | **whole-system capacity**: N distinct users exercising every feature at once; findings in `docs/STRESS_REPORT.md` |
