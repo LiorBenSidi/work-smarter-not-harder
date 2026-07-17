@@ -31,6 +31,31 @@ def test_upload_then_serve_roundtrip(media_client):
     assert got.data == _PNG                      # the exact bytes come back
 
 
+def test_served_media_carries_a_download_name_with_extension(media_client):
+    # #338 item 6: saving an attachment must yield a real filename WITH its extension, not a bare uuid the
+    # OS can't open. serve() sets a Content-Disposition download_name carrying the mime's extension.
+    c = media_client
+    _login(c)
+    mid = _upload_png(c).get_json()["id"]
+    disp = c.get(f"/media/{mid}").headers.get("Content-Disposition", "")
+    assert ".png" in disp                          # the extension is present in the download name
+    assert mid in disp                             # ...and it's the stable, unique id (traceable)
+
+
+def test_missing_file_on_disk_serves_a_clean_404(media_client):
+    # #338 item 7 (backend): if the blob is gone from the volume but the record remains, serve() must return
+    # a clean JSON 404 — not leak a Werkzeug HTML error page / 500 that the SPA can't reason about.
+    import os
+    c = media_client
+    _login(c)
+    mid = _upload_png(c).get_json()["id"]
+    root = c.raw.application.config["MEDIA_ROOT"]
+    os.remove(os.path.join(root, mid + ".png"))    # simulate a lost/rotated volume file
+    r = c.get(f"/media/{mid}")
+    assert r.status_code == 404
+    assert r.is_json and "error" in r.get_json()   # structured, not an HTML crash page
+
+
 def test_attach_to_post_then_list(media_client):
     c = media_client
     _login(c)
