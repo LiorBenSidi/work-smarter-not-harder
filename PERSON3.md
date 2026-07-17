@@ -34,10 +34,10 @@ never commit it. (The GitHub-side secrets for the deploy are in [`SECRETS.md`](S
 - **The deploy (+10)** — take the CI/CD pipeline (already in the repo: `ci.yml` `build`+`deploy`, `docker-compose.prod.yml`, `Caddyfile`, auto-rollback, `/ready` gate — PRs #91/#92) **live**. Already done (Lior): the `build` job pushes both images to GHCR, the **GHCR packages are public**, and the `APP_SECRET_KEY`/`SMTP_*` secrets are set. Your part is the **VM**: provision it, set `SSH_PRIVATE_KEY` + `SSH_HOST` + `DEPLOY_ENABLED=true` (the deploy runs only when both the host is set and the switch is on), (optional) the `app` CNAME + `SITE_ADDRESS`, add UptimeRobot, and demo an auto-deploy on green `main`. Run-sheet: [`docs/DEPLOY_DEMO.md`](docs/DEPLOY_DEMO.md). Graded on that live demo.
 
 ## Roadmap (build these — your way)
-- [~] **Azure deploy + CI/CD (go live)** — **the deploy is live and auto-deploying** on green `main`
-  (`https://app.worksmarternotharder.dev`; `SSH_HOST` + `SSH_PRIVATE_KEY` + `DEPLOY_ENABLED=true` set, the
-  `app` CNAME + `SITE_ADDRESS` wired, Caddy HTTPS issued). **Remaining: the UptimeRobot monitor (R9) and
-  running the graded demo itself.** Background below.
+- [x] **Azure deploy + CI/CD (go live)** — **done end-to-end**: the deploy is live and auto-deploying on green
+  `main` (`https://app.worksmarternotharder.dev`; `SSH_HOST` + `SSH_PRIVATE_KEY` + `DEPLOY_ENABLED=true` set, the
+  `app` CNAME + `SITE_ADDRESS` wired, Caddy HTTPS issued); the **graded demo was presented 16 Jul**; the
+  **UptimeRobot monitor is live** (R9, monitor `803532626`, 17 Jul). Background below.
   The pipeline *code* is written + hardened (Lior, PRs #91/#92:
   build→GHCR→SSH-deploy→Caddy HTTPS + `docker-compose.prod.yml`, auto-rollback, `/ready`), **the GHCR packages are
   already public, and `APP_SECRET_KEY`/`SMTP_*` are already set**. Your part: get the VM from the instructor, set
