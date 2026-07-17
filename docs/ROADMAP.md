@@ -107,9 +107,9 @@ The only coordination points are the seams (`/predict` shape, `db.py`'s function
 | GitHub: regular commits from **all 3**, meaningful messages | 🟡 in progress | all |
 | Report (app + features×tests + **risk assessment**) | 🟡 [`REPORT.md`](REPORT.md) §5 risk assessment ✅ (rewritten around "which test goes red if this mitigation disappears?", incl. what we deliberately did *not* mitigate). §1 API surface/data model + the AI rows still owed by their owners | all (Elad: risk ✅) |
 | Demo video of using the app | ⬜ | all |
-| Azure VM deploy + CI/CD auto-deploy (+10) | ✅ **live** — every green `main` auto-deploys to the Azure VM, served over HTTPS at `app.worksmarternotharder.dev` (`/ready` gate + auto-rollback). Remaining: the graded live **demo** | Lior (pipeline) · Elad (live VM + demo) |
+| Azure VM deploy + CI/CD auto-deploy (+10) | ✅ **done** — every green `main` auto-deploys to the Azure VM, served over HTTPS at `app.worksmarternotharder.dev` (`/ready` gate + auto-rollback); the graded live **demo was presented 16 Jul** | Lior (pipeline) · Elad (live VM + demo) |
 | Online Forum — real-time, 8 sub-features (+10) | 🟡 posts/comments/post-votes + anonymity + edit/delete-own + **P2P DM (text) + live DM notifications (SSE push) + vote notifications + comment votes + anti-spam messaging rate-limit** done; media/attachments + file-size caps done (#160); **received-engagement metric done** (`GET /me/engagement` + a Profile-screen card); open: fuller cold-seeding | Lior (CRUD/UI + DM + notifications + vote-notifs + comment-votes) · Elad (media ✅ #160 · engagement metric ✅) · Shiri (seed content) |
-| Present 16 Jul (6 min) · demo by Wk 12 · final 23 Aug | ⬜ | all |
+| Present 16 Jul (6 min) · demo by Wk 12 · final 23 Aug | 🟡 presented **16 Jul** ✅; final submission **23 Aug** outstanding | all |
 | No shipped API keys | ✅ local model | Shiri |
 
 Legend: ✅ done · 🟡 partial / in-progress · ⬜ not started.
