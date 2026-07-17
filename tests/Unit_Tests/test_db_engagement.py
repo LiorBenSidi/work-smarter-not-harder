@@ -23,32 +23,36 @@ def db_mod():
     return mod
 
 
-class _Posts:
+class _Coll:
+    """Minimal collection stand-in: find() returns every row, or (for forum_comments) filters by author —
+    the only query forum_received_engagement issues against forum_comments (#331)."""
+
     def __init__(self, rows):
         self._rows = rows
 
-    def find(self, *args, **kwargs):
-        return list(self._rows)
+    def find(self, filt=None, *args, **kwargs):
+        rows = list(self._rows)
+        if filt and "author" in filt:
+            rows = [r for r in rows if r.get("author") == filt["author"]]
+        return rows
 
 
-def _db(posts):
-    return SimpleNamespace(forum_posts=_Posts(posts))
+def _db(posts, comments=()):
+    return SimpleNamespace(forum_posts=_Coll(posts), forum_comments=_Coll(comments))
 
 
-def _post(author, votes=(), comments=()):
-    return {"id": "p", "author": author, "votes": list(votes), "comments": list(comments)}
+def _post(author, votes=()):
+    return {"id": "p", "author": author, "votes": list(votes)}
 
 
 def _comment(author, votes=()):
-    return {"id": "c", "author": author, "votes": list(votes)}
+    return {"id": "c", "post_id": "p", "author": author, "votes": list(votes)}
 
 
 def test_votes_on_own_posts_and_comments_are_counted(db_mod):
-    posts = [
-        _post("alice", votes=[{"user": "bob", "value": 1}, {"user": "carol", "value": 1}]),
-        _post("bob", comments=[_comment("alice", votes=[{"user": "bob", "value": -1}])]),
-    ]
-    assert db_mod.forum_received_engagement(_db(posts), "alice") == {"up": 2, "down": 1, "score": 1}
+    posts = [_post("alice", votes=[{"user": "bob", "value": 1}, {"user": "carol", "value": 1}])]
+    comments = [_comment("alice", votes=[{"user": "bob", "value": -1}])]   # alice's comment, a downvote on it
+    assert db_mod.forum_received_engagement(_db(posts, comments), "alice") == {"up": 2, "down": 1, "score": 1}
 
 
 def test_a_user_with_no_content_or_votes_gets_zeros(db_mod):
@@ -65,19 +69,20 @@ def test_own_votes_on_own_content_are_excluded(db_mod):
 
 def test_votes_on_an_anonymous_post_still_reach_its_real_author(db_mod):
     """An anonymous post hides the author from readers, not from the author's own metric."""
-    posts = [{"id": "p", "author": "alice", "anonymous": True,
-              "votes": [{"user": "bob", "value": -1}], "comments": []}]
+    posts = [{"id": "p", "author": "alice", "anonymous": True, "votes": [{"user": "bob", "value": -1}]}]
     assert db_mod.forum_received_engagement(_db(posts), "alice") == {"up": 0, "down": 1, "score": -1}
 
 
 def test_votes_on_someone_elses_comment_under_my_post_are_not_mine(db_mod):
     """Engagement follows the AUTHOR of the voted item, not the owner of the thread."""
-    posts = [_post("alice", comments=[_comment("bob", votes=[{"user": "carol", "value": 1}])])]
-    assert db_mod.forum_received_engagement(_db(posts), "alice") == {"up": 0, "down": 0, "score": 0}
-    assert db_mod.forum_received_engagement(_db(posts), "bob") == {"up": 1, "down": 0, "score": 1}
+    posts = [_post("alice")]
+    comments = [_comment("bob", votes=[{"user": "carol", "value": 1}])]   # bob's comment under alice's post
+    assert db_mod.forum_received_engagement(_db(posts, comments), "alice") == {"up": 0, "down": 0, "score": 0}
+    assert db_mod.forum_received_engagement(_db(posts, comments), "bob") == {"up": 1, "down": 0, "score": 1}
 
 
 def test_missing_votes_fields_do_not_crash(db_mod):
-    """Legacy docs may lack `votes`/`comments` — the metric must tolerate them (malformed-doc guard)."""
-    posts = [{"id": "p", "author": "alice"}, {"id": "q", "author": "alice", "comments": [{"author": "alice"}]}]
-    assert db_mod.forum_received_engagement(_db(posts), "alice") == {"up": 0, "down": 0, "score": 0}
+    """Legacy docs may lack `votes` — the metric must tolerate them (malformed-doc guard)."""
+    posts = [{"id": "p", "author": "alice"}]
+    comments = [{"id": "c", "author": "alice"}]
+    assert db_mod.forum_received_engagement(_db(posts, comments), "alice") == {"up": 0, "down": 0, "score": 0}

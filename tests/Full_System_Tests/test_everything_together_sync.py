@@ -127,12 +127,12 @@ def test_comment_and_comment_vote_sync_across_users(stack):
     a, b = stack["alice"], stack["bob"]
     pid = _post(a)
     cid = b.post(f"/forum/posts/{pid}/comments", json={"body": "nice"}).get_json()["comment"]["id"]
-    # alice's detail view shows bob's comment...
-    detail = a.get(f"/forum/posts/{pid}").get_json()["post"]
-    assert [c["id"] for c in detail["comments"]] == [cid]
+    # alice's comments view shows bob's comment (#331: comments have their own endpoint)...
+    comments = a.get(f"/forum/posts/{pid}/comments").get_json()["comments"]
+    assert [c["id"] for c in comments] == [cid]
     # ...alice upvotes it -> the comment's score syncs into every view and BOB's engagement + feed.
     assert a.post(f"/forum/posts/{pid}/comments/{cid}/vote", json={"value": 1}).get_json()["score"] == 1
-    assert b.get(f"/forum/posts/{pid}").get_json()["post"]["comments"][0]["score"] == 1
+    assert b.get(f"/forum/posts/{pid}/comments").get_json()["comments"][0]["score"] == 1
     assert b.get("/me/engagement").get_json() == {"up": 1, "down": 0, "score": 1}
     assert any(n["type"] == "vote" for n in b.get("/notifications").get_json()["notifications"])
 

@@ -120,8 +120,10 @@ class _FakeColl:
                 d.update(update.get("$set", {}))
                 for key, val in update.get("$push", {}).items():
                     d.setdefault(key, []).append(val)
-                for key, val in update.get("$inc", {}).items():   # forum_bump_rev's atomic counter
+                for key, val in update.get("$inc", {}).items():   # forum_bump_rev + comment_count counter
                     d[key] = d.get(key, 0) + val
+                for key in update.get("$unset", {}):              # migrate_embedded_comments drops the embedded array
+                    d.pop(key, None)
                 return SimpleNamespace(matched_count=1, upserted_id=None)
         if upsert:
             new = dict(filt)
@@ -148,6 +150,7 @@ class _FakeDB:
         self.profiles = _FakeColl()
         self.analysis_history = _FakeColl()
         self.forum_posts = _FakeColl()
+        self.forum_comments = _FakeColl()        # comments live in their own collection now (#331)
         self.messages = _FakeColl()
         self.notifications = _FakeColl()
         self.meta = _FakeColl()                  # the forum_rev counter lives here (real-time push)
@@ -170,6 +173,11 @@ def test_ensure_indexes_creates_unique_constraints(db_mod, db):
     assert ("email", True) in db.users.indexes               # unique email (partial) — one account per email
     assert ("id", True) in db.forum_posts.indexes            # unique forum post id
     assert ("created_at", False) in db.forum_posts.indexes   # perf: newest-first paginated feed read (#325)
+    # #331: comments in their own collection, indexed for the per-post newest-first paginated read
+    assert ([("post_id", 1), ("created_at", -1)], False) in db.forum_comments.indexes
+    # comment ids are unique like post ids (the key vote/get look up) — this also makes the one-shot
+    # migration re-run safe: a partial re-run raises instead of silently duplicating comments.
+    assert ("id", True) in db.forum_comments.indexes
     assert ("username", True) in db.profiles.indexes         # one profile per user
     assert ("username", False) in db.analysis_history.indexes  # perf (non-unique) per-user history scan
 
@@ -369,8 +377,8 @@ def _seed_vote(db, post_id, user, value):
 def test_forum_create_then_get_and_list(db_mod, db):
     post = db_mod.forum_create_post(db, "alice", "Title", "Body", False)
     assert post["id"] and isinstance(post["id"], str)
-    assert post["score"] == 0 and post["comments"] == []
-    assert "votes" not in post and "_id" not in post  # internal/raw fields not leaked
+    assert post["score"] == 0 and post["comment_count"] == 0     # #331: count, not an embedded array
+    assert "comments" not in post and "votes" not in post and "_id" not in post  # internal/raw fields not leaked
     assert db_mod.forum_get_post(db, post["id"])["body"] == "Body"
     assert len(db_mod.forum_list_posts(db)) == 1
 
@@ -388,7 +396,7 @@ def test_forum_list_posts_is_a_bounded_newest_first_page(db_mod, db):
     # #325: the feed read must be BOUNDED (a .limit() applied — never a full-collection scan) and newest-first.
     for i in range(5):
         db.forum_posts.insert_one({"id": f"p{i}", "author": "a", "title": f"t{i}", "body": "b",
-                                   "score": 0, "comments": [], "votes": [], "created_at": float(i)})
+                                   "score": 0, "comment_count": 0, "votes": [], "created_at": float(i)})
     page = db_mod.forum_list_posts(db, limit=3)
     assert [p["id"] for p in page] == ["p4", "p3", "p2"]      # newest (highest created_at) first, capped at 3
     assert db.forum_posts.last_limit == 3                     # the read went through .limit() -> bounded
@@ -397,7 +405,7 @@ def test_forum_list_posts_is_a_bounded_newest_first_page(db_mod, db):
 def test_forum_list_posts_limit_is_clamped_to_the_max(db_mod, db):
     # A hostile ?limit=99999999 must NOT reopen an unbounded scan: the store clamps to FORUM_PAGE_MAX.
     db.forum_posts.insert_one({"id": "p", "author": "a", "title": "t", "body": "b",
-                               "score": 0, "comments": [], "votes": [], "created_at": 1.0})
+                               "score": 0, "comment_count": 0, "votes": [], "created_at": 1.0})
     db_mod.forum_list_posts(db, limit=99999999)
     assert db.forum_posts.last_limit == db_mod.FORUM_PAGE_MAX  # clamped, not the caller's wild value
 
@@ -406,7 +414,7 @@ def test_forum_list_posts_before_cursor_pages_to_older(db_mod, db):
     # `before` = a created_at cursor: only STRICTLY-older posts come back, so the client can walk to the oldest.
     for i in range(5):
         db.forum_posts.insert_one({"id": f"p{i}", "author": "a", "title": f"t{i}", "body": "b",
-                                   "score": 0, "comments": [], "votes": [], "created_at": float(i)})
+                                   "score": 0, "comment_count": 0, "votes": [], "created_at": float(i)})
     older = db_mod.forum_list_posts(db, before=2.0, limit=10)
     assert [p["id"] for p in older] == ["p1", "p0"]           # only created_at < 2.0, newest-first
     # walking the cursor from the newest page reaches every post exactly once (no gaps, no repeats)
@@ -437,18 +445,103 @@ def test_forum_get_missing_post_is_none(db_mod, db):
 
 
 def test_forum_add_comment(db_mod, db):
+    # #331: the comment lands in forum_comments (NOT embedded on the post), and the post's comment_count bumps.
     pid = db_mod.forum_create_post(db, "alice", "T", "B", False)["id"]
     comment = db_mod.forum_add_comment(db, pid, "bob", "nice")
     assert comment["author"] == "bob" and comment["body"] == "nice" and comment["score"] == 0
     assert comment["id"] and isinstance(comment["id"], str) and "votes" not in comment
-    stored = db_mod.forum_get_post(db, pid)["comments"]
+    # the post itself carries only a COUNT now, never an embedded array
+    assert db_mod.forum_get_post(db, pid)["comment_count"] == 1
+    assert "comments" not in db_mod.forum_get_post(db, pid)
+    # the comment is readable from its own collection via forum_list_comments (public shape)
+    stored = db_mod.forum_list_comments(db, pid)
     assert len(stored) == 1 and stored[0]["id"] == comment["id"]
     assert stored[0]["author"] == "bob" and stored[0]["body"] == "nice" and stored[0]["score"] == 0
     assert "votes" not in stored[0]                      # internal tally not leaked to the public shape
+    # the raw stored comment carries its post_id (the collection key) — never leaked in the public shape
+    assert db.forum_comments.docs[0]["post_id"] == pid
 
 
 def test_forum_add_comment_on_missing_post_is_none(db_mod, db):
     assert db_mod.forum_add_comment(db, "nope", "bob", "x") is None
+    assert db.forum_comments.docs == []                  # nothing inserted for an unknown post
+
+
+def test_forum_list_comments_is_a_bounded_newest_first_page(db_mod, db):
+    # #331: like the feed, a post's comments read is BOUNDED (a .limit() applied) and newest-first.
+    pid = db_mod.forum_create_post(db, "alice", "T", "B", False)["id"]
+    for i in range(5):
+        db.forum_comments.insert_one({"id": f"c{i}", "post_id": pid, "author": "u", "body": f"b{i}",
+                                      "score": 0, "votes": [], "created_at": float(i)})
+    page = db_mod.forum_list_comments(db, pid, limit=3)
+    assert [c["id"] for c in page] == ["c4", "c3", "c2"]      # newest (highest created_at) first, capped at 3
+    assert db.forum_comments.last_limit == 3                  # the read went through .limit() -> bounded
+
+
+def test_forum_list_comments_limit_is_clamped_to_the_max(db_mod, db):
+    pid = db_mod.forum_create_post(db, "alice", "T", "B", False)["id"]
+    db.forum_comments.insert_one({"id": "c", "post_id": pid, "author": "u", "body": "b",
+                                  "score": 0, "votes": [], "created_at": 1.0})
+    db_mod.forum_list_comments(db, pid, limit=99999999)
+    assert db.forum_comments.last_limit == db_mod.COMMENT_PAGE_MAX  # clamped, not the caller's wild value
+
+
+def test_forum_list_comments_before_cursor_and_post_scoping(db_mod, db):
+    pid = db_mod.forum_create_post(db, "alice", "T", "B", False)["id"]
+    other = db_mod.forum_create_post(db, "alice", "T2", "B2", False)["id"]
+    for i in range(5):
+        db.forum_comments.insert_one({"id": f"c{i}", "post_id": pid, "author": "u", "body": f"b{i}",
+                                      "score": 0, "votes": [], "created_at": float(i)})
+    db.forum_comments.insert_one({"id": "x", "post_id": other, "author": "u", "body": "elsewhere",
+                                  "score": 0, "votes": [], "created_at": 9.0})
+    older = db_mod.forum_list_comments(db, pid, before=2.0, limit=10)
+    assert [c["id"] for c in older] == ["c1", "c0"]          # only this post's comments, created_at < 2.0, newest-first
+    # walking the before-cursor reaches every comment of the post exactly once (and never the other post's)
+    seen, cursor = [], None
+    while True:
+        pg = db_mod.forum_list_comments(db, pid, before=cursor, limit=2)
+        if not pg:
+            break
+        seen += [c["id"] for c in pg]
+        cursor = pg[-1]["created_at"]
+    assert seen == ["c4", "c3", "c2", "c1", "c0"]           # full descending walk, each once, "x" never appears
+
+
+def test_forum_vote_comment_one_per_user_revote_and_distinct_sum(db_mod, db):
+    # #331: comment votes are a read-modify-write on the comment's own doc. One vote per user; re-voting
+    # replaces; distinct users sum; a wrong post_id OR unknown comment -> None.
+    pid = db_mod.forum_create_post(db, "alice", "T", "B", False)["id"]
+    cid = db_mod.forum_add_comment(db, pid, "alice", "hi")["id"]
+    assert db_mod.forum_vote_comment(db, pid, cid, "bob", 1) == 1
+    assert db_mod.forum_vote_comment(db, pid, cid, "bob", -1) == -1   # same user replaces, not adds
+    assert db_mod.forum_vote_comment(db, pid, cid, "carol", 1) == 0   # distinct users sum: -1 + 1
+    assert db_mod.forum_vote_comment(db, pid, "no-such", "bob", 1) is None      # unknown comment
+    assert db_mod.forum_vote_comment(db, "no-such-post", cid, "bob", 1) is None  # right comment, wrong post
+    # votes stay a LIST of {user, value} (never a username-keyed dict — a handle may contain '.'/'$')
+    raw = db.forum_comments.find_one({"id": cid})
+    assert isinstance(raw["votes"], list) and {v["user"] for v in raw["votes"]} == {"bob", "carol"}
+
+
+def test_migrate_embedded_comments_moves_and_is_idempotent(db_mod, db):
+    # #331 migration: a pre-refactor post with an embedded comments array is moved into forum_comments,
+    # comment_count is set, the embedded field is dropped, and re-running is a no-op.
+    db.forum_posts.insert_one({"id": "old", "author": "a", "title": "t", "body": "b", "score": 0,
+                               "votes": [], "created_at": 100.0,
+                               "comments": [{"id": "c1", "author": "bob", "body": "one", "score": 2,
+                                             "votes": [{"user": "x", "value": 1}, {"user": "y", "value": 1}]},
+                                            {"id": "c2", "author": "cara", "body": "two", "score": 0, "votes": []}]})
+    db.forum_posts.insert_one({"id": "new", "author": "a", "title": "t", "body": "b", "score": 0,
+                               "comment_count": 0, "votes": [], "created_at": 200.0})   # already migrated
+    assert db_mod.migrate_embedded_comments(db) == 1        # only the embedded post is migrated
+    post = db.forum_posts.find_one({"id": "old"})
+    assert post["comment_count"] == 2 and "comments" not in post   # count set, embedded array dropped
+    moved = db_mod.forum_list_comments(db, "old")          # newest-first; synthesized created_at keeps order
+    assert [c["id"] for c in moved] == ["c2", "c1"]        # c2 got the later synthesized created_at
+    c1 = db.forum_comments.find_one({"id": "c1"})
+    assert c1["author"] == "bob" and c1["score"] == 2 and len(c1["votes"]) == 2   # id/author/score/votes preserved
+    assert c1["created_at"] == 100.0 and db.forum_comments.find_one({"id": "c2"})["created_at"] > 100.0
+    assert db_mod.migrate_embedded_comments(db) == 0       # idempotent: re-running moves nothing
+    assert len(db.forum_comments.docs) == 2               # no duplicate inserts on the second run
 
 
 def test_forum_update_post_by_author(db_mod, db):
@@ -554,14 +647,16 @@ def test_delete_user_profile_and_history(db_mod, db):
 def test_forum_purge_user_strips_authored_and_voted_content(db_mod, db):
     pa = db_mod.forum_create_post(db, "alice", "A", "a", False)["id"]
     pb = db_mod.forum_create_post(db, "bob", "B", "b", False)["id"]
-    db_mod.forum_add_comment(db, pb, "alice", "hi")
+    db_mod.forum_add_comment(db, pb, "alice", "hi")         # alice's comment on bob's post -> forum_comments
     _seed_vote(db, pb, "alice", 1)          # seed votes directly: forum_vote itself is now real-Mongo-only
     _seed_vote(db, pb, "bob", 1)
     db_mod.forum_purge_user(db, "alice")
     assert db_mod.forum_get_post(db, pa) is None                 # alice's own post gone
     post = db_mod.forum_get_post(db, pb)
     assert post is not None and post["score"] == 1               # her vote stripped, bob's kept
-    assert all(c["author"] != "alice" for c in post["comments"]) # her comment stripped
+    # her comment is stripped from forum_comments, and bob's post comment_count reflects the removal (#331)
+    assert db_mod.forum_list_comments(db, pb) == []
+    assert post["comment_count"] == 0
 
 
 def test_message_and_notification_delete_for_user(db_mod, db):

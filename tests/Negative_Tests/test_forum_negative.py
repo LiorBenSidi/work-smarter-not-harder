@@ -69,7 +69,8 @@ def test_unknown_comment_vote_is_404_even_on_a_real_post(poster):
 def test_comment_rejects_malformed_bodies(poster, payload):
     pid = _pid(poster)
     assert poster.post(f"/forum/posts/{pid}/comments", json=payload).status_code == 400
-    assert poster.get(f"/forum/posts/{pid}").get_json()["post"]["comments"] == []
+    assert poster.get(f"/forum/posts/{pid}").get_json()["post"]["comment_count"] == 0   # #331
+    assert poster.get(f"/forum/posts/{pid}/comments").get_json()["comments"] == []
 
 
 # --------------------------------------------------------------- vote walls (the bool trap included)

@@ -2385,6 +2385,10 @@
 
     let forumPosts = [], forumSort = "recent", forumDir = "desc";   // desc = newest / highest first (the default)
     let forumNextBefore = null;   // pagination cursor (#325): created_at of the oldest loaded post; null = no more
+    // #331: comments live in their own collection, fetched paginated via GET /forum/posts/<id>/comments.
+    // We accumulate the newest-first pages (deduped by id) and render them sorted OLDEST-first, so the
+    // reading order matches the old embedded list; "Load more comments" pages back to older comments.
+    let commentAccum = [], commentsNextBefore = null;
     // Supersede-guards: a slower OLDER re-render must not overwrite a newer one. vote()/voteComment() fire
     // openPost()+loadForum() un-awaited, so rapid up/down clicks launch overlapping fetches whose responses
     // can arrive out of order and momentarily paint a stale score (#SPA3). The latest call always wins.
@@ -2529,19 +2533,11 @@
         + (p.mine
             ? '<div class="own-actions"><button class="ghost" onclick="editPost()">Edit</button> <button class="ghost" onclick="deletePost()">Delete</button></div>'
             : '')
-        + '<h4 style="margin:14px 0 6px">Comments</h4>'
-        + (p.comments.length
-            ? '<ul class="comments">' + p.comments.map((c) =>
-                '<li>' + avatarHtml(c.author, 28) + '<div class="c-main"><strong>' + escapeHtml(c.author) + '</strong> ' + escapeHtml(c.body) + '</div>'
-                + '<div class="c-vote"><button class="ghost mini cvote" data-cid="' + escapeHtml(c.id) + '" data-val="1" aria-label="Upvote comment">' + ICON.up + '</button>'
-                + '<span class="pill">' + escapeHtml(c.score) + '</span>'
-                + '<button class="ghost mini cvote" data-cid="' + escapeHtml(c.id) + '" data-val="-1" aria-label="Downvote comment">' + ICON.down + '</button></div></li>'
-              ).join("") + '</ul>'
-            : '<p class="muted">No comments yet.</p>')
+        + '<h4 style="margin:14px 0 6px">Comments' + (p.comment_count ? ' <span class="muted">(' + escapeHtml(p.comment_count) + ')</span>' : '') + '</h4>'
+        + '<div id="comments-box"><p class="muted">Loading comments…</p></div>'
         + '<form id="comment-form" style="margin-top:10px"><textarea name="body" placeholder="Add a comment" aria-label="Add a comment" maxlength="2000" rows="2" required style="resize:vertical"></textarea>'
         + '<div style="margin-top:8px"><button type="submit">Comment</button></div></form></div>';
-      box.querySelectorAll(".cvote").forEach((b) =>
-        b.addEventListener("click", () => voteComment(b.dataset.cid, Number(b.dataset.val))));
+      loadComments(id);                                     // #331: fetch this post's comments (paginated) into #comments-box
       onSubmit("comment-form", async (f) => {
         const cr = await api("/forum/posts/" + id + "/comments", { method: "POST", body: { body: f.body.value } });
         if (cr.ok) openPost(id);
@@ -2562,6 +2558,52 @@
         d.setAttribute("aria-expanded", on ? "true" : "false");
       });
       placeDetail();
+    }
+
+    // ---- Comments (#331: own collection, fetched paginated) ----
+    // Render the accumulated comments OLDEST-first (sort ascending by created_at), with a "Load more
+    // comments" control that pages back to older comments via the next_before cursor (mirrors the feed).
+    function renderComments() {
+      const box = document.getElementById("comments-box"); if (!box) return;
+      const list = commentAccum.slice().sort((a, b) => (a.created_at || 0) - (b.created_at || 0));
+      let html = list.length
+        ? '<ul class="comments">' + list.map((c) =>
+            '<li>' + avatarHtml(c.author, 28) + '<div class="c-main"><strong>' + escapeHtml(c.author) + '</strong> ' + escapeHtml(c.body) + '</div>'
+            + '<div class="c-vote"><button class="ghost mini cvote" data-cid="' + escapeHtml(c.id) + '" data-val="1" aria-label="Upvote comment">' + ICON.up + '</button>'
+            + '<span class="pill">' + escapeHtml(c.score) + '</span>'
+            + '<button class="ghost mini cvote" data-cid="' + escapeHtml(c.id) + '" data-val="-1" aria-label="Downvote comment">' + ICON.down + '</button></div></li>'
+          ).join("") + '</ul>'
+        : '<p class="muted">No comments yet.</p>';
+      if (commentsNextBefore) html += '<button type="button" class="ghost forum-more" id="comments-more" style="margin:10px auto 0;display:block">Load more comments</button>';
+      box.innerHTML = html;
+      box.querySelectorAll(".cvote").forEach((b) =>
+        b.addEventListener("click", () => voteComment(b.dataset.cid, Number(b.dataset.val))));
+      const more = document.getElementById("comments-more");
+      if (more) more.addEventListener("click", loadMoreComments);
+    }
+    // Load a post's FIRST (newest) page of comments — resets the accumulator, so re-opening a post starts clean.
+    async function loadComments(id) {
+      commentAccum = []; commentsNextBefore = null;
+      const r = await api("/forum/posts/" + id + "/comments");
+      if (currentPostId !== id) return;                      // a newer open superseded this
+      if (!r.ok || !r.data) { const box = document.getElementById("comments-box"); if (box) box.innerHTML = '<p class="muted">Couldn\'t load comments.</p>'; return; }
+      commentAccum = r.data.comments || [];
+      commentsNextBefore = r.data.next_before || null;
+      renderComments();
+    }
+    // Fetch the NEXT older page and merge it in (deduped). Bounded + index-backed, so this reaches the oldest
+    // comment one page at a time — no unbounded read, ever (mirrors loadMoreForum).
+    async function loadMoreComments() {
+      if (!commentsNextBefore || !currentPostId) return;
+      const id = currentPostId, cursor = commentsNextBefore;
+      commentsNextBefore = null;                             // guard: don't double-fire while this page is in flight
+      const r = await api("/forum/posts/" + id + "/comments?before=" + encodeURIComponent(cursor));
+      if (currentPostId !== id) return;
+      if (!r.ok || !r.data) { commentsNextBefore = cursor; return; }   // restore the cursor so the user can retry
+      const have = new Set(commentAccum.map((c) => c.id));
+      commentAccum = commentAccum.concat((r.data.comments || []).filter((c) => !have.has(c.id)));   // dedupe overlaps
+      commentsNextBefore = r.data.next_before || null;
+      renderComments();
     }
 
     function closePost() {
@@ -2622,8 +2664,13 @@
       try {
         const r = await api("/forum/posts/" + currentPostId + "/comments/" + encodeURIComponent(commentId) + "/vote",
           { method: "POST", body: { value } });
-        if (r.ok) openPost(currentPostId);   // re-render to reflect the new comment score
-        else flash("forum-flash", (r.data && r.data.error) || "Couldn't record your vote — please try again.");
+        if (r.ok) {
+          // Patch the voted comment's score in the accumulated list and re-render — so loaded (older) pages
+          // aren't dropped and the new score shows even for a comment not on the newest page (#331).
+          const c = commentAccum.find((x) => x.id === commentId);
+          if (c && r.data && typeof r.data.score === "number") { c.score = r.data.score; renderComments(); }
+          else loadComments(currentPostId);
+        } else flash("forum-flash", (r.data && r.data.error) || "Couldn't record your vote — please try again.");
       } finally { voteInFlight = false; }
     }
 
