@@ -30,7 +30,7 @@ def test_comment_vote_changes_score_one_per_user(forum_client):
     cid = _comment(forum_client, pid)
     assert _cvote(forum_client, pid, cid, 1).get_json()["score"] == 1
     assert _cvote(forum_client, pid, cid, -1).get_json()["score"] == -1     # re-voting replaces
-    comments = forum_client.get(f"/forum/posts/{pid}").get_json()["post"]["comments"]
+    comments = forum_client.get(f"/forum/posts/{pid}/comments").get_json()["comments"]   # #331: own endpoint
     assert comments[0]["score"] == -1 and "votes" not in comments[0]        # score surfaces; tally hidden
 
 

@@ -67,13 +67,48 @@ def test_forum_feed_ignores_a_garbage_before_cursor(forum_client):
 
 
 def test_get_post_with_its_comments(forum_client):
+    # #331: comments are NOT embedded in the post detail — the detail carries a count, and the comments
+    # themselves are fetched from the paginated GET /forum/posts/<id>/comments endpoint.
     _login(forum_client)
     pid = _new_post(forum_client, "T", "b").get_json()["post"]["id"]
     forum_client.post(f"/forum/posts/{pid}/comments", json={"body": "great"})
     post = forum_client.get(f"/forum/posts/{pid}").get_json()["post"]
     assert post["body"] == "b"
-    assert len(post["comments"]) == 1
-    assert post["comments"][0]["body"] == "great"
+    assert post["comment_count"] == 1 and "comments" not in post
+    data = forum_client.get(f"/forum/posts/{pid}/comments").get_json()
+    assert data["next_before"] is None
+    assert [c["body"] for c in data["comments"]] == ["great"]
+
+
+def test_comments_endpoint_pages_back_to_the_oldest_via_next_before(forum_client):
+    # #331: the comments read is a bounded page + a `next_before` cursor (mirrors the forum feed). Walking
+    # the cursor must reach EVERY comment, newest-first, exactly once — even the oldest, with no unbounded read.
+    _login(forum_client)
+    pid = _new_post(forum_client, "T", "b").get_json()["post"]["id"]
+    for i in range(5):
+        forum_client.post(f"/forum/posts/{pid}/comments", json={"body": f"c{i}"})
+    seen, before = [], None
+    for _ in range(10):                                   # bounded loop guard (5 comments / 2 per page)
+        url = f"/forum/posts/{pid}/comments?limit=2" + (f"&before={before}" if before is not None else "")
+        data = forum_client.get(url).get_json()
+        seen += [c["body"] for c in data["comments"]]
+        before = data["next_before"]
+        if before is None:
+            break
+    assert seen == ["c4", "c3", "c2", "c1", "c0"]         # full newest-first walk, each comment exactly once
+
+
+def test_comments_endpoint_ignores_a_garbage_before_cursor(forum_client):
+    _login(forum_client)
+    pid = _new_post(forum_client, "T", "b").get_json()["post"]["id"]
+    forum_client.post(f"/forum/posts/{pid}/comments", json={"body": "hi"})
+    resp = forum_client.get(f"/forum/posts/{pid}/comments?before=not-a-number")
+    assert resp.status_code == 200
+    assert [c["body"] for c in resp.get_json()["comments"]] == ["hi"]
+
+
+def test_comments_endpoint_requires_login(forum_client):
+    assert forum_client.get("/forum/posts/whatever/comments").status_code == 401
 
 
 def test_vote_changes_score_and_one_vote_per_user(forum_client):

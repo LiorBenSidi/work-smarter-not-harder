@@ -140,7 +140,9 @@ class _DbHistory(_DbStore):
 class _DbForum(_DbStore):
     """Seam Lior implements: ``forum_create_post(db, author, title, body, anonymous)``,
     ``forum_list_posts(db)``, ``forum_get_post(db, post_id)``,
-    ``forum_add_comment(db, post_id, author, body)``, ``forum_vote(db, post_id, username, value)``,
+    ``forum_add_comment(db, post_id, author, body)``,
+    ``forum_list_comments(db, post_id, before, limit)`` (comments live in their own collection, #331),
+    ``forum_get_comment(db, post_id, comment_id)``, ``forum_vote(db, post_id, username, value)``,
     ``forum_vote_comment(db, post_id, comment_id, username, value)``."""
 
     def create_post(self, author, title, body, anonymous):
@@ -158,6 +160,14 @@ class _DbForum(_DbStore):
     def add_comment(self, post_id, author, body):
         db_module, handle = self._resolve()
         return db_module.forum_add_comment(handle, post_id, author, body)
+
+    def list_comments(self, post_id, before=None, limit=None):
+        db_module, handle = self._resolve()
+        return db_module.forum_list_comments(handle, post_id, before=before, limit=limit)
+
+    def get_comment(self, post_id, comment_id):
+        db_module, handle = self._resolve()
+        return db_module.forum_get_comment(handle, post_id, comment_id)
 
     def vote(self, post_id, username, value):
         db_module, handle = self._resolve()
