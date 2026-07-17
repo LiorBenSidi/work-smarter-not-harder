@@ -7,7 +7,9 @@ rate-limiting and the Azure deploy are Elad's. See docs/COLLABORATORS.md.
 
 The web stores (web/app.py ``_Db*`` classes) call these functions with the db handle from ``get_db``.
 Inputs are already type-validated at the route layer (NoSQL-injection defense) before they reach here.
-Collections (DESIGN.md §2): ``users``, ``profiles``, ``analysis_history``, ``forum_posts``.
+Collections (DESIGN.md §2): ``users``, ``profiles``, ``analysis_history``, ``forum_posts``,
+``forum_comments`` (comments live in their OWN collection, keyed by ``post_id`` — #331, so a hot post
+can never bloat toward Mongo's 16 MB document cap and comments read in bounded, indexed pages).
 """
 import logging
 import re
@@ -43,7 +45,13 @@ def ensure_indexes(db):
     atomic upsert (also guards direct DB writes); ``forum_posts.id`` keeps the opaque post ids unique;
     ``profiles.username`` enforces one profile per user (matches ``save_profile``'s upsert key).
     Performance: ``analysis_history.username`` makes ``list_history`` a per-user index scan rather than
-    a full-collection scan as history grows.
+    a full-collection scan as history grows. ``forum_posts.created_at`` backs the paginated feed read
+    (``forum_list_posts``) so the newest page is served straight off the index — O(log N + page) at any
+    forum size, instead of a full-collection load + in-memory sort (#325). ``forum_comments`` is keyed
+    on ``(post_id, created_at)`` so one post's comments are read newest-first, bounded + straight off the
+    index (``forum_list_comments``) — never a full-collection scan as the whole forum's comments grow (#331).
+    ``forum_posts.author`` + ``forum_comments.author`` scope ``forum_received_engagement`` to the user's
+    own posts/comments on a profile view, so neither read scans its whole collection as the forum grows (#331).
     """
     db.users.create_index("username", unique=True)
     # One account per email (the login identity). PARTIAL so the seed/legacy users WITHOUT an email don't
@@ -52,6 +60,18 @@ def ensure_indexes(db):
     # insert (the loser's insert raises -> create_user surfaces DuplicateEmailError -> the route 409s).
     db.users.create_index("email", unique=True, partialFilterExpression={"email": {"$exists": True}})
     db.forum_posts.create_index("id", unique=True)
+    db.forum_posts.create_index("created_at")     # newest-first paginated feed read (forum_list_posts, #325)
+    # Comments now live in their own collection (#331). This compound index serves the per-post, newest-first
+    # paginated read (forum_list_comments) straight off the index — O(log N + page) at any comment volume.
+    db.forum_comments.create_index([("post_id", 1), ("created_at", -1)])
+    # Comment ids are unique like post ids: they're the key `forum_vote_comment` / `forum_get_comment` look up.
+    # It also makes the one-shot migration RE-RUN SAFE: if it ever died between inserting a post's comments and
+    # $unset-ing the embedded array, a re-run would silently duplicate them — this turns that into a loud failure.
+    db.forum_comments.create_index("id", unique=True)
+    # forum_received_engagement scopes its two reads to the user instead of a full scan (#331):
+    # `forum_posts.author` for their posts, `forum_comments.author` for the comments they wrote.
+    db.forum_posts.create_index("author")
+    db.forum_comments.create_index("author")
     db.profiles.create_index("username", unique=True)
     db.analysis_history.create_index("username")
     # Social layer: threads + inbox filter on the real sender/recipient username fields; poll on user.
@@ -332,12 +352,20 @@ def add_history(db, username, entry):
 
 # ---- forum (CRUD seam; the real-time push stays Elad's; the seed mechanism is db/seed.py) ----
 def _comment_public(c):
-    """Public projection of one comment — id/author/body/score, dropping the internal votes list."""
-    return {"id": c.get("id"), "author": c.get("author"), "body": c.get("body"), "score": c.get("score", 0)}
+    """Public projection of one comment — id/author/body/score/created_at, dropping the internal votes list.
+    ``created_at`` is the field the client orders comments on and the cursor ``forum_list_comments`` pages by."""
+    return {"id": c.get("id"), "author": c.get("author"), "body": c.get("body"),
+            "score": c.get("score", 0), "created_at": c.get("created_at", 0)}
 
 
 def _shape(post):
-    """Public projection of a forum post — drops the raw _id and the internal votes lists (post + comments)."""
+    """Public projection of a forum post — drops the raw _id and the internal votes list, and surfaces
+    ``comment_count`` (comments themselves live in ``forum_comments`` now, read via ``forum_list_comments``).
+
+    ``comment_count`` reads the stored counter, falling back to the length of a still-embedded ``comments``
+    array so a post that has NOT been migrated yet (pre-#331 shape) still reports the right count — the app
+    is correct before the one-shot migration runs.
+    """
     created = post.get("created_at") or 0
     if not created:                                    # a post created BEFORE created_at existed has none: derive it
         oid = post.get("_id")                          # from the Mongo _id (an ObjectId embeds its insertion time),
@@ -349,7 +377,7 @@ def _shape(post):
     return {"id": post["id"], "author": post["author"], "anonymous": post.get("anonymous", False),
             "title": post["title"], "body": post["body"], "score": post.get("score", 0),
             "created_at": created,
-            "comments": [_comment_public(c) for c in post.get("comments", [])]}
+            "comment_count": post.get("comment_count", len(post.get("comments") or []))}
 
 
 # ---- Forum revision counter (real-time push) --------------------------------------------------
@@ -383,16 +411,32 @@ def forum_get_rev(db):
 def forum_create_post(db, author, title, body, anonymous):
     """Insert a post and return its public shape (opaque string id)."""
     post = {"id": uuid.uuid4().hex, "author": author, "anonymous": anonymous,
-            "title": title, "body": body, "score": 0, "comments": [], "votes": [],
+            "title": title, "body": body, "score": 0, "comment_count": 0, "votes": [],
             "created_at": time.time()}
     db.forum_posts.insert_one(post)
     forum_bump_rev(db)
     return _shape(post)
 
 
-def forum_list_posts(db):
-    """Return every post in public shape."""
-    return [_shape(p) for p in db.forum_posts.find()]
+FORUM_PAGE_DEFAULT = 50    # posts per page when the caller doesn't specify (Elad's suggested default, #325)
+FORUM_PAGE_MAX = 100       # hard cap: no single request can pull more than this, however large ?limit is
+
+COMMENT_PAGE_DEFAULT = 50  # comments per page when the caller doesn't specify (#331)
+COMMENT_PAGE_MAX = 100     # hard cap: no single request can pull more comments than this, however large ?limit is
+
+
+def forum_list_posts(db, before=None, limit=None):
+    """Return ONE page of posts, newest first, in public shape — a bounded, INDEXED read (#325).
+
+    ``before`` is a ``created_at`` cursor: only posts strictly older than it are returned, so the client
+    can page back to the very oldest post one page at a time. ``limit`` defaults to ``FORUM_PAGE_DEFAULT``
+    and is clamped to ``[1, FORUM_PAGE_MAX]`` so no request — however crafted (``?limit=99999999``) — can
+    reopen the old unbounded full-collection scan. Backed by the ``created_at`` index (``ensure_indexes``),
+    so each page is O(log N + limit) regardless of how large the forum grows.
+    """
+    limit = FORUM_PAGE_DEFAULT if limit is None else max(1, min(int(limit), FORUM_PAGE_MAX))
+    query = {"created_at": {"$lt": before}} if before is not None else {}
+    return [_shape(p) for p in db.forum_posts.find(query).sort("created_at", -1).limit(limit)]
 
 
 def forum_get_post(db, post_id):
@@ -402,55 +446,69 @@ def forum_get_post(db, post_id):
 
 
 def forum_add_comment(db, post_id, author, body):
-    """Append a comment (with its own id + empty vote tally) and return its public shape, or None if
-    the post is unknown. The id lets a comment be up/downvoted independently of its post."""
-    comment = {"id": uuid.uuid4().hex, "author": author, "body": body, "votes": [], "score": 0}
-    result = db.forum_posts.update_one({"id": post_id}, {"$push": {"comments": comment}})
-    if not result.matched_count:
+    """Insert a comment into ``forum_comments`` and return its public shape, or None if the post is unknown.
+
+    The comment is its OWN document (``{id, post_id, author, body, score, votes, created_at}``) — so a hot
+    thread can never grow the post document toward Mongo's 16 MB cap (#331). We verify the post exists first
+    (return None if not), then insert the comment, bump the post's ``comment_count`` (the number the feed +
+    detail show), and advance the forum revision. The id lets a comment be up/downvoted independently."""
+    if db.forum_posts.find_one({"id": post_id}) is None:
         return None
+    comment = {"id": uuid.uuid4().hex, "post_id": post_id, "author": author, "body": body,
+               "score": 0, "votes": [], "created_at": time.time()}
+    db.forum_comments.insert_one(comment)
+    db.forum_posts.update_one({"id": post_id}, {"$inc": {"comment_count": 1}})
     forum_bump_rev(db)
     return _comment_public(comment)
 
 
+def forum_list_comments(db, post_id, before=None, limit=None):
+    """Return ONE page of a post's comments, newest first, in public shape — a bounded, INDEXED read (#331).
+
+    ``before`` is a ``created_at`` cursor: only comments strictly older than it are returned, so the client
+    can page back to the very first comment one page at a time. ``limit`` defaults to ``COMMENT_PAGE_DEFAULT``
+    and is clamped to ``[1, COMMENT_PAGE_MAX]`` so no request — however crafted (``?limit=99999999``) — can
+    pull an unbounded slice of a huge thread. Backed by the ``(post_id, created_at)`` index
+    (``ensure_indexes``), so each page is O(log N + limit) regardless of how many comments the post has.
+    """
+    limit = COMMENT_PAGE_DEFAULT if limit is None else max(1, min(int(limit), COMMENT_PAGE_MAX))
+    query = {"post_id": post_id}
+    if before is not None:
+        query["created_at"] = {"$lt": before}
+    return [_comment_public(c) for c in
+            db.forum_comments.find(query).sort("created_at", -1).limit(limit)]
+
+
+def forum_get_comment(db, post_id, comment_id):
+    """Return one comment (public shape) matching BOTH ``post_id`` and ``comment_id``, or None.
+
+    Used by the vote-notification path to resolve a comment's real author after a vote lands, without
+    reading the whole (paginated) thread."""
+    comment = db.forum_comments.find_one({"id": comment_id, "post_id": post_id})
+    return _comment_public(comment) if comment else None
+
+
 def forum_vote_comment(db, post_id, comment_id, username, value):
     """Record one vote per user on a comment (re-voting replaces) and return the comment's new score,
-    or None if the post or comment is unknown.
+    or None if the comment (matching BOTH id and post_id) is unknown.
 
-    A single **atomic pipeline update** (MongoDB 4.2+) keyed on ``{id, "comments.id"}`` — so an unknown
-    post OR comment misses the filter and returns None. Server-side, ``$map`` over the comments and, for
-    the target comment only, drop this user's prior vote, append the new one, and recompute *that
-    comment's* score in one pass (a ``$let`` builds the new votes list once). One atomic write, so
-    concurrent votes on different comments of the same post can't fail each other and a valid vote never
-    spuriously 503s under load (the old whole-``comments``-array CAS serialized them and could exhaust its
-    retries). Votes stay a LIST of ``{"user", "value"}`` (never a username-keyed dict — a username may
-    contain ``.``/``$``). ``username`` is wrapped in ``$literal`` so a ``$``-prefixed handle is treated as
-    data, not an aggregation field path.
+    A read-modify-write on the comment's OWN document (#331): drop this user's prior vote, append the new
+    one, recompute the score as the sum of the remaining values, and write the pair back. Votes stay a LIST
+    of ``{"user", "value"}`` (never a username-keyed dict — a username may contain ``.``/``$``, illegal as
+    field names, and here the handle is only ever a VALUE), so a ``$``/``.`` handle is a safe write.
+    "One vote per user, re-vote replaces, distinct users sum" holds because the prior vote is filtered out
+    before the new one is appended.
     """
-    post = db.forum_posts.find_one_and_update(
-        {"id": post_id, "comments.id": comment_id},
-        [{"$set": {"comments": {"$map": {
-            "input": "$comments", "as": "c",
-            "in": {"$cond": [
-                {"$eq": ["$$c.id", comment_id]},
-                {"$let": {
-                    "vars": {"newvotes": {"$concatArrays": [
-                        {"$filter": {"input": {"$ifNull": ["$$c.votes", []]}, "as": "v",
-                                     "cond": {"$ne": ["$$v.user", {"$literal": username}]}}},
-                        [{"user": {"$literal": username}, "value": value}],
-                    ]}},
-                    "in": {"$mergeObjects": ["$$c", {"votes": "$$newvotes",
-                                                     "score": {"$sum": "$$newvotes.value"}}]},
-                }},
-                "$$c",
-            ]},
-        }}}}],
-        return_document=ReturnDocument.AFTER,
-    )
-    if not post:
+    comment = db.forum_comments.find_one({"id": comment_id, "post_id": post_id})
+    if comment is None:
         return None
+    votes = [v for v in (comment.get("votes") or []) if v.get("user") != username]
+    votes.append({"user": username, "value": value})
+    score = sum(v["value"] for v in votes)
+    db.forum_comments.update_one({"id": comment_id, "post_id": post_id},
+                                 {"$set": {"votes": votes, "score": score}})
     forum_bump_rev(db)
-    target = next((c for c in post.get("comments", []) if c.get("id") == comment_id), None)
-    return target["score"] if target else None
+    return score
 
 
 def forum_vote(db, post_id, username, value):
@@ -484,6 +542,39 @@ def forum_vote(db, post_id, username, value):
     return post["score"]
 
 
+def migrate_embedded_comments(db):
+    """One-shot, IDEMPOTENT migration of pre-#331 posts: move each post's embedded ``comments`` array into
+    the ``forum_comments`` collection, set the post's ``comment_count``, and drop the embedded array.
+
+    For every post that still carries a ``comments`` field, each embedded comment is inserted as its own
+    document (its id / author / body / score / votes preserved), synthesizing a ``created_at`` of
+    ``post.created_at + i*1e-6`` for the i-th comment so the original order is kept AND every comment has a
+    strictly-monotonic timestamp (the field ``forum_list_comments`` pages on). The post's ``comment_count``
+    is set to the array length and the embedded ``comments`` field is ``$unset``. A post with no ``comments``
+    field is skipped, so re-running is a no-op. Returns the number of posts migrated.
+
+    NOT auto-run on connect (``ensure_indexes`` stays side-effect-free) — run it once via
+    ``scripts/migrate_forum_comments.py`` on the VM.
+    """
+    migrated = 0
+    for post in list(db.forum_posts.find()):
+        if "comments" not in post:
+            continue                                             # already migrated (or never embedded) -> skip
+        embedded = post.get("comments") or []
+        base = post.get("created_at") or 0
+        for i, c in enumerate(embedded):
+            db.forum_comments.insert_one({
+                "id": c.get("id") or uuid.uuid4().hex, "post_id": post["id"],
+                "author": c.get("author"), "body": c.get("body"),
+                "score": c.get("score", 0), "votes": c.get("votes") or [],
+                "created_at": base + i * 1e-6})
+        db.forum_posts.update_one({"id": post["id"]},
+                                  {"$set": {"comment_count": len(embedded)},
+                                   "$unset": {"comments": ""}})
+        migrated += 1
+    return migrated
+
+
 def forum_received_engagement(db, username):
     """Votes OTHERS cast on `username`'s posts and comments (GUIDELINES §3.3's per-user total).
 
@@ -492,27 +583,29 @@ def forum_received_engagement(db, username):
     own content are excluded ("received" means from the community). Returns counts only
     ({"up", "down", "score"}); voter identities never leave the store, same as the public shapes.
 
-    A full-collection scan in Python rather than a Mongo aggregation: the read happens on a personal
-    profile view (not a hot path), and staying on plain find() keeps it exercisable by the same
-    in-memory fakes as the rest of this module.
+    Neither read scans its whole collection on a profile view (#331): the posts read is SCOPED to the
+    user's own posts (``{"author": username}``) and comments are read from ``forum_comments`` filtered to
+    the user — so both cost the same whether the forum holds a handful of rows or thousands. Backed by the
+    ``forum_posts.author`` + ``forum_comments.author`` indexes (``ensure_indexes``). Comments live in their
+    own collection since #333; counting stays in plain Python so the same in-memory fakes exercise it — the
+    query only narrows WHICH documents are pulled, not the tally.
     """
     up = down = 0
-    for post in db.forum_posts.find():
-        vote_lists = []
+    vote_lists = []
+    for post in db.forum_posts.find({"author": username}):
         if post.get("author") == username:
             vote_lists.append(post.get("votes") or [])
-        for comment in post.get("comments") or []:
-            if comment.get("author") == username:
-                vote_lists.append(comment.get("votes") or [])
-        for votes in vote_lists:
-            for vote in votes:
-                if vote.get("user") == username:
-                    continue
-                value = vote.get("value", 0)
-                if value > 0:
-                    up += 1
-                elif value < 0:
-                    down += 1
+    for comment in db.forum_comments.find({"author": username}):
+        vote_lists.append(comment.get("votes") or [])
+    for votes in vote_lists:
+        for vote in votes:
+            if vote.get("user") == username:
+                continue
+            value = vote.get("value", 0)
+            if value > 0:
+                up += 1
+            elif value < 0:
+                down += 1
     return {"up": up, "down": down, "score": up - down}
 
 
@@ -544,6 +637,7 @@ def forum_delete_post(db, post_id, username):
     if post.get("author") != username:
         return FORBIDDEN
     db.forum_posts.delete_one({"id": post_id})
+    db.forum_comments.delete_many({"post_id": post_id})   # a deleted post takes its comments with it (#331)
     forum_bump_rev(db)
     return True
 
@@ -669,49 +763,57 @@ def notification_delete_for_user(db, username):
 
 
 def forum_purge_user(db, username):
-    """Erase the user from the forum: delete the posts they authored, and strip their comments and
-    votes out of everyone else's posts — recomputing the affected post/comment scores so the forum
-    stays consistent for the remaining users."""
+    """Erase the user from the forum: delete the posts they authored (and those posts' comments), delete
+    the comments they wrote under everyone else's posts, and strip their votes out of the remaining posts
+    and comments — recomputing the affected scores + comment counts so the forum stays consistent for the
+    remaining users (#331: comments are their own collection now)."""
+    own_post_ids = [p["id"] for p in db.forum_posts.find({"author": username})]
     db.forum_posts.delete_many({"author": username})
+    for pid in own_post_ids:                                     # a deleted post takes its comments with it
+        db.forum_comments.delete_many({"post_id": pid})
+    db.forum_comments.delete_many({"author": username})          # the user's comments under others' posts
+    # strip the user's votes out of the surviving comments + recompute each comment's score
+    for c in list(db.forum_comments.find()):
+        cvotes = [v for v in c.get("votes", []) if v.get("user") != username]
+        if len(cvotes) != len(c.get("votes", [])):
+            db.forum_comments.update_one(
+                {"id": c["id"]},
+                {"$set": {"votes": cvotes, "score": sum(v["value"] for v in cvotes)}})
+    # strip the user's votes out of the surviving posts, recompute score, and refresh comment_count
     for post in list(db.forum_posts.find()):
-        kept_comments, changed = [], False
-        for c in post.get("comments", []):
-            if c.get("author") == username:
-                changed = True                                   # drop the user's comment entirely
-                continue
-            cvotes = [v for v in c.get("votes", []) if v.get("user") != username]
-            if len(cvotes) != len(c.get("votes", [])):
-                c = {**c, "votes": cvotes, "score": sum(v["value"] for v in cvotes)}
-                changed = True
-            kept_comments.append(c)
+        updates = {}
         pvotes = [v for v in post.get("votes", []) if v.get("user") != username]
         if len(pvotes) != len(post.get("votes", [])):
-            changed = True
-        if changed:
-            db.forum_posts.update_one(
-                {"id": post["id"]},
-                {"$set": {"comments": kept_comments, "votes": pvotes,
-                          "score": sum(v["value"] for v in pvotes)}})
+            updates["votes"] = pvotes
+            updates["score"] = sum(v["value"] for v in pvotes)
+        live_count = len(list(db.forum_comments.find({"post_id": post["id"]})))
+        if post.get("comment_count", 0) != live_count:
+            updates["comment_count"] = live_count
+        if updates:
+            db.forum_posts.update_one({"id": post["id"]}, {"$set": updates})
 
 
 # ---- account data export (GDPR right to data portability) — the user's own data, as JSON ----
 def forum_export_user(db, username):
     """The user's forum footprint: posts they authored (public shape), comments they wrote (with the
-    parent post's id + title), and every vote they cast — on posts and on comments."""
+    parent post's id + title), and every vote they cast — on posts and on comments. Comments + their
+    votes are read from ``forum_comments`` now (#331)."""
     posts, comments, votes = [], [], []
+    post_titles = {}
     for post in db.forum_posts.find():
+        post_titles[post["id"]] = post.get("title")
         if post.get("author") == username:
             posts.append(_shape(post))
         for pv in post.get("votes", []):
             if pv.get("user") == username:
                 votes.append({"post_id": post["id"], "value": pv.get("value")})
-        for c in post.get("comments", []):
-            if c.get("author") == username:
-                comments.append({"post_id": post["id"], "post_title": post.get("title"),
-                                 "body": c.get("body"), "score": c.get("score", 0)})
-            for cv in c.get("votes", []):
-                if cv.get("user") == username:
-                    votes.append({"post_id": post["id"], "comment_id": c.get("id"), "value": cv.get("value")})
+    for c in db.forum_comments.find():
+        if c.get("author") == username:
+            comments.append({"post_id": c.get("post_id"), "post_title": post_titles.get(c.get("post_id")),
+                             "body": c.get("body"), "score": c.get("score", 0)})
+        for cv in c.get("votes", []):
+            if cv.get("user") == username:
+                votes.append({"post_id": c.get("post_id"), "comment_id": c.get("id"), "value": cv.get("value")})
     return {"posts": posts, "comments": comments, "votes": votes}
 
 
