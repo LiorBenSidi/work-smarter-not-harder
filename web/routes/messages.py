@@ -219,20 +219,40 @@ def mark_notifications_read():
 
 # ---- Server-Sent Events push (real-time, no polling on the client) ----
 # Each open stream holds one gthread worker thread for its whole lifetime. To stop a burst of streams
-# from starving the pool (gunicorn 2 workers x 4 threads = 8 slots), we (a) recycle each stream after
-# EVENTS_MAX_SECONDS so slots free up, and (b) cap concurrent streams PER WORKER at EVENTS_MAX_STREAMS,
-# keeping >=1 thread per worker free for ordinary requests. Over the cap, the client is told to reconnect
-# later and rides its polling backstop -> NO thread is held, so /login, /health, etc. can never starve.
-# (gevent/eventlet workers would lift the cap, at the cost of a new dependency — not needed for the demo.)
+# from starving the pool (prod: gunicorn 1 worker x 16 threads), we (a) recycle each stream after
+# EVENTS_MAX_SECONDS so slots free up, and (b) cap concurrent streams PER WORKER at EVENTS_MAX_STREAMS.
+# Over the cap, the client is told to reconnect later and rides its polling backstop -> NO thread is held,
+# so /login, /health, etc. can never starve. (gevent/eventlet workers would lift the cap, at the cost of a
+# new dependency — not needed for the demo.)
 def _events_int_env(name, default):
     try:
         return max(1, int(os.environ.get(name, default)))
     except (TypeError, ValueError):
         return default
 
+
+def _safe_stream_cap(configured_streams, web_threads):
+    """The effective SSE cap, hard-limited so streams can NEVER consume more than half the worker's threads.
+
+    An SSE stream pins one gthread thread for its whole life. If EVENTS_MAX_STREAMS ever reached --threads,
+    a burst of streams could hold EVERY thread and starve /health -> failed healthcheck -> container restart
+    (a self-inflicted DoS). Clamping to `web_threads // 2` guarantees >= half the pool always stays free for
+    ordinary requests + /health, no matter how EVENTS_MAX_STREAMS is (mis)configured. Floor of 1 so the app
+    always boots. Returns the value the semaphore is actually sized to."""
+    return max(1, min(configured_streams, web_threads // 2))
+
+
 EVENTS_MAX_SECONDS = _events_int_env("EVENTS_MAX_SECONDS", 90)   # recycle each stream; browser auto-reconnects
 EVENTS_TICK_SECONDS = 1.5                                        # how often the server checks for new notifications
-EVENTS_MAX_STREAMS = _events_int_env("EVENTS_MAX_STREAMS", 3)    # per worker; keep < gunicorn --threads (reserve >=1)
+# WEB_THREADS mirrors gunicorn --threads (same env var; default 16). The clamp below ties the SSE cap to it
+# so no configuration can let streams starve the worker — a bad EVENTS_MAX_STREAMS is made harmless, not fatal.
+_WEB_THREADS = _events_int_env("WEB_THREADS", 16)
+_EVENTS_MAX_STREAMS_CONFIGURED = _events_int_env("EVENTS_MAX_STREAMS", 3)
+EVENTS_MAX_STREAMS = _safe_stream_cap(_EVENTS_MAX_STREAMS_CONFIGURED, _WEB_THREADS)  # per worker; <= threads//2
+if EVENTS_MAX_STREAMS < _EVENTS_MAX_STREAMS_CONFIGURED:
+    logger.warning("EVENTS_MAX_STREAMS=%d is unsafe for %d threads; clamped to %d so SSE can't starve the "
+                   "worker (>= half the threads stay free for requests/health)",
+                   _EVENTS_MAX_STREAMS_CONFIGURED, _WEB_THREADS, EVENTS_MAX_STREAMS)
 _sse_slots = threading.BoundedSemaphore(EVENTS_MAX_STREAMS)     # bounds concurrent /events streams in THIS worker
 
 
