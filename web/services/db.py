@@ -45,7 +45,9 @@ def ensure_indexes(db):
     Performance: ``analysis_history.username`` makes ``list_history`` a per-user index scan rather than
     a full-collection scan as history grows. ``forum_posts.created_at`` backs the paginated feed read
     (``forum_list_posts``) so the newest page is served straight off the index — O(log N + page) at any
-    forum size, instead of a full-collection load + in-memory sort (#325).
+    forum size, instead of a full-collection load + in-memory sort (#325). ``forum_posts.author`` +
+    the multikey ``forum_posts.comments.author`` scope ``forum_received_engagement`` to the user's own
+    content on a profile view, so it never scans the whole collection as the forum grows (#331).
     """
     db.users.create_index("username", unique=True)
     # One account per email (the login identity). PARTIAL so the seed/legacy users WITHOUT an email don't
@@ -55,6 +57,10 @@ def ensure_indexes(db):
     db.users.create_index("email", unique=True, partialFilterExpression={"email": {"$exists": True}})
     db.forum_posts.create_index("id", unique=True)
     db.forum_posts.create_index("created_at")     # newest-first paginated feed read (forum_list_posts, #325)
+    # forum_received_engagement scopes its read to the user's own content instead of a full scan (#331):
+    # `author` for their posts, the multikey `comments.author` for posts they commented on.
+    db.forum_posts.create_index("author")
+    db.forum_posts.create_index("comments.author")
     db.profiles.create_index("username", unique=True)
     db.analysis_history.create_index("username")
     # Social layer: threads + inbox filter on the real sender/recipient username fields; poll on user.
@@ -508,12 +514,15 @@ def forum_received_engagement(db, username):
     own content are excluded ("received" means from the community). Returns counts only
     ({"up", "down", "score"}); voter identities never leave the store, same as the public shapes.
 
-    A full-collection scan in Python rather than a Mongo aggregation: the read happens on a personal
-    profile view (not a hot path), and staying on plain find() keeps it exercisable by the same
-    in-memory fakes as the rest of this module.
+    The read is SCOPED to the user's own content — posts they authored OR posts carrying a comment they
+    authored — instead of scanning the whole ``forum_posts`` collection (#331: an unbounded full scan on a
+    profile view amplifies under load as the forum grows). Backed by the ``author`` + ``comments.author``
+    indexes (``ensure_indexes``). The counting then stays in plain Python so the same in-memory fakes as
+    the rest of this module exercise it; the ``$or`` only narrows WHICH documents are pulled, not the tally.
     """
     up = down = 0
-    for post in db.forum_posts.find():
+    scope = {"$or": [{"author": username}, {"comments.author": username}]}
+    for post in db.forum_posts.find(scope):
         vote_lists = []
         if post.get("author") == username:
             vote_lists.append(post.get("votes") or [])

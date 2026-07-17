@@ -26,9 +26,31 @@ def db_mod():
 class _Posts:
     def __init__(self, rows):
         self._rows = rows
+        self.last_filter = "unset"     # records the query forum_received_engagement scopes the read with
+        self.returned = None           # how many docs the read actually pulled — the scan-bound assertion
 
-    def find(self, *args, **kwargs):
-        return list(self._rows)
+    @staticmethod
+    def _match(doc, filt):
+        # Only what forum_received_engagement's scoping query needs: an `$or` of exact-`author` and
+        # `comments.author` (dotted → any comment by the user). Empty/None filter matches all (old behaviour).
+        if not filt:
+            return True
+        for k, v in filt.items():
+            if k == "$or":
+                if not any(_Posts._match(doc, sub) for sub in v):
+                    return False
+            elif k == "comments.author":
+                if v not in [c.get("author") for c in doc.get("comments") or []]:
+                    return False
+            elif doc.get(k) != v:
+                return False
+        return True
+
+    def find(self, filt=None, *args, **kwargs):
+        self.last_filter = filt
+        rows = [dict(d) for d in self._rows if self._match(d, filt)]
+        self.returned = len(rows)
+        return rows
 
 
 def _db(posts):
@@ -81,3 +103,19 @@ def test_missing_votes_fields_do_not_crash(db_mod):
     """Legacy docs may lack `votes`/`comments` — the metric must tolerate them (malformed-doc guard)."""
     posts = [{"id": "p", "author": "alice"}, {"id": "q", "author": "alice", "comments": [{"author": "alice"}]}]
     assert db_mod.forum_received_engagement(_db(posts), "alice") == {"up": 0, "down": 0, "score": 0}
+
+
+def test_the_read_is_scoped_to_the_users_own_content_not_a_full_scan(db_mod):
+    """#331 (scale/DoS): a profile view must NOT drag the whole `forum_posts` collection into Python.
+    The read is scoped by a query to the user's own posts + the posts they commented on, so a forum with
+    thousands of unrelated posts costs the same as one with a handful. Correctness is unchanged."""
+    mine_post = _post("alice", votes=[{"user": "bob", "value": 1}])
+    mine_comment = _post("dave", comments=[_comment("alice", votes=[{"user": "carol", "value": 1}])])
+    strangers = [_post(f"stranger{i}", votes=[{"user": "x", "value": 1}]) for i in range(200)]
+    fake = _Posts([mine_post, mine_comment, *strangers])
+
+    result = db_mod.forum_received_engagement(SimpleNamespace(forum_posts=fake), "alice")
+
+    assert result == {"up": 2, "down": 0, "score": 2}          # correctness holds under the scoped read
+    assert fake.last_filter, "read must pass a scoping query, not find() over the whole collection"
+    assert fake.returned == 2, "only the two posts alice is involved in should be read, not all 202"

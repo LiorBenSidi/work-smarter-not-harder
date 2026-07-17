@@ -133,7 +133,18 @@ def _attach(target_type, target_id, peers=None):
     if ids is None:
         return jsonify(error="attachment_ids must be a list of ids"), 400
     me = session["username"]
-    bound = [i for i in ids if _media().bind(i, me, target_type, target_id, peers=peers)]
+    # #331: cap how many blobs one target can carry, so its serve read (list_for_target) stays bounded.
+    # Counted against what's already bound there (the cap is on the target, not this single call), so a
+    # flood spread over many calls can't grow it past the limit either. Blobs past the cap are shed.
+    cap = current_app.config.get("MEDIA_MAX_ATTACHMENTS_PER_TARGET", 50)
+    count = len(_media().list_for_target(target_type, target_id))
+    bound = []
+    for i in ids:
+        if count >= cap:
+            break
+        if _media().bind(i, me, target_type, target_id, peers=peers):
+            bound.append(i)
+            count += 1
     return jsonify(bound=bound), 200
 
 

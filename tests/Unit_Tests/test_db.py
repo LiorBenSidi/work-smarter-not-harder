@@ -170,6 +170,8 @@ def test_ensure_indexes_creates_unique_constraints(db_mod, db):
     assert ("email", True) in db.users.indexes               # unique email (partial) — one account per email
     assert ("id", True) in db.forum_posts.indexes            # unique forum post id
     assert ("created_at", False) in db.forum_posts.indexes   # perf: newest-first paginated feed read (#325)
+    assert ("author", False) in db.forum_posts.indexes           # perf: engagement read scoped to own posts (#331)
+    assert ("comments.author", False) in db.forum_posts.indexes  # perf: ...and posts they commented on (#331)
     assert ("username", True) in db.profiles.indexes         # one profile per user
     assert ("username", False) in db.analysis_history.indexes  # perf (non-unique) per-user history scan
 
