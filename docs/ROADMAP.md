@@ -134,5 +134,5 @@ tested (incl. votes-as-a-list and a real-Mongo integration suite that runs in CI
 (measured), Forum media, the received-engagement metric, and the stress/cross-container tests. The Forum
 **real-time layer** (SSE, DM, notifications) was built by **Lior** (see the §Forum table above).
 **Team rule (Lior, 10 Jul): responsibilities not assigned in writing fall to Elad.** **Still to build:** the
-RF model + real `/predict` + recommendation engine + cold-seed content (Shiri);
-the graded live-deploy demo + UptimeRobot (Elad, run-sheet ready). Due **23 Aug 2026**.
+RF model + real `/predict` + recommendation engine + cold-seed content (Shiri). Elad's demo was presented
+**16 Jul** and the UptimeRobot monitor went live **17 Jul** (R9) — his lane is complete. Due **23 Aug 2026**.

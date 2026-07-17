@@ -23,9 +23,9 @@ keep `main` green (PR-only), and **don't re-do or "polish" the built parts**.
   [`docs/DEPLOY_DEMO.md`](docs/DEPLOY_DEMO.md).
 - ⏳ **Open — Shiri (`ai/`):** the real Random Forest model + recommendation engine behind `POST /predict` — it's a
   contract-shaped **placeholder** today. See [`PERSON1.md`](PERSON1.md).
-- ⏳ **Open — Elad:** only the **UptimeRobot monitor** (R9 — point it at `/health`; needs a dashboard account,
-  human-only). *Done:* the live-deploy **demo** (presented **16 Jul**, #340); the **risk assessment**
-  ([`docs/REPORT.md`](docs/REPORT.md) §5); the Azure deploy is **live**
+- ✅ **Elad — lane complete** (17 Jul): the **UptimeRobot monitor is live** (R9, monitor `803532626` on the
+  prod FQDN — the last open item). *Also done:* the live-deploy **demo** (presented **16 Jul**, #340); the
+  **risk assessment** ([`docs/REPORT.md`](docs/REPORT.md) §5); the Azure deploy is **live**
   (`https://app.worksmarternotharder.dev`, auto-deploy on green `main`);
   the **AI job queue** (`ai/jobqueue.py` — bounded queue + `ProcessPoolExecutor` in front of
   `inference.predict_one`; `/predict` unchanged, `/jobs` + `/queue/stats` additive; GUIDELINES §2, +5);
