@@ -14,7 +14,7 @@ from flask import Blueprint, current_app, jsonify, request, session
 
 from ratelimit import limiter
 from routes.auth import login_required
-from services.db import FORUM_PAGE_DEFAULT, FORUM_PAGE_MAX
+from services.db import COMMENT_PAGE_DEFAULT, COMMENT_PAGE_MAX, FORUM_PAGE_DEFAULT, FORUM_PAGE_MAX
 from services.identity import display_name
 
 logger = logging.getLogger(__name__)
@@ -67,23 +67,28 @@ def _mine(post, me):
 
 
 def _summary(post, me):
-    # tolerate partial/seed rows from the store: a missing score/comments degrades this row to a
-    # default rather than 500-ing the whole list.
+    # tolerate partial/seed rows from the store: a missing score/comment_count degrades this row to a
+    # default rather than 500-ing the whole list. `comments` is the COUNT (comments live in their own
+    # collection now, #331); the fallback tolerates a not-yet-migrated post that still embeds the array.
     return {"id": post.get("id"), "title": post.get("title"), "author": _author(post),
             "mine": _mine(post, me), "created_at": post.get("created_at", 0),
-            "score": post.get("score", 0), "comments": len(post.get("comments") or [])}
+            "score": post.get("score", 0),
+            "comments": post.get("comment_count", len(post.get("comments") or []))}
 
 
 def _comment(c):
-    """Public projection of one comment — id/author(display name)/body/score, never the raw votes."""
+    """Public projection of one comment — id/author(display name)/body/score/created_at, never the raw votes.
+    ``created_at`` lets the client order comments (oldest-first for display) and render each comment's age."""
     return {"id": c.get("id"), "author": display_name(c.get("author")), "body": c.get("body"),
-            "score": c.get("score", 0)}
+            "score": c.get("score", 0), "created_at": c.get("created_at", 0)}
 
 
 def _detail(post, me):
+    # The comments themselves are fetched separately (paginated) via GET /forum/posts/<id>/comments (#331) —
+    # the detail carries only the COUNT. The fallback tolerates a not-yet-migrated post that still embeds them.
     return {"id": post.get("id"), "title": post.get("title"), "body": post.get("body"),
             "author": _author(post), "mine": _mine(post, me), "score": post.get("score", 0),
-            "comments": [_comment(c) for c in (post.get("comments") or [])]}
+            "comment_count": post.get("comment_count", len(post.get("comments") or []))}
 
 
 def _forum():
@@ -139,11 +144,10 @@ def _notify_author_of_vote(post_id, voter, value):
 
 
 def _notify_comment_author_of_vote(post_id, comment_id, voter, value):
-    """Notify a comment's author their comment was up/downvoted (§2.6)."""
+    """Notify a comment's author their comment was up/downvoted (§2.6). The comment is read from its own
+    collection through the store (#331), so the ping still targets the comment's real author."""
     try:
-        post = _forum().get_post(post_id)
-        comments = (post.get("comments") or []) if post else []
-        comment = next((c for c in comments if c.get("id") == comment_id), None)
+        comment = _forum().get_comment(post_id, comment_id)
     except Exception:
         logger.warning("could not resolve a comment author for a vote notification", exc_info=True)
         return
@@ -254,6 +258,30 @@ def add_comment(post_id):
     if comment is None:
         return jsonify(error="post not found"), 404
     return jsonify(comment=_comment(comment)), 201
+
+
+@forum_bp.get("/forum/posts/<post_id>/comments")
+@login_required
+def list_comments(post_id):
+    """One page of a post's comments, newest first (#331). `?before=<created_at>` pages back to older
+    comments; `?limit` is clamped to COMMENT_PAGE_MAX so the read is always bounded + index-backed. The
+    response carries `next_before` — the cursor for the next older page, or null when this is the last page.
+    A missing post yields a clean empty page (the caller already fetched the post detail to open it)."""
+    before = request.args.get("before", type=float)
+    if before is not None and not math.isfinite(before):
+        before = None                                  # a garbage cursor (nan/inf) -> newest page, never a scan
+    limit = request.args.get("limit", type=int)        # None -> the store's default page size
+    effective = COMMENT_PAGE_DEFAULT if limit is None else max(1, min(limit, COMMENT_PAGE_MAX))
+    try:
+        comments = _forum().list_comments(post_id, before=before, limit=limit)
+    except Exception:
+        logger.exception("forum store unavailable")
+        return jsonify(error="forum store unavailable"), 503
+    items = [_comment(c) for c in comments]
+    # Cursor for the NEXT older page = the oldest created_at we returned. Only offer it when the page came
+    # back FULL (a shorter page means there's nothing older), so the client knows when to stop paging.
+    next_before = comments[-1].get("created_at") if len(comments) == effective else None
+    return jsonify(comments=items, next_before=next_before), 200
 
 
 @forum_bp.post("/forum/posts/<post_id>/vote")
