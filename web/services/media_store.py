@@ -29,10 +29,17 @@ class DbMedia:
 
     def __init__(self, app):
         self._app = app
+        self._indexed = False
 
     def _collection(self):
         from services import db as db_module
-        return db_module.get_db(self._app.config["MONGO_URI"])["media"]
+        coll = db_module.get_db(self._app.config["MONGO_URI"])["media"]
+        if not self._indexed:
+            # #331: back list_for_target with a compound index so listing ONE target's attachments is an
+            # index seek, not a scan of the whole (growing) media collection. Idempotent; done once.
+            coll.create_index([("target_type", 1), ("target_id", 1), ("created_at", 1)])
+            self._indexed = True
+        return coll
 
     @staticmethod
     def _public(doc):
@@ -60,5 +67,11 @@ class DbMedia:
         return res.matched_count == 1
 
     def list_for_target(self, target_type, target_id):
-        docs = self._collection().find({"target_type": target_type, "target_id": target_id})
+        # Bounded read (#331): the attach route caps a target at MEDIA_MAX_ATTACHMENTS_PER_TARGET, so a
+        # matching .limit() here never drops a legitimately-bound blob — it's a defensive ceiling against
+        # any pre-cap data or a race, keeping the read O(cap) rather than O(all attachments on the target).
+        cap = self._app.config.get("MEDIA_MAX_ATTACHMENTS_PER_TARGET", 50)
+        docs = (self._collection()
+                .find({"target_type": target_type, "target_id": target_id})
+                .sort("created_at", 1).limit(cap))
         return [self._public(d) for d in docs]

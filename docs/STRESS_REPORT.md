@@ -47,10 +47,17 @@ This complements the existing stress assets rather than repeating them:
 | **Slowest endpoint under load** | `/forum/posts` list: p50 1.5 s, p95 7 s at 200 users (worst of all endpoints) | heaviest read (full post list + votes), no pagination | Low today; first candidate if the forum grows. |
 
 ## 4. Recommendations (capacity, not correctness)
-1. **Raise web concurrency on a bigger host** — workers are hardcoded (`--workers 2` in `web/Dockerfile`, sized for the B1s VM). Making it env-tunable (`GUNICORN_WORKERS`) would let the same image use a larger VM; at ~78 RPS/2-workers, 4 workers projects to roughly ~150 RPS before db becomes the constraint. *(Lior's tier — recommendation only.)*
-2. **Rate-limit storage is per-process** (`memory://`, documented in `web/ratelimit.py`) — with more workers the caps loosen N×; point `RATELIMIT_STORAGE_URI` at redis if workers grow.
-3. **Forum list pagination** — the one endpoint that visibly leads the latency pack under load.
-4. **Re-run this file when the real model lands** — ai never became the bottleneck against the placeholder; the queue's 503 backpressure story should be re-measured with real inference times (`LOCUST_TARGET=ai` in `locustfile.py` covers the direct-at-ai axis).
+1. ✅ **Raise web concurrency** — **DONE (#330).** The finding turned out sharper than "add workers": on this
+   4-vCPU VM *threads*, not workers, are the lever (werkzeug's scrypt releases the GIL, so 1 worker × N threads
+   already parallelises across all cores; +workers ≈ 0 gain, measured 3.01×≈3.19× at 4-way). `WEB_WORKERS`/`WEB_THREADS`
+   are now env-tunable (same image, bigger host), default **1 worker × 16 threads** (1 worker keeps the `memory://`
+   caps exact; 16 = the measured knee). Dev↔prod mirrored + an SSE-starvation guard. Re-measured in §6.
+2. **Rate-limit storage is per-process** (`memory://`, documented in `web/ratelimit.py`) — the default stays 1 worker so the caps are exact; point `RATELIMIT_STORAGE_URI` at redis if `WEB_WORKERS` is ever raised > 1.
+3. ✅ **Forum list pagination** — **DONE (#332):** cursor pagination + a `created_at` index. It was the latency leader; §6 shows `/forum/posts` p95 fell ~9× at 200 users.
+4. ✅ **Bound the other unbounded reads (#331)** — the same audit found the pattern elsewhere; the two Elad-lane
+   rows are now bounded (`forum_received_engagement` scoped to the user's own content + indexes;
+   media `list_for_target` capped per target + a compound index). The hot-path rows (history/DM/inbox/notifications) stay open on Lior's tier.
+5. **Re-run this file when the real model lands** — ai never became the bottleneck against the placeholder; the queue's 503 backpressure story should be re-measured with real inference times (`LOCUST_TARGET=ai` in `locustfile.py` covers the direct-at-ai axis). Tracked as #326.
 
 ## 5. Reproduce
 
@@ -63,3 +70,36 @@ locust -f tests/Stress_Tests/locustfile_full_system.py --headless \
 ```
 
 Stress data lands in the dev database only (`st_*`/`fence_*` users, their posts/DMs/media); `docker compose down -v` clears it.
+
+## 6. Re-measured on the fixed stack (2026-07-17)
+
+The §1 run motivated three issues (#324 web concurrency, #325 forum pagination, #331 unbounded reads). Lior
+landed #330 (1 worker × **16 threads**, env-tunable) and #332 (forum cursor pagination + index); I re-ran the
+**same** `locustfile_full_system.py` on the rebuilt stack at the knee stages (100 + 200 users) to confirm the
+fixes moved the numbers rather than just the code. Same host, same scenario — only the two merges differ.
+
+| @ 200 users | §1 baseline (2×4, no pagination) | Fixed (1×16 + #332) | Change |
+|---|---:|---:|---:|
+| Throughput | 74 RPS | **122 RPS** | **+64 %** |
+| Latency p50 | 1.0 s | **250 ms** | **4× faster** |
+| Latency p95 | 5.7 s | **1.6 s** | **3.6× faster** |
+| Latency p99 | 11 s | **2.4 s** | **4.6× faster** |
+| `/forum/posts` p95 | **7.0 s** (worst endpoint) | **0.8 s** | **~9× faster** |
+| 5xx server errors | 0 | 0 | held |
+
+At 100 users (already clean in §1) the gains are smaller but real: p95 170 ms → **130 ms**, `/forum/posts`
+p95 down to 140 ms. The 200-user run logged 24 setup-phase drops (0.16 %) — all `RemoteDisconnected` on the
+expensive signup/profile requests during the 20 users/s ramp burst, the same class §1 note ³ describes; **every
+in-session feature request succeeded (0.00 % on each feature endpoint), and there were no 5xx**.
+
+**Read-outs:**
+- **#324 — threads, not workers, were the lever.** Confirmed under load: the burst suite (`CONCURRENCY=16`)
+  hung `/ready` on the old 8-thread dev stack and passes on 16 threads (Lior, #330). scrypt releasing the GIL is
+  why adding *workers* did nothing here; +threads bought the throughput. The 1×16 default is the measured knee.
+- **#325 — pagination erased the forum bottleneck.** `/forum/posts` went from the clear latency leader (p95 7 s)
+  to mid-pack (p95 0.8 s). It no longer leads.
+- **New leader: `POST /media`** (p50 1.5 s, p95 2.6 s at 200 users) — disk-write bound, an expected shape for an
+  upload endpoint, and already fenced by the #313 rate-limit + disk cap. Not a correctness issue; the next
+  capacity candidate if media traffic dominates.
+
+Reproduce: the §5 command at `-u 100`/`-u 200` on a stack built from `main` at or after #330/#332.

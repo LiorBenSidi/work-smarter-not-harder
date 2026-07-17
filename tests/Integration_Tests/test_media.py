@@ -104,6 +104,23 @@ def test_cannot_attach_someone_elses_blob(media_client, make_client, fake_users,
     assert bob.post(f"/forum/posts/{pid}/attachments", json={"attachment_ids": [mid]}).get_json()["bound"] == []
 
 
+def test_attachments_are_capped_per_target(media_client):
+    # #331 (scale/availability): a single post/DM must not carry an unbounded attachment list — the serve
+    # read (list_for_target) would then be unbounded too. The bind route caps how many blobs one target
+    # can hold, so the list stays bounded no matter how many a user tries to bolt on.
+    c = media_client
+    _login(c)
+    c.raw.application.config["MEDIA_MAX_ATTACHMENTS_PER_TARGET"] = 3
+    pid = c.post("/forum/posts", json={"title": "many", "body": "b"}).get_json()["post"]["id"]
+    ids = [_upload_png(c).get_json()["id"] for _ in range(5)]
+    bound = c.post(f"/forum/posts/{pid}/attachments", json={"attachment_ids": ids}).get_json()["bound"]
+    assert bound == ids[:3]                                    # only the first 3 attach; the rest are shed
+    assert len(c.get(f"/forum/posts/{pid}/attachments").get_json()["attachments"]) == 3
+    # a later, separate attach on the now-full target binds nothing (the cap is on the target, not the call)
+    extra = _upload_png(c).get_json()["id"]
+    assert c.post(f"/forum/posts/{pid}/attachments", json={"attachment_ids": [extra]}).get_json()["bound"] == []
+
+
 def test_cannot_attach_to_someone_elses_post(media_client, make_client, fake_users, fake_forum,
                                              fake_messages, fake_media, fake_notifications, tmp_path):
     # alice owns a post; bob (his OWN blob) can't bolt it onto her post -> 403 (post-ownership), and a

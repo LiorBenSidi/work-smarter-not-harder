@@ -178,6 +178,9 @@ def test_ensure_indexes_creates_unique_constraints(db_mod, db):
     # comment ids are unique like post ids (the key vote/get look up) — this also makes the one-shot
     # migration re-run safe: a partial re-run raises instead of silently duplicating comments.
     assert ("id", True) in db.forum_comments.indexes
+    # #331: forum_received_engagement scopes its two reads to the user, each backed by an author index
+    assert ("author", False) in db.forum_posts.indexes       # their posts
+    assert ("author", False) in db.forum_comments.indexes    # their comments
     assert ("username", True) in db.profiles.indexes         # one profile per user
     assert ("username", False) in db.analysis_history.indexes  # perf (non-unique) per-user history scan
 

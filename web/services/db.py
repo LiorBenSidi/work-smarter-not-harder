@@ -50,6 +50,8 @@ def ensure_indexes(db):
     forum size, instead of a full-collection load + in-memory sort (#325). ``forum_comments`` is keyed
     on ``(post_id, created_at)`` so one post's comments are read newest-first, bounded + straight off the
     index (``forum_list_comments``) — never a full-collection scan as the whole forum's comments grow (#331).
+    ``forum_posts.author`` + ``forum_comments.author`` scope ``forum_received_engagement`` to the user's
+    own posts/comments on a profile view, so neither read scans its whole collection as the forum grows (#331).
     """
     db.users.create_index("username", unique=True)
     # One account per email (the login identity). PARTIAL so the seed/legacy users WITHOUT an email don't
@@ -66,6 +68,10 @@ def ensure_indexes(db):
     # It also makes the one-shot migration RE-RUN SAFE: if it ever died between inserting a post's comments and
     # $unset-ing the embedded array, a re-run would silently duplicate them — this turns that into a loud failure.
     db.forum_comments.create_index("id", unique=True)
+    # forum_received_engagement scopes its two reads to the user instead of a full scan (#331):
+    # `forum_posts.author` for their posts, `forum_comments.author` for the comments they wrote.
+    db.forum_posts.create_index("author")
+    db.forum_comments.create_index("author")
     db.profiles.create_index("username", unique=True)
     db.analysis_history.create_index("username")
     # Social layer: threads + inbox filter on the real sender/recipient username fields; poll on user.
@@ -577,14 +583,16 @@ def forum_received_engagement(db, username):
     own content are excluded ("received" means from the community). Returns counts only
     ({"up", "down", "score"}); voter identities never leave the store, same as the public shapes.
 
-    A full-collection scan in Python rather than a Mongo aggregation: the read happens on a personal
-    profile view (not a hot path), and staying on plain find() keeps it exercisable by the same
-    in-memory fakes as the rest of this module. Comments now live in ``forum_comments`` (#331), so their
-    votes are tallied from that collection (find on the author) rather than an embedded array.
+    Neither read scans its whole collection on a profile view (#331): the posts read is SCOPED to the
+    user's own posts (``{"author": username}``) and comments are read from ``forum_comments`` filtered to
+    the user — so both cost the same whether the forum holds a handful of rows or thousands. Backed by the
+    ``forum_posts.author`` + ``forum_comments.author`` indexes (``ensure_indexes``). Comments live in their
+    own collection since #333; counting stays in plain Python so the same in-memory fakes exercise it — the
+    query only narrows WHICH documents are pulled, not the tally.
     """
     up = down = 0
     vote_lists = []
-    for post in db.forum_posts.find():
+    for post in db.forum_posts.find({"author": username}):
         if post.get("author") == username:
             vote_lists.append(post.get("votes") or [])
     for comment in db.forum_comments.find({"author": username}):

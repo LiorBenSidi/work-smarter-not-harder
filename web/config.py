@@ -90,3 +90,7 @@ class Config:
     MEDIA_MAX_TOTAL_BYTES = _int_env("MEDIA_MAX_TOTAL_BYTES", 500 * 1024 * 1024)   # 500 MB total
     MEDIA_ALLOWED_MIME = os.environ.get(
         "MEDIA_ALLOWED_MIME", "image/png,image/jpeg,image/webp,image/gif,video/mp4")
+    # Per-target attachment cap (#331): one post/comment/DM can hold at most this many blobs, so the
+    # serve read (list_for_target) stays bounded — an authenticated user can't grow a single target's
+    # attachment list without limit and amplify every list read of it. Enforced at bind time.
+    MEDIA_MAX_ATTACHMENTS_PER_TARGET = _int_env("MEDIA_MAX_ATTACHMENTS_PER_TARGET", 50)
