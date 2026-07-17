@@ -7,9 +7,10 @@ Guidance for AI agents (and humans) working in this repo. **Claude Code loads th
 team "Git Push & Pray" (Lior · Shiri · Elad). Full spec: [`docs/PROPOSAL.md`](docs/PROPOSAL.md); official
 requirements: [`docs/Proj_Guidelines.pdf`](docs/Proj_Guidelines.pdf) + [`docs/TA-Notes.txt`](docs/TA-Notes.txt).
 
-## Current status (updated 2026-07-02) — read this first
-The backend is built and CI-gated; the open work is two teammates' lanes. If you're picking up work, build
-**within** an open lane below, keep `main` green (PR-only), and **don't re-do or "polish" the built parts**.
+## Current status (updated 2026-07-17) — read this first
+The backend is built and CI-gated; **the graded live demo was presented 16 Jul.** The open work is Shiri's
+model lane + the final 23 Aug submission. If you're picking up work, build **within** an open lane below,
+keep `main` green (PR-only), and **don't re-do or "polish" the built parts**.
 - ✅ **Built (Lior):** the `web` tier (auth · profile · daily check-in · dashboard · history · forum CRUD+UI ·
   **direct messages + live DM notifications** (the Chat tab: conversations · threads · generative avatars · a
   polling notification pulse · an anti-spam messaging rate-limit) · **vote notifications** (an up/downvote pings
@@ -22,8 +23,9 @@ The backend is built and CI-gated; the open work is two teammates' lanes. If you
   [`docs/DEPLOY_DEMO.md`](docs/DEPLOY_DEMO.md).
 - ⏳ **Open — Shiri (`ai/`):** the real Random Forest model + recommendation engine behind `POST /predict` — it's a
   contract-shaped **placeholder** today. See [`PERSON1.md`](PERSON1.md).
-- ⏳ **Open — Elad:** the live-deploy **demo** (the run itself; everything it needs is wired) + the UptimeRobot monitor.
-  *Done:* the **risk assessment** ([`docs/REPORT.md`](docs/REPORT.md) §5); the Azure deploy is **live**
+- ⏳ **Open — Elad:** only the **UptimeRobot monitor** (R9 — point it at `/health`; needs a dashboard account,
+  human-only). *Done:* the live-deploy **demo** (presented **16 Jul**, #340); the **risk assessment**
+  ([`docs/REPORT.md`](docs/REPORT.md) §5); the Azure deploy is **live**
   (`https://app.worksmarternotharder.dev`, auto-deploy on green `main`);
   the **AI job queue** (`ai/jobqueue.py` — bounded queue + `ProcessPoolExecutor` in front of
   `inference.predict_one`; `/predict` unchanged, `/jobs` + `/queue/stats` additive; GUIDELINES §2, +5);
