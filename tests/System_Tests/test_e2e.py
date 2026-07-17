@@ -13,6 +13,8 @@ import pytest
 
 requests = pytest.importorskip("requests")
 
+from _live_auth import csrf_headers, sign_in  # noqa: E402  (after importorskip guards `requests`)
+
 BASE = os.environ.get("E2E_BASE_URL", "").rstrip("/")
 pytestmark = pytest.mark.skipif(not BASE, reason="set E2E_BASE_URL to run the system e2e against a live stack")
 
@@ -25,15 +27,16 @@ def client():
 
 
 def _h(s):
-    return {"X-CSRF-Token": s.cookies.get("csrf_token", "")}   # CSRF token on every unsafe request
+    return csrf_headers(s)   # CSRF token on every unsafe request
 
 
 def test_full_user_journey_web_ai_db(client):
     s = client
     user, pw = "e2e_" + uuid.uuid4().hex[:8], "s3cret-e2e-pw!"
 
-    assert s.post(f"{BASE}/register", json={"username": user, "password": pw, "email": user + "@example.com"}, headers=_h(s)).status_code in (200, 201)
-    assert s.post(f"{BASE}/login", json={"username": user, "password": pw}, headers=_h(s)).status_code == 200
+    # Auth-mode-aware sign-in (#336): completes email-verify / login-OTP when the target stack has them on,
+    # so the journey runs against the CI throwaway stack AND a normal dev/mock-email stack alike.
+    sign_in(s, BASE, user, pw)
     assert s.get(f"{BASE}/me").json().get("username") == user
 
     assert s.post(f"{BASE}/profile", json={"age": 30, "gender": "male", "height": 180, "weight": 78,

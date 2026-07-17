@@ -17,10 +17,11 @@ import pytest
 
 requests = pytest.importorskip("requests")
 
+from _live_auth import TIMEOUT, csrf_headers, sign_in  # noqa: E402  (after importorskip guards `requests`)
+
 BASE = os.environ.get("E2E_BASE_URL", "").rstrip("/")
 pytestmark = pytest.mark.skipif(not BASE, reason="set E2E_BASE_URL to run against a live stack")
 
-TIMEOUT = 15
 _PNG = b"\x89PNG\r\n\x1a\nlive-journey-bytes"
 
 
@@ -31,15 +32,13 @@ def _session():
 
 
 def _h(s):
-    return {"X-CSRF-Token": s.cookies.get("csrf_token", "")}
+    return csrf_headers(s)
 
 
 def _login(s, user):
-    r = s.post(f"{BASE}/register", json={"username": user, "password": "s3cret-live!", "email": user + "@ex.com"},
-               headers=_h(s), timeout=TIMEOUT)
-    assert r.status_code in (200, 201), r.text
-    r = s.post(f"{BASE}/login", json={"username": user, "password": "s3cret-live!"}, headers=_h(s), timeout=TIMEOUT)
-    assert r.status_code == 200, r.text
+    # Auth-mode-aware: completes verify/OTP when the target stack has them on (#336), so this runs against
+    # the CI throwaway stack, a normal `docker compose up` dev stack, or any mock-email deploy.
+    sign_in(s, BASE, user, "s3cret-live!")
 
 
 def test_media_votes_engagement_and_the_upload_cap_over_the_real_wire():
