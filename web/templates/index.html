@@ -740,11 +740,6 @@
     /* Lightbox: tap an inline image to view it enlarged IN-PAGE (not a new tab). Click anywhere / Esc closes. */
     .lightbox { position:fixed; inset:0; z-index:1000; background:rgba(6,10,20,.86); display:flex;
       align-items:center; justify-content:center; padding:24px; cursor:zoom-out; }
-    .lightbox video { max-width:min(94vw,900px); max-height:92vh; width:auto; height:auto; border-radius:12px; }
-    .media-enlarge { position:absolute; top:6px; right:6px; z-index:2; width:32px; height:32px; border-radius:9px;
-      border:1px solid rgba(255,255,255,.25); background:rgba(10,14,24,.62); color:#fff; font-size:16px;
-      line-height:1; cursor:pointer; display:flex; align-items:center; justify-content:center; }
-    .media-enlarge:hover, .media-enlarge:focus-visible { background:rgba(44,56,86,.92); }
     .lightbox img { max-width:min(94vw,900px); max-height:92vh; width:auto; height:auto; border-radius:12px;
       box-shadow:0 18px 60px rgba(0,0,0,.5); }
     /* An explicit ✕ affordance (desktop + mobile) — the overlay/Esc still close, but a visible button is
@@ -1135,7 +1130,7 @@
               <span id="dm-files-hint" class="muted" style="font-size:12px"></span>
               <div class="dm-attach-hint muted">PNG · JPEG · WebP · GIF · MP4 · up to 10 MB</div>
               <div id="dm-reply-flash" class="flash" aria-live="polite"></div>
-              <div id="lightbox" class="lightbox" hidden role="dialog" aria-modal="true" aria-label="Enlarged media"><button type="button" class="lightbox-close" aria-label="Close">&times;</button><img id="lightbox-img" src="" alt="Shared photo, enlarged"><video id="lightbox-vid" controls playsinline hidden aria-label="Shared video, enlarged"></video></div>
+              <div id="lightbox" class="lightbox" hidden role="dialog" aria-modal="true" aria-label="Enlarged photo"><button type="button" class="lightbox-close" aria-label="Close">&times;</button><img id="lightbox-img" src="" alt="Shared photo, enlarged"></div>
             </div>
           </div>
         </section>
@@ -2729,12 +2724,9 @@
       const alt = "Photo shared by " + escapeHtml(att.owner || "a member");
       if (String(att.mime || "").indexOf("video/") === 0) {
         // `playsinline` (#338 item 2): without it iOS force-fullscreens on play — inline is the point of an
-        // embedded player. The ⤢ button (#338 item 3) enlarges IN-PAGE via the lightbox; clicking the video
-        // itself stays play/pause, so enlarging needs its own control.
-        return '<div style="position:relative;display:inline-block;max-width:100%">'
-          + '<video src="' + url + '" controls playsinline preload="metadata" style="' + st + '"></video>'
-          + '<button type="button" class="media-enlarge" data-fullvid="' + url + '" aria-label="Enlarge video">⤢</button>'
-          + "</div>";
+        // embedded player. Enlarging is the native fullscreen control's job: an overlaid in-app ⤢ button
+        // never receives real taps (the video element swallows the pointer — #338), so no app-level control.
+        return '<video src="' + url + '" controls playsinline preload="metadata" style="' + st + '"></video>';
       }
       // In-page enlarge via the shared lightbox (#338 item 1) — never a raw-blob navigation that strands the
       // user outside the app. `data-full` is the lightbox's behaviour contract (same as DM images).
@@ -3015,16 +3007,14 @@
     // Lightbox: tap an inline DM image to view it enlarged IN-PAGE (not a new tab); click the overlay or
     // press Esc to close. Delegated so it works for images added on every thread re-render.
     (function () {
-      const lb = $("lightbox"), lbImg = $("lightbox-img"), lbVid = $("lightbox-vid"); if (!lb || !lbImg) return;
+      const lb = $("lightbox"), lbImg = $("lightbox-img"); if (!lb || !lbImg) return;
       // Keyed off `data-full` — a behaviour contract, not a DM-specific class — so DM *and* forum images
-      // share the one lightbox, and any future zoomable image just adds the attribute (#338 items 1+3).
-      const open = (el) => { lbVid.hidden = true; lbVid.removeAttribute("src"); lbImg.hidden = false; lbImg.src = el.getAttribute("data-full") || el.src; lb.hidden = false; };
-      const openVid = (url) => { lbImg.hidden = true; lbImg.src = ""; lbVid.hidden = false; lbVid.src = url; lb.hidden = false; };
-      const close = () => { lb.hidden = true; lbImg.src = ""; lbVid.pause && lbVid.pause(); lbVid.removeAttribute("src"); };
+      // share the one lightbox, and any future zoomable image just adds the attribute (#338 item 1).
+      // Images only: video enlarge is the player's native fullscreen control (#338 items 3/4 resolution).
+      const open = (el) => { lbImg.src = el.getAttribute("data-full") || el.src; lb.hidden = false; };
+      const close = () => { lb.hidden = true; lbImg.src = ""; };
       document.addEventListener("click", (e) => {
         if (e.target.closest && e.target.closest(".lightbox-close")) { close(); return; }   // the explicit ✕ button
-        const vidBtn = e.target.closest && e.target.closest("[data-fullvid]");
-        if (vidBtn) { openVid(vidBtn.getAttribute("data-fullvid")); return; }
         const img = e.target.closest && e.target.closest("img[data-full]");
         if (img) { open(img); return; }
         if (e.target === lb || e.target === lbImg) close();      // click the overlay or the enlarged image closes it
