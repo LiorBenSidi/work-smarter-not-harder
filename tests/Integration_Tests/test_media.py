@@ -64,6 +64,32 @@ def test_dm_attachment_carries_owner_and_created_at_for_inline_placement(media_c
     assert att["url"] == f"/media/{mid}" and att["mime"] == "image/png"
 
 
+def test_upload_rejected_once_total_disk_cap_reached(media_client):
+    # Issue #313: MEDIA_MAX_TOTAL_BYTES bounds the volume's TOTAL bytes, so a logged-in user can't fill
+    # the VM's disk 10 MB at a time (a full disk wedges Mongo writes + logging). The check runs before
+    # the write: once stored bytes are at/over the cap, the next upload 507s and nothing new is stored.
+    import os
+    c = media_client
+    _login(c)
+    app = c.raw.application
+    app.config["MEDIA_MAX_TOTAL_BYTES"] = len(_PNG)   # 1st upload fills the cap exactly
+    assert _upload_png(c).status_code == 201
+    r = _upload_png(c)
+    assert r.status_code == 507
+    assert "storage" in r.get_json()["error"]
+    stored = os.listdir(app.config["MEDIA_ROOT"])
+    assert len(stored) == 1                            # the rejected upload left no bytes behind
+
+
+def test_upload_allowed_while_under_total_disk_cap(media_client):
+    # Under the cap, uploads keep working — the default (500 MB) never trips for normal use.
+    c = media_client
+    _login(c)
+    c.raw.application.config["MEDIA_MAX_TOTAL_BYTES"] = 10 * 1024 * 1024
+    assert _upload_png(c).status_code == 201
+    assert _upload_png(c).status_code == 201
+
+
 def test_cannot_attach_someone_elses_blob(media_client, make_client, fake_users, fake_forum,
                                           fake_messages, fake_media, fake_notifications, tmp_path):
     # alice uploads; bob (a second client sharing the same fake stores) can't bind alice's blob.
@@ -76,6 +102,23 @@ def test_cannot_attach_someone_elses_blob(media_client, make_client, fake_users,
     bob.post("/login", json={"username": "bob", "password": "s3cretpw!"})
     pid = bob.post("/forum/posts", json={"title": "hijack", "body": "not mine"}).get_json()["post"]["id"]
     assert bob.post(f"/forum/posts/{pid}/attachments", json={"attachment_ids": [mid]}).get_json()["bound"] == []
+
+
+def test_attachments_are_capped_per_target(media_client):
+    # #331 (scale/availability): a single post/DM must not carry an unbounded attachment list — the serve
+    # read (list_for_target) would then be unbounded too. The bind route caps how many blobs one target
+    # can hold, so the list stays bounded no matter how many a user tries to bolt on.
+    c = media_client
+    _login(c)
+    c.raw.application.config["MEDIA_MAX_ATTACHMENTS_PER_TARGET"] = 3
+    pid = c.post("/forum/posts", json={"title": "many", "body": "b"}).get_json()["post"]["id"]
+    ids = [_upload_png(c).get_json()["id"] for _ in range(5)]
+    bound = c.post(f"/forum/posts/{pid}/attachments", json={"attachment_ids": ids}).get_json()["bound"]
+    assert bound == ids[:3]                                    # only the first 3 attach; the rest are shed
+    assert len(c.get(f"/forum/posts/{pid}/attachments").get_json()["attachments"]) == 3
+    # a later, separate attach on the now-full target binds nothing (the cap is on the target, not the call)
+    extra = _upload_png(c).get_json()["id"]
+    assert c.post(f"/forum/posts/{pid}/attachments", json={"attachment_ids": [extra]}).get_json()["bound"] == []
 
 
 def test_cannot_attach_to_someone_elses_post(media_client, make_client, fake_users, fake_forum,

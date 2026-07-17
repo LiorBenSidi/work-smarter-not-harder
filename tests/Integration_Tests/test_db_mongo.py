@@ -16,7 +16,7 @@ from pathlib import Path
 import pytest
 
 WEB = Path(__file__).resolve().parents[2] / "web"
-_COLLECTIONS = ("users", "profiles", "analysis_history", "forum_posts", "messages", "notifications")
+_COLLECTIONS = ("users", "profiles", "analysis_history", "forum_posts", "forum_comments", "messages", "notifications")
 
 
 @pytest.fixture
@@ -122,7 +122,7 @@ def test_account_deletion_cascade_erases_all_user_data(db_mod, real_db):
     assert db_mod.list_history(real_db, "alice") == []
     assert db_mod.forum_get_post(real_db, pa) is None
     post = db_mod.forum_get_post(real_db, pb)
-    assert post["score"] == 1 and all(c["author"] != "alice" for c in post["comments"])
+    assert post["score"] == 1 and all(c["author"] != "alice" for c in db_mod.forum_list_comments(real_db, pb))
     assert db_mod.message_list_conversation(real_db, "alice", "bob") == []
     assert db_mod.notification_list(real_db, "bob") == []
 
@@ -166,7 +166,8 @@ def test_forum_crud_and_problematic_username_vote(db_mod, real_db):
     pid = db_mod.forum_create_post(real_db, "alice", "T", "B", False)["id"]
     assert db_mod.forum_get_post(real_db, pid)["body"] == "B"
     cid = db_mod.forum_add_comment(real_db, pid, "bob", "nice")["id"]
-    stored = db_mod.forum_get_post(real_db, pid)["comments"]
+    assert db_mod.forum_get_post(real_db, pid)["comment_count"] == 1   # #331: count on the post, comments elsewhere
+    stored = db_mod.forum_list_comments(real_db, pid)
     assert len(stored) == 1 and stored[0]["author"] == "bob" and stored[0]["body"] == "nice"
     assert stored[0]["score"] == 0 and "votes" not in stored[0]        # internal tally not leaked
     # the votes-as-list fix: '.'/'$' usernames must be safe real-Mongo writes (would fail as field names)

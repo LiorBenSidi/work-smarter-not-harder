@@ -49,7 +49,8 @@ def test_delete_account_cascades_across_every_store(full_client, fake_users, fak
     posts = {p["id"]: p for p in fake_forum.list_posts()}
     assert alice_post["id"] not in posts
     assert bob_post["id"] in posts
-    assert all(c["author"] != "alice" for c in posts[bob_post["id"]]["comments"])
+    # her comment on bob's post is stripped from the comments collection (#331)
+    assert all(c["author"] != "alice" for c in fake_forum.list_comments(bob_post["id"]))
     assert "alice" not in posts[bob_post["id"]]["votes"]
     assert posts[bob_post["id"]]["score"] == 0                       # her +1 removed
     # every DM (both directions) + notifications (inbox AND the one where she was the actor) erased
@@ -71,7 +72,7 @@ def test_delete_preserves_other_users_forum_content(full_client, fake_forum):
 
     post = fake_forum.get_post(bp["id"])
     assert post is not None                                          # bob's post survives
-    assert [c["author"] for c in post["comments"]] == ["bob"]        # only bob's comment remains
+    assert [c["author"] for c in fake_forum.list_comments(bp["id"])] == ["bob"]   # only bob's comment remains (#331)
     assert post["score"] == 1                                        # alice's +1 removed, bob's kept
 
 

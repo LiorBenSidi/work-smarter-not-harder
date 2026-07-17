@@ -51,7 +51,8 @@ def test_suffixed_user_content_shows_display_name_never_the_handle(forum_client)
     forum_client.post("/forum/posts/" + pid + "/comments", json={"body": "mine"})
     p = forum_client.get("/forum/posts/" + pid).get_json()["post"]
     assert p["author"] == "sam" and p["author"] != "sam-2"        # display name, not the internal handle
-    assert p["comments"][0]["author"] == "sam"                    # comment author resolved too
+    comments = forum_client.get("/forum/posts/" + pid + "/comments").get_json()["comments"]   # #331: own endpoint
+    assert comments[0]["author"] == "sam"                         # comment author resolved too
     assert p["mine"] is True                                      # and the suffixed account still owns it
 
 
@@ -60,8 +61,8 @@ def test_comment_author_shows_display_name(forum_client):
     _login(forum_client, "cara@example.com")
     pid = forum_client.post("/forum/posts", json={"title": "t", "body": "b"}).get_json()["post"]["id"]
     forum_client.post("/forum/posts/" + pid + "/comments", json={"body": "nice"})
-    p = forum_client.get("/forum/posts/" + pid).get_json()["post"]
-    assert p["comments"][0]["author"] == "cara"
+    comments = forum_client.get("/forum/posts/" + pid + "/comments").get_json()["comments"]   # #331: own endpoint
+    assert comments[0]["author"] == "cara"
 
 
 def test_dm_conversation_and_thread_expose_the_peer_display_name(messages_client):
