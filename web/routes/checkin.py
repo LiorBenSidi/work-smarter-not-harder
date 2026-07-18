@@ -89,12 +89,19 @@ def checkin():
     proba = ({str(k): float(v) for k, v in proba_raw.items()
               if isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v)}
              if isinstance(proba_raw, dict) else None)
+    # Persist the recommendations generated for THIS check-in (#354), so History's per-entry detail view can
+    # show what was advised at the time — they already ride the same /predict response, so this adds no AI call.
+    # Coerce to a bounded list of strings (the ai is semi-trusted; the client also escapes on render). Entries
+    # stored before this change simply have no `recommendations` key -> the detail view degrades gracefully.
+    recs_raw = prediction.get("recommendations") if ok else None
+    recommendations = [str(x) for x in recs_raw[:10]] if isinstance(recs_raw, list) else []
     entry = {
         "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
         "metrics": metrics,
         "assessment": prediction.get("state") if ok else None,
         "proba": proba,
         "calories": calories,
+        "recommendations": recommendations,
     }
 
     try:

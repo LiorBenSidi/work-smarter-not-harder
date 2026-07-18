@@ -486,6 +486,20 @@ def test_dm_thread_pages_older_history_on_demand(client):
     assert "if (dmLoadingOlder || !dmMoreOlder || dmOldestCursor === null) return" in html      # re-entrancy / no-op guards
 
 
+def test_history_detail_view_is_wired(client):
+    # #354: tapping a History row or a heatmap cell opens a detail modal showing that check-in's inputs, readiness
+    # + per-state confidence, calories, and recommendations. The modal is BODY-level (a fixed child of a hidden
+    # .screen wouldn't paint); rows/cells are keyboard-accessible; recommendations degrade for pre-#354 entries.
+    html = client.get("/").get_data(as_text=True)
+    assert 'id="history-detail"' in html and 'id="hdetail-body"' in html          # the modal shell exists
+    assert "function openHistoryDetail(entry)" in html                            # populated from the in-memory entry
+    assert 'data-ts="' in html and 'aria-label="View this check-in' in html        # rows carry their entry + are labeled buttons
+    assert 'data-day="' in html                                                   # heatmap cells (with a check-in) are tappable
+    assert '"hd-recs"' in html                                                    # the recommendations list renders
+    assert "for this check-in." in html                                          # graceful fallback copy for missing recs
+    assert 'e.key === "Escape"' in html                                          # ESC closes the modal
+
+
 def test_enter_drops_a_line_in_chat_forum_and_comments(client):
     # UX (2026-07-15): Enter must insert a newline (line drop), not send/post, in the chat reply, forum post
     # body, and comments. The DM reply textarea sends only on Shift+Enter (plain Enter = newline); every
