@@ -376,6 +376,20 @@ def add_history(db, username, entry):
     db.analysis_history.insert_one({"username": username, "entry": entry})
 
 
+def history_set_recommendations(db, username, timestamp, recommendations):
+    """Persist regenerated recommendations onto ONE existing history entry, matched by its exact timestamp.
+
+    Backfill for pre-#354 check-ins that were stored before recommendations were persisted: the detail view
+    recomputes them on demand from the entry's own inputs and calls this to save them. Coerced to a bounded
+    list of strings (the ai is semi-trusted; the client also escapes on render). Returns True if a row matched.
+    """
+    recs = [str(x) for x in recommendations[:10]] if isinstance(recommendations, list) else []
+    res = db.analysis_history.update_one(
+        {"username": username, "entry.timestamp": timestamp},
+        {"$set": {"entry.recommendations": recs}})
+    return res.matched_count == 1
+
+
 # ---- forum (CRUD seam; the real-time push stays Elad's; the seed mechanism is db/seed.py) ----
 def _comment_public(c):
     """Public projection of one comment — id/author/body/score/created_at, dropping the internal votes list.

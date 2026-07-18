@@ -132,6 +132,10 @@ class _DbHistory(_DbStore):
         db_module, handle = self._resolve()
         db_module.add_history(handle, username, entry)
 
+    def set_recommendations(self, username, timestamp, recommendations):
+        db_module, handle = self._resolve()
+        return db_module.history_set_recommendations(handle, username, timestamp, recommendations)
+
     def delete(self, username):
         db_module, handle = self._resolve()
         db_module.delete_history(handle, username)

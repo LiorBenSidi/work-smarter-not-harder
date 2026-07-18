@@ -347,6 +347,16 @@ def test_history_view_read_is_bounded_and_indexed_against_mongo(db_mod, real_db)
     assert len(db_mod.list_history(real_db, "alice")) == cap + 5    # limit=None (export) = every entry
 
 
+def test_history_set_recommendations_persists_by_timestamp_against_mongo(db_mod, real_db):
+    # #354 backfill: recompute recs for a pre-#354 entry and persist them onto the row matched by its timestamp.
+    db_mod.add_history(real_db, "alice", {"assessment": "Ready", "timestamp": "2026-06-01T07:00:00Z",
+                                          "metrics": {"sleep_hours": 8}})
+    assert db_mod.history_set_recommendations(real_db, "alice", "2026-06-01T07:00:00Z", ["Hydrate", 5]) is True
+    entry = db_mod.list_history(real_db, "alice", limit=10)[-1]
+    assert entry["recommendations"] == ["Hydrate", "5"]            # coerced to strings + persisted
+    assert db_mod.history_set_recommendations(real_db, "alice", "no-such-ts", []) is False   # unknown ts -> no match
+
+
 def test_inbox_summary_read_is_bounded_against_mongo(db_mod, real_db):
     # #331: the inbox derives its rows from a bounded read of recent messages + a bounded unread scan, and the
     # result is capped to `limit` — never the user's whole message history.

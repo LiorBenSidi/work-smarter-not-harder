@@ -2518,8 +2518,10 @@
       ["fatigue", "Fatigue", " / 10"], ["soreness", "Soreness", " / 10"], ["training_load", "Training load", " / 10"],
     ];
     const HDETAIL_PROBA = [["ready", "Ready", "--ready"], ["moderate", "Moderate", "--moderate"], ["rest", "Rest", "--rest"]];
+    let hdetailTs = null;   // timestamp of the check-in the detail modal is showing (guards the async recs backfill below)
     function openHistoryDetail(entry) {
       if (!entry) return;
+      hdetailTs = entry.timestamp || null;
       const [cls] = readinessClass(entry.assessment);
       const score = readinessScore({ state: entry.assessment, proba: entry.proba });   // the SAME 0-100 score History/dashboard show
       const when = entry.timestamp ? new Date(entry.timestamp) : null;
@@ -2544,13 +2546,31 @@
       html += '<div class="hd-sect"><div class="hd-sect-t">Your inputs</div>' + (mrows || '<p class="muted">No inputs recorded.</p>') + "</div>";
       html += '<div class="hd-sect"><div class="hd-sect-t">Recommendations</div>';
       const recs = Array.isArray(entry.recommendations) ? entry.recommendations : null;
+      const canRegen = recs === null && entry.timestamp && entry.metrics && typeof entry.metrics === "object";
       if (recs && recs.length) html += '<ul class="hd-recs">' + recs.map((x) => "<li>" + escapeHtml(x) + "</li>").join("") + "</ul>";
       else if (recs) html += '<p class="muted">No recommendations were generated for this check-in.</p>';   // new entry, ai gave none
-      else html += '<p class="muted">Recommendations weren\'t recorded for this check-in.</p>';              // pre-#354 entry
+      else if (canRegen) html += '<p class="muted" id="hd-recs-pending">Generating recommendations…</p>';   // pre-#354: regenerate from the stored inputs
+      else html += '<p class="muted">Recommendations weren\'t recorded for this check-in.</p>';              // pre-#354 entry with no inputs to regenerate from
       html += "</div>";
       $("hdetail-body").innerHTML = html;
       $("history-detail").hidden = false;
       $("hdetail-close").focus();
+      if (canRegen) regenerateHistoryRecs(entry);          // #354 backfill: recompute this old entry's recommendations from its inputs
+    }
+    // Pre-#354 check-ins were stored before recommendations were persisted. On demand (when its detail opens),
+    // recompute them from the entry's own inputs — deterministic on metrics+state — persist them, and swap the
+    // "Generating…" line for the list. Grounded in the entry the modal is STILL showing (hdetailTs guard).
+    async function regenerateHistoryRecs(entry) {
+      const ts = entry.timestamp;
+      const r = await api("/history/recommendations", { method: "POST", body: { timestamp: ts } });
+      const recs = r.ok && r.data && Array.isArray(r.data.recommendations) ? r.data.recommendations : null;
+      if (recs) entry.recommendations = recs;              // cache so a re-open is instant (and won't re-fetch)
+      if (hdetailTs !== ts || $("history-detail").hidden) return;   // modal moved on / closed -> leave the DOM alone
+      const pending = document.getElementById("hd-recs-pending"); if (!pending) return;
+      pending.outerHTML = recs && recs.length
+        ? '<ul class="hd-recs">' + recs.map((x) => "<li>" + escapeHtml(x) + "</li>").join("") + "</ul>"
+        : (recs ? '<p class="muted">No recommendations were generated for this check-in.</p>'          // AI ran, returned none
+                : '<p class="muted">Recommendations weren\'t recorded for this check-in.</p>');         // AI unavailable -> keep the honest note
     }
     function closeHistoryDetail() { const el = $("history-detail"); if (el) el.hidden = true; }
     (function () {
