@@ -75,8 +75,13 @@ def ensure_indexes(db):
     db.profiles.create_index("username", unique=True)
     db.analysis_history.create_index("username")
     # Social layer: threads + inbox filter on the real sender/recipient username fields; poll on user.
-    db.messages.create_index("sender")
-    db.messages.create_index("recipient")
+    # Compound (participant-pair, created_at) indexes so a DM thread reads newest-first, bounded, straight off
+    # the index (#331): each `$or` branch of message_list_conversation is index-ordered on created_at, so Mongo
+    # SORT_MERGEs the two and applies the page limit without a full-thread scan. The `sender`/`recipient`
+    # prefixes still serve the inbox's single-field scans (message_list_conversations), so no separate
+    # single-field index is needed.
+    db.messages.create_index([("sender", 1), ("recipient", 1), ("created_at", -1)])
+    db.messages.create_index([("recipient", 1), ("sender", 1), ("created_at", -1)])
     db.notifications.create_index("user")
 
 
@@ -670,11 +675,29 @@ def message_send(db, sender, recipient, body):
     return _message_shape(msg)
 
 
-def message_list_conversation(db, user_a, user_b):
-    """Every message exchanged between two users (either direction), oldest first."""
-    msgs = (list(db.messages.find({"sender": user_a, "recipient": user_b}))
-            + list(db.messages.find({"sender": user_b, "recipient": user_a})))
-    return [_message_shape(m) for m in sorted(msgs, key=lambda m: m.get("created_at", 0))]
+MESSAGE_PAGE_DEFAULT = 50  # messages per page when the caller doesn't specify (#331)
+MESSAGE_PAGE_MAX = 100     # hard cap: no single request can pull more of a thread than this, however large ?limit is
+
+
+def message_list_conversation(db, user_a, user_b, before=None, limit=None):
+    """Return ONE page of the messages between two users (either direction), bounded + INDEXED (#331).
+
+    The newest ``limit`` messages, returned oldest-first *within the page* so the client appends them
+    chronologically. ``before`` is a ``created_at`` cursor: only messages strictly older than it are
+    returned, so the client pages back up a long thread one screen at a time (scroll-to-top). ``limit``
+    defaults to ``MESSAGE_PAGE_DEFAULT`` and is clamped to ``[1, MESSAGE_PAGE_MAX]`` so no request — however
+    crafted (``?limit=99999999``) — can pull an unbounded slice of a huge thread. Backed by the
+    ``(sender, recipient, created_at)`` / ``(recipient, sender, created_at)`` compound indexes
+    (``ensure_indexes``): each ``$or`` branch is index-ordered on ``created_at``, so Mongo SORT_MERGEs the
+    two and applies the limit without a full-thread scan — O(log N + limit) regardless of thread size.
+    """
+    limit = MESSAGE_PAGE_DEFAULT if limit is None else max(1, min(int(limit), MESSAGE_PAGE_MAX))
+    query = {"$or": [{"sender": user_a, "recipient": user_b},
+                     {"sender": user_b, "recipient": user_a}]}
+    if before is not None:
+        query["created_at"] = {"$lt": before}
+    page = list(db.messages.find(query).sort("created_at", -1).limit(limit))
+    return [_message_shape(m) for m in reversed(page)]   # newest page, oldest-first for chronological append
 
 
 def message_list_conversations(db, user):

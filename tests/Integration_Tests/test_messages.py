@@ -29,6 +29,21 @@ def test_send_and_read_dm(messages_client):
     assert thread[0]["sender"] == "alice"
 
 
+def test_conversation_read_is_paged_by_before_and_limit(messages_client):
+    # #331: the thread read is bounded + cursor-paged, so a huge thread can't be pulled in one request.
+    c = messages_client
+    _setup(c, "alice", "bob")
+    _login(c, "alice")
+    for i in range(5):
+        c.post("/messages", json={"to": "bob", "body": f"m{i}"})
+    _login(c, "bob")
+    page = c.get("/conversations/alice?limit=2").get_json()["messages"]   # 5 msgs, ask 2 -> newest 2, oldest-first
+    assert [m["body"] for m in page] == ["m3", "m4"]
+    older = c.get("/conversations/alice?before=" + str(page[0]["created_at"])).get_json()["messages"]
+    assert [m["body"] for m in older] == ["m0", "m1", "m2"]               # the cursor pages to OLDER messages
+    assert c.get("/conversations/alice?before=nan").get_json()["messages"]  # a garbage cursor -> newest page, not blackholed
+
+
 def test_conversation_list_and_unread_clears_on_open(messages_client):
     c = messages_client
     _setup(c, "alice", "bob")

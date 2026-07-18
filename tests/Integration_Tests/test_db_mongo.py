@@ -309,3 +309,21 @@ def test_add_history_replaces_the_same_day_entry_against_mongo(db_mod, real_db):
     # an entry without a parseable timestamp is appended, never dropped (defensive)
     db_mod.add_history(real_db, "alice", {"assessment": "Ready"})
     assert len(db_mod.list_history(real_db, "alice")) == 3
+
+
+def test_dm_thread_read_is_bounded_and_indexed_against_mongo(db_mod, real_db):
+    # #331: a DM thread reads a bounded, cursor-paged page off the two compound (participant-pair, created_at)
+    # indexes, not a full-thread scan. Pinned on real Mongo because the $or + sort + limit is the SORT_MERGE
+    # path the in-memory fake can't model. Order-strict assertions are avoided (wall-clock created_at can tie).
+    db_mod.ensure_indexes(real_db)
+    keys = [tuple(idx["key"].items()) for idx in real_db.messages.list_indexes()]
+    assert (("sender", 1), ("recipient", 1), ("created_at", -1)) in keys
+    assert (("recipient", 1), ("sender", 1), ("created_at", -1)) in keys
+    for i in range(120):
+        db_mod.message_send(real_db, "alice", "bob", f"m{i}")
+    page = db_mod.message_list_conversation(real_db, "alice", "bob")
+    assert len(page) == db_mod.MESSAGE_PAGE_DEFAULT              # a bounded page, never all 120 messages
+    cursor = page[0]["created_at"]                              # oldest loaded -> page strictly older than it
+    older = db_mod.message_list_conversation(real_db, "alice", "bob", before=cursor)
+    assert all(m["created_at"] < cursor for m in older)        # every older-page row precedes the cursor
+    assert len(db_mod.message_list_conversation(real_db, "alice", "bob", limit=99999999)) == db_mod.MESSAGE_PAGE_MAX

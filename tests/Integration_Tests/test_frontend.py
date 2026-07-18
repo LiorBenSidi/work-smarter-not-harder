@@ -119,6 +119,26 @@ def test_checkin_scales_and_live_validation_are_wired(client):
     assert 'class="field-err" data-for="resting_hr"' in html
 
 
+def test_checkin_saved_flash_auto_dismisses(client):
+    # #355: the "Check-in saved." success is a TRANSIENT toast — it auto-clears after a few seconds so it can't
+    # linger on the Today screen or reappear when the user navigates back to it. Errors are NOT auto-cleared.
+    html = client.get("/").get_data(as_text=True)
+    assert "function checkinFlashOk(msg)" in html                              # the auto-dismiss helper
+    assert 'setTimeout(() => flash("checkin-flash", "", "ok"), 4000)' in html  # ...clears the flash after a few seconds
+    assert 'checkinFlashOk("Check-in saved.")' in html                         # the success path uses it
+    assert 'flash("checkin-flash", "Check-in saved."' not in html              # the old lingering (never-cleared) flash is gone
+
+
+def test_filter_sort_chips_keep_newest_on_the_row(client):
+    # #353: on a narrow screen the "↓ Newest" sort chip must stay on the filters' row, not wrap to a line of its
+    # own. The filters/sorts wrap inside a .chip-group; the ".dir" sort chip is its SIBLING, pinned top-right.
+    html = client.get("/").get_data(as_text=True)
+    assert "#history-filters, #forum-sorts { flex-wrap:nowrap;" in html        # the row itself never wraps
+    assert "#history-filters .chip-group, #forum-sorts .chip-group" in html    # the chips wrap inside their group
+    assert '<div class="chip-group">' in html                                  # the group wraps the filter/sort chips
+    assert 'id="history-dir" class="chip dir"' in html and 'id="forum-dir" class="chip dir"' in html  # sort chip stays a sibling
+
+
 def test_slack_inspired_polish_present(client):
     # Slack-style polish: an unread COUNT on the Chat nav (not just a dot), a recent-chats avatar strip,
     # and a frosted backdrop behind the open account menu.
