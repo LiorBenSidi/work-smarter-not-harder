@@ -151,6 +151,55 @@ def test_checkin_missing_recommendations_persists_empty_list(make_client, fake_u
     assert c.post("/checkin", json=_metrics()).get_json()["entry"]["recommendations"] == []
 
 
+# ---- #354 backfill: regenerate recommendations for a PRE-#354 check-in (stored before recs were persisted) ----
+def _old_entry(ts="2026-06-01T07:00:00Z", **extra):
+    e = {"assessment": "Ready", "timestamp": ts, "metrics": dict(_metrics())}
+    e.update(extra)
+    return e
+
+
+def test_regenerate_recommendations_backfills_from_the_entrys_inputs(make_client, fake_users, fake_profiles, fake_history, monkeypatch):
+    fake_history.add("alice", _old_entry())                                   # no `recommendations` key (pre-#354)
+    _set_predict(monkeypatch, {"state": "Ready", "recommendations": ["Push your session", 7]})
+    c = _client(make_client, fake_users, fake_profiles, fake_history)
+    _login(c)
+    r = c.post("/history/recommendations", json={"timestamp": "2026-06-01T07:00:00Z"})
+    assert r.status_code == 200
+    assert r.get_json()["recommendations"] == ["Push your session", "7"]      # regenerated + coerced to strings
+    stored = c.get("/history").get_json()["history"][0]
+    assert stored["recommendations"] == ["Push your session", "7"]            # ...and persisted onto the entry
+
+
+def test_regenerate_recommendations_is_idempotent_and_skips_the_ai(make_client, fake_users, fake_profiles, fake_history, monkeypatch):
+    fake_history.add("alice", _old_entry(ts="2026-06-02T07:00:00Z", recommendations=["Already here"]))
+    def _boom(*a, **k):
+        raise AssertionError("the ai must not be called when recommendations already exist")
+    monkeypatch.setattr(sys.modules["services.ai_client"], "predict", _boom)
+    c = _client(make_client, fake_users, fake_profiles, fake_history)
+    _login(c)
+    r = c.post("/history/recommendations", json={"timestamp": "2026-06-02T07:00:00Z"})
+    assert r.status_code == 200 and r.get_json()["recommendations"] == ["Already here"]
+
+
+def test_regenerate_recommendations_404_for_an_unknown_entry(make_client, fake_users, fake_profiles, fake_history):
+    c = _client(make_client, fake_users, fake_profiles, fake_history)
+    _login(c)
+    assert c.post("/history/recommendations", json={"timestamp": "does-not-exist"}).status_code == 404
+
+
+def test_regenerate_recommendations_503_when_the_ai_is_down(make_client, fake_users, fake_profiles, fake_history, monkeypatch):
+    fake_history.add("alice", _old_entry(ts="2026-06-03T07:00:00Z"))
+    _set_predict(monkeypatch, None)                                          # ai unreachable
+    c = _client(make_client, fake_users, fake_profiles, fake_history)
+    _login(c)
+    assert c.post("/history/recommendations", json={"timestamp": "2026-06-03T07:00:00Z"}).status_code == 503
+
+
+def test_regenerate_recommendations_requires_login(make_client, fake_users, fake_profiles, fake_history):
+    c = _client(make_client, fake_users, fake_profiles, fake_history)
+    assert c.post("/history/recommendations", json={"timestamp": "x"}).status_code == 401
+
+
 def test_second_checkin_same_day_replaces_the_days_entry(make_client, fake_users, fake_profiles, fake_history, monkeypatch):
     # issue #5: a daily-readiness log is one row per day. A second check-in the same UTC day REPLACES the
     # first, so History doesn't accrue several rows for one day (both submits are stamped the same UTC day).

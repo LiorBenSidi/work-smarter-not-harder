@@ -517,6 +517,17 @@ def test_history_detail_view_is_wired(client):
     assert 'e.key === "Escape"' in html                                          # ESC closes the modal
 
 
+def test_history_detail_regenerates_recs_for_pre_354_entries(client):
+    # #354 backfill: opening a pre-#354 entry (no recommendations) recomputes them on demand from its inputs via
+    # POST /history/recommendations, showing a "Generating…" line that's swapped for the list when it returns.
+    html = client.get("/").get_data(as_text=True)
+    assert "async function regenerateHistoryRecs(entry)" in html
+    assert '"/history/recommendations"' in html                                   # the backfill endpoint
+    assert 'id="hd-recs-pending"' in html                                         # the "Generating…" placeholder
+    assert "if (canRegen) regenerateHistoryRecs(entry)" in html                   # fired only for regenerable old entries
+    assert "hdetailTs !== ts" in html                                             # guarded to the still-open entry (no cross-entry paint)
+
+
 def test_enter_drops_a_line_in_chat_forum_and_comments(client):
     # UX (2026-07-15): Enter must insert a newline (line drop), not send/post, in the chat reply, forum post
     # body, and comments. The DM reply textarea sends only on Shift+Enter (plain Enter = newline); every

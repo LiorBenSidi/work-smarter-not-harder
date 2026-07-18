@@ -217,6 +217,14 @@ class FakeHistory:
             entries[:] = [e for e in entries if str(e.get("timestamp") or "")[:10] != day]
         entries.append(entry)
 
+    def set_recommendations(self, username, timestamp, recommendations):
+        # Mirror db.history_set_recommendations: persist recs onto the entry matched by its exact timestamp.
+        for e in self._by_user.get(username, []):
+            if e.get("timestamp") == timestamp:
+                e["recommendations"] = [str(x) for x in recommendations]
+                return True
+        return False
+
     def delete(self, username):
         self._by_user.pop(username, None)
 

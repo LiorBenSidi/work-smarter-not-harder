@@ -18,6 +18,7 @@ from flask import Blueprint, current_app, jsonify, request, session
 from ratelimit import limiter
 from routes.auth import login_required
 from services import ai_client
+from services.db import HISTORY_VIEW_CAP
 
 logger = logging.getLogger(__name__)
 
@@ -111,3 +112,53 @@ def checkin():
         return jsonify(error="history store unavailable"), 503
 
     return jsonify(entry=entry, ai_status="ok" if ok else "unavailable"), 201
+
+
+@checkin_bp.post("/history/recommendations")
+@limiter.limit("30 per minute")   # occasional (only when a pre-#354 detail opens); the cap is anti-abuse
+@login_required
+def regenerate_recommendations():
+    """Recompute + persist the recommendations for ONE past check-in from its stored inputs (#354 backfill).
+
+    Pre-#354 check-ins were saved before recommendations were persisted. When the detail view opens such an
+    entry it calls this: we re-run /predict from the entry's OWN metrics (deterministic on metrics+state), store
+    the result, and return it. Idempotent — an entry that already has recommendations is returned without an AI
+    call. Scoped to the caller's own history (the timestamp only ever matches one of their rows).
+    """
+    data = request.get_json(silent=True) or {}
+    ts = data.get("timestamp")
+    if not isinstance(ts, str) or not ts:
+        return jsonify(error="timestamp is required"), 400
+
+    username = session["username"]
+    try:
+        entries = current_app.config["HISTORY"].list(username, limit=HISTORY_VIEW_CAP)   # the entry is in the recent view
+    except Exception:
+        logger.exception("history store unavailable during recommendation backfill")
+        return jsonify(error="history store unavailable"), 503
+    entry = next((e for e in entries if isinstance(e, dict) and e.get("timestamp") == ts), None)
+    if entry is None:
+        return jsonify(error="check-in not found"), 404
+    if isinstance(entry.get("recommendations"), list):
+        return jsonify(recommendations=entry["recommendations"]), 200    # already backfilled -> no AI call
+
+    metrics = entry.get("metrics")
+    if not isinstance(metrics, dict) or not metrics:
+        return jsonify(recommendations=[]), 200                          # no inputs to regenerate from
+
+    try:
+        profile = current_app.config["PROFILES"].get(username)
+    except Exception:
+        profile = None
+    prediction = ai_client.predict(current_app.config["AI_URL"], {**(profile or {}), **metrics},
+                                   timeout=current_app.config["AI_CLIENT_TIMEOUT"])
+    if not isinstance(prediction, dict):
+        return jsonify(error="ai unavailable"), 503                      # can't regenerate right now; client keeps the note
+    recs_raw = prediction.get("recommendations")
+    recommendations = [str(x) for x in recs_raw[:10]] if isinstance(recs_raw, list) else []
+    try:
+        current_app.config["HISTORY"].set_recommendations(username, ts, recommendations)
+    except Exception:
+        logger.exception("history store unavailable persisting regenerated recommendations")
+        # non-fatal: still return the freshly-generated recs so the user sees them this session
+    return jsonify(recommendations=recommendations), 200
