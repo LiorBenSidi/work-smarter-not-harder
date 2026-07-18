@@ -423,6 +423,11 @@
     .chip:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
     /* Sort-direction toggle: a plain (never-"active") chip pushed to the row's end; its ↓/↑ label carries the state. */
     .chip.dir { margin-left:auto; font-variant-numeric:tabular-nums; }
+    /* #353: keep the ".dir" sort chip on the filters' TOP row, never wrapped to a line of its own on a narrow
+       screen. The filter/sort chips wrap among themselves in their own group on the left; the sort chip is
+       pinned top-right by its margin-left:auto. Applied to History (5 chips wrapped past mobile width) + Forum. */
+    #history-filters, #forum-sorts { flex-wrap:nowrap; align-items:flex-start; }
+    #history-filters .chip-group, #forum-sorts .chip-group { display:flex; flex-wrap:wrap; gap:7px; min-width:0; }
     /* Illustrated empty states: a friendly icon + guidance instead of a bare grey line (Wolt's empty cards) */
     /* Skeleton shimmer for loading states (Bluesky/OSS pattern) — a placeholder that pulses instead of a bare
        "Loading…". Reduced-motion safe. Both mobile + desktop. */
@@ -1044,10 +1049,12 @@
             <div id="history-trend" class="trend"></div>
             <div id="history-heat" class="heat"></div>
             <div id="history-filters" class="chips" role="group" aria-label="Filter and sort readiness">
-              <button class="chip active" type="button" data-filter="all">All</button>
-              <button class="chip" type="button" data-filter="ready">Ready</button>
-              <button class="chip" type="button" data-filter="moderate">Moderate</button>
-              <button class="chip" type="button" data-filter="rest">Rest</button>
+              <div class="chip-group">
+                <button class="chip active" type="button" data-filter="all">All</button>
+                <button class="chip" type="button" data-filter="ready">Ready</button>
+                <button class="chip" type="button" data-filter="moderate">Moderate</button>
+                <button class="chip" type="button" data-filter="rest">Rest</button>
+              </div>
               <button id="history-dir" class="chip dir" type="button" aria-label="Reverse sort order">↓ Newest</button>
             </div>
             <div id="history"><div class="sk" style="height:64px"></div><div class="sk" style="height:64px"></div><div class="sk" style="height:64px"></div></div>
@@ -1077,9 +1084,11 @@
             </form>
           </div>
           <div id="forum-sorts" class="chips" role="group" aria-label="Sort posts">
-            <button class="chip active" type="button" data-sort="recent">Recent</button>
-            <button class="chip" type="button" data-sort="top">Top</button>
-            <button class="chip" type="button" data-sort="mine">Mine</button>
+            <div class="chip-group">
+              <button class="chip active" type="button" data-sort="recent">Recent</button>
+              <button class="chip" type="button" data-sort="top">Top</button>
+              <button class="chip" type="button" data-sort="mine">Mine</button>
+            </div>
             <button id="forum-dir" class="chip dir" type="button" aria-label="Reverse sort order">↓ Newest</button>
           </div>
           <div id="forum-list"><div class="sk" style="height:64px"></div><div class="sk" style="height:64px"></div><div class="sk" style="height:64px"></div></div>
@@ -1887,7 +1896,16 @@
       const utcToday = new Date().toISOString().slice(0, 10);
       return (historyItems || []).some((it) => String((it && it.timestamp) || "").slice(0, 10) === utcToday);
     }
+    // #355: a check-in success message is a transient toast — it auto-clears after a few seconds so it can't
+    // linger on the Today screen or reappear when the user navigates back to it. (Errors are NOT auto-cleared.)
+    let checkinFlashTimer = null;
+    function checkinFlashOk(msg) {
+      flash("checkin-flash", msg, "ok");
+      clearTimeout(checkinFlashTimer);
+      checkinFlashTimer = setTimeout(() => flash("checkin-flash", "", "ok"), 4000);
+    }
     onSubmit("checkin-form", async (f) => {
+      clearTimeout(checkinFlashTimer);                             // a fresh submit cancels any pending auto-clear
       if (!validateCheckin()) {                                    // clicked while greyed → say why, don't POST
         ["sleep_hours", "resting_hr"].forEach((id) => {
           if (!ciNumValid(id)) { $(id).classList.add("invalid"); const e = document.querySelector('.field-err[data-for="' + id + '"]'); if (e) e.hidden = false; }
@@ -1899,7 +1917,7 @@
       // (readiness + calorie target), it doesn't add a second row. Confirm before replacing.
       if (hasCheckedInToday() && !confirm(
         "You've already checked in today.\n\nSubmitting will REPLACE today's reading (readiness + calorie target) with this new one — it won't add a second entry.\n\nReplace today's check-in?")) {
-        flash("checkin-flash", "Kept your earlier check-in for today.", "ok");
+        checkinFlashOk("Kept your earlier check-in for today.");
         return;
       }
       const body = {
@@ -1917,7 +1935,7 @@
       // or a request that stalls, would otherwise leave Submit stuck-grey with the values still selected).
       // The refresh runs in the background; the count-up fires once both loaders settle. Each loader has its
       // own error handling + session guard, so a background failure degrades in-panel, never wedges the form.
-      flash("checkin-flash", "Check-in saved.", "ok"); f.reset(); resetCheckinScales(); updateCheckinValidity();
+      checkinFlashOk("Check-in saved."); f.reset(); resetCheckinScales(); updateCheckinValidity();
       Promise.all([loadDashboard({ fresh: true }), loadHistory()]).then(countUpKcal).catch(() => {});
     });
 
