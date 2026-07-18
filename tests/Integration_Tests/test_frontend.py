@@ -486,6 +486,18 @@ def test_dm_thread_pages_older_history_on_demand(client):
     assert "if (dmLoadingOlder || !dmMoreOlder || dmOldestCursor === null) return" in html      # re-entrancy / no-op guards
 
 
+def test_screen_switch_has_a_subtle_crossfade(client):
+    # #356: switching screens replays a subtle entrance on the incoming .screen (a hidden->visible toggle alone
+    # does NOT restart a CSS animation, so switches snapped). It re-triggers the animation on the SCREEN element
+    # only — never re-mounting content (the prior "jumpy flicker" came from tearing down content nodes) — and
+    # no-ops under reduced motion (the reducedMotion() guard + the global prefers-reduced-motion rule).
+    html = client.get("/").get_data(as_text=True)
+    assert "@keyframes screenSwap" in html                                 # the cross-fade keyframe exists
+    assert '_screen.style.animation = "screenSwap' in html                 # it's applied to the incoming screen
+    assert "void _screen.offsetWidth" in html                              # the reflow that actually restarts the animation
+    assert "if (_screen && !reducedMotion())" in html                      # opt-out honored (no reflow/anim under reduced motion)
+
+
 def test_history_detail_view_is_wired(client):
     # #354: tapping a History row or a heatmap cell opens a detail modal showing that check-in's inputs, readiness
     # + per-state confidence, calories, and recommendations. The modal is BODY-level (a fixed child of a hidden
