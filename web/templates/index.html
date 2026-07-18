@@ -2291,20 +2291,9 @@
       return Math.round(50 + tilt * 15);                     // stays in [35,65] ⊂ the moderate band
     }
 
-    async function loadDashboard(opts) {
-      // freshReveal = a check-in just landed -> the recs cascade in (only then, not on tab-switch/refresh).
-      const freshReveal = !!(opts && opts.fresh) && !reducedMotion();
-      const u = currentUser;
-      const el = $("dashboard"); el.innerHTML = sk("card");
-      const r = await api("/dashboard");
-      if (sessionChanged(u, "loadDashboard")) return;        // stale session -> don't paint another user's readiness
-      if (!r.ok) { el.innerHTML = '<p class="flash error">Could not load the dashboard.</p>'; return; }
-      const d = r.data || {};   // a 200 with a null/unparseable body must not throw on d.readiness (mirrors the other loaders)
-      // keep the glanceable stats in sync with the AI's latest read
-      // the stat strip shows the SAME 0-100 score as the orb (one consistent number), not the class word
-      statState = d.readiness ? String(readinessScore(d.readiness)) : "—";
-      statKcal = d.calories != null ? d.calories : "—";   // statCard escapes on render now
-      renderStats();
+    // Render the readiness card (orb + recs + confidence + calorie pill) from a /dashboard-shaped object into el.
+    // Shared by the live /dashboard read AND the optimistic instant-paint from the latest stored check-in below.
+    function paintReadiness(el, d, freshReveal) {
       if (d.needs_checkin) {
         // No check-in yet -> there are no daily metrics to score, so this is NOT an AI outage. Prompt the
         // first check-in with a greyed example of the payoff. Readiness needs only the check-in; a profile
@@ -2348,6 +2337,44 @@
         el.querySelectorAll(".conf-fill").forEach((f) => { f.style.width = f.dataset.w + "%"; });
         countUpScore(el);   // the hero readiness number rises in step with the orb-ring sweep
       });
+    }
+
+    // The newest history entry IF it's from today (UTC) — today's stored readiness, for the optimistic paint.
+    function latestTodayEntry() {
+      const today = new Date().toISOString().slice(0, 10);
+      let best = null;
+      for (const e of (historyItems || [])) {
+        if (e && e.assessment && String(e.timestamp || "").slice(0, 10) === today && (!best || e.timestamp > best.timestamp)) best = e;
+      }
+      return best;
+    }
+
+    async function loadDashboard(opts) {
+      // freshReveal = a check-in just landed -> the recs cascade in (only then, not on tab-switch/refresh).
+      const freshReveal = !!(opts && opts.fresh) && !reducedMotion();
+      const u = currentUser;
+      const el = $("dashboard");
+      // Optimistic instant paint (perf, from Lior's "the home score takes long to load"): if today's check-in is
+      // already in historyItems, show ITS stored readiness NOW so the orb is never blank while the AI-backed
+      // /dashboard read is in flight. Skipped on a fresh check-in (that path runs its own reveal) and when there's
+      // no today-entry (then /dashboard is the fast needs_checkin case anyway).
+      const opt = !(opts && opts.fresh) ? latestTodayEntry() : null;
+      if (opt) paintReadiness(el, { ai_status: "ok", needs_profile: false, calories: opt.calories,
+        readiness: { state: opt.assessment, proba: opt.proba, recommendations: opt.recommendations } }, false);
+      else el.innerHTML = sk("card");
+      const r = await api("/dashboard");
+      if (sessionChanged(u, "loadDashboard")) return;        // stale session -> don't paint another user's readiness
+      if (!r.ok) { if (!opt) el.innerHTML = '<p class="flash error">Could not load the dashboard.</p>'; return; }   // a transient error keeps the optimistic paint
+      const d = r.data || {};   // a 200 with a null/unparseable body must not throw on d.readiness (mirrors the other loaders)
+      // keep the glanceable stats in sync with the AI's latest read (the stat strip shows the SAME 0-100 score as the orb)
+      statState = d.readiness ? String(readinessScore(d.readiness)) : "—";
+      statKcal = d.calories != null ? d.calories : "—";   // statCard escapes on render now
+      renderStats();
+      // Replace the optimistic paint with the fresh AI result — unless it's identical, so an unchanged orb doesn't
+      // re-run its count-up animation for no reason.
+      const sameAsOptimistic = opt && d.readiness && d.readiness.state === opt.assessment && d.calories === opt.calories
+        && readinessScore(d.readiness) === readinessScore({ state: opt.assessment, proba: opt.proba });
+      if (!sameAsOptimistic) paintReadiness(el, d, freshReveal);
     }
 
     // The hero readiness number rises 0->N over the orb-ring sweep (1.1s) — the instrument "computing"
@@ -3491,7 +3518,9 @@
       $("dm-thread-view").hidden = true; $("dm-list-view").hidden = false; $("screen-messages").classList.remove("thread-open"); dmPeer = null; closeDmSuggest();  // fresh DM view (drop any stale search dropdown)
       showView("app");
       showScreen("today");
-      loadProfile(); loadDashboard(); loadHistory(); loadForum();
+      // History (a fast, bounded read) FIRST, then the dashboard — so loadDashboard can instantly paint today's
+      // stored readiness from historyItems while its slower AI-backed /dashboard read is in flight (perf).
+      loadProfile(); loadHistory().then(() => loadDashboard()).catch(() => loadDashboard()); loadForum();
       startEvents();
     }
 
