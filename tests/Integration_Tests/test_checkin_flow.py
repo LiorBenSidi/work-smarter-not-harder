@@ -130,6 +130,27 @@ def test_checkin_missing_proba_persists_none(make_client, fake_users, fake_profi
     assert c.post("/checkin", json=_metrics()).get_json()["entry"]["proba"] is None
 
 
+def test_checkin_persists_recommendations_for_the_detail_view(make_client, fake_users, fake_profiles, fake_history, monkeypatch):
+    # #354: History's per-entry detail shows what was advised at the time, so the check-in must persist the
+    # recommendations that ride the same /predict response — coerced to a bounded list of strings.
+    _set_predict(monkeypatch, {"state": "Ready", "calories": 2200,
+                               "recommendations": ["Hydrate well", "Push your planned session", 42]})
+    c = _client(make_client, fake_users, fake_profiles, fake_history)
+    _login(c)
+    entry = c.post("/checkin", json=_metrics()).get_json()["entry"]
+    assert entry["recommendations"] == ["Hydrate well", "Push your planned session", "42"]   # coerced to strings
+    stored = c.get("/history").get_json()["history"][0]
+    assert stored["recommendations"] == ["Hydrate well", "Push your planned session", "42"]   # ...and persisted
+
+
+def test_checkin_missing_recommendations_persists_empty_list(make_client, fake_users, fake_profiles, fake_history, monkeypatch):
+    # No recommendations in the AI response (or ai down) -> an empty list, never a missing key or a crash.
+    _set_predict(monkeypatch, {"state": "Ready", "calories": 2000})           # no recommendations key
+    c = _client(make_client, fake_users, fake_profiles, fake_history)
+    _login(c)
+    assert c.post("/checkin", json=_metrics()).get_json()["entry"]["recommendations"] == []
+
+
 def test_second_checkin_same_day_replaces_the_days_entry(make_client, fake_users, fake_profiles, fake_history, monkeypatch):
     # issue #5: a daily-readiness log is one row per day. A second check-in the same UTC day REPLACES the
     # first, so History doesn't accrue several rows for one day (both submits are stamped the same UTC day).

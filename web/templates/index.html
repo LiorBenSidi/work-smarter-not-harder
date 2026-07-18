@@ -764,6 +764,32 @@
       background:rgba(16,22,40,.62); border:1px solid rgba(255,255,255,.24);
       -webkit-backdrop-filter:blur(10px); backdrop-filter:blur(10px); transition:background .15s var(--ease), transform .15s var(--ease); }
     .lightbox-close:hover, .lightbox-close:focus-visible { background:rgba(44,56,86,.92); transform:scale(1.06); }
+    /* History check-in detail modal (#354) */
+    .hdetail { position:fixed; inset:0; z-index:1000; background:rgba(6,10,20,.72); display:flex; align-items:flex-end;
+      justify-content:center; padding:0; -webkit-backdrop-filter:blur(3px); backdrop-filter:blur(3px); }
+    @media (min-width:640px) { .hdetail { align-items:center; padding:20px; } }
+    @media (prefers-reduced-motion: no-preference) { .hdetail:not([hidden]) .hdetail-card { animation: rise .3s cubic-bezier(.2,.7,.2,1) both; } }
+    .hdetail-card { width:min(560px, 100%); max-height:88vh; overflow-y:auto; background:var(--card); border:1px solid var(--line);
+      border-radius:22px 22px 0 0; padding:18px 18px calc(20px + env(safe-area-inset-bottom)); box-shadow:0 -12px 40px rgba(0,0,0,.4); }
+    @media (min-width:640px) { .hdetail-card { border-radius:22px; box-shadow:0 24px 60px rgba(0,0,0,.5); } }
+    .hdetail-head { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:10px; }
+    .hdetail-title { font-size:16px; font-weight:800; margin:0; letter-spacing:-.01em; }
+    .hd-headline { display:flex; align-items:center; gap:12px; padding:12px; border-radius:16px; background:var(--field);
+      border:1px solid var(--line); border-left:4px solid var(--rc, var(--line)); margin-bottom:14px; }
+    .hd-headline.ready { --rc:var(--ready); } .hd-headline.moderate { --rc:var(--moderate); } .hd-headline.rest { --rc:var(--rest); }
+    .hd-score { font-size:30px; font-weight:800; letter-spacing:-.02em; }
+    .hd-state { font-size:15px; }
+    .hd-sect { margin:0 0 14px; }
+    .hd-sect-t { font-size:11px; text-transform:uppercase; letter-spacing:.08em; color:var(--muted); margin:0 0 7px; }
+    .hd-kv, .hd-prob { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:7px 2px; border-bottom:1px solid var(--line); }
+    .hd-kv:last-child, .hd-prob:last-child { border-bottom:0; }
+    .hd-k { color:var(--muted); } .hd-v { font-weight:700; }
+    .hd-prob { justify-content:flex-start; } .hd-prob .readiness i { width:10px; height:10px; border-radius:3px; background:var(--lc, var(--line)); display:inline-block; }
+    .hd-prob.ready .readiness i, .readiness.ready i { --lc:var(--ready); } .hd-prob .hd-prob-k { flex:1; } .hd-prob-v { font-weight:700; font-variant-numeric:tabular-nums; }
+    .hd-recs { margin:0; padding-left:18px; display:flex; flex-direction:column; gap:6px; }
+    .hd-recs li { line-height:1.4; }
+    .hrow[data-ts], .heat-cell[data-day] { cursor:pointer; }
+    .hrow[data-ts]:focus-visible, .heat-cell[data-day]:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
     /* date separator between days in a thread */
     .dm-daysep { align-self:center; margin:8px 0 4px; }
     .dm-daysep span { font-size:11px; color:var(--muted); background:var(--field); border:1px solid var(--line); padding:2px 11px; border-radius:999px; }
@@ -1267,6 +1293,18 @@
   <button id="ctx-back" class="ctx-back" type="button" hidden aria-label="Go to Today"></button>
   <!-- Frosted backdrop behind the open account menu (body-level so its blur covers the whole viewport). -->
   <div id="menu-backdrop" class="menu-backdrop" hidden></div>
+
+  <!-- History check-in detail (#354). BODY-level fixed dialog: it opens from the History screen, and a fixed
+       child of a hidden .screen would not paint. Populated by openHistoryDetail() from the in-memory entry. -->
+  <div id="history-detail" class="hdetail" hidden role="dialog" aria-modal="true" aria-labelledby="hdetail-title">
+    <div class="hdetail-card" role="document">
+      <div class="hdetail-head">
+        <h2 id="hdetail-title" class="hdetail-title">Check-in</h2>
+        <button id="hdetail-close" class="ghost mini" type="button" aria-label="Close">&#10005;</button>
+      </div>
+      <div id="hdetail-body" class="hdetail-body"></div>
+    </div>
+  </div>
 
   <!-- Debug tools (DEBUG only, never in live mode / inside the preview iframe). See wireDebugTools().
        Omitted server-side when this shell is the mobile-preview iframe (?preview=1): the preview must
@@ -2341,7 +2379,8 @@
         // The SAME real 0-100 score the dashboard shows (from the stored per-state proba), not the band
         // level. An older entry with no stored proba falls back to its band centre (readinessScore's default).
         const score = readinessScore({ state: it.assessment, proba: it.proba });
-        return '<li class="hrow reveal-item readiness ' + cls + '" style="animation-delay:' + Math.min(i * 35, 280) + 'ms">'
+        return '<li class="hrow reveal-item readiness ' + cls + '" data-ts="' + escapeHtml(it.timestamp || "")
+          + '" role="button" tabindex="0" aria-label="View this check-in\'s details" style="animation-delay:' + Math.min(i * 35, 280) + 'ms">'
           + '<span class="hrow-score">' + score + '</span>'
           + '<span class="hrow-main"><strong>' + escapeHtml(it.assessment || "—") + "</strong>"
           + (it.calories != null ? '<span class="muted"> · ' + escapeHtml(it.calories) + " kcal</span>" : "") + "</span>"
@@ -2412,8 +2451,10 @@
       let cells = "", cur = new Date(start);
       for (let i = 0; i < WEEKS * 7; i++) {
         const k = key(cur), cls = byDay[k], future = cur > today;
+        // #354: only days WITH a check-in are tappable (open that day's detail); empty/future cells are inert.
+        const tap = cls ? ' data-day="' + k + '" role="button" tabindex="0" aria-label="View check-in on ' + k + '"' : "";
         cells += '<span class="heat-cell' + (cls ? " readiness " + cls + " on" : "") + (future ? " future" : "")
-          + '" title="' + k + (cls ? " · " + cls : "") + '"></span>';
+          + '"' + tap + ' title="' + k + (cls ? " · " + cls : "") + '"></span>';
         cur.setUTCDate(cur.getUTCDate() + 1);
       }
       el.innerHTML = '<p class="trend-cap">Last ' + WEEKS + ' weeks</p>'
@@ -2424,6 +2465,69 @@
         + '<span class="readiness moderate"><i style="--lc:var(--moderate)"></i></span>Moderate'
         + '<span class="readiness rest"><i style="--lc:var(--rest)"></i></span>Rest</div>';
     }
+
+    // ---- History check-in detail (#354): tap a history row or a heatmap cell to open that check-in's inputs,
+    // readiness + per-state confidence, calories, and the recommendations recorded at the time. Everything is
+    // already in historyItems (no fetch); recommendations are persisted from this check-in forward — older
+    // entries have no `recommendations` key and show a graceful note. ----
+    const HDETAIL_METRICS = [
+      ["sleep_hours", "Sleep", " h"], ["resting_hr", "Resting HR", " bpm"],
+      ["fatigue", "Fatigue", " / 10"], ["soreness", "Soreness", " / 10"], ["training_load", "Training load", " / 10"],
+    ];
+    const HDETAIL_PROBA = [["ready", "Ready", "--ready"], ["moderate", "Moderate", "--moderate"], ["rest", "Rest", "--rest"]];
+    function openHistoryDetail(entry) {
+      if (!entry) return;
+      const [cls] = readinessClass(entry.assessment);
+      const score = readinessScore({ state: entry.assessment, proba: entry.proba });   // the SAME 0-100 score History/dashboard show
+      const when = entry.timestamp ? new Date(entry.timestamp) : null;
+      $("hdetail-title").textContent = "Check-in" + (when && !isNaN(when) ? " · " + when.toLocaleString([], { dateStyle: "medium", timeStyle: "short" }) : "");
+      let html = '<div class="hd-headline readiness ' + cls + '"><span class="hd-score">' + score + "</span>"
+        + '<span class="hd-state"><strong>' + escapeHtml(entry.assessment || "—") + "</strong>"
+        + (entry.calories != null ? '<span class="muted"> · ' + escapeHtml(entry.calories) + " kcal</span>" : "") + "</span></div>";
+      const proba = entry.proba && typeof entry.proba === "object" ? entry.proba : null;
+      if (proba) {
+        // Normalise the proba keys through readinessClass (the AI emits "Ready"/"Moderate"/"Rest"; readinessScore
+        // does the same) so the confidence rows show regardless of the key's case/wording.
+        const norm = { ready: null, moderate: null, rest: null };
+        for (const k in proba) { const [c] = readinessClass(k); const v = Number(proba[k]); if (c in norm && Number.isFinite(v)) norm[c] = v; }
+        const rows = HDETAIL_PROBA.filter(([k]) => norm[k] != null).map(([k, label, cvar]) =>
+          '<div class="hd-prob"><span class="readiness ' + k + '"><i style="--lc:var(' + cvar + ')"></i></span>'
+          + '<span class="hd-prob-k">' + label + '</span><span class="hd-prob-v">' + Math.round(norm[k] * 100) + "%</span></div>").join("");
+        if (rows) html += '<div class="hd-sect"><div class="hd-sect-t">Readiness confidence</div>' + rows + "</div>";
+      }
+      const m = entry.metrics && typeof entry.metrics === "object" ? entry.metrics : {};
+      const mrows = HDETAIL_METRICS.filter(([k]) => m[k] != null).map(([k, label, unit]) =>
+        '<div class="hd-kv"><span class="hd-k">' + label + '</span><span class="hd-v">' + escapeHtml(m[k]) + unit + "</span></div>").join("");
+      html += '<div class="hd-sect"><div class="hd-sect-t">Your inputs</div>' + (mrows || '<p class="muted">No inputs recorded.</p>') + "</div>";
+      html += '<div class="hd-sect"><div class="hd-sect-t">Recommendations</div>';
+      const recs = Array.isArray(entry.recommendations) ? entry.recommendations : null;
+      if (recs && recs.length) html += '<ul class="hd-recs">' + recs.map((x) => "<li>" + escapeHtml(x) + "</li>").join("") + "</ul>";
+      else if (recs) html += '<p class="muted">No recommendations were generated for this check-in.</p>';   // new entry, ai gave none
+      else html += '<p class="muted">Recommendations weren\'t recorded for this check-in.</p>';              // pre-#354 entry
+      html += "</div>";
+      $("hdetail-body").innerHTML = html;
+      $("history-detail").hidden = false;
+      $("hdetail-close").focus();
+    }
+    function closeHistoryDetail() { const el = $("history-detail"); if (el) el.hidden = true; }
+    (function () {
+      const modal = $("history-detail"); if (!modal) return;
+      modal.addEventListener("click", (e) => { if (e.target === modal || (e.target.closest && e.target.closest("#hdetail-close"))) closeHistoryDetail(); });
+      document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !modal.hidden) closeHistoryDetail(); });
+      const openFromRow = (row) => { const e = (historyItems || []).find((it) => String((it && it.timestamp) || "") === row.dataset.ts); if (e) openHistoryDetail(e); };
+      const hist = $("history");
+      if (hist) {
+        hist.addEventListener("click", (e) => { const row = e.target.closest && e.target.closest(".hrow[data-ts]"); if (row) openFromRow(row); });
+        hist.addEventListener("keydown", (e) => { if (e.key !== "Enter" && e.key !== " ") return; const row = e.target.closest && e.target.closest(".hrow[data-ts]"); if (row) { e.preventDefault(); openFromRow(row); } });
+      }
+      // a heatmap CELL -> the LAST check-in that day (matches how the heatmap colours the day)
+      const openFromDay = (day) => { const e = [...(historyItems || [])].reverse().find((it) => String((it && it.timestamp) || "").slice(0, 10) === day); if (e) openHistoryDetail(e); };
+      const heat = $("history-heat");
+      if (heat) {
+        heat.addEventListener("click", (e) => { const c = e.target.closest && e.target.closest(".heat-cell[data-day]"); if (c) openFromDay(c.dataset.day); });
+        heat.addEventListener("keydown", (e) => { if (e.key !== "Enter" && e.key !== " ") return; const c = e.target.closest && e.target.closest(".heat-cell[data-day]"); if (c) { e.preventDefault(); openFromDay(c.dataset.day); } });
+      }
+    })();
 
     // ---- Forum ----
     function escapeHtml(s) {
