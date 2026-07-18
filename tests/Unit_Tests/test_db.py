@@ -182,7 +182,10 @@ def test_ensure_indexes_creates_unique_constraints(db_mod, db):
     assert ("author", False) in db.forum_posts.indexes       # their posts
     assert ("author", False) in db.forum_comments.indexes    # their comments
     assert ("username", True) in db.profiles.indexes         # one profile per user
-    assert ("username", False) in db.analysis_history.indexes  # perf (non-unique) per-user history scan
+    # #331: (username, entry.timestamp) so the History view reads a user's NEWEST N check-ins off the index
+    assert ([("username", 1), ("entry.timestamp", -1)], False) in db.analysis_history.indexes
+    # #331: (user, created_at) so notifications read newest-first + the `since` poll filters off the index
+    assert ([("user", 1), ("created_at", -1)], False) in db.notifications.indexes
 
 
 def test_ensure_schema_applies_a_jsonschema_validator_to_every_collection(db_mod, db):

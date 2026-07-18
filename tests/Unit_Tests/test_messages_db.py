@@ -49,21 +49,38 @@ class _Coll:
         self.docs = []
         self.last_limit = None      # the n from the most recent find(...).limit(n), for read-bound assertions
 
+    _OPS = ("$lt", "$lte", "$gt", "$gte", "$ne")
+
     def _match(self, doc, filt):
         for k, v in filt.items():
             if k == "$or":
                 if not any(self._match(doc, sub) for sub in v):
                     return False
-            elif isinstance(v, dict) and "$lt" in v:                 # the created_at pagination cursor
+            elif isinstance(v, dict) and any(op in v for op in self._OPS):   # range/inequality operators
                 val = doc.get(k)
-                if val is None or not val < v["$lt"]:
-                    return False
+                for op, bound in v.items():
+                    if op == "$ne":
+                        if val == bound:
+                            return False
+                    elif val is None:                                        # a comparison against a missing field never matches
+                        return False
+                    elif op == "$lt" and not val < bound:
+                        return False
+                    elif op == "$lte" and not val <= bound:
+                        return False
+                    elif op == "$gt" and not val > bound:
+                        return False
+                    elif op == "$gte" and not val >= bound:
+                        return False
             elif doc.get(k) != v:
                 return False
         return True
 
     def find(self, filt=None):
         return _Cursor([dict(d) for d in self.docs if self._match(d, filt or {})], self)
+
+    def count_documents(self, filt=None):
+        return sum(1 for d in self.docs if self._match(d, filt or {}))
 
     def insert_one(self, doc):
         self.docs.append(dict(doc))
@@ -199,3 +216,28 @@ def test_conversation_before_cursor_pages_to_older(db_mod, db):
     older = db_mod.message_list_conversation(db, "alice", "bob", before=oldest_at)
     assert [m["body"] for m in older] == [f"m{i}" for i in range(10)]     # the previous page (m0..m9), oldest-first
     assert all(m["created_at"] < oldest_at for m in older)               # every row strictly older than the cursor
+
+
+# ---- #331: the inbox summary + notification feed are BOUNDED reads too ----
+def test_inbox_summary_is_a_bounded_read(db_mod, db):
+    # The inbox must derive its rows from a .limit()-bounded read of recent messages — never the user's whole
+    # message history pulled into the app — and cap the result to `limit`.
+    db_mod.message_send(db, "alice", "bob", "hi")
+    db_mod.message_send(db, "carol", "bob", "yo")
+    rows = db_mod.message_list_conversations(db, "bob")
+    assert {r["peer"] for r in rows} == {"alice", "carol"}
+    assert db.messages.last_limit == db_mod.CONVO_SCAN_CAP               # the read was .limit()-bounded, not a full scan
+    assert len(db_mod.message_list_conversations(db, "bob", limit=1)) == 1   # result capped to `limit`
+
+
+def test_notification_feed_is_bounded_and_since_filters_in_query(db_mod, db):
+    # The feed read is newest-first, capped by `limit` (a .limit()-bounded read), and `since` filters in the
+    # query (off the index) rather than loading everything and filtering in Python.
+    first = db_mod.notification_add(db, "bob", "dm", "a", "a", "first")
+    db_mod.notification_add(db, "bob", "dm", "c", "c", "second")
+    db_mod.notification_add(db, "bob", "dm", "d", "d", "third")
+    capped = db_mod.notification_list(db, "bob", limit=2)
+    assert [n["text"] for n in capped] == ["third", "second"]            # the newest 2
+    assert db.notifications.last_limit == 2                              # .limit()-bounded read
+    newer = db_mod.notification_list(db, "bob", since=first["created_at"], limit=db_mod.NOTIF_VIEW_CAP)
+    assert [n["text"] for n in newer] == ["third", "second"]             # `since` excluded the first, in-query

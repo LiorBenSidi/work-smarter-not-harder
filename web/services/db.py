@@ -73,7 +73,10 @@ def ensure_indexes(db):
     db.forum_posts.create_index("author")
     db.forum_comments.create_index("author")
     db.profiles.create_index("username", unique=True)
-    db.analysis_history.create_index("username")
+    # (username, entry.timestamp) so the History view reads one user's NEWEST N check-ins straight off the
+    # index — bounded + ordered, not a scan of their whole append-only log (#331). The username prefix still
+    # serves add_history's same-day delete and the GDPR full export.
+    db.analysis_history.create_index([("username", 1), ("entry.timestamp", -1)])
     # Social layer: threads + inbox filter on the real sender/recipient username fields; poll on user.
     # Compound (participant-pair, created_at) indexes so a DM thread reads newest-first, bounded, straight off
     # the index (#331): each `$or` branch of message_list_conversation is index-ordered on created_at, so Mongo
@@ -82,7 +85,10 @@ def ensure_indexes(db):
     # single-field index is needed.
     db.messages.create_index([("sender", 1), ("recipient", 1), ("created_at", -1)])
     db.messages.create_index([("recipient", 1), ("sender", 1), ("created_at", -1)])
-    db.notifications.create_index("user")
+    # (user, created_at) so a user's notifications read newest-first, bounded, and the `since` poll filter
+    # runs off the index — not a full scan of everyone's notifications filtered in Python (#331). The user
+    # prefix still serves mark-read and the GDPR export/delete.
+    db.notifications.create_index([("user", 1), ("created_at", -1)])
 
 
 # Document-shape validators ($jsonSchema) — defence-in-depth behind the route-layer validation: the DB
@@ -334,13 +340,28 @@ def save_profile(db, username, profile):
 
 
 # ---- history (F8 read + the check-in write) ----
-def list_history(db, username):
-    """Return the user's analysis-history entries (oldest-first; append-only natural order).
+HISTORY_VIEW_CAP = 400   # #331: the History view's newest-N bound (~13 months of daily check-ins). The heatmap
+                         # (7 weeks), trend, and streak all live inside it. limit=None = every entry (GDPR export).
+
+
+def list_history(db, username, limit=None):
+    """Return the user's analysis-history entries, oldest-first.
+
+    ``limit`` bounds the read to the user's NEWEST ``limit`` check-ins (returned oldest-first within that
+    window), read straight off the ``(username, entry.timestamp)`` index — so the History view can't pull an
+    unbounded append-only log however large it grows (#331). ``limit=None`` returns EVERY entry (the GDPR
+    export, which legitimately needs all of a user's data — out of scope per #331).
 
     Malformed rows without an ``entry`` field are skipped rather than raising, so one bad write can't
     500 the whole history view.
     """
-    return [doc["entry"] for doc in db.analysis_history.find({"username": username}) if "entry" in doc]
+    cursor = db.analysis_history.find({"username": username})
+    if limit is not None:
+        docs = list(cursor.sort("entry.timestamp", -1).limit(max(1, int(limit))))
+        docs.reverse()                       # newest-N off the index, flipped back to oldest-first for the caller
+    else:
+        docs = list(cursor)                  # unbounded: the GDPR export only
+    return [doc["entry"] for doc in docs if "entry" in doc]
 
 
 def add_history(db, username, entry):
@@ -700,17 +721,35 @@ def message_list_conversation(db, user_a, user_b, before=None, limit=None):
     return [_message_shape(m) for m in reversed(page)]   # newest page, oldest-first for chronological append
 
 
-def message_list_conversations(db, user):
-    """One summary row per peer the user has messaged with (latest body + unread count), newest first."""
-    mine = list(db.messages.find({"sender": user})) + list(db.messages.find({"recipient": user}))
+CONVO_LIST_CAP = 100    # #331: most-recent conversations returned in the inbox summary.
+CONVO_SCAN_CAP = 500    # #331: how many recent messages / unread messages a single inbox read may touch.
+
+
+def message_list_conversations(db, user, limit=None):
+    """One summary row per peer the user has messaged with (latest body + unread count), newest first.
+
+    Bounded + indexed (#331): instead of pulling EVERY message the user has ever sent or received into the
+    web process and grouping in Python, this reads only the newest ``CONVO_SCAN_CAP`` messages (straight off
+    the compound ``(sender/recipient, created_at)`` indexes) to derive each peer's latest message + ordering,
+    and counts unread from the naturally-small set of still-unread received messages (also capped). The result
+    is capped to ``limit`` rows — so one inbox request can never amplify into an unbounded scan/payload,
+    however large the user's message history grows.
+    """
+    cap = CONVO_LIST_CAP if limit is None else max(1, int(limit))
     convos = {}
-    for m in sorted(mine, key=lambda m: m.get("created_at", 0)):
+    # newest-first: the FIRST time we see a peer is its latest message (the summary line + ordering key).
+    for m in (db.messages.find({"$or": [{"sender": user}, {"recipient": user}]})
+              .sort("created_at", -1).limit(CONVO_SCAN_CAP)):
         peer = m["recipient"] if m["sender"] == user else m["sender"]
-        row = convos.setdefault(peer, {"peer": peer, "last_message": "", "last_at": 0, "unread": 0})
-        row["last_message"], row["last_at"] = m.get("body", ""), m.get("created_at", 0)
-        if m["recipient"] == user and not m.get("read"):
-            row["unread"] += 1
-    return sorted(convos.values(), key=lambda c: c["last_at"], reverse=True)
+        if peer not in convos:
+            convos[peer] = {"peer": peer, "last_message": m.get("body", ""),
+                            "last_at": m.get("created_at", 0), "unread": 0}
+    # unread counts come from the (small) set of actually-unread received messages, itself bounded.
+    for m in db.messages.find({"recipient": user, "read": {"$ne": True}}).limit(CONVO_SCAN_CAP):
+        peer = m.get("sender")
+        if peer in convos:
+            convos[peer]["unread"] += 1
+    return sorted(convos.values(), key=lambda c: c["last_at"], reverse=True)[:cap]
 
 
 def message_mark_delivered(db, user):
@@ -728,8 +767,10 @@ def message_mark_read(db, user, peer):
 
 
 def message_count_since(db, user, since):
-    """How many messages `user` has sent at/after `since` (epoch secs) — the anti-spam counter."""
-    return sum(1 for m in db.messages.find({"sender": user}) if m.get("created_at", 0) >= since)
+    """How many messages `user` has sent at/after `since` (epoch secs) — the anti-spam counter. Bounded (#331):
+    the ``created_at >= since`` filter runs in Mongo off the ``(sender, …)`` index instead of pulling every
+    message the user has ever sent into the web process and counting in Python."""
+    return db.messages.count_documents({"sender": user, "created_at": {"$gte": since}})
 
 
 def _notification_shape(n):
@@ -745,12 +786,23 @@ def notification_add(db, user, ntype, actor, ref, text):
     return _notification_shape(n)
 
 
-def notification_list(db, user, since=None):
-    """The user's notifications, newest first; `since` (epoch secs) returns only newer ones (polling)."""
-    items = list(db.notifications.find({"user": user}))
+NOTIF_VIEW_CAP = 100   # #331: newest-N notifications returned to the feed. limit=None = all (GDPR export).
+
+
+def notification_list(db, user, since=None, limit=None):
+    """The user's notifications, newest first.
+
+    Bounded + indexed (#331): both the ``since`` polling cursor and the newest-first ordering run off the
+    ``(user, created_at)`` index, and ``limit`` (the feed passes ``NOTIF_VIEW_CAP``) caps the read — so one
+    poll can't pull an unbounded feed, however many notifications the user has accrued. ``since`` (epoch secs)
+    returns only strictly-newer items. ``limit=None`` returns all of them (the GDPR export)."""
+    query = {"user": user}
     if since is not None:
-        items = [n for n in items if n.get("created_at", 0) > since]
-    return [_notification_shape(n) for n in sorted(items, key=lambda n: n.get("created_at", 0), reverse=True)]
+        query["created_at"] = {"$gt": since}
+    cursor = db.notifications.find(query).sort("created_at", -1)
+    if limit is not None:
+        cursor = cursor.limit(max(1, int(limit)))
+    return [_notification_shape(n) for n in cursor]
 
 
 def notification_mark_read(db, user, ids=None):

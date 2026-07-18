@@ -327,3 +327,45 @@ def test_dm_thread_read_is_bounded_and_indexed_against_mongo(db_mod, real_db):
     older = db_mod.message_list_conversation(real_db, "alice", "bob", before=cursor)
     assert all(m["created_at"] < cursor for m in older)        # every older-page row precedes the cursor
     assert len(db_mod.message_list_conversation(real_db, "alice", "bob", limit=99999999)) == db_mod.MESSAGE_PAGE_MAX
+
+
+def test_history_view_read_is_bounded_and_indexed_against_mongo(db_mod, real_db):
+    # #331: the History view reads the newest HISTORY_VIEW_CAP check-ins off the (username, entry.timestamp)
+    # index; limit=None (the GDPR export) still returns everything.
+    from datetime import date, timedelta
+    db_mod.ensure_indexes(real_db)
+    keys = [tuple(idx["key"].items()) for idx in real_db.analysis_history.list_indexes()]
+    assert (("username", 1), ("entry.timestamp", -1)) in keys
+    cap, base = db_mod.HISTORY_VIEW_CAP, date(2020, 1, 1)
+    for i in range(cap + 5):                                          # distinct days -> distinct check-ins
+        ts = f"{(base + timedelta(days=i)).isoformat()}T10:00:00Z"
+        db_mod.add_history(real_db, "alice", {"assessment": "Ready", "timestamp": ts})
+    view = db_mod.list_history(real_db, "alice", limit=cap)
+    assert len(view) == cap                                          # bounded to the newest N
+    assert view[0]["timestamp"] < view[-1]["timestamp"]             # oldest-first within the window
+    assert view[-1]["timestamp"].startswith((base + timedelta(days=cap + 4)).isoformat())  # newest day present
+    assert len(db_mod.list_history(real_db, "alice")) == cap + 5    # limit=None (export) = every entry
+
+
+def test_inbox_summary_read_is_bounded_against_mongo(db_mod, real_db):
+    # #331: the inbox derives its rows from a bounded read of recent messages + a bounded unread scan, and the
+    # result is capped to `limit` — never the user's whole message history.
+    db_mod.ensure_indexes(real_db)
+    for peer in ("alice", "carol", "dave"):
+        db_mod.message_send(real_db, peer, "bob", f"hi from {peer}")
+    rows = db_mod.message_list_conversations(real_db, "bob")
+    assert {r["peer"] for r in rows} == {"alice", "carol", "dave"}
+    assert all(r["unread"] == 1 for r in rows)                      # one unread from each peer
+    assert len(db_mod.message_list_conversations(real_db, "bob", limit=2)) == 2   # result capped to `limit`
+
+
+def test_notification_feed_read_is_bounded_and_indexed_against_mongo(db_mod, real_db):
+    # #331: notifications read newest-first off the (user, created_at) index, bounded by `limit`; limit=None
+    # (the GDPR export) returns the full feed.
+    db_mod.ensure_indexes(real_db)
+    keys = [tuple(idx["key"].items()) for idx in real_db.notifications.list_indexes()]
+    assert (("user", 1), ("created_at", -1)) in keys
+    for i in range(db_mod.NOTIF_VIEW_CAP + 5):
+        db_mod.notification_add(real_db, "bob", "dm", "a", "a", f"n{i}")
+    assert len(db_mod.notification_list(real_db, "bob", limit=db_mod.NOTIF_VIEW_CAP)) == db_mod.NOTIF_VIEW_CAP
+    assert len(db_mod.notification_list(real_db, "bob")) == db_mod.NOTIF_VIEW_CAP + 5   # limit=None (export) = all

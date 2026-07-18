@@ -9,6 +9,7 @@ import logging
 from flask import Blueprint, current_app, jsonify, session
 
 from routes.auth import login_required
+from services.db import HISTORY_VIEW_CAP
 
 logger = logging.getLogger(__name__)
 
@@ -19,7 +20,9 @@ history_bp = Blueprint("history", __name__)
 @login_required
 def history():
     try:
-        entries = current_app.config["HISTORY"].list(session["username"])
+        # Bounded read (#331): the view gets the newest HISTORY_VIEW_CAP check-ins (heatmap/trend/streak all
+        # live inside it). The GDPR export calls .list() with no cap when it legitimately needs everything.
+        entries = current_app.config["HISTORY"].list(session["username"], limit=HISTORY_VIEW_CAP)
     except Exception:
         logger.exception("history store unavailable")
         return jsonify(error="history store unavailable"), 503
