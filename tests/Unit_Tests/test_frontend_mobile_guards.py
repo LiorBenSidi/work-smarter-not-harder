@@ -103,11 +103,13 @@ def test_statcard_escapes_its_value():
 
 # ---- The check-in sleep input matches the AI model's contract (min sleep_hours) ----
 def test_sleep_input_min_matches_the_model_contract():
-    # F1: the ai model rejects sleep_hours < 1. The check-in form must not let a user enter 0 (which
-    # would validate server-side under the old range, then 400 at /predict -> sticky false "AI down").
+    # F1: the ai model rejects sleep_hours < 1. The typed check-in fields are text+inputmode (so the caret can
+    # sit at the end of a partly-typed value and iOS still shows the numeric keypad), so the >= 1 floor lives in
+    # the JS validation range (CI_RANGE) + the server, not a native min= attribute. Guard the JS floor here.
     m = re.search(r'<input id="sleep_hours"[^>]*>', INDEX)
     assert m, "the sleep_hours input is missing"
-    assert 'min="1"' in m.group(0), 'the sleep input must be min="1" (the model rejects < 1), not min="0"'
+    assert 'inputmode="decimal"' in m.group(0), "the sleep input keeps the numeric keypad via inputmode"
+    assert "CI_RANGE = { sleep_hours: [1, 24]" in INDEX, "the JS validation floor for sleep must be 1 (the model rejects < 1), not 0"
 
 
 def test_api_fetch_has_an_abort_timeout():

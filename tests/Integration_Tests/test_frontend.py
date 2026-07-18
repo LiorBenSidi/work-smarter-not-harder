@@ -465,8 +465,11 @@ def test_checkin_capsule_hidden_over_an_open_dm_thread(client):
     # thread) and return on close. open/closeThread re-evaluate it.
     html = client.get("/").get_data(as_text=True)
     assert 'const threadOpen = $("dm-thread-view") && !$("dm-thread-view").hidden;' in html
-    assert 'el.hidden = !(checkinDue && currentScreen !== "today") || threadOpen;' in html
+    assert 'const show = checkinDue && currentScreen !== "today" && !threadOpen;' in html   # shows only when due, off-Today, no thread
     assert html.count("updateCheckinCapsule();") >= 3          # showScreen + openThread + closeThread (at least)
+    # iOS fix: re-showing the capsule replays its entrance so it can't stay stuck on the `both` backwards fill (opacity:0)
+    assert "if (show && wasHidden) {" in html
+    assert "void el.offsetWidth;" in html
 
 
 def test_dm_thread_pages_older_history_on_demand(client):
@@ -487,15 +490,17 @@ def test_dm_thread_pages_older_history_on_demand(client):
 
 
 def test_screen_switch_has_a_subtle_crossfade(client):
-    # #356: switching screens replays a subtle entrance on the incoming .screen (a hidden->visible toggle alone
-    # does NOT restart a CSS animation, so switches snapped). It re-triggers the animation on the SCREEN element
-    # only — never re-mounting content (the prior "jumpy flicker" came from tearing down content nodes) — and
-    # no-ops under reduced motion (the reducedMotion() guard + the global prefers-reduced-motion rule).
+    # #356: switching screens cross-fades instead of a hard snap. Primary path = the native View Transitions
+    # API (a real old->new cross-fade); fallback (older Safari) = replaying a subtle entrance on the incoming
+    # .screen. Either only toggles `hidden` (never re-mounts content — the old "jumpy flicker" came from tearing
+    # content nodes down); reducedMotion() opts fully out.
     html = client.get("/").get_data(as_text=True)
-    assert "@keyframes screenSwap" in html                                 # the cross-fade keyframe exists
-    assert '_screen.style.animation = "screenSwap' in html                 # it's applied to the incoming screen
-    assert "void _screen.offsetWidth" in html                              # the reflow that actually restarts the animation
-    assert "if (_screen && !reducedMotion())" in html                      # opt-out honored (no reflow/anim under reduced motion)
+    assert "document.startViewTransition" in html                          # native cross-fade is the primary path
+    assert "::view-transition-old(root)" in html                           # its duration is tuned for a smoother feel
+    assert "@keyframes screenSwap" in html                                 # the fallback keyframe exists
+    assert '_screen.style.animation = "screenSwap' in html                 # ...applied to the incoming screen where VT is absent
+    assert "void _screen.offsetWidth" in html                              # the reflow that actually restarts the fallback animation
+    assert "if (!reducedMotion() && typeof document.startViewTransition" in html   # opt-out honored (no transition under reduced motion)
 
 
 def test_history_detail_view_is_wired(client):
@@ -633,7 +638,7 @@ def test_checkin_submit_frees_the_form_on_save_not_after_the_refresh(client):
     # with the values still selected. On save we reset + re-enable immediately; the refresh + count-up follow.
     html = client.get("/").get_data(as_text=True)
     start = html.index('onSubmit("checkin-form"')
-    handler = html[start:start + 2800]                                            # the check-in submit handler body
+    handler = html[start:start + 3300]                                            # the check-in submit handler body
     assert '"Saving…"' in handler                                                 # in-flight feedback
     assert "await Promise.all([loadDashboard" not in handler                      # the refresh is NOT awaited
     assert "Promise.all([loadDashboard({ fresh: true }), loadHistory()]).then(countUpKcal)" in handler  # ...it's backgrounded
