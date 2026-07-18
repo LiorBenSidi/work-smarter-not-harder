@@ -22,17 +22,48 @@ def db_mod():
     return mod
 
 
+class _Cursor:
+    """Iterable pymongo-cursor stand-in: supports .sort() + .limit(), and records the applied limit on the
+    parent collection so a test can assert a read was BOUNDED (not an unlimited scan)."""
+
+    def __init__(self, rows, coll=None):
+        self._rows, self._coll = rows, coll
+
+    def sort(self, field, direction=1):
+        return _Cursor(sorted(self._rows, key=lambda d: d.get(field, 0), reverse=direction < 0), self._coll)
+
+    def limit(self, n):
+        if self._coll is not None:
+            self._coll.last_limit = n
+        return _Cursor(self._rows[:n] if n else self._rows, self._coll)
+
+    def __iter__(self):
+        return iter(self._rows)
+
+
 class _Coll:
-    """Minimal pymongo-collection stand-in supporting just the ops the message/notification seams use."""
+    """Minimal pymongo-collection stand-in supporting the ops the message/notification seams use — now
+    including the `$or` + `$lt` cursor read the bounded DM-thread page (#331) needs."""
 
     def __init__(self):
         self.docs = []
+        self.last_limit = None      # the n from the most recent find(...).limit(n), for read-bound assertions
 
     def _match(self, doc, filt):
-        return all(doc.get(k) == v for k, v in filt.items())
+        for k, v in filt.items():
+            if k == "$or":
+                if not any(self._match(doc, sub) for sub in v):
+                    return False
+            elif isinstance(v, dict) and "$lt" in v:                 # the created_at pagination cursor
+                val = doc.get(k)
+                if val is None or not val < v["$lt"]:
+                    return False
+            elif doc.get(k) != v:
+                return False
+        return True
 
     def find(self, filt=None):
-        return [dict(d) for d in self.docs if self._match(d, filt or {})]
+        return _Cursor([dict(d) for d in self.docs if self._match(d, filt or {})], self)
 
     def insert_one(self, doc):
         self.docs.append(dict(doc))
@@ -138,3 +169,33 @@ def test_notification_since_returns_only_newer(db_mod, db):
 def test_notifications_are_per_user(db_mod, db):
     db_mod.notification_add(db, "bob", "dm", "alice", "alice", "for bob")
     assert db_mod.notification_list(db, "carol") == []                    # carol sees nothing
+
+
+# ---- #331: the DM thread read is a BOUNDED, cursor-paged page (not a whole-thread load) ----
+def test_conversation_page_is_bounded_and_clamped(db_mod, db):
+    for i in range(120):
+        db_mod.message_send(db, "alice", "bob", f"m{i}")
+    default_page = db_mod.message_list_conversation(db, "alice", "bob")
+    assert len(default_page) == db_mod.MESSAGE_PAGE_DEFAULT               # a default PAGE, never the whole 120-msg thread
+    assert db.messages.last_limit == db_mod.MESSAGE_PAGE_DEFAULT          # the read was .limit()-bounded, not capped in memory
+    huge = db_mod.message_list_conversation(db, "alice", "bob", limit=99999999)
+    assert len(huge) == db_mod.MESSAGE_PAGE_MAX                           # ?limit=huge can't pull an unbounded slice
+    assert db.messages.last_limit == db_mod.MESSAGE_PAGE_MAX
+
+
+def test_conversation_default_page_is_the_newest_messages_oldest_first(db_mod, db):
+    for i in range(60):
+        db_mod.message_send(db, "alice", "bob", f"m{i}")
+    page = [m["body"] for m in db_mod.message_list_conversation(db, "alice", "bob")]   # default 50
+    assert len(page) == 50
+    assert page[0] == "m10" and page[-1] == "m59"                         # the 50 most-recent (m10..m59), oldest-first
+
+
+def test_conversation_before_cursor_pages_to_older(db_mod, db):
+    for i in range(60):
+        db_mod.message_send(db, "alice", "bob", f"m{i}")
+    page1 = db_mod.message_list_conversation(db, "alice", "bob")          # newest 50: m10..m59
+    oldest_at = page1[0]["created_at"]                                   # cursor = the oldest message loaded so far
+    older = db_mod.message_list_conversation(db, "alice", "bob", before=oldest_at)
+    assert [m["body"] for m in older] == [f"m{i}" for i in range(10)]     # the previous page (m0..m9), oldest-first
+    assert all(m["created_at"] < oldest_at for m in older)               # every row strictly older than the cursor
