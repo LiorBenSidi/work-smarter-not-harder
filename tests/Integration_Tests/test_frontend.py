@@ -528,6 +528,18 @@ def test_history_detail_regenerates_recs_for_pre_354_entries(client):
     assert "hdetailTs !== ts" in html                                             # guarded to the still-open entry (no cross-entry paint)
 
 
+def test_dashboard_paints_the_last_stored_readiness_instantly(client):
+    # perf (Lior's "the home score takes long to load"): the orb waits on the AI-backed /dashboard read, so
+    # loadDashboard now paints today's STORED readiness from historyItems immediately (optimistic), then swaps in
+    # the fresh AI result — and skips the swap when it's identical so an unchanged orb doesn't re-animate.
+    html = client.get("/").get_data(as_text=True)
+    assert "function paintReadiness(el, d, freshReveal)" in html                  # the render is reusable
+    assert "function latestTodayEntry()" in html                                  # today's stored entry drives the instant paint
+    assert "const opt = !(opts && opts.fresh) ? latestTodayEntry() : null" in html
+    assert "const sameAsOptimistic" in html                                       # unchanged orb doesn't re-animate
+    assert "loadHistory().then(() => loadDashboard())" in html                    # history loads first so the instant paint has data
+
+
 def test_enter_drops_a_line_in_chat_forum_and_comments(client):
     # UX (2026-07-15): Enter must insert a newline (line drop), not send/post, in the chat reply, forum post
     # body, and comments. The DM reply textarea sends only on Shift+Enter (plain Enter = newline); every
