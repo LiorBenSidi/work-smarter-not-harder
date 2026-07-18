@@ -424,18 +424,29 @@ def test_open_dm_thread_is_a_pinned_single_scroll_chat_pane(client):
     assert 'classList.add("thread-open")' in html and 'classList.remove("thread-open")' in html   # toggled on open/close
 
 
-def test_dm_pane_height_is_runtime_measured_not_a_magic_number(client):
-    # #351/#352: the open DM pane's height is MEASURED at runtime (sizeDmThreadPane) = viewport − the real
-    # header height − main's padding (which reserves the nav + safe-area), so it always fits. A hard-coded
-    # `100dvh − <magic>` was wrong per-device — too tall let page-scroll hide the Back button under the header
-    # (#351); too short left a dead gap above the nav (#352). The magic calc survives only as the pre-JS
-    # fallback INSIDE the var().
+def test_dm_pane_is_pinned_between_header_and_nav(client):
+    # #351/#352: the open DM pane is PINNED (position:fixed) between the sticky header and the floating nav,
+    # anchored to their RUNTIME-MEASURED positions (sizeDmThreadPane) — never a hard-coded viewport guess.
+    # Fixed => out of page flow, so page-scroll can't slide the Back button under the header (#351); its bottom
+    # is anchored just above the nav, so the pane fills the space with no dead gap (#352). Live-verified on the
+    # Docker stack at a mobile viewport: page overflow 0, forced scroll 0, Back never moves, gap-to-nav 12px.
     html = client.get("/").get_data(as_text=True)
-    assert "height:var(--dm-pane-h," in html                          # the card height is the measured var (calc fallback inside)
-    assert "function sizeDmThreadPane()" in html                      # the runtime sizer exists
-    assert 'setProperty("--dm-pane-h"' in html                        # ...and writes the measured height
-    assert "sizeDmThreadPane();" in html                              # called on thread open (before content paints)
-    assert "addEventListener(e, sizeDmThreadPane)" in html            # re-measured on resize / orientationchange
+    assert "position:fixed; left:50%; transform:translateX(-50%)" in html      # the pane is pinned to the viewport
+    assert "top:var(--dm-pane-top" in html and "bottom:var(--dm-pane-bottom" in html   # anchored to measured header/nav
+    assert "function sizeDmThreadPane()" in html                               # the runtime sizer exists
+    assert 'setProperty("--dm-pane-top"' in html and 'setProperty("--dm-pane-bottom"' in html
+    assert "sizeDmThreadPane();" in html                                       # called on thread open
+    assert "addEventListener(e, sizeDmThreadPane)" in html                     # re-measured on resize / orientationchange
+
+
+def test_checkin_capsule_hidden_over_an_open_dm_thread(client):
+    # #352 follow-up (found in live testing): the "check-in due" capsule floats above the nav and used to sit
+    # ON TOP of an open DM thread's composer. It must hide while a thread is open (you can't check in from a
+    # thread) and return on close. open/closeThread re-evaluate it.
+    html = client.get("/").get_data(as_text=True)
+    assert 'const threadOpen = $("dm-thread-view") && !$("dm-thread-view").hidden;' in html
+    assert 'el.hidden = !(checkinDue && currentScreen !== "today") || threadOpen;' in html
+    assert html.count("updateCheckinCapsule();") >= 3          # showScreen + openThread + closeThread (at least)
 
 
 def test_enter_drops_a_line_in_chat_forum_and_comments(client):

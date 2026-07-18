@@ -701,18 +701,21 @@
     /* Open DM thread = a fixed-height chat pane: the header + composer stay PINNED and the message list is the
        ONLY thing that scrolls — no more page-scroll AND inner-scroll, and the Back button never scrolls away.
        Scoped to #dm-thread-view so the conversation LIST and every other screen are untouched. */
-    #dm-thread-view > .card { display:flex; flex-direction:column; overflow:hidden; min-height:280px;
-      /* #351/#352: the pane height is RUNTIME-MEASURED (sizeDmThreadPane) = viewport − the ACTUAL header height
-         − main's padding (which already reserves the floating nav + safe-area, per breakpoint) − a small gap.
-         No hard-coded 100dvh guess, so the pane always fits: no page-scroll can slide the Back button under the
-         header (#351), and it fills exactly to the nav with no dead gap (#352). The calc() is a pre-JS fallback. */
-      height:var(--dm-pane-h, calc(100dvh - 225px - env(safe-area-inset-bottom))); }
+    #dm-thread-view > .card { display:flex; flex-direction:column; overflow:hidden; min-height:280px; margin:0;
+      /* #351/#352: the open DM pane is PINNED (position:fixed) between the sticky header and the floating nav,
+         anchored to their MEASURED positions (sizeDmThreadPane) — never a hard-coded viewport guess. Fixed => out
+         of page flow, so the page can't scroll and the Back button can never slide under the header (#351); its
+         bottom is anchored just above the nav, so the pane fills the space with no dead gap (#352). overflow:hidden
+         + the .dm-thread inner scroll keep the message list the only scroll region. Vars have a safe pre-JS fallback. */
+      position:fixed; left:50%; transform:translateX(-50%); z-index:20; width:min(560px, calc(100vw - 28px));
+      top:var(--dm-pane-top, calc(env(safe-area-inset-top) + 72px));
+      bottom:var(--dm-pane-bottom, calc(env(safe-area-inset-bottom) + 84px)); }
     #dm-thread-view .dm-thread-head { flex:none; }
     #dm-thread-view .dm-thread { flex:1 1 auto; max-height:none; }   /* the single scroll region */
     #dm-thread-view #dm-reply-form, #dm-thread-view .dm-attach-hint,
     #dm-thread-view #dm-files-hint, #dm-thread-view #dm-reply-flash { flex:none; }
     #screen-messages.thread-open .screen-head { display:none; }      /* the thread header shows the peer, so the "Messages" title is redundant + would steal chat height */
-    @media (min-width:860px) { #dm-thread-view > .card { height:var(--dm-pane-h, calc(100dvh - 188px)); } }
+    /* desktop needs no special case now — the fixed pane is anchored to the measured header/nav on every width. */
     /* flex-shrink:0 — the thread is a flex column; without this, a tall bubble (an image, a long message)
        gets SHRUNK to fit when the thread overflows, and with overflow:hidden that clips it to a sliver.
        Bubbles must keep their content height and let the thread SCROLL instead. (Fixes the vanishing image.) */
@@ -1580,7 +1583,10 @@
     // already on Today (where the form lives). Tap -> jump to the form. (Wolt's 'shown-only-when-relevant' capsule.)
     function updateCheckinCapsule() {
       const el = $("checkin-capsule"); if (!el) return;
-      el.hidden = !(checkinDue && currentScreen !== "today");
+      // #352: don't float the check-in reminder over an OPEN DM thread — it sat on top of the composer/hint, and
+      // you can't check in from inside a thread anyway. It returns the moment you back out of the thread.
+      const threadOpen = $("dm-thread-view") && !$("dm-thread-view").hidden;
+      el.hidden = !(checkinDue && currentScreen !== "today") || threadOpen;
     }
     $("checkin-capsule").addEventListener("click", () => {
       showScreen("today");                                          // -> currentScreen="today" -> the capsule hides itself
@@ -2825,12 +2831,16 @@
     function sizeDmThreadPane() {
       const view = $("dm-thread-view");
       if (!view || view.hidden) return;                       // only while a thread is open
-      const header = document.querySelector("header"), main = document.querySelector("main");
-      if (!header || !main) return;
-      const cs = getComputedStyle(main);
-      const pad = parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom);   // top gap + the nav / safe-area reserve
-      const h = Math.max(280, window.innerHeight - header.getBoundingClientRect().height - pad - 8);
-      document.documentElement.style.setProperty("--dm-pane-h", h + "px");
+      const header = document.querySelector("header"), nav = document.querySelector(".tabbar"), root = document.documentElement;
+      if (!header) return;
+      const gap = 12;
+      // Anchor the fixed pane just below the header and just above the nav — both MEASURED, so safe-area is
+      // handled by construction and there's no viewport guess. getBoundingClientRect().bottom/top already include
+      // env(safe-area-*). When the pill nav is hidden (desktop) the pane just clears the viewport edge.
+      root.style.setProperty("--dm-pane-top", (header.getBoundingClientRect().bottom + gap) + "px");
+      const navVisible = nav && getComputedStyle(nav).display !== "none" && nav.getBoundingClientRect().height > 0;
+      const bottom = navVisible ? (window.innerHeight - nav.getBoundingClientRect().top + gap) : 24;
+      root.style.setProperty("--dm-pane-bottom", bottom + "px");
     }
     ["resize", "orientationchange"].forEach((e) => window.addEventListener(e, sizeDmThreadPane));
     // the mobile browser toolbar showing/hiding changes the visible height without a window 'resize' event
@@ -2840,6 +2850,7 @@
       dmPeer = peer;
       $("dm-list-view").hidden = true; $("dm-thread-view").hidden = false; $("screen-messages").classList.add("thread-open");
       sizeDmThreadPane();                                     // size the pane before content paints (no reflow jump)
+      updateCheckinCapsule();                                 // #352: hide the check-in reminder over the open composer
       // Clear the PREVIOUS thread BEFORE the fetch — otherwise switching DMs flashes the last peer's messages
       // and name until renderThread's async load resolves. Skeleton rows stand in while this thread loads.
       $("dm-thread").innerHTML = '<div class="sk" style="height:42px;width:62%;border-radius:16px"></div><div class="sk" style="height:42px;width:72%;margin-left:auto;border-radius:16px"></div>';
@@ -2931,6 +2942,7 @@
       $("dm-thread-view").hidden = true; $("dm-list-view").hidden = false; $("screen-messages").classList.remove("thread-open");
       loadConversations();
       updateCtxBack();                                       // back out of the thread -> Home button (or hidden)
+      updateCheckinCapsule();                                // #352: the check-in reminder returns once the thread is closed
     }
 
     onSubmit("dm-new-form", async (f) => {
