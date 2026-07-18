@@ -21,6 +21,7 @@ from collections import deque
 from flask import Blueprint, Response, current_app, jsonify, request, session
 
 from routes.auth import login_required
+from services.db import NOTIF_VIEW_CAP
 from services.identity import display_name, display_names
 
 logger = logging.getLogger(__name__)
@@ -195,7 +196,9 @@ def list_notifications():
     if since is not None and not math.isfinite(since):
         since = None                                  # a garbage cursor (nan/inf) must not blackhole the feed
     try:
-        items = _notifications().list(me, since)
+        # Bounded read (#331): a poll gets the newest NOTIF_VIEW_CAP items (with the `since` cursor filtered
+        # in Mongo off the index). The GDPR export calls .list() with no cap when it needs the full feed.
+        items = _notifications().list(me, since, limit=NOTIF_VIEW_CAP)
     except Exception:
         logger.exception("notification store unavailable during poll")
         return jsonify(error="notifications are unavailable right now"), 503

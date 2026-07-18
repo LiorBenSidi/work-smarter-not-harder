@@ -199,8 +199,14 @@ class FakeHistory:
     def __init__(self):
         self._by_user = {}
 
-    def list(self, username):
-        return self._by_user.get(username, [])
+    def list(self, username, limit=None):
+        entries = self._by_user.get(username, [])
+        if limit is None:
+            return entries                          # unbounded: the GDPR export only
+        # mirror db.list_history's bound: the newest `limit` by timestamp, returned oldest-first
+        ordered = sorted(entries, key=lambda e: str(e.get("timestamp") or ""))
+        n = max(1, int(limit))
+        return ordered[-n:]
 
     def add(self, username, entry):
         # Mirror db.add_history: a second check-in the same UTC day REPLACES that day's entry (one row/day).
@@ -409,7 +415,7 @@ class FakeMessages:
         cap = 50 if limit is None else max(1, min(int(limit), 100))   # MESSAGE_PAGE_DEFAULT / MESSAGE_PAGE_MAX
         return [self._public(m) for m in msgs[-cap:]]
 
-    def list_conversations(self, user):
+    def list_conversations(self, user, limit=None):
         convos = {}
         for m in self._msgs:
             if user not in (m["sender"], m["recipient"]):
@@ -419,7 +425,9 @@ class FakeMessages:
             row["last_message"], row["last_at"] = m["body"], m["created_at"]
             if m["recipient"] == user and not m["read"]:
                 row["unread"] += 1
-        return sorted(convos.values(), key=lambda c: c["last_at"], reverse=True)
+        rows = sorted(convos.values(), key=lambda c: c["last_at"], reverse=True)
+        cap = 100 if limit is None else max(1, int(limit))   # mirror db.CONVO_LIST_CAP: the inbox self-bounds (#331)
+        return rows[:cap]
 
     def mark_delivered(self, user):
         for m in self._msgs:
@@ -460,11 +468,14 @@ class FakeNotifications:
         self._items.append(n)
         return self._public(n)
 
-    def list(self, user, since=None):
+    def list(self, user, since=None, limit=None):
         items = [n for n in self._items if n["user"] == user]
         if since is not None:
             items = [n for n in items if n["created_at"] > since]
-        return [self._public(n) for n in sorted(items, key=lambda n: n["created_at"], reverse=True)]
+        ordered = sorted(items, key=lambda n: n["created_at"], reverse=True)
+        if limit is not None:
+            ordered = ordered[:max(1, int(limit))]
+        return [self._public(n) for n in ordered]
 
     def mark_read(self, user, ids=None):
         target = set(ids) if ids is not None else None      # [] -> mark nothing, None -> mark all

@@ -124,9 +124,9 @@ class _DbProfiles(_DbStore):
 class _DbHistory(_DbStore):
     """Seam fns: ``list_history(db, username) -> list`` / ``add_history(db, username, entry)``."""
 
-    def list(self, username):
+    def list(self, username, limit=None):
         db_module, handle = self._resolve()
-        return db_module.list_history(handle, username)
+        return db_module.list_history(handle, username, limit=limit)
 
     def add(self, username, entry):
         db_module, handle = self._resolve()
@@ -216,9 +216,9 @@ class _DbMessages(_DbStore):
         db_module, handle = self._resolve()
         return db_module.message_list_conversation(handle, user_a, user_b, before=before, limit=limit)
 
-    def list_conversations(self, user):
+    def list_conversations(self, user, limit=None):
         db_module, handle = self._resolve()
-        return db_module.message_list_conversations(handle, user)
+        return db_module.message_list_conversations(handle, user, limit=limit)
 
     def mark_read(self, user, peer):
         db_module, handle = self._resolve()
@@ -248,9 +248,9 @@ class _DbNotifications(_DbStore):
         db_module, handle = self._resolve()
         return db_module.notification_add(handle, user, ntype, actor, ref, text)
 
-    def list(self, user, since=None):
+    def list(self, user, since=None, limit=None):
         db_module, handle = self._resolve()
-        return db_module.notification_list(handle, user, since)
+        return db_module.notification_list(handle, user, since, limit=limit)
 
     def mark_read(self, user, ids=None):
         db_module, handle = self._resolve()
