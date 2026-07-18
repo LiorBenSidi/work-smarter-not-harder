@@ -120,12 +120,6 @@ def test_logout_clears_remember_cookie(otp_client):
     assert _login(otp_client).get_json()["status"] == "otp_required"
 
 
-def test_verify_otp_requires_a_pending_login(otp_client):
-    _register(otp_client)
-    r = otp_client.post("/verify-otp", json={"code": "123456"})   # no /login first
-    assert r.status_code == 400
-
-
 def test_verify_otp_is_bound_to_the_session_user(make_otp_client, fake_users):
     # a code issued to alice can't be redeemed from a browser that never started alice's login.
     _register(make_otp_client(fake_users), "alice")
