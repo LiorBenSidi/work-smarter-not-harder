@@ -818,6 +818,7 @@
 
     @keyframes breathe { 0%,100% { transform: scale(1); } 50% { transform: scale(1.045); } }
     @keyframes rise { from { opacity:0; transform: translateY(12px); } to { opacity:1; transform:none; } }
+    @keyframes screenSwap { from { opacity:0; transform: translateY(8px); } to { opacity:1; transform:none; } }   /* #356: subtle cross-fade replayed on each screen switch (ends at transform:none — no lingering containing block for the fixed DM pane) */
     @media (max-width: 640px) { .brand-tag { display:none; } }
     @media (max-width: 560px) { .row { grid-template-columns:1fr; } main { padding:16px 14px calc(92px + env(safe-area-inset-bottom)); } #who-name { display:none; } }
     /* Kill transitions for the instant of a theme switch so the palette change is atomic — otherwise
@@ -1539,6 +1540,17 @@
     function showScreen(name) {
       currentScreen = name;
       document.querySelectorAll(".screen").forEach((s) => { s.hidden = s.id !== "screen-" + name; });
+      // #356: replay a subtle entrance on the screen we switch TO — a plain hidden->visible toggle does NOT
+      // restart a CSS animation, so switches used to snap. We re-trigger the animation on the SCREEN element
+      // only (never re-mounting its content — the prior "jumpy flicker" came from tearing down content nodes);
+      // it ends at transform:none, so it never leaves a containing block under the fixed DM pane. reducedMotion()
+      // (and the global prefers-reduced-motion rule) no-op it for users who opt out.
+      const _screen = document.getElementById("screen-" + name);
+      if (_screen && !reducedMotion()) {
+        _screen.style.animation = "none";
+        void _screen.offsetWidth;                    // force reflow so the restart takes
+        _screen.style.animation = "screenSwap .32s cubic-bezier(.2,.7,.2,1) both";
+      }
       document.querySelectorAll("[data-screen]").forEach((t) => {
         const on = t.dataset.screen === name;
         t.classList.toggle("active", on);
