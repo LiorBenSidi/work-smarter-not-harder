@@ -424,6 +424,20 @@ def test_open_dm_thread_is_a_pinned_single_scroll_chat_pane(client):
     assert 'classList.add("thread-open")' in html and 'classList.remove("thread-open")' in html   # toggled on open/close
 
 
+def test_dm_pane_height_is_runtime_measured_not_a_magic_number(client):
+    # #351/#352: the open DM pane's height is MEASURED at runtime (sizeDmThreadPane) = viewport − the real
+    # header height − main's padding (which reserves the nav + safe-area), so it always fits. A hard-coded
+    # `100dvh − <magic>` was wrong per-device — too tall let page-scroll hide the Back button under the header
+    # (#351); too short left a dead gap above the nav (#352). The magic calc survives only as the pre-JS
+    # fallback INSIDE the var().
+    html = client.get("/").get_data(as_text=True)
+    assert "height:var(--dm-pane-h," in html                          # the card height is the measured var (calc fallback inside)
+    assert "function sizeDmThreadPane()" in html                      # the runtime sizer exists
+    assert 'setProperty("--dm-pane-h"' in html                        # ...and writes the measured height
+    assert "sizeDmThreadPane();" in html                              # called on thread open (before content paints)
+    assert "addEventListener(e, sizeDmThreadPane)" in html            # re-measured on resize / orientationchange
+
+
 def test_enter_drops_a_line_in_chat_forum_and_comments(client):
     # UX (2026-07-15): Enter must insert a newline (line drop), not send/post, in the chat reply, forum post
     # body, and comments. The DM reply textarea sends only on Shift+Enter (plain Enter = newline); every

@@ -702,13 +702,17 @@
        ONLY thing that scrolls — no more page-scroll AND inner-scroll, and the Back button never scrolls away.
        Scoped to #dm-thread-view so the conversation LIST and every other screen are untouched. */
     #dm-thread-view > .card { display:flex; flex-direction:column; overflow:hidden; min-height:280px;
-      height:calc(100dvh - 225px - env(safe-area-inset-bottom)); }   /* 100dvh minus the sticky app header + top gap + the floating bottom nav */
+      /* #351/#352: the pane height is RUNTIME-MEASURED (sizeDmThreadPane) = viewport − the ACTUAL header height
+         − main's padding (which already reserves the floating nav + safe-area, per breakpoint) − a small gap.
+         No hard-coded 100dvh guess, so the pane always fits: no page-scroll can slide the Back button under the
+         header (#351), and it fills exactly to the nav with no dead gap (#352). The calc() is a pre-JS fallback. */
+      height:var(--dm-pane-h, calc(100dvh - 225px - env(safe-area-inset-bottom))); }
     #dm-thread-view .dm-thread-head { flex:none; }
     #dm-thread-view .dm-thread { flex:1 1 auto; max-height:none; }   /* the single scroll region */
     #dm-thread-view #dm-reply-form, #dm-thread-view .dm-attach-hint,
     #dm-thread-view #dm-files-hint, #dm-thread-view #dm-reply-flash { flex:none; }
     #screen-messages.thread-open .screen-head { display:none; }      /* the thread header shows the peer, so the "Messages" title is redundant + would steal chat height */
-    @media (min-width:860px) { #dm-thread-view > .card { height:calc(100dvh - 188px); } }
+    @media (min-width:860px) { #dm-thread-view > .card { height:var(--dm-pane-h, calc(100dvh - 188px)); } }
     /* flex-shrink:0 — the thread is a flex column; without this, a tall bubble (an image, a long message)
        gets SHRUNK to fit when the thread overflows, and with overflow:hidden that clips it to a sliver.
        Bubbles must keep their content height and let the thread SCROLL instead. (Fixes the vanishing image.) */
@@ -2814,9 +2818,28 @@
       if (changed) el.querySelectorAll(".dm-row").forEach((d) => d.addEventListener("click", () => openThread(d.dataset.peer)));
     }
 
+    // #351/#352: size the open DM pane to EXACTLY the space between the sticky header and the floating nav,
+    // from the ACTUAL rendered header height + main's padding (which reserves the nav + safe-area, per
+    // breakpoint) — never a hard-coded viewport guess. An exact fit means main can't overflow, so page-scroll
+    // can't slide the Back button under the header (#351) and there's no dead gap above the nav (#352).
+    function sizeDmThreadPane() {
+      const view = $("dm-thread-view");
+      if (!view || view.hidden) return;                       // only while a thread is open
+      const header = document.querySelector("header"), main = document.querySelector("main");
+      if (!header || !main) return;
+      const cs = getComputedStyle(main);
+      const pad = parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom);   // top gap + the nav / safe-area reserve
+      const h = Math.max(280, window.innerHeight - header.getBoundingClientRect().height - pad - 8);
+      document.documentElement.style.setProperty("--dm-pane-h", h + "px");
+    }
+    ["resize", "orientationchange"].forEach((e) => window.addEventListener(e, sizeDmThreadPane));
+    // the mobile browser toolbar showing/hiding changes the visible height without a window 'resize' event
+    if (window.visualViewport) window.visualViewport.addEventListener("resize", sizeDmThreadPane);
+
     async function openThread(peer) {
       dmPeer = peer;
       $("dm-list-view").hidden = true; $("dm-thread-view").hidden = false; $("screen-messages").classList.add("thread-open");
+      sizeDmThreadPane();                                     // size the pane before content paints (no reflow jump)
       // Clear the PREVIOUS thread BEFORE the fetch — otherwise switching DMs flashes the last peer's messages
       // and name until renderThread's async load resolves. Skeleton rows stand in while this thread loads.
       $("dm-thread").innerHTML = '<div class="sk" style="height:42px;width:62%;border-radius:16px"></div><div class="sk" style="height:42px;width:72%;margin-left:auto;border-radius:16px"></div>';
