@@ -469,6 +469,23 @@ def test_checkin_capsule_hidden_over_an_open_dm_thread(client):
     assert html.count("updateCheckinCapsule();") >= 3          # showScreen + openThread + closeThread (at least)
 
 
+def test_dm_thread_pages_older_history_on_demand(client):
+    # #331 (client half): the thread read is bounded server-side to the newest page (MESSAGE_PAGE_DEFAULT=50),
+    # so the client must ACCUMULATE pages and let the reader fetch older history — otherwise a >50-message thread
+    # is silently truncated with no way back. The thread keeps a deduped, oldest-first union (dmMsgs) and pages
+    # strictly BEFORE its oldest message (created_at cursor), prepending without yanking the scroll position.
+    html = client.get("/").get_data(as_text=True)
+    assert "let dmMsgs = []" in html and "dmOldestCursor" in html and "dmMoreOlder" in html   # the accumulator + cursor + gate exist
+    assert "function mergeDmMsgs(page)" in html                                                # newest/older pages fold in, deduped by id
+    assert "byId.set(m.id, m)" in html                                                         # dedup keyed on the stable message id
+    assert "async function loadEarlierDm()" in html and 'onclick="loadEarlierDm()"' in html    # the control is defined AND wired
+    assert '"?before=" + encodeURIComponent(dmOldestCursor)' in html                           # it pages before the oldest held message
+    assert "dmOldestCursor = dmMsgs[0].created_at" in html                                      # cursor advances to the new oldest (monotonic -> no loop)
+    assert "if (older.length < DM_PAGE) dmMoreOlder = false" in html                            # a short page retires the control (start reached)
+    assert "box.scrollTop = prevTop + (box.scrollHeight - prevHeight)" in html                  # prepend holds the reader's place
+    assert "if (dmLoadingOlder || !dmMoreOlder || dmOldestCursor === null) return" in html      # re-entrancy / no-op guards
+
+
 def test_enter_drops_a_line_in_chat_forum_and_comments(client):
     # UX (2026-07-15): Enter must insert a newline (line drop), not send/post, in the chat reply, forum post
     # body, and comments. The DM reply textarea sends only on Shift+Enter (plain Enter = newline); every
