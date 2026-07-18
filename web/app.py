@@ -212,9 +212,9 @@ class _DbMessages(_DbStore):
         db_module, handle = self._resolve()
         return db_module.message_send(handle, sender, recipient, body)
 
-    def list_conversation(self, user_a, user_b):
+    def list_conversation(self, user_a, user_b, before=None, limit=None):
         db_module, handle = self._resolve()
-        return db_module.message_list_conversation(handle, user_a, user_b)
+        return db_module.message_list_conversation(handle, user_a, user_b, before=before, limit=limit)
 
     def list_conversations(self, user):
         db_module, handle = self._resolve()

@@ -398,9 +398,16 @@ class FakeMessages:
         self._msgs.append(m)
         return self._public(m)
 
-    def list_conversation(self, user_a, user_b):
+    def list_conversation(self, user_a, user_b, before=None, limit=None):
+        # Mirrors the real bounded, cursor-paged read (#331): newest `cap` messages strictly older than
+        # `before` (if given), returned oldest-first within the page.
         pair = {user_a, user_b}
-        return [self._public(m) for m in self._msgs if {m["sender"], m["recipient"]} == pair]
+        msgs = sorted((m for m in self._msgs if {m["sender"], m["recipient"]} == pair),
+                      key=lambda m: m["created_at"])
+        if before is not None:
+            msgs = [m for m in msgs if m["created_at"] < before]
+        cap = 50 if limit is None else max(1, min(int(limit), 100))   # MESSAGE_PAGE_DEFAULT / MESSAGE_PAGE_MAX
+        return [self._public(m) for m in msgs[-cap:]]
 
     def list_conversations(self, user):
         convos = {}

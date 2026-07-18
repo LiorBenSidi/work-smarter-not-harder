@@ -171,11 +171,16 @@ def list_conversations():
 @login_required
 def get_conversation(peer):
     me = session["username"]
+    before = request.args.get("before", type=float)   # created_at cursor (epoch secs) for paging older; None -> newest page
+    if before is not None and not math.isfinite(before):
+        before = None                                  # a garbage cursor (nan/inf) must not blackhole the thread
+    limit = request.args.get("limit", type=int)        # the store clamps this to [1, MESSAGE_PAGE_MAX]
     # Authorization by construction: the thread id is derived from {me, peer}, so this can only ever
     # return a conversation the caller is part of — there is no way to address someone else's thread.
     try:
-        thread = _messages().list_conversation(me, peer)
-        _messages().mark_read(me, peer)          # opening the thread clears its unread
+        thread = _messages().list_conversation(me, peer, before=before, limit=limit)
+        if before is None:
+            _messages().mark_read(me, peer)      # opening the thread (newest page) clears unread; paging older does not
     except Exception:
         logger.exception("message store unavailable during conversation read")
         return jsonify(error="messaging is unavailable right now"), 503
