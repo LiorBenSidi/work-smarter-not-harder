@@ -36,17 +36,8 @@ class _PartialForum:
         return []
 
 
-def test_forum_list_requires_login(forum_client):
-    assert forum_client.get("/forum/posts").status_code == 401
-
-
-def test_forum_create_requires_login(forum_client):
-    assert forum_client.post("/forum/posts", json={"title": "T", "body": "b"}).status_code == 401
-
-
-def test_injection_in_post_is_rejected_400(forum_client):
-    _login(forum_client)
-    assert forum_client.post("/forum/posts", json={"title": {"$gt": ""}, "body": "b"}).status_code == 400
+# (GET/POST /forum/posts auth-gating and the `{"$gt": ""}` create-injection live in
+#  Negative_Tests — the same layer, same inputs, with a stronger "never stored" assertion.)
 
 
 def test_invalid_vote_value_is_rejected_400(forum_client):
@@ -77,30 +68,9 @@ def test_forum_degrades_to_503_when_store_fails(make_client, fake_users):
     assert c.post("/forum/posts", json={"title": "T", "body": "b"}).status_code == 503
 
 
-def _as(c, username):
-    c.post("/register", json={"username": username, "password": "s3cretpw!", "email": f"{username.strip()}@example.com"})
-    c.post("/login", json={"username": username, "password": "s3cretpw!", "email": f"{username.strip()}@example.com"})
-
-
-def test_cannot_edit_someone_elses_post(forum_client):
-    _as(forum_client, "alice")
-    pid = forum_client.post("/forum/posts", json={"title": "T", "body": "b"}).get_json()["post"]["id"]
-    forum_client.post("/logout")
-    _as(forum_client, "mallory")
-    resp = forum_client.patch(f"/forum/posts/{pid}", json={"title": "hacked", "body": "hacked"})
-    assert resp.status_code == 403
-    forum_client.post("/logout")
-    _as(forum_client, "alice")
-    assert forum_client.get(f"/forum/posts/{pid}").get_json()["post"]["title"] == "T"  # untouched
-
-
-def test_cannot_delete_someone_elses_post(forum_client):
-    _as(forum_client, "alice")
-    pid = forum_client.post("/forum/posts", json={"title": "T", "body": "b"}).get_json()["post"]["id"]
-    forum_client.post("/logout")
-    _as(forum_client, "mallory")
-    assert forum_client.delete(f"/forum/posts/{pid}").status_code == 403
-    assert forum_client.get(f"/forum/posts/{pid}").status_code == 200  # still there
+# (Foreign-post edit/delete -> 403 with the post left untouched is proven in Negative_Tests.
+#  What stays here is the gate those 403 tests assume: an *anonymous* edit/delete never reaches
+#  the ownership check at all — and PATCH/DELETE are not in the Negative auth-gate matrix.)
 
 
 def test_edit_and_delete_require_login(forum_client):

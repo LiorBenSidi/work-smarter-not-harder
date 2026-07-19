@@ -10,12 +10,8 @@ def _profile():
     return {"age": 30, "gender": "male", "height": 180, "weight": 80, "goal": "maintain", "training_frequency": 3}
 
 
-def test_get_profile_requires_login(profile_client):
-    assert profile_client.get("/profile").status_code == 401
-
-
-def test_post_profile_requires_login(profile_client):
-    assert profile_client.post("/profile", json=_profile()).status_code == 401
+# (GET/POST /profile auth-gating is covered by the Negative_Tests route matrix — same layer,
+#  same routes. Kept here: the injection wall on a field that matrix does not itself inject into.)
 
 
 def test_injection_in_profile_field_rejected(profile_client):
