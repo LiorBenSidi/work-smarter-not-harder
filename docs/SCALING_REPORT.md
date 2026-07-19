@@ -49,7 +49,9 @@ throughput gain paid for by a latency collapse is not a gain. Here both improved
 parallelism looks like — the work is spread, not merely buffered.
 
 The gain is 2.86×, not 4×, because the container is capped at 4 CPUs that it shares with gunicorn's
-threads and the OS, and because each job pays a small pickle round-trip to its worker process.
+threads and the OS, and because each job pays a small pickle round-trip to its worker process. (Directly
+re-measured on the real Random Forest, this same 1→4 step gives **~2.5×** — see *Re-baselined on the real
+model* below; the proxy and the shipped model agree to within ~0.3×.)
 
 ## Axis 2 — Horizontal: `--scale ai=N` replicas
 
@@ -203,3 +205,20 @@ drove the queue to its `AI_QUEUE_MAX_PENDING` bound and shed **246 of 400** subm
 back to `pending: 0` with **zero** `pool_rebuilds`/`abandoned` and `/health` 200 throughout. The
 backpressure the microsecond placeholder was too fast to ever trigger now engages on the real model exactly
 as designed — which was the open question in **#326** (now closed).
+
+**Pool scaling, now measured directly on the real model (2026-07-19).** The 2.86× in Axis 1 is the CPU-bound
+proxy; with real inference in the seat I re-ran that same experiment against `inference:predict_one` — two
+standalone `ai` containers, `--cpus=4`, 300 requests @ concurrency 8, pool warmed first:
+
+| `AI_QUEUE_WORKERS` | Throughput (req/s) | p50 (ms) | p95 (ms) | Failures |
+|---|---:|---:|---:|---:|
+| 1 | ~59 | ~133 | ~152 | 0 |
+| 4 | **~150** | **~52** | **~72** | 0 |
+
+**~2.5× throughput** (2.49× and 2.57× across two runs) with p50 latency *also* ~2.5× lower (133 → 52 ms) —
+both improve together, the signature of real parallelism rather than buffering. It lands just under the
+proxy's 2.86×, which is the honest direction: the real model pays a little more per call than `cpu_burn`
+(pickling the feature payload out to the worker, and four resident model copies competing for memory
+bandwidth). That the two agree to within ~0.3× is the point — the proxy sat in a representative seat, so the
+Axis-1 figure was never a lab artifact. The pool is still the +5 job-queue parallelism, now validated on the
+shipped model, not just its stand-in.
