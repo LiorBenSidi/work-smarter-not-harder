@@ -1,7 +1,7 @@
 # Full-System Stress Report — what falls, what holds
 
 **Date:** 2026-07-16 · **Owner:** Elad · **Scenario:** [`tests/Stress_Tests/locustfile_full_system.py`](../tests/Stress_Tests/locustfile_full_system.py)
-**Stack under test:** the 3-container dev stack (`docker compose up --build`, one host: web = gunicorn 2 workers × 4 gthread threads, db = mongo:7, ai = job queue + placeholder model), commit `d2f6d5a` (includes the #313 media limits).
+**Stack under test (§1 baseline):** the 3-container dev stack (`docker compose up --build`, one host: web = gunicorn 2 workers × 4 gthread threads, db = mongo:7, ai = job queue + placeholder model), commit `d2f6d5a` (includes the #313 media limits). **§6 re-measures on the 1×16 web tier (#330/#332); §7 re-runs the whole scenario on the real Random Forest.**
 
 This complements the existing stress assets rather than repeating them:
 - `tests/Stress_Tests/test_load.py` — single-IP burst: the **fences** engage (429/503), never 5xx.
@@ -32,7 +32,7 @@ This complements the existing stress assets rather than repeating them:
 | **Everything, ≤ 100 concurrent users** | Clean: 0 failures, p50 ≤ 26 ms, p95 ≤ 170 ms at ~78 RPS. Comfortably above any class-demo audience. |
 | **Correctness under overload** | At 200–300 users the site gets *slow*, never *wrong*: no 5xx in ~22k over-saturated requests. Degradation mode is queueing, which is the design intent (shed/queue, don't crash). |
 | **Container stability** | 0 restarts, `healthy` end-to-end. `/health` stayed 200 (no Docker/UptimeRobot restart storm — the exact failure `test_load.py` guards). |
-| **AI path (`/checkin` → job queue → model)** | Never shed (no 503) at any stage — the queue's backpressure was never reached because web saturates first; ai CPU stayed low (placeholder model; re-measure when Shiri's real model lands). |
+| **AI path (`/checkin` → job queue → model)** | Never shed (no 503) at any stage. Re-measured on the **real** Random Forest (2026-07-19, §7): `/checkin` is now the heaviest write (p95 190 ms @ 100u, 570 ms @ 200u) and `ai` CPU does real work (26–97 %), but web still saturates first so the queue's `max_pending` bound is never reached under full-system load — the shed-503 path engages only on the direct-at-`ai` axis (#326). |
 | **Media (#313 fixes, verified live)** | Upload/serve held under mixed load; single-IP flood → **429 after 20/min**, and the disk cap returns a clean **507** when tripped. No 5xx. |
 | **Rate-limit fences vs normal use** | Distinct-IP users never hit a 429 — the caps only bite abusers, not legitimate traffic (the `test_normal_*` contract, now shown at 300-user scale). |
 | **Single-IP abuse fences (live prod-mode stack)** | `/health` burst all-200 · login flood → 429, no 5xx · `/ready` only 200/503 · forum flood → 429 · media flood → 429. (The `test_load.py` forum case needs a `TESTING=1` stack because prod-mode signup requires email-verify — it passes in CI's `compose-e2e`; verified here manually with a verified user.) |
@@ -57,7 +57,7 @@ This complements the existing stress assets rather than repeating them:
 4. ✅ **Bound the other unbounded reads (#331)** — the same audit found the pattern elsewhere; the two Elad-lane
    rows are now bounded (`forum_received_engagement` scoped to the user's own content + indexes;
    media `list_for_target` capped per target + a compound index). The hot-path rows (history/DM/inbox/notifications) stay open on Lior's tier.
-5. **Re-run this file when the real model lands** — ai never became the bottleneck against the placeholder; the queue's 503 backpressure story should be re-measured with real inference times (`LOCUST_TARGET=ai` in `locustfile.py` covers the direct-at-ai axis). Tracked as #326.
+5. ✅ **Re-run this file on the real model** — **DONE (§7, 2026-07-19).** Re-ran the full-system scenario against the baked-in Random Forest: `ai` now does real work (CPU 26–97 %) and `/checkin` is the heaviest write, but web still saturates first so the queue never sheds under full-system load — 0 feature failures, 0 5xx at every stage. The direct-at-`ai` 503-backpressure story (the queue reaching its `max_pending` bound) is the companion axis, measured separately in #326 / `SCALING_REPORT.md`.
 
 ## 5. Reproduce
 
@@ -103,3 +103,46 @@ in-session feature request succeeded (0.00 % on each feature endpoint), and ther
   capacity candidate if media traffic dominates.
 
 Reproduce: the §5 command at `-u 100`/`-u 200` on a stack built from `main` at or after #330/#332.
+
+## 7. Re-run on the real model (2026-07-19)
+
+§1/§6 ran against the microsecond **placeholder**, so the AI path never did real work and rec #5 asked for a
+re-run once the model landed. It has: the real Random Forest is now baked into the `ai` image
+(`ai/model/model.pkl`). I re-ran the **same** `locustfile_full_system.py` at the knee stages (100 + 200 users,
+2 min each) against a stack built from `main` @ `5769cb7` — **web = 1 worker × 16 threads** (the #330 default,
+same as §6), db = `mongo:7`, ai = job queue + **real model**, mock-email signup, one seeded DM hub. Host:
+Docker Desktop, 8 logical cores.
+
+| Stage | Requests | Feature failures | Setup drops | RPS | p50 | p95 | p99 | max |
+|------:|---------:|-----------------:|------------:|----:|----:|----:|----:|----:|
+| 100u | 9,221 | **0** | 1 | 77.5 | 29 ms | 190 ms | 450 ms | 1.5 s¹ |
+| 200u | 15,984 | **0** | 36² | 134 | 86 ms | 1.0 s | 2.0 s | 3.0 s |
+
+¹ one-off cold-start outlier: the first `/predict` spawns the pool workers and loads the 5 MB model
+(~1.8 s warm-up), then steady state is ~27 ms/score.
+² all setup-phase `RemoteDisconnected`/`ConnectionAborted` on the expensive signup/profile requests during
+the 20 users/s ramp burst — the same class §1 note ³ / §6 describe; **every in-session feature request
+succeeded (0 failures on every feature endpoint), no 5xx, no 429, no 503.**
+
+**Read-outs:**
+- **`/checkin` (the cross-container AI hot path) held on the real model** — 100u: p50 82 ms / p95 190 ms;
+  200u: p50 110 ms / p95 570 ms / **0 failures**. It is now the heaviest *write* (real inference cost), where
+  against the placeholder it sat with the cheap forum writes.
+- **`ai` is no longer idle.** Container CPU ran **26–74 %** at 100u and **60–97 %** at 200u (vs "stayed low"
+  on the placeholder). But it never approached its 4-core cap — **web saturates first** (CPU bursting to
+  708 % on the 200u ramp, ~110–143 % steady), so the queue's `AI_QUEUE_MAX_PENDING` bound is never reached
+  and `/checkin` never sheds under full-system load. `ai` RSS held flat (~560 MB, the pool's model copies).
+- **The 503-backpressure path does engage — on the direct-at-`ai` axis, where the model is the bottleneck.**
+  #326/#376 drove `/jobs` to its bound (246/400 shed with 503) on the real model
+  (`SCALING_REPORT.md` → *Re-baselined on the real model*). Under *full-system* load web is the limiter, so
+  that bound simply isn't the one that binds. Both are true and complementary: shed fires where the model is
+  the bottleneck, not where web is.
+- **Latency leader unchanged:** `POST /media` (p95 2.1 s @ 200u) — disk-write bound, already fenced (#313).
+  The real model did not change the endpoint ranking.
+
+**Verdict:** the full system holds on the real model exactly as it did on the placeholder — clean through
+100 users, slow-not-wrong at 200, zero server errors — and the one thing the placeholder could never show,
+that the AI path carries real inference without becoming the full-system bottleneck or shedding, is now
+measured rather than assumed.
+
+Reproduce: the §5 command at `-u 100`/`-u 200` on a stack built from `main` at/after #330, with the real-model `ai` image.
