@@ -34,9 +34,11 @@ TWO USER CLASSES, picked with ``LOCUST_TARGET``:
              --host http://localhost:5099 --exit-code-on-error 1
       # after: AI_QUEUE_WORKERS=4, same command
 
-  Against the placeholder model ``/predict`` returns in microseconds, so the measurement is only
-  meaningful with the CPU-bound bench target (``AI_WORKER_TARGET=bench:cpu_burn``) — see ai/bench.py
-  for why. ``scripts/scaling_benchmark.py`` is the same measurement without the locust dependency.
+  The real Random Forest scores in single-digit milliseconds, so ramping the shipped model is
+  meaningful — but for comparing pool sizes the CPU-bound bench target
+  (``AI_WORKER_TARGET=bench:cpu_burn``) is still the controlled workload: it holds each job's cost
+  fixed and large enough that the speedup, not scheduler noise, dominates — see ai/bench.py.
+  ``scripts/scaling_benchmark.py`` is the same measurement without the locust dependency.
 """
 import os
 import uuid

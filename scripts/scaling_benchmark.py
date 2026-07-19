@@ -62,8 +62,17 @@ def _one_request(url, payload, timeout):
     return time.perf_counter() - started, status
 
 
+# A complete, in-range readiness request: /predict validates these four fields BEFORE the queue
+# whatever the worker target is (ai/app.py), so a payload without them is 400-ed at the boundary
+# and the benchmark would measure the validator, not the pool.
+READINESS_FIELDS = {"sleep_hours": 8, "fatigue": 2, "soreness": 1, "training_load": 100}
+
+
 def run(url, requests_count, concurrency, iterations, timeout):
-    payload = {"features": {"iterations": iterations}} if iterations else {"features": {}}
+    # `iterations` rides on top for the bench target (cpu_burn reads it); the real model builds its
+    # vector from its own feature list and ignores extra keys, so one payload serves both targets.
+    features = dict(READINESS_FIELDS, **({"iterations": iterations} if iterations else {}))
+    payload = {"features": features}
 
     # Warm the pool: the first request per worker process pays for the spawn + import. Measuring it
     # would credit the 1-worker run with a saving it does not have at steady state.

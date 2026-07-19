@@ -67,8 +67,9 @@ def test_the_live_queue_reports_its_robustness_counters_and_a_healthy_pool():
 def test_gunicorn_serves_concurrent_predicts_without_serializing_them():
     """Fire N `/predict` calls at once. With one gunicorn worker and one thread these would queue at
     the HTTP layer; with the thread pool + process pool they overlap. We assert on *correctness under
-    concurrency* (every caller gets a valid, complete answer) rather than on wall-clock, because a
-    placeholder model returns in microseconds and a timing assertion here would be noise.
+    concurrency* (every caller gets a valid, complete answer) rather than on wall-clock: the real
+    model scores in a few milliseconds, so on a shared CI runner a timing bound would measure
+    scheduler noise, not the pool.
     """
     with concurrent.futures.ThreadPoolExecutor(max_workers=12) as pool:
         responses = list(pool.map(lambda _: _post("/predict", FEATURES), range(24)))

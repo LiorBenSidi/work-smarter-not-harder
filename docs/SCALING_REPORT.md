@@ -4,13 +4,16 @@
 > parallelization"*; §2 (+5) — a job queue works `/predict` in parallel.
 > **Design contract:** [`DESIGN.md`](DESIGN.md) §L7 — *"a locust run before/after `--scale ai=2` shows
 > throughput rising."*
-> **Owner:** Elad · **Measured:** 2026-07-09 · **Plan:** [`SCALING_PLAN.md`](SCALING_PLAN.md)
+> **Owner:** Elad · **Measured:** 2026-07-09 (CPU-bound proxy) · real-RF re-baseline 2026-07-19 (#376) · **Plan:** [`SCALING_PLAN.md`](SCALING_PLAN.md)
 
 ## How this was measured, and why it is honest
 
-The shipped model is a **placeholder that returns in microseconds**. Any throughput table built on it
-would measure Flask and HTTP, not the pool: one worker finishing instantly is exactly as fast as four,
-and a "2× speedup" would be measurement noise dressed up as a result.
+When these numbers were taken (2026-07-09) the shipped model was a **placeholder that returned in
+microseconds**. Any throughput table built on it would have measured Flask and HTTP, not the pool: one
+worker finishing instantly is exactly as fast as four, and a "2× speedup" would be measurement noise
+dressed up as a result. (The real Random Forest has since landed — see *Measured model footprint* below and
+*Re-baselined on the real model* (#376) — and re-running the benchmark against it confirmed the CPU-bound
+proxy sat in a representative seat, so the multipliers below still hold.)
 
 So every number below was taken with a **CPU-bound workload in the same seat the Random Forest will
 occupy** — `ai/bench.py:cpu_burn`, a deterministic pure-Python arithmetic loop, selected through the
@@ -46,7 +49,9 @@ throughput gain paid for by a latency collapse is not a gain. Here both improved
 parallelism looks like — the work is spread, not merely buffered.
 
 The gain is 2.86×, not 4×, because the container is capped at 4 CPUs that it shares with gunicorn's
-threads and the OS, and because each job pays a small pickle round-trip to its worker process.
+threads and the OS, and because each job pays a small pickle round-trip to its worker process. (Directly
+re-measured on the real Random Forest, this same 1→4 step gives **~2.5×** — see *Re-baselined on the real
+model* below; the proxy and the shipped model agree to within ~0.3×.)
 
 ## Axis 2 — Horizontal: `--scale ai=N` replicas
 
@@ -66,7 +71,8 @@ docker compose -f docker-compose.yml -f docker-compose.scale.yml up -d --build -
 **1.60× throughput.** Sub-linear on purpose to report, not to hide: Docker's DNS round-robin balances
 *connections*, not *work*, so with only 8 concurrent clients the split is uneven, and p95 barely moves
 (96 → 93 ms) because the tail is set by whichever replica got the unlucky burst. Throughput scales;
-tail latency needs a real load balancer, which the single course VM does not warrant.
+tail latency needs a real load balancer, which the single course VM does not warrant. (Directly re-measured
+on the real Random Forest: **~1.54×** — see *Re-baselined on the real model* below.)
 
 The two axes **multiply**: total parallel scorers = `AI_QUEUE_WORKERS` × replicas.
 
@@ -184,3 +190,51 @@ promised re-measure (10,000 calls per state, 2026-07-13) puts it at **~2.5 µs p
 `generate_recommendations` call + ~1.7 µs per `calculate_calories` call, worst observed spike 240 µs** —
 four orders of magnitude below the ~27 ms RF inference it rides on. It moves `predict_one`'s latency by
 roughly 0.01 %, so every headroom figure above stands unchanged and **the knobs stay as they are**.
+
+## Re-baselined on the real model (#326 / #376)
+
+The multipliers above use the CPU-bound proxy on purpose (see *How this was measured*). Once the real RF
+shipped, the benchmark was pointed at the live `/predict` — which first required a fix: `scaling_benchmark.py`
+had sent `{"features": {}}`, and the readiness validator that now ships with the model rejects that at the
+boundary (400), so the script had been measuring the *reject* path, not the pool. Fixed in **#376**, with a
+`test_scale_contract` guard that pins the benchmark payload to `ai/app.py`'s validator so the next
+required-field change fails CI instead of silently zeroing the benchmark.
+
+Re-run against the real model (standalone `ai`, pool = 4, `--cpus=4`): synchronous `/predict` sustained
+**~160 req/s** (p50 48 ms, p95 64 ms) at concurrency 8, and the async `/jobs` burst (400 submits @ 64 clients)
+drove the queue to its `AI_QUEUE_MAX_PENDING` bound and shed **246 of 400** submits with 503, then drained
+back to `pending: 0` with **zero** `pool_rebuilds`/`abandoned` and `/health` 200 throughout. The
+backpressure the microsecond placeholder was too fast to ever trigger now engages on the real model exactly
+as designed — which was the open question in **#326** (now closed).
+
+**Pool scaling, now measured directly on the real model (2026-07-19).** The 2.86× in Axis 1 is the CPU-bound
+proxy; with real inference in the seat I re-ran that same experiment against `inference:predict_one` — two
+standalone `ai` containers, `--cpus=4`, 300 requests @ concurrency 8, pool warmed first:
+
+| `AI_QUEUE_WORKERS` | Throughput (req/s) | p50 (ms) | p95 (ms) | Failures |
+|---|---:|---:|---:|---:|
+| 1 | ~59 | ~133 | ~152 | 0 |
+| 4 | **~150** | **~52** | **~72** | 0 |
+
+**~2.5× throughput** (2.49× and 2.57× across two runs) with p50 latency *also* ~2.5× lower (133 → 52 ms) —
+both improve together, the signature of real parallelism rather than buffering. It lands just under the
+proxy's 2.86×, which is the honest direction: the real model pays a little more per call than `cpu_burn`
+(pickling the feature payload out to the worker, and four resident model copies competing for memory
+bandwidth). That the two agree to within ~0.3× is the point — the proxy sat in a representative seat, so the
+Axis-1 figure was never a lab artifact. The pool is still the +5 job-queue parallelism, now validated on the
+shipped model, not just its stand-in.
+
+**Replica scaling, measured on the real model too.** Same treatment for Axis 2: pool held at 1 per container,
+`--scale ai=1 → 2` on the real model, benchmarked from *inside* the compose network (exactly how `web` reaches
+`ai`), 300 requests @ concurrency 8:
+
+| `ai` replicas | Throughput (req/s) | p50 (ms) | Failures |
+|---|---:|---:|---:|
+| 1 | ~66 | ~121 | 0 |
+| 2 | **~101** | **~80** | 0 |
+
+**~1.54×** (1.47× and 1.62× across two runs), p50 ~1.5× lower — the same sub-linear shape as the proxy's
+1.60×, and for the same reason: Docker's DNS round-robin balances *connections*, not *work*, so the tail is
+set by whichever replica caught the unlucky burst. Both axes now carry a real-model number, so the whole
+scaling story — pool **~2.5×**, replicas **~1.5×**, the two multiplying — is measured on the shipped model,
+not inferred from its stand-in.
