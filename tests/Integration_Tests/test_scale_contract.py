@@ -10,6 +10,7 @@ accident and impossible to notice until the numbers are wrong or the VM is down:
   * the `/jobs` + replicas caveat must stay written down. The job store is per-container, so a scaled
     `ai` would 404 job reads — safe today only because `web` calls `/predict` alone.
 """
+import importlib.util
 from pathlib import Path
 
 import pytest
@@ -86,3 +87,23 @@ def test_the_replica_caveat_stays_documented(scale_raw):
 def test_the_queue_documents_why_ai_holds_state_in_memory(jobqueue_module):
     doc = jobqueue_module.__doc__ or ""
     assert "in-memory" in doc.lower()
+
+
+# --------------------------------------------------------------------------- the benchmark payload
+
+
+def test_the_benchmark_payload_passes_the_predict_validator(ai_app_module):
+    """/predict validates the four readiness fields before the queue for EVERY worker target
+    (ai/app.py), so a benchmark payload the validator rejects measures the 400 path, not the pool —
+    exactly how the script silently broke when the model's field validation landed. Pin the script's
+    payload to the validator it must satisfy, for both the plain and the --iterations form."""
+    spec = importlib.util.spec_from_file_location(
+        "scaling_benchmark_under_test", str(ROOT / "scripts" / "scaling_benchmark.py")
+    )
+    benchmark = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(benchmark)
+
+    assert ai_app_module._readiness_error(benchmark.READINESS_FIELDS) is None
+    with_bench_knob = dict(benchmark.READINESS_FIELDS, iterations=300_000)
+    assert ai_app_module._readiness_error(with_bench_knob) is None
+    assert len(with_bench_knob) <= ai_app_module.MAX_FEATURES
