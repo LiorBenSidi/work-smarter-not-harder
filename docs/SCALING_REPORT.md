@@ -71,7 +71,8 @@ docker compose -f docker-compose.yml -f docker-compose.scale.yml up -d --build -
 **1.60× throughput.** Sub-linear on purpose to report, not to hide: Docker's DNS round-robin balances
 *connections*, not *work*, so with only 8 concurrent clients the split is uneven, and p95 barely moves
 (96 → 93 ms) because the tail is set by whichever replica got the unlucky burst. Throughput scales;
-tail latency needs a real load balancer, which the single course VM does not warrant.
+tail latency needs a real load balancer, which the single course VM does not warrant. (Directly re-measured
+on the real Random Forest: **~1.54×** — see *Re-baselined on the real model* below.)
 
 The two axes **multiply**: total parallel scorers = `AI_QUEUE_WORKERS` × replicas.
 
@@ -222,3 +223,18 @@ proxy's 2.86×, which is the honest direction: the real model pays a little more
 bandwidth). That the two agree to within ~0.3× is the point — the proxy sat in a representative seat, so the
 Axis-1 figure was never a lab artifact. The pool is still the +5 job-queue parallelism, now validated on the
 shipped model, not just its stand-in.
+
+**Replica scaling, measured on the real model too.** Same treatment for Axis 2: pool held at 1 per container,
+`--scale ai=1 → 2` on the real model, benchmarked from *inside* the compose network (exactly how `web` reaches
+`ai`), 300 requests @ concurrency 8:
+
+| `ai` replicas | Throughput (req/s) | p50 (ms) | Failures |
+|---|---:|---:|---:|
+| 1 | ~66 | ~121 | 0 |
+| 2 | **~101** | **~80** | 0 |
+
+**~1.54×** (1.47× and 1.62× across two runs), p50 ~1.5× lower — the same sub-linear shape as the proxy's
+1.60×, and for the same reason: Docker's DNS round-robin balances *connections*, not *work*, so the tail is
+set by whichever replica caught the unlucky burst. Both axes now carry a real-model number, so the whole
+scaling story — pool **~2.5×**, replicas **~1.5×**, the two multiplying — is measured on the shipped model,
+not inferred from its stand-in.
