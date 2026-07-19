@@ -113,11 +113,9 @@ def test_login_accepts_email_as_identifier(client):
     assert by_email.get_json()["status"] == "logged in"
 
 
-def test_default_store_app_serves_health(make_client):
-    # the PRODUCTION default user store (no fake injected) must still boot + serve /health (no Mongo)
-    resp = make_client().get("/health")
-    assert resp.status_code == 200
-    assert resp.get_json() == {"status": "ok", "service": "web"}
+# (The "production default store still boots + serves /health without Mongo" case is asserted
+#  byte-identically by test_web_smoke.py::test_web_boots_and_serves_health, which is its natural
+#  home and the one the REPORT's smoke row cites.)
 
 
 # ---- identity model: display name is NON-unique; each account gets a unique internal handle ----

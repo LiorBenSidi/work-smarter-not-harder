@@ -9,8 +9,8 @@ class _BrokenHistory:
         raise RuntimeError("store down")
 
 
-def test_history_requires_login(history_client):
-    assert history_client.get("/history").status_code == 401
+# (GET /history auth-gating is in the Negative_Tests 13-route matrix. The 503-degradation test
+#  below stays: this file owns it, and its only other twin is bundled inside a teammate's test.)
 
 
 def test_history_degrades_to_503_when_store_fails(make_client, fake_users):

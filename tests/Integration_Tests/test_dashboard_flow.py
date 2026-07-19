@@ -156,8 +156,13 @@ def test_dashboard_history_forwarded_is_bounded_and_empty_history_is_harmless(da
                                                  "soreness": 2, "training_load": 5}, "assessment": "Ready"}]
 
 
-def test_dashboard_uses_the_most_recent_checkin(dash_client, monkeypatch):
-    # Two check-ins: the dashboard scores the LATEST (oldest-first history -> [-1]).
+def test_dashboard_uses_the_most_recent_checkin(dash_client, fake_history, monkeypatch):
+    # The dashboard scores the LATEST entry (oldest-first history -> [-1]).
+    #
+    # This used to do two _checkin() calls back to back — but both land on the same UTC day, and
+    # same-day replacement keeps ONE row (test_checkin_flow asserts len(hist) == 1 for exactly this
+    # sequence). So [-1] was indexing a single-element list and the test could not tell [-1] from
+    # [0]. Seed DISTINCT days so the selection is actually exercised.
     seen = {}
 
     def capture(url, features, **kw):
@@ -168,8 +173,11 @@ def test_dashboard_uses_the_most_recent_checkin(dash_client, monkeypatch):
     monkeypatch.setattr(sys.modules["services.ai_client"], "predict", capture)
     _login(dash_client)
     dash_client.post("/profile", json=_profile())
-    _checkin(dash_client, fatigue=2)
-    _checkin(dash_client, fatigue=9)                  # the more recent one
+    base = {"sleep_hours": 7, "resting_hr": 55, "soreness": 2, "training_load": 5}
+    fake_history.add("alice", {"timestamp": "2026-06-26T07:00:00+00:00", "assessment": "Ready",
+                               "metrics": {**base, "fatigue": 2}})          # older
+    fake_history.add("alice", {"timestamp": "2026-06-27T07:00:00+00:00", "assessment": "Rest",
+                               "metrics": {**base, "fatigue": 9}})          # the more recent one
     dash_client.get("/dashboard")
     assert seen["fatigue"] == 9
 

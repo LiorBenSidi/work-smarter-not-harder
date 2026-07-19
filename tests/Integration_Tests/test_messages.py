@@ -165,32 +165,16 @@ def test_non_finite_since_returns_all_not_nothing(messages_client):
     assert len(c.get("/notifications?since=inf").get_json()["notifications"]) == 1
 
 
-def test_rate_limit_blocks_a_flood(messages_client):
-    c = messages_client
-    _setup(c, "alice", "bob")
-    _login(c, "alice")
-    for _ in range(20):
-        assert c.post("/messages", json={"to": "bob", "body": "spam"}).status_code == 201
-    assert c.post("/messages", json={"to": "bob", "body": "spam"}).status_code == 429
-
-
-def test_validation_and_edges(messages_client):
-    c = messages_client
-    _setup(c, "alice", "bob")
-    _login(c, "alice")
-    assert c.post("/messages", json={"to": "bob", "body": ""}).status_code == 400        # empty body
-    assert c.post("/messages", json={"to": "", "body": "x"}).status_code == 400          # empty recipient
-    assert c.post("/messages", json={"body": "x"}).status_code == 400                    # missing recipient
-    assert c.post("/messages", json={"to": "alice", "body": "x"}).status_code == 400     # self-message
-    assert c.post("/messages", json={"to": "ghost", "body": "x"}).status_code == 404     # unknown recipient
+# (The 20-then-429 DM flood cap, the send-validation walls, and the self / unknown-recipient cases are
+#  proven in Negative_Tests with the same inputs PLUS a "nothing was delivered" assertion this file
+#  never made — so those tests were strictly weaker copies.)
 
 
 def test_all_endpoints_require_login(messages_client):
     c = messages_client
-    assert c.post("/messages", json={"to": "bob", "body": "x"}).status_code == 401
-    assert c.get("/conversations").status_code == 401
+    # only the routes the Negative_Tests 401 matrix does NOT cover — POST /messages, GET /conversations
+    # and GET /notifications are already in it.
     assert c.get("/conversations/bob").status_code == 401
-    assert c.get("/notifications").status_code == 401
     assert c.post("/notifications/read", json={}).status_code == 401
     assert c.get("/events").status_code == 401   # the SSE stream is auth-gated too (401 before streaming)
 
@@ -319,12 +303,7 @@ def test_user_search_excludes_the_caller(messages_client):
     assert "maya" not in names and "marco_r" in names               # you never find yourself
 
 
-def test_user_search_too_short_is_empty_200(messages_client):
-    c = messages_client
-    _setup(c, "alice", "bob")
-    _login(c, "alice")
-    r = c.get("/users/search?q=a")
-    assert r.status_code == 200 and r.get_json()["results"] == []   # 1 char -> nothing, but not an error
+# (The 1-char "q=a" -> empty-200 case is asserted identically in Negative_Tests.)
 
 
 def test_user_search_requires_login(messages_client):

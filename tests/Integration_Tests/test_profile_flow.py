@@ -20,9 +20,10 @@ def test_get_profile_before_save_is_null(profile_client):
 def test_save_then_get_profile_roundtrip(profile_client):
     _login(profile_client)
     assert profile_client.post("/profile", json=_profile()).status_code == 200
+    # the WHOLE profile must survive the round-trip: asserting only age+goal let a mutation that
+    # dropped height / weight / gender / training_frequency on save pass unnoticed.
     got = profile_client.get("/profile").get_json()["profile"]
-    assert got["age"] == 30
-    assert got["goal"] == "maintain"
+    assert {k: got[k] for k in _profile()} == _profile()
 
 
 def test_save_invalid_profile_returns_400(profile_client):

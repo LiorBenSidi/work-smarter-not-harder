@@ -157,10 +157,9 @@ def test_edit_missing_post_is_404(forum_client):
     assert forum_client.patch("/forum/posts/999", json={"title": "X", "body": "y"}).status_code == 404
 
 
-def test_edit_rejects_bad_body_400(forum_client):
-    _login(forum_client)
-    pid = _new_post(forum_client).get_json()["post"]["id"]
-    assert forum_client.patch(f"/forum/posts/{pid}", json={"title": "", "body": "y"}).status_code == 400
+# (The empty-title PATCH wall is proven in Negative_Tests with the same input, alongside the
+#  over-length wall and a "the refusal changed nothing" assertion. test_edit_missing_post_is_404
+#  above stays: PATCH is absent from that file's unknown-post sweep.)
 
 
 def test_votes_aggregate_across_users(forum_client):

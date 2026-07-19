@@ -91,8 +91,14 @@ def test_change_password_clears_this_browsers_remember_cookie(client):
     r = client.post("/account/password", json={"current_password": "password123", "new_password": "newpassword1"})
     # the response expires this browser's remember cookie (belt-and-suspenders alongside the hash-tail
     # invalidation) so this device also re-verifies on its next login.
-    set_cookies = "\n".join(r.headers.get_all("Set-Cookie"))
-    assert "remember_token=" in set_cookies
+    remember = [c for c in r.headers.get_all("Set-Cookie") if c.startswith("remember_token=")]
+    assert remember, "the response must act on this browser's remember cookie"
+    # `"remember_token=" in set_cookies` alone is NOT enough: a response handing back a fresh, VALID
+    # cookie matches it just as well — the exact inverse of the property this test is named for.
+    # Pin the expiry that actually clears it.
+    cleared = remember[0]
+    assert cleared.startswith("remember_token=;"), f"the cookie value must be emptied, got: {cleared}"
+    assert "Expires=Thu, 01 Jan 1970" in cleared or "Max-Age=0" in cleared, cleared
 
 
 def test_password_change_forces_reverification_on_next_login(otp_client):

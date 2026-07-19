@@ -25,7 +25,8 @@ def test_a_third_user_cannot_read_a_private_conversation(messages_client):
     _login(c, "carol")
     for path in ("/conversations/alice", "/conversations/bob"):
         thread = c.get(path).get_json()["messages"]
-        assert all("secret for bob only" != m["body"] for m in thread)
+        # (an `all(body != secret for m in thread)` guard used to sit here; it was vacuously true on
+        #  the empty list the next line asserts, so it carried no signal.)
         assert thread == []                                     # carol shares no thread with either
     assert c.get("/conversations").get_json()["conversations"] == []
 
@@ -54,12 +55,8 @@ def test_a_delimiter_username_cannot_hijack_another_pairs_thread(messages_client
     assert thread == []                                             # no collision -> attacker sees nothing
 
 
-def test_recipient_field_rejects_a_nosql_operator_payload(messages_client):
-    c = messages_client
-    _register(c, "alice")
-    _login(c, "alice")
-    # a non-string recipient (operator-injection attempt) is rejected at validation, never queried
-    assert c.post("/messages", json={"to": {"$gt": ""}, "body": "x"}).status_code == 400
+# (The `{"to": {"$gt": ""}}` operator-injection recipient is rejected with the identical payload in
+#  Negative_Tests, which also asserts the message was never delivered.)
 
 
 def test_marking_read_only_affects_your_own_notifications(messages_client):

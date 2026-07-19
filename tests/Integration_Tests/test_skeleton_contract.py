@@ -19,9 +19,8 @@ def test_only_web_publishes_a_host_port():
     assert "5000:5000" not in compose, "never publish host 5000 (macOS AirPlay hijacks it)"
 
 
-def test_each_app_container_has_a_dockerfile():
-    for container in ("web", "ai"):
-        assert (ROOT / container / "Dockerfile").is_file(), f"{container}/Dockerfile is missing"
+# (Dockerfile existence is proven by test_app_containers_run_via_gunicorn below — its read_text()
+#  raises on a missing file, so no repo state fails that test but passes a separate existence check.)
 
 
 def test_all_three_services_have_healthchecks():

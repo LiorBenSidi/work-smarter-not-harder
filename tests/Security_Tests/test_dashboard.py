@@ -9,8 +9,8 @@ class _BrokenProfiles:
         raise RuntimeError("store down")
 
 
-def test_dashboard_requires_login(profile_client):
-    assert profile_client.get("/dashboard").status_code == 401
+# (GET /dashboard auth-gating is in the Negative_Tests 13-route matrix. The broken-profile-store
+#  503 test below stays — no other test drives /dashboard with that dependency failing.)
 
 
 def test_dashboard_degrades_to_503_when_profile_store_fails(make_client, fake_users):
