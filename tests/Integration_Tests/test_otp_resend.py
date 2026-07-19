@@ -32,12 +32,22 @@ def test_resend_issues_a_fresh_code_and_verifies(otp_client):
     assert otp_client.post("/verify-otp", json={"code": resent["dev_otp"]}).status_code == 200
 
 
-def test_resend_supersedes_the_previous_code(otp_client):
+def test_resend_supersedes_the_previous_code(otp_client, monkeypatch):
+    # Pin the code generator to a counter so the two codes are guaranteed distinct. (Previously this
+    # test guarded the collision case with an `if`, which meant a regression that made resend reuse
+    # the same code — exactly what this test exists to catch — skipped the assertion and passed.)
+    import itertools
+    from web.routes import auth as auth_module
+    counter = itertools.count(1)
+    monkeypatch.setattr(auth_module.secrets, "randbelow", lambda _n: next(counter))
+
     first = _start_login(otp_client)
     resent = otp_client.post("/resend-otp").get_json()
-    if first["dev_otp"] != resent["dev_otp"]:            # (guard the ~1e-6 chance of an identical code)
-        # re-issuing replaces the stored hash, so the OLD code no longer verifies
-        assert otp_client.post("/verify-otp", json={"code": first["dev_otp"]}).status_code == 401
+    assert first["dev_otp"] != resent["dev_otp"], "resend must issue a NEW code, not reuse the old one"
+    # re-issuing replaces the stored hash, so the OLD code no longer verifies
+    assert otp_client.post("/verify-otp", json={"code": first["dev_otp"]}).status_code == 401
+    # ...and the current one still does, so the refusal above is about staleness, not a broken challenge
+    assert otp_client.post("/verify-otp", json={"code": resent["dev_otp"]}).status_code == 200
 
 
 def test_resend_without_a_pending_login_is_400(otp_client):
