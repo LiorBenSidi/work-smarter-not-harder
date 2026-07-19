@@ -4,13 +4,16 @@
 > parallelization"*; §2 (+5) — a job queue works `/predict` in parallel.
 > **Design contract:** [`DESIGN.md`](DESIGN.md) §L7 — *"a locust run before/after `--scale ai=2` shows
 > throughput rising."*
-> **Owner:** Elad · **Measured:** 2026-07-09 · **Plan:** [`SCALING_PLAN.md`](SCALING_PLAN.md)
+> **Owner:** Elad · **Measured:** 2026-07-09 (CPU-bound proxy) · real-RF re-baseline 2026-07-19 (#376) · **Plan:** [`SCALING_PLAN.md`](SCALING_PLAN.md)
 
 ## How this was measured, and why it is honest
 
-The shipped model is a **placeholder that returns in microseconds**. Any throughput table built on it
-would measure Flask and HTTP, not the pool: one worker finishing instantly is exactly as fast as four,
-and a "2× speedup" would be measurement noise dressed up as a result.
+When these numbers were taken (2026-07-09) the shipped model was a **placeholder that returned in
+microseconds**. Any throughput table built on it would have measured Flask and HTTP, not the pool: one
+worker finishing instantly is exactly as fast as four, and a "2× speedup" would be measurement noise
+dressed up as a result. (The real Random Forest has since landed — see *Measured model footprint* below and
+*Re-baselined on the real model* (#376) — and re-running the benchmark against it confirmed the CPU-bound
+proxy sat in a representative seat, so the multipliers below still hold.)
 
 So every number below was taken with a **CPU-bound workload in the same seat the Random Forest will
 occupy** — `ai/bench.py:cpu_burn`, a deterministic pure-Python arithmetic loop, selected through the
@@ -184,3 +187,19 @@ promised re-measure (10,000 calls per state, 2026-07-13) puts it at **~2.5 µs p
 `generate_recommendations` call + ~1.7 µs per `calculate_calories` call, worst observed spike 240 µs** —
 four orders of magnitude below the ~27 ms RF inference it rides on. It moves `predict_one`'s latency by
 roughly 0.01 %, so every headroom figure above stands unchanged and **the knobs stay as they are**.
+
+## Re-baselined on the real model (#326 / #376)
+
+The multipliers above use the CPU-bound proxy on purpose (see *How this was measured*). Once the real RF
+shipped, the benchmark was pointed at the live `/predict` — which first required a fix: `scaling_benchmark.py`
+had sent `{"features": {}}`, and the readiness validator that now ships with the model rejects that at the
+boundary (400), so the script had been measuring the *reject* path, not the pool. Fixed in **#376**, with a
+`test_scale_contract` guard that pins the benchmark payload to `ai/app.py`'s validator so the next
+required-field change fails CI instead of silently zeroing the benchmark.
+
+Re-run against the real model (standalone `ai`, pool = 4, `--cpus=4`): synchronous `/predict` sustained
+**~160 req/s** (p50 48 ms, p95 64 ms) at concurrency 8, and the async `/jobs` burst (400 submits @ 64 clients)
+drove the queue to its `AI_QUEUE_MAX_PENDING` bound and shed **246 of 400** submits with 503, then drained
+back to `pending: 0` with **zero** `pool_rebuilds`/`abandoned` and `/health` 200 throughout. The
+backpressure the microsecond placeholder was too fast to ever trigger now engages on the real model exactly
+as designed — which was the open question in **#326** (now closed).
