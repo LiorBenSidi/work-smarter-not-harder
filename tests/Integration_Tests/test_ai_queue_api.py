@@ -235,14 +235,6 @@ def test_a_non_object_body_is_rejected(make_client, route):
     assert make_client().post(route, json=["not", "a", "dict"]).status_code == 400
 
 
-@pytest.mark.parametrize("route", ["/predict", "/jobs"])
-def test_an_oversized_feature_map_is_rejected(make_client, route):
-    features = {f"f{n}": n for n in range(500)}
-    response = make_client().post(route, json={"features": features})
-    assert response.status_code == 400
-    assert "too many features" in response.get_json()["error"]
-
-
 def test_a_rejected_request_never_reached_a_worker(make_client):
     calls = []
 

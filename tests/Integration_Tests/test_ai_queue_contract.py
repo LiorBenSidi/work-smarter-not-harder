@@ -84,8 +84,8 @@ def test_the_model_seam_returns_the_web_ai_contract_keys(inference_module):
     """Shiri owns the VALUES; `web/services/ai_client.py` reads these KEYS.
 
     Call with the four fields the real Random Forest requires (sleep_hours, fatigue, soreness,
-    training_load) so this survives Shiri's model, which raises ValueError on incomplete input
-    rather than median-imputing invented values. The placeholder ignores them; both are green.
+    training_load) — Shiri's model raises ValueError on incomplete input rather than
+    median-imputing invented values, so an under-specified call here would fail for the wrong reason.
     """
     result = inference_module.predict_one(
         {"sleep_hours": 8, "fatigue": 2, "soreness": 1, "training_load": 100}
