@@ -92,6 +92,11 @@ def test_remember_cookie_is_signed_and_httponly(otp_client):
     v = otp_client.post("/verify-otp", json={"code": code, "remember": True})
     set_cookie = v.headers.get("Set-Cookie", "")
     assert "remember_token=" in set_cookie and "HttpOnly" in set_cookie
+    # ...and actually assert the SIGNED half of this test's name, which went unchecked: nothing here
+    # would have failed if the cookie carried a raw, unsigned value. An itsdangerous token is
+    # `payload.timestamp.signature`, so an unsigned one has no separators.
+    token = set_cookie.split("remember_token=", 1)[1].split(";", 1)[0]
+    assert token.count(".") == 2, f"the remember token must be signed (payload.ts.sig), got: {token!r}"
 
 
 def test_no_remember_flag_sets_no_cookie_and_still_prompts(otp_client):

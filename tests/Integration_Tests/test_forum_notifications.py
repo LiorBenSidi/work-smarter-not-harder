@@ -45,8 +45,10 @@ def test_upvote_notifies_the_post_author(forum_client):
     _login(forum_client, "bob")
     notes = _vote_notes(forum_client)
     assert len(notes) == 1
-    assert "upvot" in notes[0]["text"].lower()
-    assert forum_client.get("/notifications").get_json()["unread"] >= 1
+    # exact, not `"upvot" in ...`: the substring still passed if the text regressed to "upvoted your
+    # comment" — the post-vs-comment confusion this very file exists to prevent.
+    assert notes[0]["text"] == "upvoted your post"
+    assert forum_client.get("/notifications").get_json()["unread"] == 1   # exactly one, not ">= 1"
 
 
 def test_self_vote_creates_no_notification(forum_client):

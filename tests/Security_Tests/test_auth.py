@@ -27,8 +27,8 @@ def test_unknown_user_and_wrong_password_are_indistinguishable(client):
     assert wrong_pw.get_json() == no_user.get_json()
 
 
-def test_protected_endpoint_without_login_returns_401(client):
-    assert client.get("/me").status_code == 401
+# (GET /me auth-gating is covered by the Negative_Tests 13-route matrix — same route, same fixture.
+#  The injection tests below stay: they pin the EXACT 400, where that matrix accepts any 4xx.)
 
 
 def test_nosql_injection_login_payload_rejected(client):

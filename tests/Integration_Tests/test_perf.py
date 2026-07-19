@@ -51,4 +51,6 @@ def test_service_worker_stays_no_cache(client):
 
 def test_served_shell_is_meaningfully_large(client):
     # sanity: the shell is big enough that gzip is worth it (guards the threshold staying relevant).
-    assert len(client.get("/").get_data()) > 10_000
+    # 100k, not 10k: the served shell is ~285 KB, so a 10k floor needed ~96% of the SPA to vanish
+    # before it could fail — a threshold no plausible regression could trip.
+    assert len(client.get("/").get_data()) > 100_000

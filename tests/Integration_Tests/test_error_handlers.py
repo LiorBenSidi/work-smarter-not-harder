@@ -15,7 +15,9 @@ def test_unknown_path_returns_json_404_not_html(client):
 def test_wrong_method_returns_json_405(client):
     r = client.get("/login")                                # /login is POST-only
     assert r.status_code == 405
-    assert r.is_json and r.get_json()["error"]              # a friendly JSON reason, not HTML
+    # the exact curated reason (web/app.py _FRIENDLY_HTTP), not merely "some truthy string" —
+    # the sibling 404 test above already pins its literal.
+    assert r.is_json and r.get_json()["error"] == "that action isn't allowed here"
 
 
 def test_http_error_body_never_leaks_werkzeug_html(client):
