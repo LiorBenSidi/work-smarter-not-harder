@@ -11,11 +11,11 @@
 > +10 Azure deploy + CI/CD; supersedes [`FEEDBACK.md`](FEEDBACK.md)). Architecture detail lives in [`DESIGN.md`](DESIGN.md); the phased plan in
 > [`ROADMAP.md`](ROADMAP.md).
 >
-> **Last updated:** 2026-07-18 · **Suite at this snapshot:** **1131 tests, 1088 passing / 43 environment-gated**
+> **Last updated:** 2026-07-19 · **Suite at this snapshot:** **1130 tests, 1087 passing / 43 environment-gated**
 > (`python -m pytest tests/ -q`; the env-gated ones run in CI's `compose-e2e` job against the live containers).
 > Since the 07-12 snapshot (783 tests): **Shiri's Random Forest landed** — a real `ai/model/model.pkl` +
 > `inference.py` (exercised by `test_ai_queue_api`), with the readiness recommendation engine and the
-> calorie integration + their unit tests — and the suite grew from 783 to 1131 tests.
+> calorie integration + their unit tests — and the suite grew from 783 to 1130 tests.
 >
 > ⚠️ **Sections still owned by their planes.** §5 (risk), §2's deploy/scale/queue rows and §3's Elad rows are
 > current as of this date. §1's API surface + data model now list the DM / SSE / notification / comment-vote
@@ -143,7 +143,7 @@ Columns are the test-type dirs under `tests/`. Cells name representative file(s)
 | **F1 Accounts / Auth** | `test_auth_validation` (26) · `test_email` (14) | `test_auth_flow` (22) · `test_login_otp` (15) · `test_password_reset` (11) · `test_register_verify` (11) · `test_account_*` (25) | `test_auth_negative` (33) | `test_e2e` leg | `test_auth` (11) · `test_csrf` (6) · `test_debug_email_override` (7) | — |
 | **F2 Profile** | `test_profile_validation` (27) | `test_profile_flow` (4) · `test_identity_display` (6) | in `test_profile_checkin_negative` (59) | `test_e2e` leg | `test_profile` (4) | — |
 | **F3 Readiness (web path)** | `test_checkin_validation` (31) · `test_ai_client` (3) | `test_checkin_flow` (17) · `test_web_ai` (2) | in `test_profile_checkin_negative` (59) | `test_e2e` leg | — | — |
-| **F3 Readiness (model — Shiri)** | `test_ai_inference` (16) · `test_ai_recommendations` (14) · `test_ai_binning` (21) | `test_ai_queue_api` (33, loads the real `model.pkl`) | — | — | — | — |
+| **F3 Readiness (model — Shiri)** | `test_ai_inference` (16) · `test_ai_recommendations` (14) · `test_ai_binning` (21) | `test_ai_queue_api` (31, loads the real `model.pkl`) | — | — | — | — |
 | **F4 Calorie** | `test_calories` (14) | via `test_checkin_flow` / `test_dashboard_flow` | — | — | — | — |
 | **F7 Action plan / recommendations** | (engine covered by the F3-model unit tests) | `test_web_ai` (2) · `test_dashboard_flow` (14) | — | `test_e2e` leg | — | — |
 | **F8 Dashboard** | — | `test_dashboard_flow` (14) | — | `test_e2e` leg | `test_dashboard` (2) | — |
@@ -153,7 +153,7 @@ Columns are the test-type dirs under `tests/`. Cells name representative file(s)
 | **Forum engagement metric (Elad)** | `test_db_engagement` (7) | `test_engagement` (7) | — | — | — | — |
 | **Media (Elad)** | `test_media_store` (3) | `test_media` (11) · `test_elad_lane_journey` (4) | `test_messages_media_negative` (37) | `test_elad_lane_live` (1, live HTTP incl. 10 MB cap) | `test_media_limits` (6) | — |
 | **AI job-queue +5 (Elad)** | `test_jobqueue` (43) · `test_bench` (18) | `test_ai_queue_contract` (21) | — | `test_ai_queue_live` (11) | `test_ai_queue` (28) | `test_pool_scaling` (2) · `test_queue_backpressure` (6) |
-| **Deploy / scale (Elad)** | — | `test_deploy_contract` (21) · `test_scale_contract` (10) · `test_pin_contract` (4) | — | — | — | — |
+| **Deploy / scale (Elad)** | — | `test_deploy_contract` (21) · `test_scale_contract` (11) · `test_pin_contract` (4) | — | — | — | — |
 | **Rate-limiting / anti-spam (Elad)** | — | — | — | — | `test_rate_limit` (10) | in `test_load` |
 | **Data layer (`db.py` + Mongo)** | `test_db` (55) · `test_backup_script` (2) | `test_db_mongo` (22, real Mongo) | — | — | (injection-safe queries) | — |
 | **Frontend (SPA / CSRF / a11y / mobile)** | `test_frontend_mobile_guards` (14) | `test_frontend` (71) | — | `test_e2e` leg | `test_csrf` (6) · `test_web_hardening` (4) · `test_review_hardening` (3) | — |
@@ -164,11 +164,11 @@ Columns are the test-type dirs under `tests/`. Cells name representative file(s)
 | **Fault tolerance / isolation** | — | — | — | `test_fault_isolation` (2) · Full-System `test_parts_in_isolation` (12) | — | — |
 | **Whole-system journey** | — | — | — | `test_e2e` (1) · Full-System `test_everything_together_sync` (15) | — | — |
 
-**Totals by type (full suite, `pytest --collect-only`):** Unit **375** · Integration **441** · Negative **164** ·
-System **15** · Full-System **27** · Security **97** · Stress **12** → **1131 tests** (`tests/E2E_Tests/` is
+**Totals by type (full suite, `pytest --collect-only`):** Unit **375** · Integration **440** · Negative **164** ·
+System **15** · Full-System **27** · Security **97** · Stress **12** → **1130 tests** (`tests/E2E_Tests/` is
 currently empty). This matches the header count.
 
-**Pass / skip:** the pre-07-12 snapshot was **747 pass, 36 skip in ~47 s**; the current suite is **1088 pass,
+**Pass / skip:** the pre-07-12 snapshot was **747 pass, 36 skip in ~47 s**; the current suite is **1087 pass,
 43 skip in ~87 s** (`python -m pytest tests/ -q`). The env-gated skips are *not broken* —
 they run the moment their dependency is present:
 
@@ -363,7 +363,7 @@ between planes (§1). Full detail in [`COLLABORATORS.md`](../COLLABORATORS.md) a
 cp .env.example .env
 docker compose up --build          # 3 containers; only web is published
 # → http://localhost:8000/health   → then register, set a profile, check in, see the dashboard
-pytest -q                          # 1088 pass / 43 env-gated skip
+pytest -q                          # 1087 pass / 43 env-gated skip
 ```
 
 CI reproduces the gate on every PR (ruff → bandit → pytest + a `mongo:7` service). `main` is
