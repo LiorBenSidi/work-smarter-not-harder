@@ -21,8 +21,10 @@ keep `main` green (PR-only), and **don't re-do or "polish" the built parts**.
   (GHCR build/push → SSH-deploy to the Azure VM → Caddy HTTPS, `docker-compose.prod.yml`, auto-rollback, `/ready`
   gate). Full test suite green on `main`. Deploy detail: [`docs/CICD_REPORT.md`](docs/CICD_REPORT.md) · demo run-sheet:
   [`docs/DEPLOY_DEMO.md`](docs/DEPLOY_DEMO.md).
-- ⏳ **Open — Shiri (`ai/`):** the real Random Forest model + recommendation engine behind `POST /predict` — it's a
-  contract-shaped **placeholder** today. See [`PERSON1.md`](PERSON1.md).
+- ✅ **Shiri (`ai/`) — the model has landed:** the real **Random Forest** + recommendation engine now serve
+  `POST /predict` (`ai/model/model.pkl` + `ai/inference.py`, with the calorie value wired in). ⏳ Still open on
+  her lane: the **F5 workout-generator / F6 program-balance** scope, the redundant `test_ai.py` TDD scaffold
+  (#358), and the model backlog (#276). See [`PERSON1.md`](PERSON1.md).
 - ✅ **Elad — lane complete** (17 Jul): the **UptimeRobot monitor is live** (R9, monitor `803532626` on the
   prod FQDN — the last open item). *Also done:* the live-deploy **demo** (presented **16 Jul**, #340); the
   **risk assessment** ([`docs/REPORT.md`](docs/REPORT.md) §5); the Azure deploy is **live**
@@ -108,4 +110,4 @@ E2E_BASE_URL=http://localhost:8000 python -m pytest tests/Stress_Tests   # locus
 ## Where things are
 - `docs/` — proposal, official guidelines, TA notes, design doc, meeting notes.
 - `CONTRIBUTING.md` — the PR workflow.
-- `web/` — the built web app + data layer · `ai/` — the AI container (Shiri's model is still a placeholder) · `tests/` — the 5 test suites (web/data covered; AI + stress/integration still to grow).
+- `web/` — the built web app + data layer · `ai/` — the AI container (the real Random Forest, `ai/model/model.pkl`) · `tests/` — the 5 course test types, green in CI (a handful are env-gated and run against the live containers).
