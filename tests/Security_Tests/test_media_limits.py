@@ -6,6 +6,9 @@ client + injected fakes, no live stack). The last test proves the per-request up
 NOT leak into the small 64 KB JSON body cap that guards the other routes.
 """
 import io
+import os
+
+import pytest
 
 
 def _login(c, user="mediauser"):
@@ -13,19 +16,29 @@ def _login(c, user="mediauser"):
     c.post("/login", json={"username": user, "password": "s3cretpw!"})
 
 
-def test_oversize_upload_is_rejected_413(media_client):
+def test_oversize_upload_is_rejected_413_before_any_bytes_are_stored(media_client):
+    # 413 alone is not the guarantee that matters: a cap that rejects *after* writing still lets a
+    # flood fill the disk. Assert the store stayed empty too.
     c = media_client
     _login(c)
-    c.raw.application.config["MEDIA_MAX_BYTES"] = 1024        # tiny per-file cap for the test
+    app = c.raw.application
+    app.config["MEDIA_MAX_BYTES"] = 1024                      # tiny per-file cap for the test
     r = c.post("/media", data={"file": (io.BytesIO(b"x" * 5000), "big.png", "image/png")})
     assert r.status_code == 413
+    root = app.config["MEDIA_ROOT"]
+    stored = os.listdir(root) if os.path.isdir(root) else []
+    assert stored == [], "an oversize upload must die before any bytes are stored"
 
 
-def test_disallowed_mime_is_rejected_400(media_client):
+@pytest.mark.parametrize("mime", ["application/octet-stream", "text/plain", "application/x-msdownload",
+                                  "image/svg+xml", "text/html", "application/json"])
+def test_every_non_allowlisted_mime_is_rejected_400(media_client, mime):
+    # allowlist, not blocklist: html/svg (script carriers) and executables all bounce the same way.
     c = media_client
     _login(c)
-    r = c.post("/media", data={"file": (io.BytesIO(b"MZ\x90\x00"), "x.exe", "application/octet-stream")})
+    r = c.post("/media", data={"file": (io.BytesIO(b"MZ\x90\x00"), "evil.bin", mime)})
     assert r.status_code == 400
+    assert "unsupported" in r.get_json()["error"]
 
 
 def test_unauthenticated_upload_is_401(media_client):

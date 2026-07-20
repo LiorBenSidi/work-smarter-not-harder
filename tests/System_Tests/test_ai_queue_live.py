@@ -48,11 +48,11 @@ def test_predict_over_the_real_wire_keeps_the_contract():
     assert isinstance(body["recommendations"], list)
 
 
-def test_the_pool_is_made_of_real_worker_processes():
-    """`/queue/stats` reports the configured pool; a pool of 1 would mean no parallelism at all."""
-    stats = _get("/queue/stats").json()
-    assert stats["workers"] >= 1
-    assert stats["max_pending"] >= 1
+# Removed: it promised proof of real worker processes but asserted only `workers >= 1` /
+# `max_pending >= 1`, both structurally guaranteed by the junk-env fallbacks — it could not fail.
+# Live parallelism is actually demonstrated by
+# test_gunicorn_serves_concurrent_predicts_without_serializing_them below, and pool health by the
+# robustness-counter test.
 
 
 def test_the_live_queue_reports_its_robustness_counters_and_a_healthy_pool():

@@ -115,9 +115,7 @@ def test_media_upload_is_rate_limited_after_a_flood(rate_limited_media_client):
     assert last.status_code == 429
 
 
-def test_normal_forum_traffic_is_not_rate_limited(forum_client):
-    # the default forum_client (limiter OFF) — a handful of posts never 429 (the caps are opt-in)
-    forum_client.post("/register", json={"username": "regular", "password": "s3cretpw!", "email": "r@ex.com"})
-    forum_client.post("/login", json={"username": "regular", "password": "s3cretpw!"})
-    for i in range(15):
-        assert forum_client.post("/forum/posts", json={"title": f"p{i}", "body": "hello there"}).status_code != 429
+# Removed: test_normal_forum_traffic_is_not_rate_limited drove the *unlimited* forum_client and
+# asserted != 429. With RATELIMIT_ENABLED off there is no code path that can return 429, so it could
+# not fail for a real reason. The caps themselves are proven by the flood tests above, which use the
+# rate_limited_* clients.

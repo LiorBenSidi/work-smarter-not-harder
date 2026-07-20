@@ -7,8 +7,13 @@ accident and impossible to notice until the numbers are wrong or the VM is down:
     purpose; shipping it as the real target would make every prediction slow and meaningless.
   * scaling `ai` out must not publish it. `--scale ai=N` with a `ports:` mapping fails outright on the
     second replica (port collision) and exposes an unauthenticated `/jobs` on the first.
-  * the `/jobs` + replicas caveat must stay written down. The job store is per-container, so a scaled
-    `ai` would 404 job reads — safe today only because `web` calls `/predict` alone.
+  * `web` must keep calling `/predict` alone. The job store is per-container, so a scaled `ai` would
+    404 job reads round-robined to a replica that never saw the job. Scaling out is safe *because* of
+    that call-site restraint, so the restraint itself is what gets pinned here.
+
+The model-seam constant (`DEFAULT_TARGET == "inference:predict_one"`) is pinned once, in
+`test_ai_queue_contract.py::test_the_model_seam_exists_with_the_name_the_pool_resolves`, which also
+resolves it — not repeated here. Likewise `ai`'s one-gunicorn-worker rule lives in that file.
 """
 import importlib.util
 from pathlib import Path
@@ -32,17 +37,7 @@ def scale():
     return _strip_comments((ROOT / "docker-compose.scale.yml").read_text())
 
 
-@pytest.fixture(scope="module")
-def scale_raw():
-    return (ROOT / "docker-compose.scale.yml").read_text()
-
-
 # --------------------------------------------------------------------------- the bench target
-
-
-def test_the_benchmark_is_never_the_production_target(jobqueue_module):
-    assert jobqueue_module.DEFAULT_TARGET == "inference:predict_one"
-    assert "bench" not in jobqueue_module.DEFAULT_TARGET
 
 
 @pytest.mark.parametrize("compose", ["docker-compose.yml", "docker-compose.prod.yml", "docker-compose.test.yml"])
@@ -76,17 +71,28 @@ def test_web_gets_more_than_one_gunicorn_worker_when_scaled(scale):
     assert '"${WEB_WORKERS:-4}"' in scale
 
 
-def test_the_replica_caveat_stays_documented(scale_raw):
-    """The one thing a future reader must not have to rediscover: /jobs is not replica-safe."""
-    lowered = scale_raw.lower()
-    assert "/jobs" in lowered
-    assert "replica" in lowered
-    assert "/predict" in lowered
+def test_web_never_calls_the_replica_unsafe_job_endpoints():
+    """What actually makes `--scale ai=N` safe: `web` talks to `/predict` and nothing else.
 
+    `/jobs` is per-container state — a read round-robins to a replica that never saw the job and
+    404s. Previously this file asserted that the caveat was *written in a comment*, which a reword
+    breaks and a real regression does not. Pin the call site instead: if anyone ever wires `web` to
+    `/jobs`, scaling out starts losing results, and this fails.
+    """
+    web_sources = [p for p in (ROOT / "web").rglob("*.py")]
+    assert web_sources, "expected to find the web package"
 
-def test_the_queue_documents_why_ai_holds_state_in_memory(jobqueue_module):
-    doc = jobqueue_module.__doc__ or ""
-    assert "in-memory" in doc.lower()
+    offenders = []
+    for path in web_sources:
+        text = path.read_text(encoding="utf-8")
+        for number, line in enumerate(text.splitlines(), start=1):
+            code = line.split("#", 1)[0]
+            if '"/jobs' in code or "'/jobs" in code or "/jobs/" in code:
+                offenders.append(f"{path.relative_to(ROOT)}:{number}: {line.strip()}")
+
+    assert offenders == [], (
+        "web must reach ai only through /predict — /jobs is not replica-safe:\n" + "\n".join(offenders)
+    )
 
 
 # --------------------------------------------------------------------------- the benchmark payload

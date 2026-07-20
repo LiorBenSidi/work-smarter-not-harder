@@ -16,6 +16,7 @@ They are cheap text assertions on the committed files (no Docker, no live stack)
 normal per-PR CI gate. Behaviour of the media/rate-limit code itself is covered by
 tests/Security_Tests/test_media_limits.py and test_rate_limit.py.
 """
+import re
 from pathlib import Path
 
 import pytest
@@ -116,6 +117,61 @@ def test_dev_and_prod_web_run_the_same_gunicorn_command():
     assert prod is not None, "prod docker-compose.prod.yml must define the web gunicorn command"
     assert dev == prod, ("local must mirror the VM — dev and prod web gunicorn commands must be identical.\n"
                          f"  dev : {dev}\n  prod: {prod}")
+
+
+@pytest.mark.parametrize("compose_filename", ["docker-compose.yml", "docker-compose.prod.yml"])
+def test_raising_web_workers_without_shared_limiter_storage_cannot_ship(compose_filename):
+    """STRESS_REPORT §4 rec #2, made executable.
+
+    `web/ratelimit.py` stores counters in `memory://` — per **process**. At one gunicorn worker the
+    advertised caps (5/min register, 20/min login, the forum + media caps) are exact. Raise
+    `WEB_WORKERS` to N and every cap silently becomes N× looser, because each worker counts alone:
+    the login brute-force cap the Security suite proves at 20/min would really be 80/min at 4 workers.
+    Nothing would go red — the caps still *exist*, they are just wrong, which is the worst shape a
+    security control can fail in.
+
+    The fix is not redis. On a 4-vCPU VM, `web` is I/O-bound and threads already use every core
+    (scrypt releases the GIL — #330 measured +workers ≈ 0 gain), so a shared store would buy a fourth
+    container and a new failure mode to support a knob we have no reason to turn. Instead the
+    dependency is pinned here: the shipped default may only exceed one worker if the same file
+    configures shared limiter storage. Whoever raises the knob gets a red test naming the trade,
+    rather than discovering it from a rate-limit bypass in production.
+    """
+    command = _web_gunicorn_command(compose_filename)
+    assert command is not None, f"{compose_filename} must define the web gunicorn command"
+
+    match = re.search(r'"--workers",\s*"\$\{WEB_WORKERS:-(\d+)\}"', command)
+    assert match, (f"{compose_filename}: web must size workers via a ${{WEB_WORKERS:-N}} default so this "
+                   f"guard can read it — got: {command}")
+    default_workers = int(match.group(1))
+
+    text = (ROOT / compose_filename).read_text()
+    shared_storage = "RATELIMIT_STORAGE_URI" in text and "memory://" not in text
+
+    assert default_workers == 1 or shared_storage, (
+        f"{compose_filename} defaults web to {default_workers} gunicorn workers while flask-limiter "
+        f"still uses per-process memory:// storage, so every advertised rate limit is really "
+        f"{default_workers}x looser than the Security suite asserts. Either keep the default at 1 "
+        f"worker (scale with --threads, which shares one process) or set RATELIMIT_STORAGE_URI to a "
+        f"shared backend in this file."
+    )
+
+
+def test_the_scale_override_is_the_documented_exception_to_the_worker_rule():
+    """`docker-compose.scale.yml` deliberately defaults web to 4 workers — it exists to measure the
+    horizontal axis, and its runs drive `ai` directly. It is therefore the one file the guard above
+    does not cover, and that exemption is only safe while it stays a **benchmark** override: it must
+    never be one of the files a deploy uses. Assert exactly that, so the exception cannot quietly
+    grow into a shipping configuration."""
+    scale = (ROOT / "docker-compose.scale.yml").read_text()
+    assert "${WEB_WORKERS:-4}" in scale, "the scale override is expected to raise web workers (the point of it)"
+
+    workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text()
+    assert "docker-compose.scale.yml" not in workflow, \
+        "the scale override is a benchmark file — CI must never build or deploy with it"
+    for shipped in ("docker-compose.prod.yml", "tests/Dockerfile"):
+        assert "docker-compose.scale.yml" not in (ROOT / shipped).read_text(), \
+            f"{shipped} must not pull in the benchmark-only scale override"
 
 
 # --------------------------------------------------------------------------- test stack (the runner)

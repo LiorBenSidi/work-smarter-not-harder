@@ -52,7 +52,17 @@ This complements the existing stress assets rather than repeating them:
    already parallelises across all cores; +workers ≈ 0 gain, measured 3.01×≈3.19× at 4-way). `WEB_WORKERS`/`WEB_THREADS`
    are now env-tunable (same image, bigger host), default **1 worker × 16 threads** (1 worker keeps the `memory://`
    caps exact; 16 = the measured knee). Dev↔prod mirrored + an SSE-starvation guard. Re-measured in §6.
-2. **Rate-limit storage is per-process** (`memory://`, documented in `web/ratelimit.py`) — the default stays 1 worker so the caps are exact; point `RATELIMIT_STORAGE_URI` at redis if `WEB_WORKERS` is ever raised > 1.
+2. ✅ **Rate-limit storage is per-process** (`memory://`, documented in `web/ratelimit.py`) — **CLOSED by a guard,
+   not by redis.** The risk was never today's config (the default is 1 worker, so the caps are exact); it was that
+   raising `WEB_WORKERS` later would make every advertised cap N× looser *silently* — the login cap the Security
+   suite proves at 20/min would really be 80/min at 4 workers, with nothing going red. Adding redis would buy a
+   fourth container and a new failure mode to support a knob we have no reason to turn (#330 measured +workers ≈ 0
+   gain on this VM — threads already use every core, since scrypt releases the GIL). So the *dependency* is pinned
+   instead: `test_deploy_contract.py::test_raising_web_workers_without_shared_limiter_storage_cannot_ship` fails
+   any shipped compose that defaults web above one worker without configuring `RATELIMIT_STORAGE_URI`, and names
+   the trade in the failure message. `docker-compose.scale.yml` (4 workers, by design) is the documented exception
+   and a companion test asserts it can never reach a deploy path. Mutation-checked: raising the prod default to 4
+   turns the guard red.
 3. ✅ **Forum list pagination** — **DONE (#332):** cursor pagination + a `created_at` index. It was the latency leader; §6 shows `/forum/posts` p95 fell ~9× at 200 users.
 4. ✅ **Bound the other unbounded reads (#331)** — the same audit found the pattern elsewhere; the two Elad-lane
    rows are now bounded (`forum_received_engagement` scoped to the user's own content + indexes;
