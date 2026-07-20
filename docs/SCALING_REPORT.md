@@ -148,6 +148,13 @@ by `test_scale_contract.py`.
   `AI_QUEUE_MAX_PENDING=32` stays: the backlog bound is about shedding load before callers time out, not
   about fitting in RAM.
 
+  *Why we stopped here rather than re-running the benchmark on the VM itself.* A live re-run would only
+  upgrade the wording from "should see" to "does see": the two things that could make prod differ — core
+  count and the workload being the real model — are both already controlled for (`--cpus=4` matches the
+  VM's 4 vCPU; #380/#381 re-measured both axes against the baked-in Random Forest). Against that, the run
+  would load the single production VM that serves the graded demo, for a claim the numbers already
+  support. Deliberate stopping point, not an unfinished item.
+
 ## Measured model footprint — the real RF validates the sizing (#248)
 
 The numbers above are the *scaling* measurement (the CPU-bound bench target, so throughput reflects the

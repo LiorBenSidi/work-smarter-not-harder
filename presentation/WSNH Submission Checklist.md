@@ -18,28 +18,32 @@
 **Penalties:** −5 per bug found · −5 per week late. So ship on time and land the fixes below.
 
 ## Deliverables (map to the rubric: 75 + 5 + 10 + 10)
-- [ ] **The working app (75)** — the repo + the **live URL** (app.worksmarternotharder.dev). Runs on Docker;
-      every proposal feature present. *(Open gap: Shiri's real model — see below.)*
-- [ ] **AI Job Queue (+5)** — `ai/jobqueue.py` (bounded queue + process pool). ✅ built.
-- [ ] **Online Forum (+10)** — all 7 sub-features + real-time + anonymity bonus. ✅ built (cold-seed content pending — Shiri).
-- [ ] **Azure deploy + CI/CD (+10)** — live over HTTPS, auto-deploy + rollback. ✅ built & live.
-- [ ] **Report** — `docs/REPORT.md` (app overview · features×tests matrix · risk assessment). ✅ current
-      (783 tests). Export to PDF if the TA wants a file.
+- [ ] **The working app (75)** — the repo + the **live URL** (app.worksmarternotharder.dev). Runs on Docker.
+      *(Shiri's Random Forest has landed — `ai/model/model.pkl` is baked into the image and `/predict` serves
+      real inference. Remaining against "every proposal feature present": the F5 workout-generator / F6
+      program-balance scope, pending Shiri's confirmation, and forum cold-seed content.)*
+- [x] **AI Job Queue (+5)** — `ai/jobqueue.py` (bounded queue + process pool). ✅ built.
+- [x] **Online Forum (+10)** — all 7 sub-features + real-time + anonymity bonus. ✅ built (cold-seed content pending — Shiri).
+- [x] **Azure deploy + CI/CD (+10)** — live over HTTPS, auto-deploy + rollback. ✅ built & live.
+- [x] **Report** — `docs/REPORT.md` (app overview · features×tests matrix · risk assessment). ✅ current
+      (1053 tests). Export to PDF if the TA wants a file.
 - [ ] **Demo video** — record from `WSNH Demo Video Script.md`; name `VID_<id1>_<id2>_<id3>.mp4`.
 - [ ] **Presentation** — **`WSNH Presentation (Canva).pptx/.pdf`** (8-slide light/projector deck, design `DAHO6FXsV5o`) + **`WSNH Speaker Script (8-slide Canva).md`** (word-for-word, 2 handoffs); rehearse to 5:00. *(`WSNH Presentation.pptx` + `WSNH Speaker Notes and QA.md` are the retired 11/12-slide versions — Q&A bank in the latter is still useful.)*
 
 ## Pre-submission checklist (do these before you submit)
 **Must-fix (the visible gaps):**
-- [ ] **Shiri: land the trained Random Forest** → real `/predict` (F3), recommendation engine (F5/F6/F7),
-      calories (F4). This is the one thing a TA running the app will notice — every prediction is "Moderate"
-      until it lands.
+- [x] **Shiri: land the trained Random Forest** → real `/predict` (F3), recommendation engine (F7), calories
+      (F4) — **landed.** `ai/model/model.pkl` + `inference.py` are baked in and predictions are real (the old
+      "every prediction reads Moderate" placeholder behaviour is gone). Still open on her lane: the **F5
+      workout-generator / F6 program-balance** scope.
 - [ ] **Shiri: forum cold-seed content** (pre-seeded clients + historical posts/comments).
 - [ ] **Add the "See It Live" demo slide** to the Canva deck (as slide 5, after Architecture) — pre-recorded 30–45s clip recommended over live for the 5-min cap. Optionally add app screenshots to slides 2–6.
-- [ ] **Lior + Elad: final timeout tune** — once Shiri reports predict-time, set `AI_PREDICT_TIMEOUT_SECONDS` /
-      `AI_CLIENT_TIMEOUT_SECONDS` accordingly (env vars, no code change).
+- [x] **Lior + Elad: final timeout tune** — **done, no retune needed.** Measured against the real model,
+      `AI_PREDICT_TIMEOUT_SECONDS`=30 / `AI_CLIENT_TIMEOUT`=33 already sit well clear of observed latency
+      (`docs/SCALING_REPORT.md`).
 
 **Verify (should already be true):**
-- [x] Suite green — **747 passing / 36 env-gated (783 collected)**; `main` green.
+- [x] Suite green — **1011 passing / 42 env-gated (1053 collected)** in CI; `main` green.
 - [x] Live URL serves over HTTPS; auto-deploy + rollback working.
 - [x] No committed secrets; only `web` exposed; auth/CSRF/injection defenses in place (TA-reviewed clean).
 - [x] Docs reconciled to reality (counts, ownership, deploy gate, data model).
@@ -54,5 +58,6 @@
 - [ ] Re-run the demo end-to-end once the model is in, so shot 3 shows a real prediction.
 
 ## The one-line status
-Engineering is submission-ready and TA-reviewed clean. The remaining items are **the AI model + forum cold-seed**
-and the **team deliverables** (demo video, rehearsal).
+Engineering is submission-ready and TA-reviewed clean, and the AI model has landed. The remaining items are
+**forum cold-seed + the F5/F6 scope call** (Shiri), the **team deliverables** (demo video, rehearsal), and the
+one thing nobody owns yet: **confirming the submission format with the TA** (the ⚠️ at the top of this file).
