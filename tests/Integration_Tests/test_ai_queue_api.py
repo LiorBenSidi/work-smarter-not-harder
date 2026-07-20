@@ -79,16 +79,8 @@ def test_predict_passes_the_features_through_to_the_model(make_client):
     assert seen == payload
 
 
-def test_predict_rejects_an_empty_body_now_the_model_needs_the_four_fields(make_client):
-    """The readiness model can't score without its four inputs, so `/predict` refuses an empty
-    features map at the boundary (400) rather than letting a worker impute invented values.
-
-    NOTE (web follow-up, Lior): web must now always send the four readiness fields. `dashboard.py`
-    currently posts profile-only and will degrade to ai_status='unavailable' until it sends them.
-    """
-    response = make_client().post("/predict", json={"features": {}})
-    assert response.status_code == 400
-    assert "required" in response.get_json()["error"]
+# An empty features map is one case of the readiness-field table below
+# (`({}, "sleep_hours is required")`), which also proves no worker was spent.
 
 
 def test_health_is_unchanged(make_client):
@@ -123,10 +115,9 @@ def test_predict_returns_504_when_the_model_outruns_the_timeout(make_client):
     assert "timed out" in response.get_json()["error"]
 
 
-def test_predict_returns_500_when_the_model_raises(make_client):
-    response = make_client(boom).post("/predict", json={"features": dict(VALID)})
-    assert response.status_code == 500
-    assert response.get_json()["error"] == "prediction failed"
+# A raising model returning 500 {"error": "prediction failed"} is asserted in
+# Security_Tests/test_ai_queue.py::test_an_error_response_does_not_leak_internals, which pins the
+# same status and body *and* that the traceback never reaches the caller.
 
 
 def test_a_model_crash_does_not_take_the_container_down(make_client):
@@ -186,10 +177,9 @@ def test_a_failed_job_reports_the_error_not_a_result(make_client):
     assert "result" not in body
 
 
-def test_an_unknown_job_id_is_a_404_not_a_500(make_client):
-    response = make_client().get("/jobs/deadbeef")
-    assert response.status_code == 404
-    assert response.get_json()["error"] == "unknown job"
+# Unknown job ids -> 404 {"error": "unknown job"} is pinned in
+# Security_Tests/test_ai_queue.py::test_a_guessed_job_id_reveals_nothing, parametrized over five
+# hostile guesses rather than the single "deadbeef" this asserted.
 
 
 def test_jobs_sheds_load_with_503_when_full(make_client):
@@ -280,12 +270,9 @@ def test_predict_rejects_an_unscoreable_readiness_request_before_a_worker(make_c
     assert client.get("/queue/stats").get_json()["submitted"] == 0
 
 
-def test_predict_accepts_a_complete_in_range_readiness_request(make_client):
-    """The mirror of the rejection cases: the four fields present and in range go through to the
-    model and come back with the contract shape."""
-    response = make_client().post("/predict", json={"features": dict(VALID)})
-    assert response.status_code == 200
-    assert {"state", "proba", "recommendations"} <= set(response.get_json())
+# The accept-path mirror of the table above is already
+# test_predict_still_returns_the_contract_shape, which asserts the exact values web reads, not
+# just the key set.
 
 
 # --------------------------------------------------------------------------- helper

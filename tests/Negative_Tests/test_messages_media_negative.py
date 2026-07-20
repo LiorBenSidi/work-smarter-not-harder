@@ -89,24 +89,8 @@ def test_upload_without_a_file_part_is_refused(alice):
                       ).status_code == 400
 
 
-@pytest.mark.parametrize("mime", ["text/plain", "application/x-msdownload", "image/svg+xml",
-                                  "text/html", "application/json"])
-def test_upload_refuses_every_non_allowlisted_mime(alice, mime):
-    # allowlist, not blocklist: html/svg (script carriers) and executables all bounce the same way.
-    r = _upload(alice, mime=mime, name="evil.bin")
-    assert r.status_code == 400
-    assert "unsupported" in r.get_json()["error"]
-
-
-def test_upload_over_the_per_file_cap_dies_with_413_before_storage(alice):
-    import os
-    app = alice.raw.application
-    app.config["MEDIA_MAX_BYTES"] = 1024                      # shrink the wall for the test
-    r = _upload(alice, data=b"\x89PNG" + b"x" * 2048)
-    assert r.status_code == 413
-    root = app.config["MEDIA_ROOT"]
-    stored = os.listdir(root) if os.path.isdir(root) else []
-    assert stored == [], "an oversize upload must die before any bytes are stored"
+# The per-file size cap (413 + nothing stored) and the mime allowlist are security walls, so they are
+# pinned once in Security_Tests/test_media_limits.py rather than duplicated here.
 
 
 # --------------------------------------------------------------- media access breaches
@@ -143,14 +127,7 @@ def test_attach_rejects_non_string_list_ids(alice, ids):
                       json={"attachment_ids": ids} if ids is not None else {}).status_code == 400
 
 
-def test_a_dm_attachment_is_dead_to_a_third_account(alice, bob, make_client, fake_users, fake_forum,
-                                                    fake_messages, fake_media, fake_notifications,
-                                                    tmp_path):
-    mid = _upload(alice).get_json()["id"]
-    alice.post("/messages/bob/attachments", json={"attachment_ids": [mid]})
-    carol = make_client(fake_users, forum=fake_forum, messages=fake_messages, media=fake_media,
-                        notifications=fake_notifications)
-    carol.raw.application.config["MEDIA_ROOT"] = str(tmp_path / "media")
-    carol.post("/register", json={"username": "carol", "password": "s3cretpw!", "email": "c@ex.com"})
-    carol.post("/login", json={"username": "carol", "password": "s3cretpw!"})
-    assert carol.get(f"/media/{mid}").status_code == 403
+# Third-party DM-attachment reads are pinned in
+# Security_Tests/test_media_limits.py::test_dm_media_is_private_to_participants, which asserts both
+# halves of the rule — the participant gets 200 *and* the outsider gets 403. Asserting only the 403
+# half here would pass just as well against a route that denies everyone.

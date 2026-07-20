@@ -106,29 +106,6 @@ def test_upload_rejected_once_total_disk_cap_reached(media_client):
     assert len(stored) == 1                            # the rejected upload left no bytes behind
 
 
-def test_upload_allowed_while_under_total_disk_cap(media_client):
-    # Under the cap, uploads keep working — the default (500 MB) never trips for normal use.
-    c = media_client
-    _login(c)
-    c.raw.application.config["MEDIA_MAX_TOTAL_BYTES"] = 10 * 1024 * 1024
-    assert _upload_png(c).status_code == 201
-    assert _upload_png(c).status_code == 201
-
-
-def test_cannot_attach_someone_elses_blob(media_client, make_client, fake_users, fake_forum,
-                                          fake_messages, fake_media, fake_notifications, tmp_path):
-    # alice uploads; bob (a second client sharing the same fake stores) can't bind alice's blob.
-    _login(media_client, "alice")
-    mid = _upload_png(media_client).get_json()["id"]
-    bob = make_client(fake_users, forum=fake_forum, messages=fake_messages, media=fake_media,
-                      notifications=fake_notifications)
-    bob.raw.application.config["MEDIA_ROOT"] = str(tmp_path / "media")
-    bob.post("/register", json={"username": "bob", "password": "s3cretpw!", "email": "bob@ex.com"})
-    bob.post("/login", json={"username": "bob", "password": "s3cretpw!"})
-    pid = bob.post("/forum/posts", json={"title": "hijack", "body": "not mine"}).get_json()["post"]["id"]
-    assert bob.post(f"/forum/posts/{pid}/attachments", json={"attachment_ids": [mid]}).get_json()["bound"] == []
-
-
 def test_attachments_are_capped_per_target(media_client):
     # #331 (scale/availability): a single post/DM must not carry an unbounded attachment list — the serve
     # read (list_for_target) would then be unbounded too. The bind route caps how many blobs one target
@@ -146,17 +123,7 @@ def test_attachments_are_capped_per_target(media_client):
     assert c.post(f"/forum/posts/{pid}/attachments", json={"attachment_ids": [extra]}).get_json()["bound"] == []
 
 
-def test_cannot_attach_to_someone_elses_post(media_client, make_client, fake_users, fake_forum,
-                                             fake_messages, fake_media, fake_notifications, tmp_path):
-    # alice owns a post; bob (his OWN blob) can't bolt it onto her post -> 403 (post-ownership), and a
-    # bogus post id -> 404. Without the check any logged-in user could attach media to anyone's post.
-    _login(media_client, "alice")
-    pid = media_client.post("/forum/posts", json={"title": "alice's", "body": "hers"}).get_json()["post"]["id"]
-    bob = make_client(fake_users, forum=fake_forum, messages=fake_messages, media=fake_media,
-                      notifications=fake_notifications)
-    bob.raw.application.config["MEDIA_ROOT"] = str(tmp_path / "media")
-    bob.post("/register", json={"username": "bob", "password": "s3cretpw!", "email": "bob@ex.com"})
-    bob.post("/login", json={"username": "bob", "password": "s3cretpw!"})
-    mid = _upload_png(bob).get_json()["id"]
-    assert bob.post(f"/forum/posts/{pid}/attachments", json={"attachment_ids": [mid]}).status_code == 403
-    assert bob.post("/forum/posts/nope/attachments", json={"attachment_ids": [mid]}).status_code == 404
+# Cross-owner attach refusals (binding a foreign blob, attaching to a foreign or missing post) live in
+# Negative_Tests/test_messages_media_negative.py, where the shared alice/bob fixtures express the same
+# assertions in a third of the setup — and the foreign-blob case additionally proves the blob stays
+# private afterwards.

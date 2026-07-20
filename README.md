@@ -226,7 +226,7 @@ P2P direct messages · media attachments · SSE-pushed notifications · a per-us
 on the profile), Week-9 logging, the 3-container build, the CI gate, the cross-container test-runner, the
 **AI job queue (+5)** (bounded + self-healing pool), **measured scaling**, and the CI/CD pipeline
 auto-deploying every green `main` to Azure over HTTPS. The **Random Forest** behind `POST /predict` has landed
-too (`ai/model/model.pkl`, baked into the image). Suite: **1023 passing / 43 environment-gated** (1066 collected).
+too (`ai/model/model.pkl`, baked into the image). Suite: **1011 passing / 42 environment-gated** (1053 collected).
 
 **Remaining:** forum cold-seed content. Risk assessment and the honest "what we did *not* mitigate" list:
 [`docs/REPORT.md`](docs/REPORT.md) §5.

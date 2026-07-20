@@ -1,4 +1,9 @@
-"""Day-one repo-integrity checks. Replace/extend with real feature tests as the app is built.
+"""Repo-integrity guards — these are permanent, not a scaffold awaiting replacement.
+
+The filename is historical (they were the first tests written). They stayed because what they check
+never stops mattering: `test_env_secrets_not_committed` shells out to `git ls-files .env` and goes red
+the moment anyone commits a secret — deliberately asking git rather than the filesystem, so a
+developer's own gitignored `.env` is not a false positive.
 
 These guard the project's required structure and a cardinal course rule (never commit secrets).
 They run in CI on every PR (see .github/workflows/ci.yml) and genuinely fail if an invariant breaks.

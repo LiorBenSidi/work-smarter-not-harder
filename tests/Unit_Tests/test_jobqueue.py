@@ -76,10 +76,8 @@ def test_get_reports_the_job_as_done_with_its_result(make_queue):
     assert "error" not in payload
 
 
-def test_each_submission_gets_a_distinct_id(make_queue):
-    queue = make_queue()
-    ids = {queue.submit({"n": n}) for n in range(20)}
-    assert len(ids) == 20
+# Id distinctness is pinned in Security_Tests/test_ai_queue.py::test_job_ids_are_not_sequential_or_guessable,
+# which asserts distinctness plus uuid4 width, hex-not-counter, and no enumerable shared prefix.
 
 
 def test_unknown_job_id_raises_job_not_found(make_queue, jobqueue_module):
@@ -298,9 +296,21 @@ def test_a_hung_job_releases_its_slot_after_the_hard_timeout(make_queue, jobqueu
     hung = queue.submit({"stuck": True})
     with pytest.raises(jobqueue_module.QueueFull):
         queue.submit({"n": 1})  # the hung job holds the only slot
-    time.sleep(0.06)
 
-    ok = queue.submit({"n": 2})  # reaping on submit must have freed the slot
+    # Reaping happens ON submit, so retry until it frees the slot rather than sleeping past the
+    # hard timeout once: a single `sleep(hard_timeout + 0.01)` is a knife-edge on a loaded CI box
+    # (the job may not have started yet), which made this file flaky under a full-suite run. The
+    # assertion is unweakened — if the reaper never fires, every attempt stays QueueFull and the
+    # test fails on `ok is None`.
+    ok = None
+    deadline = time.monotonic() + 5
+    while ok is None and time.monotonic() < deadline:
+        time.sleep(0.02)
+        try:
+            ok = queue.submit({"n": 2})
+        except jobqueue_module.QueueFull:
+            continue
+    assert ok is not None, "the reaper never freed the hung job's slot within 5s"
     assert queue.result(ok, timeout=5)["seen"] == ["n"]
     assert queue.get(hung).status == "failed"
     assert "abandoned" in queue.get(hung).as_dict()["error"]
@@ -326,8 +336,15 @@ def test_an_abandoned_job_that_finishes_late_does_not_release_its_slot_twice(mak
     release = threading.Event()
     queue = make_queue(_stuck_target(release), workers=2, hard_timeout=0.05)
     queue.submit({"stuck": True})
-    time.sleep(0.06)
-    queue.result(queue.submit({"n": 1}), timeout=5)  # reap fires; slot released once
+
+    # Poll for the reap instead of sleeping exactly past the hard timeout — see the note in
+    # test_a_hung_job_releases_its_slot_after_the_hard_timeout. Reaping runs on submit, so keep
+    # submitting healthy jobs until the hung one is counted as abandoned.
+    deadline = time.monotonic() + 5
+    while queue.stats()["abandoned"] == 0 and time.monotonic() < deadline:
+        time.sleep(0.02)
+        queue.result(queue.submit({"n": 1}), timeout=5)
+    assert queue.stats()["abandoned"] == 1, "the hung job was never reaped"
     assert queue.stats()["pending"] == 0
 
     release.set()  # the abandoned worker now finishes late
@@ -472,13 +489,8 @@ def _delay_bookkeeping(jobqueue_module, monkeypatch, delay=0.1):
     monkeypatch.setattr(jobqueue_module.JobQueue, "_on_done", slow_on_done)
 
 
-def test_stats_are_settled_even_when_the_worker_raised(make_queue):
-    queue = make_queue(boom)
-    with pytest.raises(ValueError):
-        queue.result(queue.submit({"a": 1}), timeout=5)
-    stats = queue.stats()
-    assert stats["pending"] == 0
-    assert stats["failed"] == 1
+# `failed == 1` together with `pending == 0` after a raising worker is already asserted by
+# test_stats_track_submitted_completed_and_failed above.
 
 
 def test_stats_expose_the_bound_so_operators_can_see_headroom(make_queue):
@@ -551,5 +563,6 @@ def test_the_worker_target_is_resolved_by_name(jobqueue_module, monkeypatch):
     assert jobqueue_module._resolve_target("math:sqrt")(9) == 3
 
 
-def test_the_default_target_is_the_model_seam(jobqueue_module):
-    assert jobqueue_module.DEFAULT_TARGET == "inference:predict_one"
+# DEFAULT_TARGET is pinned once, in
+# Integration_Tests/test_ai_queue_contract.py::test_the_model_seam_exists_with_the_name_the_pool_resolves,
+# which also resolves the string to the real callable — restating the constant here adds nothing.
