@@ -69,15 +69,15 @@ docker compose -f docker-compose.yml -f docker-compose.scale.yml up --build --sc
 ## Repo layout
 ```
 web/      Flask web app + the whole data layer (built)
-ai/       Random Forest + recommendation engine (Shiri — placeholder today),
+ai/       Random Forest + recommendation engine (Shiri — the real model.pkl is baked in),
           behind jobqueue.py (bounded queue + process pool) and inference.py (the model seam)
 tests/    Unit_Tests · Integration_Tests · System_Tests · Stress_Tests · Security_Tests
 scripts/  setup-hooks.sh · scaling_benchmark.py (stdlib-only load driver)
 docs/     PROPOSAL · GUIDELINES · DESIGN · ROADMAP · REPORT · SCALING_REPORT · JOB_QUEUE_PLAN
           CICD_REPORT · DEPLOY_DEMO · AUTH_TESTING · meeting-notes
 ```
-The web + data + CI/CD layers, the job queue, scaling and the live Azure deploy are built; `ai/` (Shiri's model)
-is the remaining build — all via pull requests (see below).
+The web + data + CI/CD layers, the job queue, scaling, the live Azure deploy and `ai/` (Shiri's Random Forest)
+are all built — every one of them via pull requests (see below).
 
 ## Getting started (first-time, every clone)
 **New here? → [`GETTING_STARTED.md`](GETTING_STARTED.md)** — clone · run the stack · find your part · the loop (≈5 min). It also covers the gate setup below.
