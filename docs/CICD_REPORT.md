@@ -72,10 +72,77 @@ monitor (R9).
   set them and real inbox delivery turns on. The app is *served* at the Azure FQDN (R10) — the domain is used only as
   the email FROM, so the two concerns stay cleanly separate.
 
-## Evidence (to attach after the first live runs)
+## Evidence (from the live pipeline)
 
-- Successful pipeline run: _link a green `push`-to-`main` run._
-- Failing run that blocked deploy: _link a PR whose test failed, showing `checks` red and `deploy` never started._
+**A green `push`-to-`main` run — the full chain, deploy included**
+[run 29705056423](https://github.com/LiorBenSidi/work-smarter-not-harder/actions/runs/29705056423) · `main` @ `14414d7` · 2026-07-19
+
+| job | result |
+|---|---|
+| `checks` (ruff · bandit · pytest + `mongo:7`) | ✅ success |
+| `e2e (browser · desktop + mobile)` | ✅ success |
+| `cross-container stack (test-runner)` | ✅ success |
+| `build & push image (GHCR)` | ✅ success |
+| `deploy to Azure VM` | ✅ success |
+| `stress (locust, on demand)` | ⏭ skipped (manual dispatch — R2.3) |
+
+This is the shape every merge takes: green gates → images tagged `${GITHUB_SHA::7}` + `latest` → SSH deploy →
+`/ready` probe against the FQDN.
+
+**A red run that blocked the deploy — the gate doing its job (R2.2)**
+
+Both examples below are pushes **to `main`**, i.e. runs that *would* have deployed. That matters: on a PR,
+`build` is skipped by its own `github.event_name == 'push'` guard, so a PR proves the event fence (R1.3) but
+says nothing about the test gate. These two prove the `needs:` chain.
+
+*A red `checks` stops everything* —
+[run 29207400240](https://github.com/LiorBenSidi/work-smarter-not-harder/actions/runs/29207400240) · `main` · 2026-07-12
+
+| job | result |
+|---|---|
+| `checks` (ruff · bandit · pytest) | ❌ **failure** |
+| `cross-container stack (test-runner)` | ⏭ skipped |
+| `e2e (browser · desktop + mobile)` | ⏭ skipped |
+| `build & push image (GHCR)` | ⏭ **skipped** |
+| `deploy to Azure VM` | ⏭ **skipped** |
+
+*A green `checks` but a red cross-container stack still stops the deploy* —
+[run 29209297922](https://github.com/LiorBenSidi/work-smarter-not-harder/actions/runs/29209297922) · `main` · 2026-07-12
+
+| job | result |
+|---|---|
+| `checks` | ✅ success |
+| `cross-container stack (test-runner)` | ❌ **failure** |
+| `e2e (browser · desktop + mobile)` | ✅ success |
+| `build & push image (GHCR)` | ⏭ **skipped** |
+| `deploy to Azure VM` | ⏭ **skipped** |
+
+The second run is the one worth pointing at: the fast suite was **green**, and the deploy was still blocked —
+by `compose-e2e`, the cross-container harness. That is exactly why `build` declares
+`needs: [checks, compose-e2e]` rather than `needs: checks` alone. Unit tests run against injected in-memory
+fakes and cannot see a broken `web → ai → db` wiring; the harness boots the real three containers and can. No
+image was pushed and the VM was never contacted in either run.
+
+**What the gate deliberately does *not* block: `e2e-browser`.** `build` needs `checks` and `compose-e2e` only,
+so a red browser-e2e job does **not** stop a deploy — and three times it did not
+([29497159256](https://github.com/LiorBenSidi/work-smarter-not-harder/actions/runs/29497159256),
+[29492804611](https://github.com/LiorBenSidi/work-smarter-not-harder/actions/runs/29492804611),
+[29275869078](https://github.com/LiorBenSidi/work-smarter-not-harder/actions/runs/29275869078): browser e2e red,
+`build` + `deploy` both green). This is a **known trade-off, not an oversight**: the headless-Chrome job is the
+only flaky stage in the pipeline (see the media-upload timing fixes on 13–14 Jul), and gating production on a
+flaky job trades a real failure mode (deploys blocked by test infrastructure) for a hypothetical one. The
+functional coverage it would have caught is duplicated over real HTTP in `compose-e2e`, which *does* gate. The
+cost is honest and stated: **a genuine front-end regression that only the browser job can see would reach
+prod.** Tracked as an accepted risk in [`REPORT.md`](REPORT.md) §5.5.
+
+**A deploy that failed for a non-pipeline reason** —
+[run 29630794935](https://github.com/LiorBenSidi/work-smarter-not-harder/actions/runs/29630794935) · `main` · 2026-07-18 04:40 UTC.
+Every gate green, `build` green, `deploy` red on
+`ssh: connect to host sweng-group-02.eastus.cloudapp.azure.com port 22: Connection timed out`. Cause: the
+course VM's **instructor-configured auto-shutdown** (23:50 UTC) — the run landed while the machine was off.
+Prod was left on the previous good image rather than a half-applied one, and the next green `main` (19 Jul)
+deployed cleanly. This is the operational risk behind the submission-day checklist item "confirm the VM is
+running"; it is environmental, not a defect in the pipeline.
 
 ## Demo crib — one line per directive (the grader asks "why this?")
 

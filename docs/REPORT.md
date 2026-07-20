@@ -11,7 +11,7 @@
 > +10 Azure deploy + CI/CD; supersedes [`FEEDBACK.md`](FEEDBACK.md)). Architecture detail lives in [`DESIGN.md`](DESIGN.md); the phased plan in
 > [`ROADMAP.md`](ROADMAP.md).
 >
-> **Last updated:** 2026-07-19 · **Suite at this snapshot:** **1066 checks, 1023 passing / 43 environment-gated**
+> **Last updated:** 2026-07-20 · **Suite at this snapshot:** **1066 checks, 1023 passing / 43 environment-gated**
 > (+ 17 browser e2e scenarios)
 > (`python -m pytest tests/ -q`; the env-gated ones run in CI's `compose-e2e` job against the live containers).
 > Since the 07-12 snapshot (783 tests): **Shiri's Random Forest landed** — a real `ai/model/model.pkl` +
@@ -206,12 +206,12 @@ The five canonical types live under `tests/{Unit,Integration,System,Stress,Secur
 `Negative_Tests/` for adversarial-input coverage and `Full_System_Tests/` for whole-stack journeys), run on any
 machine (env vars, no local paths), and are exercised by CI on every PR. A run that collects **0 tests fails** the gate.
 
-- **Unit (375)** — pure functions and single components in isolation: input validators (auth / profile /
+- **Unit (376)** — pure functions and single components in isolation: input validators (auth / profile /
   check-in / forum), the calorie formula, the `db.py` CRUD and Mongo-internals logic (against an in-memory
   fake), the logging configuration, and app config. Heavily parametrized on boundary and adversarial inputs
   (e.g. profile validation rejects injection objects, bools-as-numbers, and out-of-range values across every
   field).
-- **Integration (441)** — components wired together through the Flask test client: the auth flow, profile
+- **Integration (386)** — components wired together through the Flask test client: the auth flow, profile
   round-trip, check-in → `ai /predict` → persist, dashboard, history, and the full forum lifecycle. Two
   boundary suites are notable: `test_web_ai` stubs the `web → ai` HTTP seam with a contract-shaped response
   and asserts the dashboard surfaces it (and degrades to `ai_status: unavailable` when `ai` returns
@@ -223,9 +223,14 @@ machine (env vars, no local paths), and are exercised by CI on every PR. A run t
 - **Stress (12)** — `test_load` is the locust flood scenario (flood posts/votes → expect 429, not a crash;
   live-gated, on demand), plus `test_pool_scaling` and `test_queue_backpressure`, which run per-commit to
   prove the process-pool parallelism and the bounded-queue backpressure hold.
-- **Security (97)** — password hashing and session/auth-gating (`test_auth`), CSRF double-submit
+- **Security (86)** — password hashing and session/auth-gating (`test_auth`), CSRF double-submit
   (`test_csrf`), NoSQL-injection-safe queries (`test_profile`, `test_forum`), ownership enforcement on
   forum edit/delete (403), auth-gating of dashboard/history, and response-hardening (`test_web_hardening`).
+
+The two supporting directories complete the 1066: **Negative (164)** — adversarial and malformed input across
+auth, profile, check-in, forum and media — and **Full-System (27)** — whole-stack journeys in-process, plus the
+parts-in-isolation suite. The per-type figures here are the same ones tabulated in §3; both are
+`pytest --collect-only` counts, not estimates.
 
 **How to run**
 
@@ -332,6 +337,16 @@ Naming these is part of the assessment; an unlisted risk is an unnoticed one.
   process, and replicas of `web` on the one VM add no availability — the VM is still the thing that dies.
 * **Tail latency across `ai` replicas.** Docker's DNS round-robin balances connections, not work, so p95
   barely improves with replicas. A real load balancer is not warranted for one VM.
+* **A red browser-e2e job does not block the deploy.** `build` declares `needs: [checks, compose-e2e]`, so the
+  headless-Chrome suite is reported but not gating — and on three green deploys it was red
+  ([29497159256](https://github.com/LiorBenSidi/work-smarter-not-harder/actions/runs/29497159256),
+  [29492804611](https://github.com/LiorBenSidi/work-smarter-not-harder/actions/runs/29492804611),
+  [29275869078](https://github.com/LiorBenSidi/work-smarter-not-harder/actions/runs/29275869078)). It is the
+  pipeline's one flaky stage (headless timing around media upload), and gating production on a flaky job trades
+  a real failure mode — deploys blocked by test infrastructure, at the exact moment a fix needs to ship — for a
+  hypothetical one. Its functional coverage is duplicated over real HTTP in `compose-e2e`, which *does* gate.
+  The residual risk is stated rather than hidden: **a front-end regression only the browser job can see would
+  reach prod.** Evidence and reasoning: [`CICD_REPORT.md`](CICD_REPORT.md) § Evidence.
 
 ### 5.6 How the mitigations are kept honest
 
