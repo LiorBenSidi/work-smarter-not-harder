@@ -29,7 +29,7 @@ changing the `web → ai` contract and without taking over Shiri's model code.
 | File | Owner | Change |
 |---|---|---|
 | `ai/jobqueue.py` | Elad | **new** — bounded queue, process pool, job store, TTL reaping, stats |
-| `ai/inference.py` | Shiri (body) · Elad (seam) | **new** — `predict_one(features) -> dict`; placeholder body moved out of `app.py` verbatim |
+| `ai/inference.py` | Shiri (body) · Elad (seam) | **new** — `predict_one(features) -> dict`; the body was moved out of `app.py` verbatim (a placeholder at the time; the real Random Forest has since dropped into the same seam, unchanged) |
 | `ai/app.py` | Shiri | **~thin seam** — routes submit to the queue instead of computing inline |
 | `ai/Dockerfile` | Elad | `--workers 1 --threads 8` (one job store per container) + queue env |
 | `docker-compose*.yml` | Elad | queue env knobs; `AI_BASE_URL` for the test runner |
@@ -109,5 +109,6 @@ assert, as cheap text/behaviour checks in the per-PR gate:
    freely; the queue only depends on its name and shape.
 
 ## Out of scope
-The Random Forest itself (Shiri). `predict_one` keeps today's placeholder body verbatim; when the real
-model lands it drops straight in with no queue change.
+The Random Forest itself (Shiri). `predict_one` was carried over verbatim from `app.py` and the queue depends
+only on its name and shape — so when the real model landed (`ai/model/model.pkl`), it dropped straight into the
+same seam with **no queue change at all**. That is the prediction this plan made, and it held.

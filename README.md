@@ -225,11 +225,11 @@ Proposal graded **100/100**. Rubric: [`docs/GUIDELINES.md`](docs/GUIDELINES.md) 
 P2P direct messages · media attachments · SSE-pushed notifications · a per-user **received-engagement total**
 on the profile), Week-9 logging, the 3-container build, the CI gate, the cross-container test-runner, the
 **AI job queue (+5)** (bounded + self-healing pool), **measured scaling**, and the CI/CD pipeline
-auto-deploying every green `main` to Azure over HTTPS. Suite: **747 passing / 36 environment-gated** (783 collected).
+auto-deploying every green `main` to Azure over HTTPS. The **Random Forest** behind `POST /predict` has landed
+too (`ai/model/model.pkl`, baked into the image). Suite: **1023 passing / 43 environment-gated** (1066 collected).
 
-**Remaining:** the Random Forest behind `POST /predict` (Shiri — the contract-shaped placeholder is in place, so
-the queue and `web` already integrate against it) and forum cold-seed content. Risk assessment and the honest
-"what we did *not* mitigate" list: [`docs/REPORT.md`](docs/REPORT.md) §5.
+**Remaining:** forum cold-seed content. Risk assessment and the honest "what we did *not* mitigate" list:
+[`docs/REPORT.md`](docs/REPORT.md) §5.
 
 **Reviewing / grading this?** Start with [`docs/REVIEWER_NOTES.md`](docs/REVIEWER_NOTES.md) — how to run + log in
 locally (no mailbox needed), and a known-limitations / by-design table so a documented constraint isn't logged as a bug.
