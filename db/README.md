@@ -16,16 +16,21 @@ The data-access layer is `web/services/db.py`. On first connect it applies, best
 
 ### Seed (cold-start content)
 
-`db/seed.py` applies the indexes + validators and inserts starter forum posts **only if the forum is
-empty** (idempotent), so a brand-new deploy isn't an empty room. Against the published dev Mongo:
+`db/seed.py` applies the indexes + validators, creates a few **fake clients**, and seeds the forum with
+**posts + comments (+ likes)** across a realistic recent timeline — **only if the forum is empty**
+(idempotent; re-running creates nothing new) — so a brand-new deploy isn't an empty room. This is the
+Forum's cold-seeding sub-feature (rubric §7). Everything is written through the real `web/services/db.py`
+CRUD, so seeded rows match user-created ones exactly. Against the published dev Mongo:
 
 ```
 MONGO_URI="mongodb://localhost:27017/worksmarter" python db/seed.py
 ```
 
-The starter posts are placeholders — Shiri's AI cold-seed generator can supply the real content (her
-lane). For an auth'd / in-network DB (no published port), run it on the compose network (a one-shot
-`python:3.12-slim` container with `pymongo` and the repo mounted), or temporarily publish `27017`.
+The fake clients share a non-secret demo password (`demo-seed-pw`, override with `SEED_USER_PASSWORD`),
+so you can log in as one and browse/post live during a demo. The starter text is a hand-written set;
+Shiri's AI cold-seed generator can later augment it with model-generated content (her lane). For an
+auth'd / in-network DB (no published port), run it on the compose network (a one-shot `python:3.12-slim`
+container with `pymongo` + `werkzeug` and the repo mounted), or temporarily publish `27017`.
 
 ### Auth (env-gated)
 
