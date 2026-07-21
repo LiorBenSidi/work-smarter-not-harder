@@ -10,15 +10,10 @@ def _profile():
     return {"age": 30, "gender": "male", "height": 180, "weight": 80, "goal": "maintain", "training_frequency": 3}
 
 
-# (GET/POST /profile auth-gating is covered by the Negative_Tests route matrix — same layer,
-#  same routes. Kept here: the injection wall on a field that matrix does not itself inject into.)
-
-
-def test_injection_in_profile_field_rejected(profile_client):
-    _login(profile_client)
-    bad = _profile()
-    bad["weight"] = {"$gt": 0}
-    assert profile_client.post("/profile", json=bad).status_code == 400
+# (GET/POST /profile auth-gating AND the `{"$gt": ...}` injection wall are covered by Negative_Tests —
+#  the route matrix for the gate, and test_profile_rejects_each_bad_field (which injects the same object
+#  into a field, via the same field-agnostic type check) for the injection. Only the 503-degradation
+#  test below is unique to this file.)
 
 
 class _BrokenProfiles:

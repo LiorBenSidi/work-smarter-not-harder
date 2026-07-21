@@ -40,13 +40,9 @@ class _PartialForum:
 #  Negative_Tests — the same layer, same inputs, with a stronger "never stored" assertion.)
 
 
-def test_invalid_vote_value_is_rejected_400(forum_client):
-    _login(forum_client)
-    pid = forum_client.post("/forum/posts", json={"title": "T", "body": "b"}).get_json()["post"]["id"]
-    assert forum_client.post(f"/forum/posts/{pid}/vote", json={"value": 5}).status_code == 400
-    assert forum_client.post(f"/forum/posts/{pid}/vote", json={"value": True}).status_code == 400
-    # a float 1.0 must NOT slip through as "1" — the contract is exactly the ints +1 / -1
-    assert forum_client.post(f"/forum/posts/{pid}/vote", json={"value": 1.0}).status_code == 400
+# (The vote-value wall is proven in Negative_Tests::test_vote_accepts_exactly_int_plus_minus_one —
+#  a 10-value parametrize incl. True / 1.0 / out-of-range, plus a `score == 0` assertion — so the
+#  equivalence-class copy here carried no unique coverage.)
 
 
 def test_partial_store_row_does_not_crash_the_list(make_client, fake_users):
