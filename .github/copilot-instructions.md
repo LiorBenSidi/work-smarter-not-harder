@@ -2,7 +2,7 @@
 
 AI-powered sports-coaching platform (WSML 00950219). Canonical guidance: [`CLAUDE.md`](../CLAUDE.md); PR workflow: [`CONTRIBUTING.md`](../CONTRIBUTING.md).
 
-**Current status (2026-07-02):** backend built + CI-gated (web tier, whole data layer, logging, containers, CI, and the CI/CD deploy pipeline — all Lior; full test suite green on `main`). **Open:** Shiri — the real model behind `POST /predict` (`ai/` is a placeholder); Elad — the live Azure deploy + demo, Forum real-time, rate-limit, stress, test-runner. Build within an open lane; don't redo the built parts. Full breakdown: `CLAUDE.md` → Current status.
+**Current status (2026-07-02):** backend built + CI-gated (web tier, whole data layer, logging, containers, CI, and the CI/CD deploy pipeline — all Lior; full test suite green on `main`). **Open:** Shiri — F5 (workout generator) + forum cold-seed content (the real Random Forest is now live behind `POST /predict`); Elad — the graded Azure demo run (deploy + Forum media/rate-limit + stress + test-runner are shipped). Build within an open lane; don't redo the built parts. Full breakdown: `CLAUDE.md` → Current status.
 
 ## Cardinal rule
 `main` is branch-protected — **never push to `main`**. Make a branch (`feat|fix|test|docs|chore/…`) and open a PR; CI (ruff · bandit · pytest) must pass, then the **author merges their own PR** — no peer approval required (own your scope + tests; CI is the gate).

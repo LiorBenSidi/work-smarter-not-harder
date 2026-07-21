@@ -26,8 +26,11 @@
 > current as of this date. §1's API surface + data model now list the DM / SSE / notification / comment-vote
 > endpoints and the `messages` / `notifications` collections (**Lior**), plus the media endpoints and the
 > `media` collection (**Elad**, #160). §2's core AI rows (F3 model, F4 live value, F7 engine) are **now built**
-> (Shiri's Random Forest merged); the **F5 workout-generator / F6 program-balance** wording still awaits
-> **Shiri's** confirmation of final scope. The rubric is
+> (Shiri's Random Forest merged). **F5 (workout generator)** is a required proposal feature, **not yet built**
+> and **not being swapped** (confirmed against the TA's guidelines — it is a core feature in the v2 proposal
+> the TA responded to, not a stretch goal); **Shiri** builds it. **F6 (program-balance)** is merged into F7 as a
+> single pipeline — that merge is in the approved v2 proposal (the TA's guidelines supersede Noam's feedback), so
+> it is **settled, not pending** — and its balance rule is already built (`_program_recommendations`). The rubric is
 > [`GUIDELINES.md`](GUIDELINES.md) (which superseded `FEEDBACK.md` on 8 Jul and added the **+5 Job Queue**).
 
 ---
@@ -105,8 +108,8 @@ not a per-line credit — see §6.
 | F3 — Readiness analysis — **web path** (check-in → `ai /predict` → persist → surface) | ✅ | web |
 | F3 — Readiness analysis — **the model** (Random Forest, real `/predict`) | ✅ merged (`ai/model/model.pkl` + `inference.py`; `test_ai_queue_api` loads the real RF) | ai |
 | F4 — Calorie recommendation (Mifflin–St Jeor, `ai/calories.py`) | ✅ engine + unit tests; live value now wired into `/predict` (`calculate_calories` in `predict_one`) | ai |
-| F5 — Workout generator | ⬜ (the engine advises on an existing program; a standalone generator is not present — Shiri to confirm scope) | ai |
-| F6 — Program-balance analysis (push/pull volume, folds into F7) | 🟡 built in `_program_recommendations`; final scope pending Shiri | ai |
+| F5 — Workout generator | ⬜ **required, not yet built** — the engine advises on an existing program but does not *generate* a plan (goal + days + equipment + split → plan from the program catalog). No swap (TA-confirmed); Shiri to build. | ai |
+| F6 — Program-balance analysis (push/pull volume, merged into F7) | 🟡 built in `_program_recommendations` (the F6→F7 merge is settled in the v2 proposal — not pending); one gap: no `program` input feeds it yet (#276 P7), which F5 supplies | ai |
 | F7 — Action plan / recommendations — **web surfaces the list**; **engine** | ✅ | web ✅ · ai ✅ (`generate_recommendations`) |
 | F8 — Dashboard | ✅ | web |
 | F9 — History tracking | ✅ | web |
@@ -399,8 +402,9 @@ branch-protected and merges only on green CI.
 
 ## 8. Open items (tracked; not blockers for the built planes)
 
-- **F6 + F7 merge** — awaiting Noam's confirmation; the submitted 9-feature scope is the graded contract
-  until he replies. Fallback (trend-analysis-over-history) is defined in `ROADMAP.md`.
+- **F6 + F7 merge** — in scope, not pending: the merge is in the v2 proposal the team sent the TA (28 Jun),
+  and the TA's guidelines explicitly permit notified feature changes; the balance rule is built
+  (`_program_recommendations`). See `ROADMAP.md` → "Scope decision".
 - **Exact readiness categories + final feature set** — finalized by the AI plane during data exploration
   (the `/predict` contract already pins the shapes: features in, `{state, proba, recommendations, calories}`
   out).
