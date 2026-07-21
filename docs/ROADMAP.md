@@ -10,7 +10,10 @@ Penalties: −5 / bug, −5 / week late. Partial credit per feature; you needn't
 
 ## Scope decision — pending Noam's OK
 **F6 (Program-Balance Analysis) folds into F7 (Action Plan)** as a single rule, rather than a standalone feature:
-F5 already generates balanced programs, and F7 already surfaces the same insight (e.g. "add chest volume").
+F7's recommendation engine already surfaces the program-balance insight (e.g. "add chest volume") as a rule
+(`ai/recommendations.py::_program_recommendations`) — so F6 need not stand alone. **Note:** F5, the workout
+*generator* (a plan from goal + training-days + split), is a **separate proposal feature and is not yet built** —
+it is listed under *Complete the 80* below, remains required, and is **not** being swapped.
 Emailed Noam to confirm this keeps full credit. **Fallback if he wants a distinct feature:** swap F6 for
 *training-trend analysis* over saved history (same data-analysis concept, reuses the history store). Until he
 replies, build F6 as a rule inside F7.
