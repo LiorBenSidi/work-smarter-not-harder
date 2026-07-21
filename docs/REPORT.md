@@ -116,7 +116,7 @@ not a per-line credit — see §6.
 | Online Forum — CRUD/UI (posts, comments, votes, anonymity, edit/delete-own) | ✅ | web |
 | Online Forum — real-time layer (SSE push, DM, vote + DM notifications, media attachments) | ✅ | web (DM/SSE/notifications) · deploy (media, size caps) |
 | Online Forum — received-engagement metric (§3.3 per-user vote total: `/me/engagement` + a Profile-screen card) | ✅ | deploy (Elad) |
-| Online Forum — cold-seed content | 🟡 (idempotent seed script; content) | web ✅ · ai (content) |
+| Online Forum — cold-seed content | ✅ `db/seed.py` — fake clients + posts + comments + likes (a deliberate demo/review tool; a fresh DB is empty by design). Shiri's AI generator can optionally augment the copy. | web |
 | Data layer — `db.py` CRUD + indexes + `$jsonSchema` validators + auth config + seed + backup | ✅ | web (data) |
 | Week-9 observability — named loggers, console + rotating-file handlers, per-request access log | ✅ | web |
 | Containers — 3-container `docker-compose`, only `web` exposed, healthchecks | ✅ | web |
