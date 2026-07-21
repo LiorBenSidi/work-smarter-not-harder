@@ -4,9 +4,10 @@ Project documents for **Work Smarter, Not Harder** (WSML 00950219 final project)
 
 | File | What it is |
 |---|---|
-| [`PROPOSAL.md`](PROPOSAL.md) | The **submitted** project proposal (מסמך אפיון) — the graded spec. |
-| [`PROPOSAL-v2.md`](PROPOSAL-v2.md) | **Revised** spec (cleaner rewrite; F6+F7 merged → 8 features) — current intent, **pending Noam's OK** on the merge. `PROPOSAL.md` stays the graded contract. |
-| [`FEEDBACK.md`](FEEDBACK.md) | **Noam's feedback** on the proposal (Moodle, 25 Jun) — the **grading rubric**: 80 build + 10 Forum + 10 Deploy/CI-CD. |
+| [`PROPOSAL.md`](PROPOSAL.md) | The **originally-submitted** project proposal (מסמך אפיון), graded 100/100. |
+| [`PROPOSAL-v2.md`](PROPOSAL-v2.md) | **Revised** spec (cleaner rewrite; F6+F7 merged → 8 features) — the **current** feature spec the team builds to. |
+| [`GUIDELINES.md`](GUIDELINES.md) | The TA's **WSNH_Guidelines** (`WSNH_Guidelines.pdf`, 8 Jul) — the **current grading rubric** (75 + 5 Job Queue + 10 Forum + 10 Deploy/CI-CD). **Source of truth** (supersedes `FEEDBACK.md`). |
+| [`FEEDBACK.md`](FEEDBACK.md) | **Noam's feedback** on the proposal (Moodle, 25 Jun) — **superseded** by `GUIDELINES.md`. |
 | [`Proj_Guidelines.pdf`](Proj_Guidelines.pdf) | The **official** course project guidelines (course-provided reference). |
 | [`TA-Notes.txt`](TA-Notes.txt) | The TA's clarifications/notes on the project (course-provided reference). |
 | [`DESIGN.md`](DESIGN.md) | Living **design document** — architecture, data model, API contracts, decisions (distilled from the revised spec; open items flagged). |

@@ -1,9 +1,10 @@
-> _**Status (2026-06-27):** the team's **revised** spec — a cleaner rewrite addressing Noam's "plan in phases /
-> don't AI-dump" feedback (authored in Elad's Claude Code). **The graded contract is still the submitted
-> [`PROPOSAL.md`](PROPOSAL.md) (100/100)**; this v2 is current design intent. The main scope change — **F6+F7
-> merged → 8 features** — needs **Noam's email OK** before it's official; the submitted **9-feature** scope governs
-> the 80 until he confirms. The **5 course test types + feature×test matrix are still required** (tracked in the
-> repo / [`DESIGN.md`](DESIGN.md), not in this doc — per Noam's "this doc is no place for tests")._
+> _**Status:** the team's **revised** spec — a cleaner rewrite addressing Noam's "plan in phases / don't AI-dump"
+> feedback (authored in Elad's Claude Code) — and the **current** feature spec the team builds to. It was sent to
+> the TA on 28 Jun; the TA responded (8 Jul) with the graded rubric [`GUIDELINES.md`](GUIDELINES.md)
+> (`WSNH_Guidelines.pdf`), **now the source of truth** (it supersedes Noam's feedback). Those guidelines permit
+> notified feature changes, so the main scope change (**F6+F7 merged → 8 features**) stands — **nothing is
+> pending**. The **5 course test types + feature×test matrix are still required** (tracked in the repo /
+> [`DESIGN.md`](DESIGN.md), not in this doc)._
 
 ---
 

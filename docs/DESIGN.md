@@ -70,13 +70,13 @@ All **5 course test types** live in `tests/{Unit,Integration,System,Stress,Secur
 ## 7. Decisions (mini-ADRs)
 - **3 containers, only `web` exposed** — course rule; only `web` gets host ports.
 - **Local RF, baked into the image** — no runtime train/download; pin sklearn; RF swappable behind `/predict`.
-- **F6 + F7 merged** → one "Program Balance & Action Plan" pipeline (analysis feeds prioritization; two capabilities from the user's view). ⚠️ **Pending Noam's email OK** — merging a feature needs his sign-off; the submitted **9-feature** scope is the graded contract until he confirms.
+- **F6 + F7 merged** → one "Program Balance & Action Plan" pipeline (analysis feeds prioritization; two capabilities from the user's view). The source of truth is the TA's [`GUIDELINES.md`](GUIDELINES.md) (`WSNH_Guidelines.pdf`), which permits notified feature changes; the team notified the merge (the 28 Jun v2 proposal). **Not pending anyone** — the balance rule is built (`ai/recommendations.py::_program_recommendations`).
 - **Scaling = `ai` replicas + gunicorn workers** (horizontal, measurable with locust); `multiprocessing` only for *measured* CPU-heavy work, not per-request RF inference.
 - **Single-file inline frontend** (`web/templates/index.html` — HTML + CSS + JS in one file, ~2.7k lines). **Why:** zero build step (no bundler/transpiler to configure, break, or explain to a grader), a single deploy artifact Flask serves directly, and the whole SPA is one reviewable/greppable unit. **Tradeoffs (accepted):** no separate CSS/JS lint pass, large diffs on that file, and many guard tests regex the *combined* served HTML. **Mitigations in place:** a CI `node --check` gate on the extracted inline `<script>` (catches JS syntax errors before the E2E job); the E2E "zero uncaught page exceptions" contract. **Planned:** a mechanical `web/static/app.js` + `styles.css` extraction *after* the 16 Jul presentation (a one-shot PR that also re-points the guard regexes) — deliberately **not** before the deadline, since splitting mid-demo-week would force a same-day mass test edit for no functional gain.
 
 ## 8. Open / to confirm
-- **F6+F7 merge** — awaiting Noam's reply.
-- **Smartwatch import** — stretch; awaiting Noam (Samsung has no web API → likely a real export-file parse).
+- **F6+F7 merge** — in scope (notified per the TA's guidelines); **not pending**.
+- **Smartwatch import** — stretch / future work in the proposal; **not a required feature**.
 - **Exact training-state categories + final feature set** — during data exploration.
 - **Deploy ordering** (Azure right after MVP vs after the 80) — team decision.
 - **Forum real-time layer** (SSE vs Flask-SocketIO) — at Phase 3.

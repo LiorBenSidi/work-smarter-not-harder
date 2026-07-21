@@ -35,7 +35,7 @@ Everything for the **final-project presentation**, in one place all three of us 
 Handoffs: end of slide 3 → Lior, end of slide 6 → Elad.
 
 ## Left to do
-- **AI model:** train the Random Forest → real `/predict` (until then every prediction reads "Moderate") + forum cold-seed content. **Spec:** [`../ai/For Shiri - predict contract.md`](../ai/For%20Shiri%20-%20predict%20contract.md) — the exact shape + training plan for zero rework.
+- **AI (Shiri):** **F5 workout generator** + forum cold-seed content. *(The Random Forest classifier is built and live behind a real `/predict` — the "reads Moderate" placeholder era is over; F5 is the remaining AI feature.)* **Spec:** [`../ai/For Shiri - predict contract.md`](../ai/For%20Shiri%20-%20predict%20contract.md).
 - **Team:** add the **"See It Live"** demo slide (as slide 5 in Canva, after Architecture) + record the 30–45s clip; do one **timed rehearsal**.
 
 ## Editing the deck (Shiri & Elad)
