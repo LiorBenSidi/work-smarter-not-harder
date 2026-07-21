@@ -283,18 +283,8 @@ def test_perf_indexes_and_schema_validator_are_applied(db_mod, real_db):
         real_db.users.insert_one({"username": "nopass"})        # missing required password_hash
 
 
-def test_seed_is_idempotent(db_mod, real_db):
-    import importlib.util
-
-    seed_path = Path(__file__).resolve().parents[2] / "db" / "seed.py"
-    spec = importlib.util.spec_from_file_location("seed_under_test", str(seed_path))
-    seed = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(seed)
-    uri = os.environ["TEST_MONGO_URI"]
-    first = seed.seed(uri)                                       # empty forum -> seeds
-    second = seed.seed(uri)                                      # already seeded -> no-op
-    assert first == len(seed.SEED_POSTS) and second == 0
-    assert real_db.forum_posts.count_documents({}) == len(seed.SEED_POSTS)
+# (The cold-seed's real-Mongo tests — idempotency + populated content + newest-first feed + login-able
+#  accounts — now live in their own file, tests/Integration_Tests/test_seed_mongo.py.)
 
 
 def test_add_history_replaces_the_same_day_entry_against_mongo(db_mod, real_db):
