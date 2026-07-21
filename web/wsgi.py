@@ -30,3 +30,9 @@ if _log_file:
 
 configure_logging(log_file=_log_file or None)   # None -> console only (configure reads the empty env)
 app = create_app()
+
+# Cold-seed the forum on boot (rubric §7) — best-effort + idempotent, so a fresh deploy comes up already
+# populated with fake clients + posts + comments. Runs in the real gunicorn process only (tests build the
+# app via create_app, not wsgi), skips under TESTING, and NEVER blocks boot on failure. See seed_data.py.
+from seed_data import cold_seed_on_startup   # noqa: E402 — after create_app + logging are wired
+cold_seed_on_startup(app)

@@ -34,6 +34,14 @@ def seed_mod():
     return mod
 
 
+@pytest.fixture
+def seed_data_mod():
+    spec = importlib.util.spec_from_file_location("seed_data_under_test", str(ROOT / "web" / "seed_data.py"))
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
 class _Coll:
     """The handful of pymongo ops the seed's CRUD path actually calls."""
 
@@ -199,3 +207,33 @@ def test_apply_seed_is_idempotent(seed_mod, db_mod, db, monkeypatch):
     assert len(db.forum_posts.docs) == posts_after_first
     assert len(db.forum_comments.docs) == comments_after_first
     assert first["posts"] == posts_after_first  # sanity: the first run is what populated it
+
+
+# --------------------------------------------------------------- cold_seed_on_startup (the wsgi boot hook)
+
+def _fake_app(**config):
+    return SimpleNamespace(config=config)
+
+
+def test_cold_seed_on_startup_is_skipped_under_testing(seed_data_mod, monkeypatch):
+    # protects the cross-container test-runner (docker-compose.test.yml sets TESTING=1): it must NOT seed.
+    called = []
+    monkeypatch.setattr(seed_data_mod, "apply_seed", lambda *a, **k: called.append(1))
+    seed_data_mod.cold_seed_on_startup(_fake_app(TESTING=True, MONGO_URI="mongodb://x/db"))
+    assert called == []
+
+
+def test_cold_seed_on_startup_respects_the_off_switch(seed_data_mod, monkeypatch):
+    called = []
+    monkeypatch.setattr(seed_data_mod, "apply_seed", lambda *a, **k: called.append(1))
+    monkeypatch.setenv("COLD_SEED_ON_STARTUP", "0")
+    seed_data_mod.cold_seed_on_startup(_fake_app(TESTING=False, MONGO_URI="mongodb://x/db"))
+    assert called == []
+
+
+def test_cold_seed_on_startup_never_raises_when_the_db_is_unreachable(seed_data_mod, monkeypatch):
+    # best-effort: a Mongo/import failure must be swallowed so the user-facing container ALWAYS boots.
+    monkeypatch.delenv("COLD_SEED_ON_STARTUP", raising=False)
+    # point it at a resolvable-but-dead address so get_db()/ensure_schema fails fast; must not propagate.
+    seed_data_mod.cold_seed_on_startup(_fake_app(TESTING=False, MONGO_URI="mongodb://127.0.0.1:1/db"))
+    # reaching here without an exception is the assertion.
