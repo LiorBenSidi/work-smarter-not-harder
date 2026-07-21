@@ -18,9 +18,13 @@ The data-access layer is `web/services/db.py`. On first connect it applies, best
 
 `db/seed.py` applies the indexes + validators, creates a few **fake clients**, and seeds the forum with
 **posts + comments (+ likes)** across a realistic recent timeline — **only if the forum is empty**
-(idempotent; re-running creates nothing new) — so a brand-new deploy isn't an empty room. This is the
-Forum's cold-seeding sub-feature (rubric §7). Everything is written through the real `web/services/db.py`
-CRUD, so seeded rows match user-created ones exactly. Against the published dev Mongo:
+(idempotent; re-running creates nothing new). This is the Forum's cold-seeding sub-feature (rubric §7).
+
+**It is a deliberate tool, not an auto-run:** a brand-new database is left **empty by design** (a real
+deployment starts empty and fills with real users), so run this when you want a populated app — for the
+demo, for local testing, or to give the TA a populated instance to review. Everything is written through
+the real `web/services/db.py` CRUD, so seeded rows match user-created ones exactly. Against the published
+dev Mongo:
 
 ```
 MONGO_URI="mongodb://localhost:27017/worksmarter" python db/seed.py
