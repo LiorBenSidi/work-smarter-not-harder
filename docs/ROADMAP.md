@@ -8,15 +8,15 @@ which supersedes [`FEEDBACK.md`](FEEDBACK.md)):
 **75** = the whole app (F1–F9, no stretch goals) on Docker · **+5** Job Queue (parallel AI request handling) · **+10** real-time Forum · **+10** Azure deploy + CI/CD.
 Penalties: −5 / bug, −5 / week late. Partial credit per feature; you needn't do it all (this is the bar for a perfect 100).
 
-## Scope decision — pending Noam's OK
-**F6 (Program-Balance Analysis) folds into F7 (Action Plan)** as a single rule, rather than a standalone feature:
-F7's recommendation engine already surfaces the program-balance insight (e.g. "add chest volume") as a rule
-(`ai/recommendations.py::_program_recommendations`) — so F6 need not stand alone. **Note:** F5, the workout
-*generator* (a plan from goal + training-days + split), is a **separate proposal feature and is not yet built** —
+## Scope decision — settled (F6 merges into F7)
+**F6 (Program-Balance Analysis) is merged with F7 (Action Plan)** as a single pipeline, not a standalone feature.
+F7's recommendation engine already implements it as a rule (`ai/recommendations.py::_program_recommendations`,
+e.g. "add chest volume"). **This is not pending anyone:** the F6→F7 merge is written into the submitted v2
+proposal (`PROPOSAL-v2.md` §7, "Program Balance & Action Plan"), which the TA acknowledged on 8 Jul with the
+official `WSNH_Guidelines.pdf` — and those guidelines supersede Noam's feedback. The only open F6 gap is that no
+`program` input feeds the rule yet (#276 P7), which **F5** will supply. **Note:** F5, the workout *generator*
+(a plan from goal + training-days + equipment + split), is a **separate proposal feature and is not yet built** —
 it is listed under *Complete the 80* below, remains required, and is **not** being swapped.
-Emailed Noam to confirm this keeps full credit. **Fallback if he wants a distinct feature:** swap F6 for
-*training-trend analysis* over saved history (same data-analysis concept, reuses the history store). Until he
-replies, build F6 as a rule inside F7.
 
 ## Phase 0 — MVP (must come first)
 **Goal:** prove the architecture + the AI heart, end-to-end on Docker.
