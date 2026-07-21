@@ -57,10 +57,16 @@ def test_checkin_is_rate_limited_after_a_flood(make_client, fake_users, fake_pro
     assert last.status_code == 429
 
 
-def test_normal_traffic_is_not_rate_limited(client):
-    # the default client (limiter OFF) proves the suite isn't throttled — a handful of logins never 429
-    for _ in range(30):
-        assert client.post("/login", json={"username": "nobody", "password": "wrongpass"}).status_code != 429
+def test_traffic_under_the_login_cap_is_not_rate_limited(rate_limited_client):
+    # The failable complement to the flood tests: with the limiter ON, ordinary use must NOT trip it.
+    # /login is 20/min, so 15 attempts (well under the cap) never 429. This fails if a teammate sets a
+    # cap so low that normal traffic is throttled — mutation-proved: dropping /login to "5 per minute"
+    # makes the 6th of these return 429. (The prior version drove the limiter-OFF `client` and asserted
+    # `!= 429`, which no code path could produce — it could not fail.)
+    c = rate_limited_client
+    for i in range(15):
+        r = c.post("/login", json={"username": "nobody", "password": "wrongpass"})
+        assert r.status_code != 429, f"login {i + 1}/15 (under the 20/min cap) was throttled — cap set too low"
 
 
 # --- Forum public routes (OWNER: Elad). auth is already limited above; DM has its own anti-spam.
