@@ -26,6 +26,7 @@ echo
 echo "Building and starting the 3-container stack (web · ai · db)…"
 echo "When it is up, open  ->  http://localhost:8000   (health: /health)"
 echo "Register a new account; with no SMTP set, one-time codes appear on screen and in the logs."
+echo "Want demo content (a populated forum)? In another terminal, run:  ./seed.sh"
 echo "Stop with Ctrl-C, then 'docker compose down'."
 echo
 

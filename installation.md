@@ -22,6 +22,18 @@ When the stack is up, open **http://localhost:8000**.
 - **Register a new account.** With no SMTP configured (the default), one-time codes — login OTP,
   signup verification, password reset — are shown **on screen and in the logs**, so no mailbox is needed.
 
+## Populate demo content (optional)
+A brand-new database starts **empty** (real product behaviour). To see a populated app — a few demo
+clients plus a forum with posts, comments and likes — run this **after the stack is up** (in another terminal):
+```bash
+./seed.sh
+```
+Idempotent — safe to re-run; it does nothing if the forum already has content. Then log in as a seeded
+client (e.g. **`coach_maya`**) with the demo password **`demo-seed-pw`** and browse the forum. Equivalent manual step:
+```bash
+docker compose run --rm -v "$PWD:/repo" -e MONGO_URI=mongodb://db:27017/worksmarter web python /repo/db/seed.py
+```
+
 ## Stop
 Press `Ctrl-C`, then:
 ```bash
