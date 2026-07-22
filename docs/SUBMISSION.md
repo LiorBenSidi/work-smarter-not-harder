@@ -22,6 +22,8 @@ Rubric (`docs/GUIDELINES.md`, the TA's `WSNH_Guidelines`, 8 Jul): **75** proposa
 | Presentation + demo video | `presentation/` (see the checklist) | all | 🟡 deck ✅ (presented 16 Jul); **demo video ⬜ to record** → `VID_<ids>.mp4` |
 | Submission checklist | [`presentation/WSNH Submission Checklist.md`](../presentation/WSNH%20Submission%20Checklist.md) | — | ✅ |
 
+**Hand-in format** (per [`docs/Proj_Guidelines.pdf`](Proj_Guidelines.pdf) p11–12 — text+visual dual-read verified): submit **(1) the GitHub repo link — "no more zips"**, **(2) a video** of the app in use, and **(3) the report** (`docs/REPORT.md` — app · features · *tests per feature* · risk assessment). `README.md` must exist with run + test instructions; **−5 each time the code doesn't run**. So the report lives in the repo (no PDF required) and there is **no submission zip** for the graded project — only the Show Off gallery (Track B) uses a zip.
+
 ### Verify-your-own-lane before sign-off
 - **Lior** — web tier · whole data layer (`db.py` CRUD, indexes, `$jsonSchema`, seed, backup) · observability ·
   the 3-container build · the CI gate · the CI/CD pipeline · web/data integration/system/security tests. ✅ shipped.
@@ -31,8 +33,8 @@ Rubric (`docs/GUIDELINES.md`, the TA's `WSNH_Guidelines`, 8 Jul): **75** proposa
   `program` input, #276 P7). ← the one open **graded** feature.
 
 ### Open before hand-in (human steps / not built)
-- [ ] **Confirm submission mechanics with the TA** — zip vs Moodle vs repo link; report as PDF or the live
-      `docs/REPORT.md`. Nobody's lane yet; **gates the hand-in.**
+- [ ] **Submit the GitHub repo link** in the Moodle final-project box when it opens (format is settled above:
+      repo link + video + report, **no zip**). Only residual: confirm *which* Moodle box — not a build task.
 - [ ] **F5 workout generator** (Shiri) — #276.
 - [ ] **Seed prod once** before the TA review (`db/README.md` command) and confirm the **Azure VM is up**
       (instructor auto-shutdown ~23:50 UTC).
