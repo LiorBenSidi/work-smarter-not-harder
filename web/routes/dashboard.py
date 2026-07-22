@@ -12,6 +12,7 @@ from flask import Blueprint, current_app, jsonify, session
 
 from routes.auth import login_required
 from services import ai_client
+from services.db import HISTORY_VIEW_CAP
 
 logger = logging.getLogger(__name__)
 
@@ -51,7 +52,11 @@ def dashboard():
     # target, not a hard block. With NO check-in there's simply nothing to score (the metrics are what the
     # model needs), so we prompt a check-in — never an unscoreable profile-only /predict.
     try:
-        entries = list(current_app.config["HISTORY"].list(session["username"]))
+        # Bounded read (#331): the dashboard only needs the LATEST check-in (readiness) plus the newest
+        # _HISTORY_WINDOW entries (trend), so cap the read at HISTORY_VIEW_CAP (newest-N, oldest-first
+        # within that window) instead of loading the whole append-only log. Matches the /history route's
+        # cap; the GDPR export is the only history read that legitimately stays uncapped.
+        entries = list(current_app.config["HISTORY"].list(session["username"], limit=HISTORY_VIEW_CAP))
     except Exception:
         logger.exception("history store unavailable on dashboard")
         return jsonify(error="history store unavailable"), 503

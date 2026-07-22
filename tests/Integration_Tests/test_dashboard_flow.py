@@ -267,3 +267,26 @@ def test_dashboard_drops_non_finite_ai_values_keeping_strict_json(dash_client, m
     data = resp.get_json()
     assert data["readiness"]["proba"] == {"Rest": 0.4}   # non-finite proba keys dropped, the finite one kept
     assert data["calories"] is None                       # non-finite calories -> null
+
+
+def test_dashboard_history_read_is_bounded(dash_client, fake_history, monkeypatch):
+    # #331: the dashboard needs only the LATEST check-in (readiness) + the newest _HISTORY_WINDOW entries
+    # (trend), so its history read must be CAPPED at HISTORY_VIEW_CAP — never an unbounded load of the whole
+    # append-only log. Regression guard: dropping the `limit=` kwarg (reverting to an unbounded read) makes
+    # the store see limit=None and fails this. Mirrors the /history route's existing cap.
+    # (fake_history IS the dash_client's injected HISTORY store, so spying on it sees the route's read.)
+    from services.db import HISTORY_VIEW_CAP
+    _set_predict(monkeypatch, {"state": "Rest", "proba": {"Rest": 0.8}, "recommendations": []})
+    _login(dash_client)
+    _checkin(dash_client)
+
+    seen = {}
+    original = fake_history.list
+
+    def spy(username, limit=None):
+        seen["limit"] = limit                 # capture the bound the ROUTE requested (checkin already ran)
+        return original(username, limit=limit)
+
+    monkeypatch.setattr(fake_history, "list", spy)
+    assert dash_client.get("/dashboard").status_code == 200
+    assert seen["limit"] == HISTORY_VIEW_CAP  # bounded, not None (which would be the unbounded export read)
