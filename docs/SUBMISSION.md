@@ -3,7 +3,22 @@
 One enumerated list of **everything we hand in**, so each teammate can verify the *complete* package
 against a single source of truth and fix what they think is missing. Two independent tracks.
 
-Naming convention for any zip/video: `<id1>_<id2>_<id3>`.
+## Status at a glance
+
+**✅ Implemented & verified**
+- **Graded build:** 3-container Docker app · **Job Queue (+5)** · **Online Forum (+10)** · **Azure deploy + CI/CD (+10)** · live HTTPS URL
+- **Report** (`REPORT.md`, 1063 tests) · **README** (run + test instructions) · risk assessment
+- **Per-member commits** present (Lior 308 · Elad 43 · Shiri 11 — the per-member grading requirement is met)
+- **Show Off package** built & verified (metadata · A3 poster · thumb · demo · zip)
+
+**⬜ Still open**
+- **F5 workout generator** — the one open *graded* feature (Shiri · [#276](https://github.com/LiorBenSidi/work-smarter-not-harder/issues/276))
+- **Demo video** of the app — not recorded yet (team; script at `presentation/WSNH Demo Video Script.md`)
+- **Paste the repo link** into the Moodle final-project box (when it opens) + **upload the Show Off zip** (Lior)
+- **Seed prod · VM up · joint sign-off** before the TA review
+
+Naming: demo **video** = `VID_<id1>_<id2>_<id3>.mp4`; the Show Off **zip** = one member's ID (`207490913.zip`).
+The graded project has **no zip** — it's a repo link.
 
 ---
 
@@ -16,11 +31,13 @@ Rubric (`docs/GUIDELINES.md`, the TA's `WSNH_Guidelines`, 8 Jul): **75** proposa
 |---|---|---|---|
 | The application | this repo @ `main` | all | ✅ `docker compose up --build` (3 containers, only `web` published) |
 | Live URL over HTTPS | app.worksmarternotharder.dev | Elad (deploy) | ✅ live, auto-deploy + rollback |
-| **Report** | [`docs/REPORT.md`](REPORT.md) | all (Lior drafted) | ✅ current — **1063 tests** (1018 pass / 45 env-gated in CI). Export to PDF if the TA wants a file. |
+| **Report** | [`docs/REPORT.md`](REPORT.md) | all (Lior drafted) | ✅ current — **1063 tests** (1018 pass / 45 env-gated in CI). The single source is the live `.md`; the stale 2026-07-11 `REPORT.pdf` was removed — regenerate a fresh PDF from this only if the TA wants a file. |
 | Rubric / guidelines | [`docs/GUIDELINES.md`](GUIDELINES.md) | — | ✅ |
 | Roadmap | [`docs/ROADMAP.md`](ROADMAP.md) | — | ✅ |
 | Presentation + demo video | `presentation/` (see the checklist) | all | 🟡 deck ✅ (presented 16 Jul); **demo video ⬜ to record** → `VID_<ids>.mp4` |
 | Submission checklist | [`presentation/WSNH Submission Checklist.md`](../presentation/WSNH%20Submission%20Checklist.md) | — | ✅ |
+
+**Hand-in format** (per [`docs/Proj_Guidelines.pdf`](Proj_Guidelines.pdf) p11–12 — text+visual dual-read verified): submit **(1) the GitHub repo link — "no more zips"**, **(2) a video** of the app in use, and **(3) the report** (`docs/REPORT.md` — app · features · *tests per feature* · risk assessment). `README.md` must exist with run + test instructions; **−5 each time the code doesn't run**. So the report lives in the repo (no PDF required) and there is **no submission zip** for the graded project — only the Show Off gallery (Track B) uses a zip.
 
 ### Verify-your-own-lane before sign-off
 - **Lior** — web tier · whole data layer (`db.py` CRUD, indexes, `$jsonSchema`, seed, backup) · observability ·
@@ -31,8 +48,8 @@ Rubric (`docs/GUIDELINES.md`, the TA's `WSNH_Guidelines`, 8 Jul): **75** proposa
   `program` input, #276 P7). ← the one open **graded** feature.
 
 ### Open before hand-in (human steps / not built)
-- [ ] **Confirm submission mechanics with the TA** — zip vs Moodle vs repo link; report as PDF or the live
-      `docs/REPORT.md`. Nobody's lane yet; **gates the hand-in.**
+- [ ] **Submit the GitHub repo link** in the Moodle final-project box when it opens (format is settled above:
+      repo link + video + report, **no zip**). Only residual: confirm *which* Moodle box — not a build task.
 - [ ] **F5 workout generator** (Shiri) — #276.
 - [ ] **Seed prod once** before the TA review (`db/README.md` command) and confirm the **Azure VM is up**
       (instructor auto-shutdown ~23:50 UTC).
@@ -48,14 +65,17 @@ ID, built and uploaded by Lior. Package built & verified against the instruction
 
 | Item | Requirement | Built package | ✓ |
 |---|---|---|---|
-| `metadata.json` | title · ~20-word + ~100-word desc · team · links | present (20-word short desc) | ✅ |
+| [`metadata.json`](../presentation/showoff/metadata.json) | title · ~20-word + ~100-word desc · team · links | **mirrored in-repo for review** (20-word short desc) | ✅ |
 | `poster.pdf` | A3 | 297 × 420 mm | ✅ |
 | `thumb.png` | thumbnail | present | ✅ |
 | `demo.mp4` | 20–90 s · 1920×1080 · MP4 · silent | 27.9 s · 1920×1080 · silent | ✅ |
 
-Built in the course "Show Off Your Project" folder (outside this repo — it is a Moodle upload, not repo
-content). **One thing to confirm before upload:** the instruction asks the zip be named after **one**
-member's ID (e.g. `<id>.zip`); the current build uses all three IDs — decide the final filename.
+The zip is built in the course "Show Off Your Project" folder (outside this repo — it is a Moodle upload,
+not repo content). Its text component is **mirrored at [`presentation/showoff/metadata.json`](../presentation/showoff/metadata.json)**
+so the team can review the gallery title / descriptions / links; the binaries (poster · thumb · demo) stay
+in the course folder. **Filename resolved:** the instruction asks for **one** member's ID, so an
+instruction-compliant **`207490913.zip`** (identical contents) now sits alongside the original triple-ID
+build in the course folder — **upload `207490913.zip`**.
 
 ---
 

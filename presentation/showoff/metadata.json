@@ -1,0 +1,21 @@
+{
+  "title": "Work Smarter, Not Harder",
+  "short_description": "An AI sports-coaching platform: log recovery metrics and get a Random Forest readiness call plus workout, nutrition, and program-balance guidance.",
+  "long_description_md": "**Work Smarter, Not Harder** turns daily recovery metrics into coaching decisions. Athletes log sleep, fatigue, soreness and training load, and a **locally-trained Random Forest** classifies training readiness as *Ready*, *Moderate*, or *Rest*.\n\nA recommendation engine turns that into an action plan: what to train, what to fix first, how many calories to eat, and whether to push, maintain, or deload. A built-in **community forum** adds posts, votes, and real-time messaging.\n\nIt runs as **three Docker containers** (Flask · MongoDB · AI inference), only the web tier exposed, and ships with CI/CD, tests across all five test types, and a live HTTPS deployment on Azure.",
+  "team": [
+    { "name": "Lior Ben Sidi" },
+    { "name": "Shiri Haboob" },
+    { "name": "Elad Nachalieli" }
+  ],
+  "tags": ["AI", "machine-learning", "fitness", "sports-science", "full-stack", "docker"],
+  "tech_stack": ["Python", "Flask", "scikit-learn", "MongoDB", "Docker", "Docker Compose", "GitHub Actions", "Azure", "Caddy"],
+  "poster": { "type": "pdf" },
+  "links": [
+    { "label": "GitHub", "url": "https://github.com/LiorBenSidi/work-smarter-not-harder" },
+    { "label": "Live App", "url": "https://app.worksmarternotharder.dev" }
+  ],
+  "launch": {
+    "type": "live",
+    "notes": "Deployed live on Azure over HTTPS at app.worksmarternotharder.dev. Register with any email (one-time code) to try it; seeded demo data is available on request."
+  }
+}
