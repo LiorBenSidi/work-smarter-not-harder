@@ -63,19 +63,18 @@ Rubric (`docs/GUIDELINES.md`, the TA's `WSNH_Guidelines`, 8 Jul): **75** proposa
 Moodle `id=266452` (Noam, 16 Jul). Per `instruction_for_students.pdf`: one zip named after **one** member's
 ID, built and uploaded by Lior. Package built & verified against the instruction:
 
-| Item | Requirement | Built package | ✓ |
+| Item (in [`presentation/showoff/`](../presentation/showoff/)) | Requirement | Built | ✓ |
 |---|---|---|---|
-| [`metadata.json`](../presentation/showoff/metadata.json) | title · ~20-word + ~100-word desc · team · links | **mirrored in-repo for review** (20-word short desc) | ✅ |
-| `poster.pdf` | A3 | 297 × 420 mm | ✅ |
-| `thumb.png` | thumbnail | present | ✅ |
-| `demo.mp4` | 20–90 s · 1920×1080 · MP4 · silent | 27.9 s · 1920×1080 · silent | ✅ |
+| [`metadata.json`](../presentation/showoff/metadata.json) | title · ~20-word + ~100-word desc · team · links | ✅ in-repo | ✅ |
+| [`poster.pdf`](../presentation/showoff/poster.pdf) | A3 | 297 × 420 mm — **renders inline on GitHub** | ✅ |
+| [`thumb.png`](../presentation/showoff/thumb.png) | thumbnail | renders inline | ✅ |
+| [`demo.mp4`](../presentation/showoff/demo.mp4) | 20–90 s · 1920×1080 · MP4 · silent | 27.9 s — **plays inline on GitHub** | ✅ |
+| [`207490913.zip`](../presentation/showoff/207490913.zip) | the exact Moodle upload (named after **one** member's ID) | ✅ in-repo | ✅ |
 
-The zip is built in the course "Show Off Your Project" folder (outside this repo — it is a Moodle upload,
-not repo content). Its text component is **mirrored at [`presentation/showoff/metadata.json`](../presentation/showoff/metadata.json)**
-so the team can review the gallery title / descriptions / links; the binaries (poster · thumb · demo) stay
-in the course folder. **Filename resolved:** the instruction asks for **one** member's ID, so an
-instruction-compliant **`207490913.zip`** (identical contents) now sits alongside the original triple-ID
-build in the course folder — **upload `207490913.zip`**.
+**The whole Show Off package is committed to [`presentation/showoff/`](../presentation/showoff/)** — the exact
+`207490913.zip` to upload, **plus its unpacked files so Elad & Shiri can review the poster, thumbnail, and demo
+video inline on GitHub** (not just the metadata text). The zip is named after **one** member's ID per the
+instruction (all three names are inside `metadata.json`). **Action:** review the files, then **upload `207490913.zip`** to Moodle `id=266452`.
 
 ---
 
