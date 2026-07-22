@@ -1,12 +1,14 @@
 # Work Smarter, Not Harder — final submission checklist
 
 **Team Git Push & Pray** — Shiri · Lior · Elad · IDs **<id1> · <id2> · <id3>**
-**Naming convention:** `<id>_<id>_<id>` → **`<id1>_<id2>_<id3>`** (used for the zip + video, e.g.
-`WSNH_<id1>_<id2>_<id3>.zip`, `VID_<id1>_<id2>_<id3>.mp4`).
+**Naming convention:** `<id>_<id>_<id>` → **`<id1>_<id2>_<id3>`** for the demo **video** (`VID_<id1>_<id2>_<id3>.mp4`).
+*(No project zip — the graded hand-in is a repo link; the only zip is the separate Show Off gallery, named after **one** member's ID.)*
 
-> ⚠️ **Confirm the exact submission mechanics with the TA** (Moodle upload vs. repo link vs. zip; whether the
-> report is a PDF or the live `docs/REPORT.md`). The items below are the deliverables; the *format* is the one
-> thing to verify — this course's mini-HWs used a `<ids>.zip` on Moodle.
+> **Hand-in format** (per `docs/Proj_Guidelines.pdf` p11–12): submit **(1) the GitHub repo link — "no more
+> zips"**, **(2) a video** of the app in use, and **(3) the report** (`docs/REPORT.md`). `README.md` must exist
+> with run + test instructions; **−5 each time the code doesn't run**. So the report is the in-repo `.md` (no
+> PDF needed) and there is **no project zip** — the only residual is confirming *which* Moodle box to paste the
+> repo link into.
 
 ## Dates
 | When | What |
@@ -27,7 +29,7 @@
       (`db/seed.py`: fake clients + posts + comments + likes — a deliberate demo/review tool; see below).
 - [x] **Azure deploy + CI/CD (+10)** — live over HTTPS, auto-deploy + rollback. ✅ built & live.
 - [x] **Report** — `docs/REPORT.md` (app overview · features×tests matrix · risk assessment). ✅ current
-      (1062 tests). Export to PDF if the TA wants a file.
+      (1063 tests). Submitted as the in-repo `.md` — the guidelines take a repo link, not a PDF.
 - [ ] **Demo video** — record from `WSNH Demo Video Script.md`; name `VID_<id1>_<id2>_<id3>.mp4`.
 - [ ] **Presentation** — **`WSNH Presentation (Canva).pptx/.pdf`** (8-slide light/projector deck, design `DAHO6FXsV5o`) + **`WSNH Speaker Script (8-slide Canva).md`** (word-for-word, 2 handoffs); rehearse to 5:00. *(`WSNH Presentation.pptx` + `WSNH Speaker Notes and QA.md` are the retired 11/12-slide versions — Q&A bank in the latter is still useful.)*
 
@@ -47,7 +49,7 @@
       (`docs/SCALING_REPORT.md`).
 
 **Verify (should already be true):**
-- [x] Suite green — **1062 collected** (real-Mongo IT runs on the `mongo:7` CI service); `main` green.
+- [x] Suite green — **1063 collected** (real-Mongo IT runs on the `mongo:7` CI service); `main` green.
 - [x] Live URL serves over HTTPS; auto-deploy + rollback working.
 - [x] No committed secrets; only `web` exposed; auth/CSRF/injection defenses in place (TA-reviewed clean).
 - [x] Docs reconciled to reality (counts, ownership, deploy gate, data model).
@@ -64,5 +66,5 @@
 ## The one-line status
 Engineering is submission-ready and TA-reviewed clean; the AI model has landed and the forum cold-seed tool
 is built (run it against prod before the review). The remaining items are the **F5 workout-generator**
-(Shiri), the **team deliverables** (demo video, rehearsal), and the one thing nobody owns yet: **confirming
-the submission format with the TA** (the ⚠️ at the top of this file).
+(Shiri) and the **team deliverables** — the demo **video**, the rehearsal, and pasting the **repo link** into
+the Moodle final-project box when it opens (format is settled: repo link + video + report, **no zip**).
