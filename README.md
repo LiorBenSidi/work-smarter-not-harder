@@ -94,10 +94,18 @@ pip install -r requirements-dev.txt        # in your venv: pinned ruff + bandit 
 > The trade-off to know: a local `python -m pytest` imports the app in-process, so it uses **your venv's** flask/werkzeug rather than the pinned ones. It's a fast, useful gate — but **CI and the container jobs are authoritative** for library versions, and if a local run ever disagrees with CI, CI is right. Pins that must match across manifests are enforced by [`tests/Integration_Tests/test_pin_contract.py`](tests/Integration_Tests/test_pin_contract.py).
 
 ## Run it
+**One command** (the "just run it" path — full guide in [`installation.md`](installation.md)):
+```sh
+./install.sh                    # creates .env, builds + starts the 3 containers → http://localhost:8000
+```
+Manual equivalent:
 ```sh
 cp .env.example .env            # sets SECRET_KEY (never commit .env)
 docker compose up --build       # 3 containers → open http://localhost:8000/health
 ```
+Then **register an account** — with no SMTP configured (the default), the one-time code is shown **on
+screen** (and logged), so **no mailbox is needed**. Want a **populated** app (a forum with demo posts)?
+Run [`./seed.sh`](seed.sh) once the stack is up.
 
 **Dev switches** (both default off; neither affects real users — full guide [`docs/AUTH_TESTING.md`](docs/AUTH_TESTING.md)):
 - **Email mock ⇄ live = `SMTP_HOST`** — unset → login-OTP / signup-verify / reset codes are shown on screen + logged (no mailbox; teammates + grading use this); set `SMTP_*` + `MAIL_FROM` in `.env` → codes are emailed only. Every auth-mode var (`OTP_ENABLED`, `REGISTER_VERIFY_EMAIL`, …) passes through from `.env`; `curl localhost:8000/auth/config` reports `email_mode`.
