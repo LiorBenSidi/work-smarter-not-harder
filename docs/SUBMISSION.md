@@ -3,7 +3,22 @@
 One enumerated list of **everything we hand in**, so each teammate can verify the *complete* package
 against a single source of truth and fix what they think is missing. Two independent tracks.
 
-Naming convention for any zip/video: `<id1>_<id2>_<id3>`.
+## Status at a glance
+
+**✅ Implemented & verified**
+- **Graded build:** 3-container Docker app · **Job Queue (+5)** · **Online Forum (+10)** · **Azure deploy + CI/CD (+10)** · live HTTPS URL
+- **Report** (`REPORT.md`, 1063 tests) · **README** (run + test instructions) · risk assessment
+- **Per-member commits** present (Lior 308 · Elad 43 · Shiri 11 — the per-member grading requirement is met)
+- **Show Off package** built & verified (metadata · A3 poster · thumb · demo · zip)
+
+**⬜ Still open**
+- **F5 workout generator** — the one open *graded* feature (Shiri · [#276](https://github.com/LiorBenSidi/work-smarter-not-harder/issues/276))
+- **Demo video** of the app — not recorded yet (team; script at `presentation/WSNH Demo Video Script.md`)
+- **Paste the repo link** into the Moodle final-project box (when it opens) + **upload the Show Off zip** (Lior)
+- **Seed prod · VM up · joint sign-off** before the TA review
+
+Naming: demo **video** = `VID_<id1>_<id2>_<id3>.mp4`; the Show Off **zip** = one member's ID (`207490913.zip`).
+The graded project has **no zip** — it's a repo link.
 
 ---
 
@@ -58,8 +73,9 @@ ID, built and uploaded by Lior. Package built & verified against the instruction
 The zip is built in the course "Show Off Your Project" folder (outside this repo — it is a Moodle upload,
 not repo content). Its text component is **mirrored at [`presentation/showoff/metadata.json`](../presentation/showoff/metadata.json)**
 so the team can review the gallery title / descriptions / links; the binaries (poster · thumb · demo) stay
-in the course folder. **One thing to confirm before upload:** the instruction asks the zip be named after
-**one** member's ID (e.g. `<id>.zip`); the current build uses all three IDs — decide the final filename.
+in the course folder. **Filename resolved:** the instruction asks for **one** member's ID, so an
+instruction-compliant **`207490913.zip`** (identical contents) now sits alongside the original triple-ID
+build in the course folder — **upload `207490913.zip`**.
 
 ---
 
