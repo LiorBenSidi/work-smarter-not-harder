@@ -16,7 +16,7 @@ Rubric (`docs/GUIDELINES.md`, the TA's `WSNH_Guidelines`, 8 Jul): **75** proposa
 |---|---|---|---|
 | The application | this repo @ `main` | all | ✅ `docker compose up --build` (3 containers, only `web` published) |
 | Live URL over HTTPS | app.worksmarternotharder.dev | Elad (deploy) | ✅ live, auto-deploy + rollback |
-| **Report** | [`docs/REPORT.md`](REPORT.md) | all (Lior drafted) | ✅ current — **1063 tests** (1018 pass / 45 env-gated in CI). Export to PDF if the TA wants a file. |
+| **Report** | [`docs/REPORT.md`](REPORT.md) | all (Lior drafted) | ✅ current — **1063 tests** (1018 pass / 45 env-gated in CI). The single source is the live `.md`; the stale 2026-07-11 `REPORT.pdf` was removed — regenerate a fresh PDF from this only if the TA wants a file. |
 | Rubric / guidelines | [`docs/GUIDELINES.md`](GUIDELINES.md) | — | ✅ |
 | Roadmap | [`docs/ROADMAP.md`](ROADMAP.md) | — | ✅ |
 | Presentation + demo video | `presentation/` (see the checklist) | all | 🟡 deck ✅ (presented 16 Jul); **demo video ⬜ to record** → `VID_<ids>.mp4` |
@@ -48,14 +48,16 @@ ID, built and uploaded by Lior. Package built & verified against the instruction
 
 | Item | Requirement | Built package | ✓ |
 |---|---|---|---|
-| `metadata.json` | title · ~20-word + ~100-word desc · team · links | present (20-word short desc) | ✅ |
+| [`metadata.json`](../presentation/showoff/metadata.json) | title · ~20-word + ~100-word desc · team · links | **mirrored in-repo for review** (20-word short desc) | ✅ |
 | `poster.pdf` | A3 | 297 × 420 mm | ✅ |
 | `thumb.png` | thumbnail | present | ✅ |
 | `demo.mp4` | 20–90 s · 1920×1080 · MP4 · silent | 27.9 s · 1920×1080 · silent | ✅ |
 
-Built in the course "Show Off Your Project" folder (outside this repo — it is a Moodle upload, not repo
-content). **One thing to confirm before upload:** the instruction asks the zip be named after **one**
-member's ID (e.g. `<id>.zip`); the current build uses all three IDs — decide the final filename.
+The zip is built in the course "Show Off Your Project" folder (outside this repo — it is a Moodle upload,
+not repo content). Its text component is **mirrored at [`presentation/showoff/metadata.json`](../presentation/showoff/metadata.json)**
+so the team can review the gallery title / descriptions / links; the binaries (poster · thumb · demo) stay
+in the course folder. **One thing to confirm before upload:** the instruction asks the zip be named after
+**one** member's ID (e.g. `<id>.zip`); the current build uses all three IDs — decide the final filename.
 
 ---
 
