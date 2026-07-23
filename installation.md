@@ -29,7 +29,14 @@ clients plus a forum with posts, comments and likes — run this **after the sta
 ./seed.sh
 ```
 Idempotent — safe to re-run; it does nothing if the forum already has content. Then log in as a seeded
-client (e.g. **`coach_maya`**) with the demo password **`demo-seed-pw`** and browse the forum. Equivalent manual step:
+client (e.g. **`coach_maya`**) with the demo password **`demo-seed-pw`** and browse the forum.
+
+> **If it can't find the seed script:** Docker only shares certain folders with its VM. If the project sits
+> outside those (e.g. under `/tmp`), the mount is empty and `./seed.sh` says so and prints the fix — either
+> move the project under your **home directory** and re-run, or allow the folder in
+> *Docker Desktop → Settings → Resources → File sharing*. Keeping the project in your home directory avoids this entirely.
+
+Equivalent manual step:
 ```bash
 docker compose run --rm -v "$PWD:/repo" -e MONGO_URI=mongodb://db:27017/worksmarter web python /repo/db/seed.py
 ```
