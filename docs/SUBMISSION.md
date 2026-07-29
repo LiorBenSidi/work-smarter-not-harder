@@ -72,7 +72,7 @@ ID, built and uploaded by Lior. Package built & verified against the instruction
 | [`207490913.zip`](../presentation/showoff/207490913.zip) | the exact Moodle upload (named after **one** member's ID) | ✅ in-repo | ✅ |
 
 **The whole Show Off package is committed to [`presentation/showoff/`](../presentation/showoff/)** — the exact
-`207490913.zip` to upload, **plus its unpacked files so Elad & Shiri can review the poster, thumbnail, and demo
+`207490913.zip` (the Moodle upload), **plus its unpacked files so Elad & Shiri could review the poster, thumbnail, and demo
 video inline on GitHub** (not just the metadata text). The zip is named after **one** member's ID per the
 instruction (all three names are inside `metadata.json`). **✅ Reviewed + approved by Elad & Shiri and UPLOADED to Moodle `id=266452` on 29 Jul 2026 — Track B complete.**
 
