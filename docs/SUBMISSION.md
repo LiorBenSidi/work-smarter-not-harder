@@ -9,12 +9,12 @@ against a single source of truth and fix what they think is missing. Two indepen
 - **Graded build:** 3-container Docker app · **Job Queue (+5)** · **Online Forum (+10)** · **Azure deploy + CI/CD (+10)** · live HTTPS URL
 - **Report** (`REPORT.md`, 1063 tests) · **README** (run + test instructions) · risk assessment
 - **Per-member commits** present (Lior 308 · Elad 43 · Shiri 11 — the per-member grading requirement is met)
-- **Show Off package** built & verified (metadata · A3 poster · thumb · demo · zip)
+- **Show Off gallery (Track B): ✅ SUBMITTED 29 Jul** (`207490913.zip` — team-approved, uploaded to Moodle)
 
 **⬜ Still open**
 - **F5 workout generator** — the one open *graded* feature (Shiri · [#276](https://github.com/LiorBenSidi/work-smarter-not-harder/issues/276))
 - **Demo video** of the app — not recorded yet (team; script at `presentation/WSNH Demo Video Script.md`)
-- **Paste the repo link** into the Moodle final-project box (when it opens) + **upload the Show Off zip** (Lior)
+- **Paste the repo link** into the Moodle final-project box (when it opens) — Lior _(Show Off zip ✅ uploaded 29 Jul)_
 - **Seed prod · VM up · joint sign-off** before the TA review
 
 Naming: demo **video** = `VID_<id1>_<id2>_<id3>.mp4`; the Show Off **zip** = one member's ID (`207490913.zip`).
@@ -58,7 +58,7 @@ Rubric (`docs/GUIDELINES.md`, the TA's `WSNH_Guidelines`, 8 Jul): **75** proposa
 
 ---
 
-## Track B — "Show Off Your Project" gallery (optional · **NOT graded**) · due **1 Aug**
+## Track B — "Show Off Your Project" gallery (optional · **NOT graded**) · due **1 Aug** — ✅ **SUBMITTED 29 Jul**
 
 Moodle `id=266452` (Noam, 16 Jul). Per `instruction_for_students.pdf`: one zip named after **one** member's
 ID, built and uploaded by Lior. Package built & verified against the instruction:
@@ -72,9 +72,9 @@ ID, built and uploaded by Lior. Package built & verified against the instruction
 | [`207490913.zip`](../presentation/showoff/207490913.zip) | the exact Moodle upload (named after **one** member's ID) | ✅ in-repo | ✅ |
 
 **The whole Show Off package is committed to [`presentation/showoff/`](../presentation/showoff/)** — the exact
-`207490913.zip` to upload, **plus its unpacked files so Elad & Shiri can review the poster, thumbnail, and demo
+`207490913.zip` (the Moodle upload), **plus its unpacked files so Elad & Shiri could review the poster, thumbnail, and demo
 video inline on GitHub** (not just the metadata text). The zip is named after **one** member's ID per the
-instruction (all three names are inside `metadata.json`). **Action:** review the files, then **upload `207490913.zip`** to Moodle `id=266452`.
+instruction (all three names are inside `metadata.json`). **✅ Reviewed + approved by Elad & Shiri and UPLOADED to Moodle `id=266452` on 29 Jul 2026 — Track B complete.**
 
 ---
 
