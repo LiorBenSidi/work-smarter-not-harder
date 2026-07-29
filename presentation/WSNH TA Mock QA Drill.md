@@ -93,6 +93,10 @@ easy → hard. (Companion to `WSNH Speaker Notes and QA.md`.)
 > Mongo collections: `users`, `profiles`, `analysis_history`, `forum_posts`, `messages`, `notifications`,
 > `media` — indexed, with `$jsonSchema` validators. `web → db` goes through the `db.py` functions, never raw.
 
+*Accurate as drilled on 16 Jul. Since then (#331, 22 Jul): comments live in their own **`forum_comments`**
+collection and a **`meta`** counter backs the SSE stream; validators cover six collections. Current model:
+[`docs/DESIGN.md`](../docs/DESIGN.md) §2.*
+
 ---
 
 ### Curveballs (be ready)

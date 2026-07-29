@@ -18,19 +18,22 @@ User → web ──┬──► ai   (POST /predict, internal)
 ```
 
 ## 2. Data model (MongoDB — as built)
-*The shapes below are what the code actually writes; `$jsonSchema` validators cover the first six.*
+*The shapes below are what the code actually writes. `$jsonSchema` validators cover `users`, `profiles`,
+`analysis_history`, `forum_posts`, `messages` and `notifications`; `forum_comments`, `meta` and `media`
+carry none.*
 
 - `users` — { username *(unique internal handle)*, display_name *(non-unique, shown)*, email, password_hash }
 - `profiles` — { username, **profile**: { age, gender, height, weight, goal, training_frequency } } *(nested)*
-- `analysis_history` — { username, **entry**: { metrics, assessment, calories, timestamp } } *(nested)*
-- `forum_posts` — { id, author, title, body, anonymous, score, votes, **comment_count** }
+- `analysis_history` — { username, **entry**: { timestamp, metrics, assessment, proba, calories, recommendations } } *(nested)*
+- `forum_posts` — { id, author, title, body, anonymous, score, votes, **comment_count**, created_at }
 - `forum_comments` — { id, post_id, author, body, score, votes, created_at } — comments are their **own**
   documents, keyed by `post_id`, so a hot thread can't grow a post toward Mongo's 16 MB cap (#331)
 - `messages` — { id, sender, recipient, body, created_at, read, delivered }
 - `notifications` — { id, user, type, text, actor, ref, read, created_at }
 - `meta` — { _id: `"forum_rev"`, v } — one monotonic integer bumped by every forum mutation; the SSE stream
   polls it to decide when to push a `forum` event
-- `media` — { id, owner, mime, size, target_type, target_id, peers, created_at } — owned by
+- `media` — { _id, owner, mime, size, target_type, target_id, peers, created_at } *(`id` is the public
+  projection; the stored key is `_id`)* — owned by
   `web/services/media_store.py`, deliberately outside the `db.py` seam (no validator)
 
 > **Not built:** the proposal (§9) also specifies a **`programs`** collection for the workout generator.

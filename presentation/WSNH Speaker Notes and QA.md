@@ -107,6 +107,10 @@ over HTTP). A broken wire path can't reach the registry or the deploy — it fai
 MongoDB collections: `users`, `profiles`, `analysis_history`, `forum_posts`, `messages`, `notifications`,
 `media`. Indexed, with `$jsonSchema` validators.
 
+> *Accurate as delivered on 16 Jul. Since then (#331, 22 Jul) comments moved into their own
+> **`forum_comments`** collection and a **`meta`** counter was added for the SSE stream; validators cover six
+> collections (`media` and the two new ones carry none). Current model: [`docs/DESIGN.md`](../docs/DESIGN.md) §2.*
+
 **Q: What did each person build?**
 Shiri: the AI model + recommendation engine + cold-seed content. Lior: the web app, the whole data layer, auth
 + security, the forum real-time layer (DM, notifications), logging, containers, and the CI/CD pipeline. Elad: the

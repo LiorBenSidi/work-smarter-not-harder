@@ -13,7 +13,7 @@
 > +10 Azure deploy + CI/CD; supersedes [`FEEDBACK.md`](FEEDBACK.md)). Architecture detail lives in [`DESIGN.md`](DESIGN.md); the phased plan in
 > [`ROADMAP.md`](ROADMAP.md).
 >
-> **Last updated:** 2026-07-22 · **Suite at this snapshot:** **1063 checks, 1018 passing / 45 environment-gated**
+> **Last updated:** 2026-07-29 · **Suite at this snapshot:** **1063 checks, 1018 passing / 45 environment-gated**
 > (+ 17 browser e2e scenarios)
 > (`python -m pytest tests/ -q`; the env-gated ones run in CI's `compose-e2e` job against the live containers).
 > Since the 07-12 snapshot (783 tests): **Shiri's Random Forest landed** — a real `ai/model/model.pkl` +
@@ -91,11 +91,23 @@ is implemented independently.
 
 ### Data model (MongoDB)
 
-`users` { username *(the unique internal handle)*, display_name *(non-unique)*, email, password_hash } · `profiles` { username, age, gender, height, weight, goal,
-training_frequency } · `analysis_history` { username, metrics, assessment, calories, timestamp } ·
-`forum_posts` { id, author, title, body, anonymous, score, votes, comments } ·
-`messages` { id, sender, recipient, body, created_at, read } · `notifications` { id, user, type, text, actor,
-read, created_at } · `media` { id, owner, mime, size, target_type, target_id, peers, created_at } *(Elad, #160)*.
+*The shapes below are what the code actually writes (full detail in [`DESIGN.md`](DESIGN.md) §2).*
+
+`users` { username *(the unique internal handle)*, display_name *(non-unique)*, email, password_hash } ·
+`profiles` { username, **profile**: { age, gender, height, weight, goal, training_frequency } } *(nested)* ·
+`analysis_history` { username, **entry**: { timestamp, metrics, assessment, proba, calories, recommendations } } *(nested)* ·
+`forum_posts` { id, author, title, body, anonymous, score, votes, **comment_count**, created_at } ·
+`forum_comments` { id, post_id, author, body, score, votes, created_at } — comments are their **own**
+documents keyed by `post_id`, so a hot thread can't grow a post toward Mongo's 16 MB cap (#331) ·
+`messages` { id, sender, recipient, body, created_at, read, delivered } ·
+`notifications` { id, user, type, text, actor, ref, read, created_at } ·
+`meta` { _id: `"forum_rev"`, v } — the monotonic forum revision the SSE stream polls ·
+`media` { _id, owner, mime, size, target_type, target_id, peers, created_at } *(Elad, #160 — owned by
+`media_store.py`, outside the `db.py` seam)*.
+
+`$jsonSchema` validators cover `users`, `profiles`, `analysis_history`, `forum_posts`, `messages` and
+`notifications`; `forum_comments`, `meta` and `media` carry none. **Not built:** the proposal's `programs`
+collection (v2 §9) — see #412 / #276.
 
 ---
 
@@ -154,7 +166,7 @@ Columns are the test-type dirs under `tests/`. Cells name representative file(s)
 | **F1 Accounts / Auth** | `test_auth_validation` (26) · `test_email` (14) | `test_auth_flow` (18) · `test_login_otp` (15) · `test_password_reset` (11) · `test_register_verify` (11) · `test_account_*` (25) | `test_auth_negative` (33) | `test_e2e` leg | `test_auth` (10) · `test_csrf` (6) · `test_debug_email_override` (7) | — |
 | **F2 Profile** | `test_profile_validation` (27) | `test_profile_flow` (4) · `test_identity_display` (6) | in `test_profile_checkin_negative` (59) | `test_e2e` leg | `test_profile` (1) | — |
 | **F3 Readiness (web path)** | `test_checkin_validation` (31) · `test_ai_client` (4) | `test_checkin_flow` (17) · `test_web_ai` (2) | in `test_profile_checkin_negative` (59) | `test_e2e` leg | — | — |
-| **F3 Readiness (model — Shiri)** | `test_ai_inference` (16) · `test_ai_recommendations` (14) · `test_ai_binning` (21) | `test_ai_queue_api` (31, loads the real `model.pkl`) | — | — | — | — |
+| **F3 Readiness (model — Shiri)** | `test_ai_inference` (16) · `test_ai_recommendations` (14) · `test_ai_binning` (21) | `test_ai_queue_api` (27, loads the real `model.pkl`) | — | — | — | — |
 | **F4 Calorie** | `test_calories` (14) | via `test_checkin_flow` / `test_dashboard_flow` | — | — | — | — |
 | **F7 Action plan / recommendations** | (engine covered by the F3-model unit tests) | `test_web_ai` (2) · `test_dashboard_flow` (15) | — | `test_e2e` leg | — | — |
 | **F8 Dashboard** | — | `test_dashboard_flow` (15) | — | `test_e2e` leg | `test_dashboard` (1) | — |
@@ -166,7 +178,7 @@ Columns are the test-type dirs under `tests/`. Cells name representative file(s)
 | **AI job-queue +5 (Elad)** | `test_jobqueue` (40) · `test_bench` (18) | `test_ai_queue_contract` (21) | — | `test_ai_queue_live` (10) | `test_ai_queue` (28) | `test_pool_scaling` (2) · `test_queue_backpressure` (6) |
 | **Deploy / scale (Elad)** | — | `test_deploy_contract` (24) · `test_scale_contract` (9) · `test_pin_contract` (4) | — | — | — | — |
 | **Rate-limiting / anti-spam (Elad)** | — | — | — | — | `test_rate_limit` (9) | in `test_load` |
-| **Data layer (`db.py` + Mongo)** | `test_db` (55) · `test_backup_script` (2) | `test_db_mongo` (22, real Mongo) | — | — | (injection-safe queries) | — |
+| **Data layer (`db.py` + Mongo)** | `test_db` (55) · `test_backup_script` (2) | `test_db_mongo` (21, real Mongo) | — | — | (injection-safe queries) | — |
 | **Frontend (SPA / CSRF / a11y / mobile)** | `test_frontend_mobile_guards` (14) | `test_frontend` (26) | — | `test_e2e` leg | `test_csrf` (6) · `test_web_hardening` (4) · `test_review_hardening` (3) | — |
 | **Observability (logging)** | `test_logging_config` (19) | — | — | — | (access-log path escaping) | — |
 | **App config / debug flag / secret** | `test_config` (13) · `test_scaffold` (4) | — | — | — | (no `.env` tracked) | — |
@@ -194,7 +206,7 @@ they run the moment their dependency is present:
 - `test_ai_queue_live` (10) — the live AI-queue behaviour (bounded queue + process pool over HTTP); runs when
   `AI_BASE_URL` points at the running `ai` container, as CI's `compose-e2e` job does.
 - `test_load` (4) — the live-stack stress burst; runs when `E2E_BASE_URL` points at a live stack.
-- `test_e2e` + `test_elad_lane_live` (1) — full-stack system journeys; run against a live stack (`E2E_BASE_URL`).
+- `test_e2e` + `test_elad_lane_live` (2) — full-stack system journeys; run against a live stack (`E2E_BASE_URL`).
 - `test_fault_isolation` (2) — destructive container-stop resilience checks; run with `FAULT_TEST=1`.
 - `test_ai` (2) — the original TDD scaffolds for the AI model (Shiri). **Now redundant:** the model has
   landed and its real tests live in `test_ai_inference` / `test_ai_recommendations` / `test_ai_binning`; the
