@@ -24,7 +24,7 @@ APK / Play Store build**; the PWA is the supported way onto a phone.)
 | Container | Role |
 |---|---|
 | `web/` | Flask frontend + authentication (werkzeug hashing) + API. **The only user-facing container.** |
-| `db`   | MongoDB — users, profiles, programs, analysis history. Internal only. |
+| `db`   | MongoDB — users, profiles, analysis history, forum posts/comments, messages, notifications. Internal only. |
 | `ai/`  | Random Forest inference + recommendation engine, behind a **bounded job queue + process pool**. Internal REST (`POST /predict`). |
 
 Course rules the architecture is built to satisfy: ≥3 communicating containers, only `web` exposed, local AI model
@@ -237,7 +237,7 @@ auto-deploying every green `main` to Azure over HTTPS. The **Random Forest** beh
 too (`ai/model/model.pkl`, baked into the image). The **forum cold-seed** is built too — a deliberate
 demo/review tool (`db/seed.py`: fake clients + posts + comments + likes); a fresh database is left
 **empty by design** (a real deployment starts empty), so run the seed when you want a populated app to
-show. Suite: **1062 collected**, green in CI (real-Mongo IT runs on the `mongo:7` service).
+show. Suite: **1063 collected** (1018 pass / 45 environment-gated), green in CI (real-Mongo IT runs on the `mongo:7` service).
 
 **Remaining:** the **F5 workout-generator** (Shiri's AI lane). Risk assessment and the honest "what we did
 *not* mitigate" list: [`docs/REPORT.md`](docs/REPORT.md) §5.

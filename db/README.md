@@ -11,8 +11,10 @@ The data-access layer is `web/services/db.py`. On first connect it applies, best
 
 - **Indexes** (`ensure_indexes`) — unique `users.username`, `forum_posts.id`, `profiles.username`, plus a
   `analysis_history.username` performance index (so `list_history` is a per-user index scan, not a full scan).
-- **Document-shape validators** (`ensure_schema`) — a `$jsonSchema` validator on all four collections, so
-  the DB itself rejects a structurally-wrong document (defense-in-depth behind the route-layer validation).
+- **Document-shape validators** (`ensure_schema`) — a `$jsonSchema` validator on six collections
+  (`users`, `profiles`, `analysis_history`, `forum_posts`, `messages`, `notifications`), so the DB itself
+  rejects a structurally-wrong document (defense-in-depth behind the route-layer validation).
+  `forum_comments`, `meta` and `media` carry no validator.
 
 ### Seed (cold-start content)
 
