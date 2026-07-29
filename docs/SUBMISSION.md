@@ -9,7 +9,7 @@ against a single source of truth and fix what they think is missing. Two indepen
 - **Graded build:** 3-container Docker app · **Job Queue (+5)** · **Online Forum (+10)** · **Azure deploy + CI/CD (+10)** · live HTTPS URL
 - **Report** (`REPORT.md`, 1063 tests) · **README** (run + test instructions) · risk assessment
 - **Per-member commits** present (Lior 308 · Elad 43 · Shiri 11 — the per-member grading requirement is met)
-- **Show Off package** built & verified (metadata · A3 poster · thumb · demo · zip)
+- **Show Off gallery (Track B): ✅ SUBMITTED 29 Jul** (`207490913.zip` — team-approved, uploaded to Moodle)
 
 **⬜ Still open**
 - **F5 workout generator** — the one open *graded* feature (Shiri · [#276](https://github.com/LiorBenSidi/work-smarter-not-harder/issues/276))
