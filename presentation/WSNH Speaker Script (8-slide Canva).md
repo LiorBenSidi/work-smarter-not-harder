@@ -27,7 +27,9 @@ Rehearse once with a timer. Usual overrun = slides 2, 4, 7 — keep to the one p
 > "Three Docker containers: **web, ai, and db**. Only **web** is exposed to the internet — the model and the database are internal, reachable only through two fixed contracts: `/predict` from web to ai, and a small data API from web to db. It runs on an **Azure VM**, with **HTTPS** via Caddy and Let's Encrypt. So it's a real, isolated, production-shaped system — not a notebook."
 
 **Slide 5 — Online Forum (40s → speak 35s).**
-> "For the +10 Online Forum we built **all seven** required features: posts and comments with images and video, likes and dislikes, **direct messages**, **notifications**, anti-abuse rate-limits, and cold-seeded content. Everything updates in **real time — no refresh** — and there's an **anonymity toggle** for the retained bonus."
+> "For the +10 Online Forum we built posts with images and video, comments, likes and dislikes, **direct messages** with media, **notifications**, anti-abuse rate-limits, and cold-seeded content. Everything updates in **real time — no refresh** — and there's an **anonymity toggle** for the retained bonus."
+
+*Accuracy note (29 Jul): media on **comments** is not built (#407) — say "posts and DMs carry media", never "posts and comments". Per-item like/dislike counts aren't surfaced either (#409); we show a net score.*
 
 **Slide 6 — Security, Data & Testing (35s).**
 > "It's built to be safe: **password hashing**, **two-step login OTP**, email verification, CSRF protection and injection-safe database queries. And it's **tested** — all five course test types, each one load-bearing — **mutation-tested**, not padding — including a **real-Mongo** integration suite and a **cross-container end-to-end** test that both **gate the build**. A broken wire path literally can't reach deploy."

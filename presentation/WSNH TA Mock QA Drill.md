@@ -79,7 +79,8 @@ easy → hard. (Companion to `WSNH Speaker Notes and QA.md`.)
 > model is the last piece; here's the pipeline returning a readiness signal end-to-end."]*
 
 **13. Show me the forum meets the requirement.**
-> All **seven** sub-features: posts + comments with image/video · like/dislike with counts **+ a per-user
+> Posts with image/video · comments *(text only — comment media is **not** built, #407)* · like/dislike
+> *(a net score per item; per-item like/dislike counts are not surfaced, #409)* **+ a per-user
 > received-vote total in the profile's "Community engagement" card** (`GET /me/engagement`, #210 — counts
 > only, voter identities never leave the store) · direct messages (P2P + media) · notifications (DMs + who
 > liked you) · anti-abuse (rate-limits + file-size caps) · cold-seeding. Everything **real-time** over SSE

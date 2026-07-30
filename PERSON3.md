@@ -68,7 +68,8 @@ never commit it. (The GitHub-side secrets for the deploy are in [`SECRETS.md`](S
   **fault-isolation** (`System_Tests/test_fault_isolation.py`: stop `ai` / stop `db` → web survives,
   `/ready` degrades to 503) + stress (`Stress_Tests/locustfile.py` + a dependency-free burst in
   `test_load.py`). Deploy/harness invariants are locked by `Integration_Tests/test_deploy_contract.py`.
-- [x] **Forum:** media/attachment storage (images/video in posts, comments and DMs) + file-size limits (PR #160).
+- [x] **Forum:** media/attachment storage (images/video in **posts and DMs**) + file-size limits (PR #160).
+  ⬜ **Comments do not accept media** — no route, no UI (TA Forum sub-req #2): [#407](https://github.com/LiorBenSidi/work-smarter-not-harder/issues/407).
 - [x] **Forum: received-engagement metric** (GUIDELINES §3.3 — "a per-user total in a personal area") —
   `GET /me/engagement` (votes *others* cast on your posts/comments; counts only, no voter identities) +
   a "Community engagement" card on the Profile screen. `forum_received_engagement` in the data layer +
