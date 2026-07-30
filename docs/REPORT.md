@@ -107,7 +107,7 @@ documents keyed by `post_id`, so a hot thread can't grow a post toward Mongo's 1
 
 `$jsonSchema` validators cover `users`, `profiles`, `analysis_history`, `forum_posts`, `messages` and
 `notifications`; `forum_comments`, `meta` and `media` carry none. **Not built:** the proposal's `programs`
-collection (v2 §9) — see #412 / #276.
+collection (v2 §9), which holds the catalog the workout generator draws on — it lands with **F5** (#276).
 
 ---
 
