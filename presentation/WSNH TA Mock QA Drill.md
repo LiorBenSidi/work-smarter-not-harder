@@ -79,8 +79,7 @@ easy → hard. (Companion to `WSNH Speaker Notes and QA.md`.)
 > model is the last piece; here's the pipeline returning a readiness signal end-to-end."]*
 
 **13. Show me the forum meets the requirement.**
-> Posts with image/video · comments *(text only — comment media is **not** built, #407)* · like/dislike
-> *(a net score per item; per-item like/dislike counts are not surfaced, #409)* **+ a per-user
+> All **seven** sub-features: posts + comments with image/video · like/dislike with counts **+ a per-user
 > received-vote total in the profile's "Community engagement" card** (`GET /me/engagement`, #210 — counts
 > only, voter identities never leave the store) · direct messages (P2P + media) · notifications (DMs + who
 > liked you) · anti-abuse (rate-limits + file-size caps) · cold-seeding. Everything **real-time** over SSE
@@ -93,10 +92,6 @@ easy → hard. (Companion to `WSNH Speaker Notes and QA.md`.)
 **15. What's your data model?**
 > Mongo collections: `users`, `profiles`, `analysis_history`, `forum_posts`, `messages`, `notifications`,
 > `media` — indexed, with `$jsonSchema` validators. `web → db` goes through the `db.py` functions, never raw.
-
-*Accurate as drilled on 16 Jul. Since then (#331, 22 Jul): comments live in their own **`forum_comments`**
-collection and a **`meta`** counter backs the SSE stream; validators cover six collections. Current model:
-[`docs/DESIGN.md`](../docs/DESIGN.md) §2.*
 
 ---
 

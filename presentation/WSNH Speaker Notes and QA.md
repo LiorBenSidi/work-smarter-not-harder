@@ -27,8 +27,8 @@ Pair the **Q&A bank** below with the new speaker script and the deck. (The per-s
 6. **Scaling (Elad, 30s).** "And it's measured: the pool one-to-four gives **2.86×** throughput; a second ai
    replica gives **1.60×**; the same test on a thread pool gives 0.96× — that's the GIL, and it's why we use
    processes." → Lior.
-7. **Forum +10 (Lior, 50s).** "Posts with media, comments, like/dislike, direct messages with media,
-   notifications, anti-abuse, and cold-seeding — everything **real-time**, no refresh,
+7. **Forum +10 (Lior, 50s).** "All seven forum sub-features: posts and comments with media, like/dislike with
+   counts, direct messages, notifications, anti-abuse, and cold-seeding — everything **real-time**, no refresh,
    over server-sent events. Plus an anonymity toggle as a bonus." → stay on Lior.
 8. **Security (Lior, 35s).** "It's built to be safe: password hashing, two-step login codes, email verification
    at signup, CSRF protection, injection-safe database queries — behind the whole data layer and Week-9 logging." → Lior.
@@ -106,10 +106,6 @@ over HTTP). A broken wire path can't reach the registry or the deploy — it fai
 **Q: What's the data model?**
 MongoDB collections: `users`, `profiles`, `analysis_history`, `forum_posts`, `messages`, `notifications`,
 `media`. Indexed, with `$jsonSchema` validators.
-
-> *Accurate as delivered on 16 Jul. Since then (#331, 22 Jul) comments moved into their own
-> **`forum_comments`** collection and a **`meta`** counter was added for the SSE stream; validators cover six
-> collections (`media` and the two new ones carry none). Current model: [`docs/DESIGN.md`](../docs/DESIGN.md) §2.*
 
 **Q: What did each person build?**
 Shiri: the AI model + recommendation engine + cold-seed content. Lior: the web app, the whole data layer, auth

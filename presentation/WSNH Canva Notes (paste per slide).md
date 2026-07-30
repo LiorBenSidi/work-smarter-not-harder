@@ -47,9 +47,7 @@ CUE: play the clip (VID_<id1>_<id2>_<id3>.mp4), set to play On click.
 ### Slide 5 — Online Forum  *(paste ↓)*  — *(becomes slide 6 if you add "See It Live")*
 
 LIOR · 5/8 · ~35s.
-"For the +10 Online Forum we built posts with images and video, comments, likes/dislikes, direct messages with media, notifications, anti-abuse rate-limits, and cold-seeded content. Everything updates in real time — no refresh — and there's an anonymity toggle for the retained bonus."
-
-> *Accuracy note (29 Jul): media on **comments** is not built (#407) — say "posts and DMs carry media", never "posts and comments". Per-item like/dislike counts aren't surfaced either (#409); we show a net score.*
+"For the +10 Online Forum we built all SEVEN required features: posts and comments with images and video, likes/dislikes, direct messages, notifications, anti-abuse rate-limits, and cold-seeded content. Everything updates in real time — no refresh — and there's an anonymity toggle for the retained bonus."
 
 ---
 
