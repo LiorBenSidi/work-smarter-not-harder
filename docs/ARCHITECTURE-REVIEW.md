@@ -2,7 +2,7 @@
 
 **Type:** design validation (pre-build) · **Date:** 2026-06-27 *(refreshed 2026-07-04 — owner tags corrected + deploy status updated)* · **Status:** advisory — changes **no** contract.
 **Lenses:** system-design · architecture (ADR) · code-review · testing-strategy.
-**Validated against:** [`PROPOSAL.md`](PROPOSAL.md) (graded 100/100 — the contract) · [`PROPOSAL-v2.md`](PROPOSAL-v2.md) (intent) ·
+**Validated against:** [`PROPOSAL-v2.md`](PROPOSAL-v2.md) — the 28 Jun revision the TA responded to (**the contract**) · [`PROPOSAL.md`](PROPOSAL.md) (graded 100/100, 17 Jun — superseded, kept for history) ·
 the rubric [`GUIDELINES.md`](GUIDELINES.md) (75 + 5 (Job Queue) + 10 + 10; supersedes [`FEEDBACK.md`](FEEDBACK.md)) · the WSML course rules · the live skeleton (`docker-compose.yml`, `web/`, `ai/`, `tests/`).
 
 **Resolution (2026-06-27):** findings **3, 4, 5, 6** are fixed in the follow-up PR — scaling story corrected to replicas + workers; auth-scale note added; the `/predict` shape pinned (`recommendations` is a list, key is `state`); the contract test made behavioural. **1, 2** remain open *decisions* (Forum transport/storage ADR; Injury-Risk pending the Noam email). **7** is now **live** — the deploy job (GHCR build/push → SSH-deploy-to-Azure → Caddy HTTPS + auto-rollback) is in `ci.yml` and auto-deploys every green `main` to `app.worksmarternotharder.dev` (Elad's go-live step, done; the graded demo run remains); **8** (`/predict` 400-vs-5xx) lands with the model.

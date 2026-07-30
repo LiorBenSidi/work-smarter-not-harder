@@ -1,7 +1,8 @@
 # Design — Work Smarter, Not Harder
 
-Living technical design. **Spec sources:** the submitted [`PROPOSAL.md`](PROPOSAL.md) (graded 100/100 — the contract)
-+ the revised [`PROPOSAL-v2.md`](PROPOSAL-v2.md) (current intent). **Driving rubric:** [`FEEDBACK.md`](FEEDBACK.md).
+Living technical design. **Spec source:** the revised [`PROPOSAL-v2.md`](PROPOSAL-v2.md) — the 28 Jun version the
+TA responded to (**the contract**); the original [`PROPOSAL.md`](PROPOSAL.md) (graded 100/100, 17 Jun) is kept for
+history and is **superseded**. **Driving rubric:** [`GUIDELINES.md`](GUIDELINES.md) (which superseded `FEEDBACK.md`).
 Items marked *proposed* are confirmed at the kickoff; open decisions are at the bottom; reference the PR that changes a decision.
 
 ## Ownership & freedom (how the split works)
@@ -48,7 +49,7 @@ carry none.*
 
 **`web → ai` `POST /predict`** (internal): request `{ features: { … } }` → response `{ state: <category>, proba: { <category>: <float> }, recommendations: [ … ] }`. *(`recommendations` is a **list** of prioritized action items — each item's content is the AI owner's call.)*
 
-**As built**, the shipped model consumes **four** features — `sleep_hours`, `fatigue`, `soreness`, `training_load` (`ai/model/model.pkl` `feature_order`) — and returns three categories: `Rest` · `Moderate` · `Ready`. The web sends the full check-in payload; extra keys are ignored by the model. `resting_hr` is collected from the user but is **not** currently a model feature. *(The proposal's candidate list — `hr_change`, `weekly_freq`, `calorie_balance`, `bodyweight_trend` — was explicitly "finalized during data exploration"; those four were not adopted. Enrichment is tracked in #276.)* The web also reads an **optional `calories`** target from the response and surfaces it on the dashboard (it degrades to `null` when absent); the `ai` includes it once `ai/calories.py` is wired into `/predict`.
+**As built**, the shipped model consumes **four** features — `sleep_hours`, `fatigue`, `soreness`, `training_load` (`ai/model/model.pkl` `feature_order`) — and returns three categories: `Rest` · `Moderate` · `Ready`. The web sends the full check-in payload; extra keys are ignored by the model. `resting_hr` is collected from the user but is **not** currently a model feature. *(The proposal's candidate list — `hr_change`, `weekly_freq`, `calorie_balance`, `bodyweight_trend` — was explicitly "finalized during data exploration"; those four were not adopted. Enrichment is tracked in #276.)* The web also reads an **optional `calories`** target from the response and surfaces it on the dashboard (it degrades to `null` when absent); the `ai` **does** include it — `ai/inference.py:133` calls `calculate_calories` and returns it on every prediction.
 
 ## 4. AI decision engine (the heart)
 One pipeline, two capabilities:

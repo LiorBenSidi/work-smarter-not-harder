@@ -21,7 +21,7 @@ media/attachments + stress + test-runner are shipped). Full breakdown:
 
 ## Architecture (3 containers — only `web` is exposed)
 - `web/` — Flask: auth (password hashing via `werkzeug.security`) + API + frontend. The only user-facing container.
-- `db` — MongoDB (users, profiles, analysis_history, forum_posts, forum_comments, messages, notifications, meta). Internal only.
+- `db` — MongoDB (users, profiles, analysis_history, forum_posts, forum_comments, messages, notifications, meta, media). Internal only.
 - `ai/` — Random Forest readiness classifier + recommendation engine. Internal REST `POST /predict`.
 
 ## Dev switches (email + viewport)

@@ -10,8 +10,11 @@ volume (`mongo-data`), a `ping` healthcheck, and `restart: unless-stopped`. The 
 The data-access layer is `web/services/db.py`.
 
 - **Indexes** (`ensure_indexes`) — applied **best-effort on first connect**: unique `users.username`,
-  `forum_posts.id`, `profiles.username`, plus a
-  `analysis_history.username` performance index (so `list_history` is a per-user index scan, not a full scan).
+  `users.email` *(partial — only where the field exists)*, `forum_posts.id`, `forum_comments.id`,
+  `profiles.username`; plus performance indexes — compound `analysis_history (username, entry.timestamp)`
+  (so `list_history` is a per-user index scan, not a full scan), `forum_posts.created_at`,
+  `forum_comments (post_id, created_at)`, `forum_posts.author` / `forum_comments.author`, the two
+  `messages` thread indexes, and `notifications (user, created_at)`.
 - **Document-shape validators** (`ensure_schema`) — **not** applied per-connect (`collMod` takes a collection
   lock, so running it on every worker boot would be a needless storm); the provisioning step `db/seed.py`
   applies them once. A `$jsonSchema` validator on six collections

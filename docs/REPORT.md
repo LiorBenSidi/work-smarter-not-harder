@@ -203,6 +203,7 @@ they run the moment their dependency is present:
 
 - `test_db_mongo` (21) — the real-Mongo integration suite; skips without `TEST_MONGO_URI`, and **runs in CI**
   against a `mongo:7` service on every PR.
+- `test_seed_mongo` (4) — the real-Mongo cold-seed test; same `TEST_MONGO_URI` gate, also **runs in CI**.
 - `test_ai_queue_live` (10) — the live AI-queue behaviour (bounded queue + process pool over HTTP); runs when
   `AI_BASE_URL` points at the running `ai` container, as CI's `compose-e2e` job does.
 - `test_load` (4) — the live-stack stress burst; runs when `E2E_BASE_URL` points at a live stack.
@@ -335,7 +336,7 @@ mutation-checked by disabling the fix.)
 | **Credential theft / weak auth** | Account takeover | werkzeug password hashing (never plaintext); protected endpoints auth-gated; CSRF double-submit on state-changing requests | ✅ built & tested (`test_auth`, `test_csrf`) |
 | **Forum abuse — edit/delete others' posts** | Integrity/trust | Ownership check → 403 on non-owner edit/delete | ✅ built & tested (`test_forum`) |
 | **Concurrent forum votes / duplicate writes** | Lost updates, double-counts | Optimistic-concurrency (compare-and-set) vote loop with bounded retries; atomic upsert dedupe; TOCTOU-safe edit/delete via matched-count | ✅ built & tested (`test_db`, real-Mongo `test_db_mongo`) |
-| **Malformed documents reaching the DB** | Corrupt reads, crashes | `$jsonSchema` validators on all collections (defence-in-depth behind route validation) + unique/perf indexes | ✅ built (`ensure_schema` / `ensure_indexes`), exercised by the real-Mongo IT |
+| **Malformed documents reaching the DB** | Corrupt reads, crashes | `$jsonSchema` validators on six collections — `users`, `profiles`, `analysis_history`, `forum_posts`, `messages`, `notifications` (defence-in-depth behind route validation) + unique/perf indexes | 🟡 built (`ensure_schema` / `ensure_indexes`), exercised by the real-Mongo IT. **Indexes** apply automatically on first connect; **validators** are applied by `db/seed.py`, which is run manually — so a deployment that never seeds has none. `forum_comments`, `meta` and `media` have no validator by design |
 | **Data loss (Mongo volume)** | Irrecoverable history | `db/backup.sh` (gzip dump + retention prune); named volume; fails fast if `MONGO_URI` unset | ✅ built & tested (`test_backup_script`) |
 | **Log files growing unbounded** | Disk exhaustion | `RotatingFileHandler` (size-capped, per-worker files); logging fully disableable via env flag | ✅ built & tested (`test_logging_config`) |
 | **Secrets committed to the repo** | Credential leak | `.env` git-ignored; `.env.example` only; a scaffold test asserts no `.env` is tracked; the AI model is local → no API keys shipped | ✅ built & tested (`test_scaffold`) |

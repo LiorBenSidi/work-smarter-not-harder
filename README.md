@@ -24,7 +24,7 @@ APK / Play Store build**; the PWA is the supported way onto a phone.)
 | Container | Role |
 |---|---|
 | `web/` | Flask frontend + authentication (werkzeug hashing) + API. **The only user-facing container.** |
-| `db`   | MongoDB — users, profiles, analysis history, forum posts/comments, messages, notifications. Internal only. |
+| `db`   | MongoDB — users, profiles, analysis history, forum posts/comments, messages, notifications, media, meta. Internal only. |
 | `ai/`  | Random Forest inference + recommendation engine, behind a **bounded job queue + process pool**. Internal REST (`POST /predict`). |
 
 Course rules the architecture is built to satisfy: ≥3 communicating containers, only `web` exposed, local AI model
