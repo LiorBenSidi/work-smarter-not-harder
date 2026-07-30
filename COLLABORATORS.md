@@ -16,7 +16,7 @@ Roles are **containers/aspects**, not a rigid feature list — see "Freedom" bel
 ## How it fits together — the contracts (the ONLY fixed shared things)
 These are the seams between owners. Change one → update `docs/DESIGN.md` **and tell the team** (a "sync point").
 - **`web → ai`** — `POST /predict {features} -> {state, proba, recommendations}` (DESIGN §3).
-- **`web → db`** — `web` calls the **`services/db.py` functions** (the data API). The **whole data layer** — CRUD + the Mongo internals (indexes, `$jsonSchema` validators, auth config, `db/seed.py`; collections `users / profiles / analysis_history / forum_posts`, DESIGN §2) — is **Lior's**.
+- **`web → db`** — `web` calls the **`services/db.py` functions** (the data API). The **whole data layer** — CRUD + the Mongo internals (indexes, `$jsonSchema` validators, auth config, `db/seed.py`; collections `users / profiles / analysis_history / forum_posts / forum_comments / messages / notifications / meta`, DESIGN §2) — is **Lior's**. (`media` is its own collection, owned by `media_store.py` — **Elad's**.)
 - **Container boundaries** — only `web` is exposed (host 8000 → container 5000); `ai` + `db` internal.
 
 Behind these, implement however you like.

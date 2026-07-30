@@ -54,7 +54,7 @@ keep `main` green (PR-only), and **don't re-do or "polish" the built parts**.
 
 ## Architecture (3 containers — only `web` is exposed)
 - **`web/`** — Flask: auth (password hashing via `werkzeug.security`), API endpoints, frontend. The ONLY user-facing container.
-- **`db`** — MongoDB: users, profiles, programs, analysis_history. Internal only.
+- **`db`** — MongoDB: users, profiles, analysis_history, forum_posts, forum_comments, messages, notifications, meta, media. Internal only. *(The proposal also specifies a `programs` collection for the workout generator — not built yet; it lands with F5, #276.)*
 - **`ai/`** — Random Forest readiness classifier + recommendation engine. Internal REST (`POST /predict`).
 
 ## Auth modes & the debug panel (two dev switches)

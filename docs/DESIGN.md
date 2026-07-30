@@ -1,7 +1,8 @@
 # Design — Work Smarter, Not Harder
 
-Living technical design. **Spec sources:** the submitted [`PROPOSAL.md`](PROPOSAL.md) (graded 100/100 — the contract)
-+ the revised [`PROPOSAL-v2.md`](PROPOSAL-v2.md) (current intent). **Driving rubric:** [`FEEDBACK.md`](FEEDBACK.md).
+Living technical design. **Spec source:** the revised [`PROPOSAL-v2.md`](PROPOSAL-v2.md) — the 28 Jun version the
+TA responded to (**the contract**); the original [`PROPOSAL.md`](PROPOSAL.md) (graded 100/100, 17 Jun) is kept for
+history and is **superseded**. **Driving rubric:** [`GUIDELINES.md`](GUIDELINES.md) (which superseded `FEEDBACK.md`).
 Items marked *proposed* are confirmed at the kickoff; open decisions are at the bottom; reference the PR that changes a decision.
 
 ## Ownership & freedom (how the split works)
@@ -17,14 +18,27 @@ User → web ──┬──► ai   (POST /predict, internal)
              └──► db   (mongodb://db:27017, internal)
 ```
 
-## 2. Data model (MongoDB — PROPOSAL §9)
+## 2. Data model (MongoDB — as built)
+*The shapes below are what the code actually writes. `$jsonSchema` validators cover `users`, `profiles`,
+`analysis_history`, `forum_posts`, `messages` and `notifications`; `forum_comments`, `meta` and `media`
+carry none.*
+
 - `users` — { username *(unique internal handle)*, display_name *(non-unique, shown)*, email, password_hash }
-- `profiles` — { username, age, gender, height, weight, goal, training_frequency }
-- `analysis_history` — { username, metrics, assessment, calories, timestamp }
-- `forum_posts` — { id, author, title, body, anonymous, score, votes, comments }
-- `messages` — { id, sender, recipient, body, created_at, read }
-- `notifications` — { id, user, type, text, actor, read, created_at }
-- `media` — { id, owner, mime, size, target_type, target_id, peers, created_at }
+- `profiles` — { username, **profile**: { age, gender, height, weight, goal, training_frequency } } *(nested)*
+- `analysis_history` — { username, **entry**: { timestamp, metrics, assessment, proba, calories, recommendations } } *(nested)*
+- `forum_posts` — { id, author, title, body, anonymous, score, votes, **comment_count**, created_at }
+- `forum_comments` — { id, post_id, author, body, score, votes, created_at } — comments are their **own**
+  documents, keyed by `post_id`, so a hot thread can't grow a post toward Mongo's 16 MB cap (#331)
+- `messages` — { id, sender, recipient, body, created_at, read, delivered }
+- `notifications` — { id, user, type, text, actor, ref, read, created_at }
+- `meta` — { _id: `"forum_rev"`, v } — one monotonic integer bumped by every forum mutation; the SSE stream
+  polls it to decide when to push a `forum` event
+- `media` — { _id, owner, mime, size, target_type, target_id, peers, created_at } *(`id` is the public
+  projection; the stored key is `_id`)* — owned by
+  `web/services/media_store.py`, deliberately outside the `db.py` seam (no validator)
+
+> **Not built:** the proposal (§9) also specifies a **`programs`** collection to hold the program/exercise
+> catalog the workout generator draws on. It does not exist; it lands with **F5** (#276).
 
 ## 3. API contracts
 | Endpoint | Method | Container | Notes |
@@ -33,7 +47,9 @@ User → web ──┬──► ai   (POST /predict, internal)
 | `/profile` | GET/POST | web | reads/writes `profiles`; validate input (NoSQL-injection guard) |
 | `/predict` | POST | ai (internal) | state assessment + recommendations |
 
-**`web → ai` `POST /predict`** (internal): request `{ features: { sleep_hours, resting_hr, hr_change, fatigue, soreness, weekly_freq, training_load, calorie_balance, bodyweight_trend } }` → response `{ state: <category>, proba: { <category>: <float> }, recommendations: [ … ] }`. *(`recommendations` is a **list** of prioritized action items — each item's content is the AI owner's call. Feature set + category set are candidates, finalized during data exploration.)* The web also reads an **optional `calories`** target from the response and surfaces it on the dashboard (it degrades to `null` when absent); the `ai` includes it once `ai/calories.py` is wired into `/predict`.
+**`web → ai` `POST /predict`** (internal): request `{ features: { … } }` → response `{ state: <category>, proba: { <category>: <float> }, recommendations: [ … ] }`. *(`recommendations` is a **list** of prioritized action items — each item's content is the AI owner's call.)*
+
+**As built**, the shipped model consumes **four** features — `sleep_hours`, `fatigue`, `soreness`, `training_load` (`ai/model/model.pkl` `feature_order`) — and returns three categories: `Rest` · `Moderate` · `Ready`. The web sends the full check-in payload; extra keys are ignored by the model. `resting_hr` is collected from the user but is **not** currently a model feature. *(The proposal's candidate list — `hr_change`, `weekly_freq`, `calorie_balance`, `bodyweight_trend` — was explicitly "finalized during data exploration"; those four were not adopted. Enrichment is tracked in #276.)* The web also reads an **optional `calories`** target from the response and surfaces it on the dashboard (it degrades to `null` when absent); the `ai` **does** include it — `ai/inference.py:133` calls `calculate_calories` and returns it on every prediction.
 
 ## 4. AI decision engine (the heart)
 One pipeline, two capabilities:

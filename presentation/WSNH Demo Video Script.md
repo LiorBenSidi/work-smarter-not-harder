@@ -16,7 +16,7 @@ say, and **which rubric item it proves** — so a TA can tick every box.
 | 3 | **Daily check-in** → fill sleep / HR / soreness / load → **Submit** → the **readiness ring** (Ready/Moderate/Rest) + recommendation + calories | "One morning check-in → a readiness state, a recommendation, and a calorie target — from the local model." | Build (the core product), AI |
 | 4 | **History** tab → the past check-ins / trend | "Every check-in is persisted and trended." | Build (persistence) |
 | 5 | **Forum** → create a **post** with a **title + body + image** | "The forum: posts with image and video attachments…" | Forum #1 |
-| 6 | Add a **comment** with an image; **like** the post and the comment; show the **counts** | "…comments with media, and like/dislike on both, with counts." | Forum #2, #3 |
+| 6 | Add a **comment** (text); **like/dislike** the post and the comment; show the **score** | "…comments on every post, and like/dislike on both." | Forum #2, #3 |
 | 7 | Toggle **anonymous** on a post | "Posts can be anonymous — a bonus we kept." | Forum bonus (anonymity) |
 | 8 | **Chat** → search a user → send a **DM** with an image → (switch to 2nd account) the DM **arrives with no refresh** + a **notification** | "Direct messages with media, delivered in real time — no refresh — and a notification fires." | Forum #4, #5, real-time |
 | 9 | Back on account 1: a **notification** that account 2 liked your post | "Notifications for likes too." | Forum #5 |
@@ -30,7 +30,9 @@ say, and **which rubric item it proves** — so a TA can tick every box.
 ## Coverage checklist (tick before you publish)
 - [ ] **75 build:** auth (1,2), core check-in→readiness (3), history (4), the app is clearly a working product.
 - [ ] **+5 Job Queue:** shot 14 (queue + parallel + the scaling number).
-- [ ] **+10 Forum:** shots 5–11 cover all seven sub-features + real-time + anonymity bonus.
+- [ ] **+10 Forum:** shots 5–11 cover the built sub-features + real-time + anonymity bonus. **Two are not
+      built — do not film them:** media on *comments* (#407) and per-item like/dislike *counts* (#409, a net
+      score is shown instead). An attachment-only DM also sends no notification (#408) — send text with it.
 - [ ] **+10 Azure/CI-CD:** shot 0 (live HTTPS) + shot 13 (pipeline test-on-commit → auto-deploy).
 - [ ] **Security posture:** email-verify (1), 2FA (2), file-size/rate-limit (10), HTTPS (0).
 
