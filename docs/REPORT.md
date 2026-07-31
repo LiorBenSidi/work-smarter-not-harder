@@ -13,7 +13,7 @@
 > +10 Azure deploy + CI/CD; supersedes [`FEEDBACK.md`](FEEDBACK.md)). Architecture detail lives in [`DESIGN.md`](DESIGN.md); the phased plan in
 > [`ROADMAP.md`](ROADMAP.md).
 >
-> **Last updated:** 2026-07-29 · **Suite at this snapshot:** **1063 checks, 1018 passing / 45 environment-gated**
+> **Last updated:** 2026-07-29 · **Suite at this snapshot:** **1064 checks, 1019 passing / 45 environment-gated**
 > (+ 17 browser e2e scenarios)
 > (`python -m pytest tests/ -q`; the env-gated ones run in CI's `compose-e2e` job against the live containers).
 > Since the 07-12 snapshot (783 tests): **Shiri's Random Forest landed** — a real `ai/model/model.pkl` +
@@ -22,7 +22,8 @@
 > **1053** after a **team-wide redundancy pass** in which each owner validated their own lane: Lior's
 > consolidated 51 template-shape tests into 7 grouped ones and removed 11 verified duplicates (#384–#386),
 > and Elad's removed 16 duplicated/vacuous checks and replaced 2 prose assertions with executable guards —
-> then rose to **1063** as the Forum cold-seed, its test-validation pass, and the dashboard read-cap landed (#391–#398).
+> then rose to **1063** as the Forum cold-seed, its test-validation pass, and the dashboard read-cap landed (#391–#398),
+> and to **1064** with the `/health`-under-load guard added in #414.
 > Every assertion was kept; the count fell because copies did, not coverage.
 >
 > ⚠️ **Sections still owned by their planes.** §5 (risk), §2's deploy/scale/queue rows and §3's Elad rows are
@@ -175,7 +176,7 @@ Columns are the test-type dirs under `tests/`. Cells name representative file(s)
 | **Forum real-time (DM · notifications · SSE)** | `test_messages_db` (13) | `test_messages` (28) · `test_forum_notifications` (10) | in `test_messages_media_negative` (30) | — | `test_messages_privacy` (4) | — |
 | **Forum engagement metric (Elad)** | `test_db_engagement` (7) | `test_engagement` (7) | — | — | — | — |
 | **Media (Elad)** | `test_media_store` (3) | `test_media` (8) · `test_elad_lane_journey` (4) | `test_messages_media_negative` (30) | `test_elad_lane_live` (1, live HTTP incl. 10 MB cap) | `test_media_limits` (11) | — |
-| **AI job-queue +5 (Elad)** | `test_jobqueue` (40) · `test_bench` (18) | `test_ai_queue_contract` (21) | — | `test_ai_queue_live` (10) | `test_ai_queue` (28) | `test_pool_scaling` (2) · `test_queue_backpressure` (6) |
+| **AI job-queue +5 (Elad)** | `test_jobqueue` (40) · `test_bench` (18) | `test_ai_queue_contract` (21) | — | `test_ai_queue_live` (10) | `test_ai_queue` (28) | `test_pool_scaling` (2) · `test_queue_backpressure` (7) |
 | **Deploy / scale (Elad)** | — | `test_deploy_contract` (24) · `test_scale_contract` (9) · `test_pin_contract` (4) | — | — | — | — |
 | **Rate-limiting / anti-spam (Elad)** | — | — | — | — | `test_rate_limit` (9) | in `test_load` |
 | **Data layer (`db.py` + Mongo)** | `test_db` (55) · `test_backup_script` (2) | `test_db_mongo` (21, real Mongo) | — | — | (injection-safe queries) | — |
@@ -188,16 +189,16 @@ Columns are the test-type dirs under `tests/`. Cells name representative file(s)
 | **Whole-system journey** | — | — | — | `test_e2e` (1) · Full-System `test_everything_together_sync` (15) | — | — |
 
 **Totals by type (full suite, `pytest --collect-only`):** Unit **381** · Integration **384** · Negative **157** ·
-System **14** · Full-System **27** · Security **88** · Stress **12** → **1063 automated checks across the seven
+System **14** · Full-System **27** · Security **88** · Stress **13** → **1064 automated checks across the seven
 pytest suites**, plus **17 browser end-to-end scenarios** driven separately (`tests/E2E_Tests/`, run in CI as
 the *e2e (browser · desktop + mobile)* job — not counted in the pytest total). This matches the header count.
 
-Read the total as *checks*, not as hand-written test functions: 1063 collected cases come from **813 test
+Read the total as *checks*, not as hand-written test functions: 1064 collected cases come from **814 test
 functions** (measured with `grep -c "^def test_"` across `tests/`), the remainder being parametrised cases (one `@parametrize` over 11 malformed payloads is 11
 collected cases, not 11 tests written). The suite is deliberately weighted toward the layers where a
 regression is cheapest to catch — unit and negative input walls — rather than toward volume.
 
-**Pass / skip:** the pre-07-12 snapshot was **747 pass, 36 skip in ~47 s**; the current suite is **1018 pass,
+**Pass / skip:** the pre-07-12 snapshot was **747 pass, 36 skip in ~47 s**; the current suite is **1019 pass,
 45 skip in ~86 s** (`python -m pytest tests/ -q`). The env-gated skips are *not broken* —
 they run the moment their dependency is present:
 
@@ -248,7 +249,7 @@ machine (env vars, no local paths), and are exercised by CI on every PR. A run t
   (`test_csrf`), NoSQL-injection-safe queries (`test_profile`, `test_forum`), ownership enforcement on
   forum edit/delete (403), auth-gating of dashboard/history, and response-hardening (`test_web_hardening`).
 
-The two supporting directories complete the 1063: **Negative (157)** — adversarial and malformed input across
+The two supporting directories complete the 1064: **Negative (157)** — adversarial and malformed input across
 auth, profile, check-in, forum and media — and **Full-System (27)** — whole-stack journeys in-process, plus the
 parts-in-isolation suite. The per-type figures here are the same ones tabulated in §3; both are
 `pytest --collect-only` counts, not estimates.
@@ -289,7 +290,7 @@ dropped.
 |---|---|---|---|
 | **`ai` container down / slow** | No readiness or recommendations | `ai_client` wraps the call in try/except + timeout; the dashboard returns `ai_status: unavailable` and still renders; `web` boots even if `ai` is down (compose `service_started`, not `service_healthy`) | ✅ built & tested (`test_ai_client`, `test_web_ai` degrade case; **`test_fault_isolation.py` stops the real container**) |
 | **`db` (Mongo) down** | History can't be read/written | Store calls are try/except-guarded; forum/list routes return 503, not 500; `/health` stays 200 (Mongo-independent) so Docker's healthcheck does not restart a healthy `web`; `/ready` degrades to 503 | ✅ built & tested (`test_fault_isolation.py` stops the real `db` container and re-probes over HTTP) |
-| **A restart storm under load** | Cascading outage | `/health` is liveness only — un-rate-limited and Mongo-independent. A 429/5xx there would make Docker + UptimeRobot restart containers *because* they are busy | ✅ built & tested (`locustfile.py` asserts `/health` is always 200 under load) |
+| **A restart storm under load** | Cascading outage | `/health` is liveness only — un-rate-limited and Mongo-independent. A 429/5xx there would make Docker + UptimeRobot restart containers *because* they are busy | ✅ built & tested (`test_queue_backpressure.py` asserts `/health` stays 200 while the queue sheds — runs on **every PR**. `locustfile.py` re-checks it against the live stack, but the `stress` job is **`workflow_dispatch`-only**, so it is not part of the merge gate) |
 | **Email relay (Brevo) down / slow / rate-limited** | OTP + password-reset emails delayed or undelivered | `send_email` wraps SMTP in try/except with a 10 s timeout and **never raises** — a down/slow relay is logged and the flow continues; the code/link stays valid server-side, so login/reset still completes once mail arrives. Free-tier bursts can *delay* delivery (documented: [`EMAIL_DELIVERABILITY.md`](EMAIL_DELIVERABILITY.md)); a rapid re-login now **reuses one valid code** instead of minting many. **The graded path runs locally with no SMTP → codes are surfaced on-screen ([`AUTH_TESTING.md`](AUTH_TESTING.md)), so mail delivery is not on the graded critical path.** | ✅ built & tested (`test_email_smtp_delivery.py`, `test_login_otp_reuse.py`; degrade path in `send_email`) |
 | **Wearable / smartwatch data missing** | Advanced metrics absent | Fall back to manually entered values | ✅ by design (no wearable dependency in the core path) |
 
@@ -302,7 +303,7 @@ mutation-checked by disabling the fix.)
 
 | Risk | Impact | Mitigation | Status |
 |---|---|---|---|
-| **Queue saturation under a flood** | Unbounded memory growth, and a backlog so deep every caller has already timed out before its job is scored | The backlog is **bounded** (`AI_QUEUE_MAX_PENDING`). Past it `submit()` raises `QueueFull` and `/predict` sheds with **503**, which `web` already treats as "ai unavailable" and degrades. Memory is the lesser reason: a queue deeper than the callers' patience is pure waste — work is done for clients that left. Shedding early keeps the p95 honest, and a bigger VM only moves that cliff, it does not remove it | ✅ built & tested (`test_queue_backpressure.py`: 4× the bound arrives, the excess is shed, `/health` stays 200) |
+| **Queue saturation under a flood** | Unbounded memory growth, and a backlog so deep every caller has already timed out before its job is scored | The backlog is **bounded** (`AI_QUEUE_MAX_PENDING`). Past it `submit()` raises `QueueFull` and `/predict` sheds with **503**, which `web` already treats as "ai unavailable" and degrades. Memory is the lesser reason: a queue deeper than the callers' patience is pure waste — work is done for clients that left. Shedding early keeps the p95 honest, and a bigger VM only moves that cliff, it does not remove it | ✅ built & tested (`test_queue_backpressure.py`: 4× the bound arrives and the excess is shed; a companion test saturates the queue and asserts `/health` still returns **200** over HTTP — mutation-verified by making liveness degrade under load) |
 | **Job-store memory leak** | Slow-fuse OOM: one entry per `/predict`, forever | Finished jobs expire (`AI_JOB_TTL_SECONDS`) and the store is hard-capped (`AI_MAX_JOBS`). TTL alone is insufficient — a burst inside one TTL window is still unbounded — so both exist | ✅ built & tested (`test_jobqueue.py` reaping + cap; `test_queue_backpressure.py` sustained run) |
 | **The model raises** | Queue wedges permanently at "full"; every later request 503s | The failure is captured per-job and the depth slot is released on the error path too, so capacity returns the moment the model does. A worker crash cannot kill the callback thread | ✅ built & tested (`test_a_flood_of_failing_jobs_does_not_wedge_the_queue`, `test_one_failing_job_does_not_poison_the_next`) |
 | **The model hangs** | A gunicorn thread is pinned forever; `ai` stops serving | `/predict` waits with a bounded timeout (`AI_PREDICT_TIMEOUT_SECONDS`) and returns **504**. The job keeps running — a timeout is the caller giving up, not a cancellation — and the container stays healthy | ✅ built & tested (`test_predict_returns_504_when_the_model_outruns_the_timeout`; verified against the live container) |
@@ -328,7 +329,7 @@ mutation-checked by disabling the fix.)
 
 | Risk | Impact | Mitigation | Status |
 |---|---|---|---|
-| **Spam / request floods (login, register, forum)** | Resource exhaustion, bulk signup, password guessing | `flask-limiter` on the public write routes; messaging carries its own 20/min anti-spam cap. Under load a **429 is the defence engaging**, not a failure — only a 5xx is | ✅ built & tested (`test_rate_limit.py`; `locustfile.py` treats 429 as a pass and 5xx as a failure) |
+| **Spam / request floods (login, register, forum)** | Resource exhaustion, bulk signup, password guessing | `flask-limiter` on the public write routes; messaging carries its own 20/min anti-spam cap. Under load a **429 is the defence engaging**, not a failure — only a 5xx is | ✅ built & tested (`test_rate_limit.py` for the public write routes; the 20/min messaging cap is proven in `Negative_Tests/test_messages_media_negative.py::test_dm_spam_over_the_window_cap_is_shed_with_429`. `locustfile.py` treats 429 as a pass and 5xx as a failure — on-demand only) |
 | **Huge-file upload (posts, comments, DMs)** | Disk exhaustion, memory blowup | Per-upload size caps + type checks; `MAX_CONTENT_LENGTH` rejects an oversized body before Flask parses it | ✅ built & tested (`test_media_limits.py`) |
 | **Hostile payload reaching a worker process** | Wasted worker, potential injection | `/predict` validates the body shape and caps the feature count **before** `submit()`, so a rejected request costs a 400, not a pickled round-trip into a child process | ✅ built & tested (`test_ai_queue.py`: injection-shaped keys, feature bombs, oversized bodies) |
 | **Job-id enumeration** | Reading another user's readiness score (`ai` has no auth by design) | Job ids are `uuid4` hex, unguessable and non-sequential; an unknown id is a flat 404 with no detail; a model traceback never reaches the caller | ✅ built & tested (`test_ai_queue.py`) |
@@ -337,7 +338,7 @@ mutation-checked by disabling the fix.)
 | **Forum abuse — edit/delete others' posts** | Integrity/trust | Ownership check → 403 on non-owner edit/delete | ✅ built & tested (`test_forum`) |
 | **Concurrent forum votes / duplicate writes** | Lost updates, double-counts | Optimistic-concurrency (compare-and-set) vote loop with bounded retries; atomic upsert dedupe; TOCTOU-safe edit/delete via matched-count | ✅ built & tested (`test_db`, real-Mongo `test_db_mongo`) |
 | **Malformed documents reaching the DB** | Corrupt reads, crashes | `$jsonSchema` validators on six collections — `users`, `profiles`, `analysis_history`, `forum_posts`, `messages`, `notifications` (defence-in-depth behind route validation) + unique/perf indexes | 🟡 built (`ensure_schema` / `ensure_indexes`), exercised by the real-Mongo IT. **Indexes** apply automatically on first connect; **validators** are applied by `db/seed.py`, which is run manually — so a deployment that never seeds has none. `forum_comments`, `meta` and `media` have no validator by design |
-| **Data loss (Mongo volume)** | Irrecoverable history | `db/backup.sh` (gzip dump + retention prune); named volume; fails fast if `MONGO_URI` unset | ✅ built & tested (`test_backup_script`) |
+| **Data loss (Mongo volume)** | Irrecoverable history | `db/backup.sh` (gzip dump + retention prune); named volume; fails fast if `MONGO_URI` unset | 🟡 built; **partially tested** (`test_backup_script` checks the script is executable and fails fast on a bad URI — it does **not** run a real `mongodump`, so restore is unverified) |
 | **Log files growing unbounded** | Disk exhaustion | `RotatingFileHandler` (size-capped, per-worker files); logging fully disableable via env flag | ✅ built & tested (`test_logging_config`) |
 | **Secrets committed to the repo** | Credential leak | `.env` git-ignored; `.env.example` only; a scaffold test asserts no `.env` is tracked; the AI model is local → no API keys shipped | ✅ built & tested (`test_scaffold`) |
 
@@ -383,8 +384,10 @@ Two habits, both visible in the test suite:
    `predict_one`, restore a second gunicorn worker, leak the depth counter, delete the reaping, publish an
    `ai` port. A guard that cannot fail is decoration.
 
-The `ai`/`db` fault-isolation requirement, the queue's failure modes, and the web tier's security surface are
-covered by tests that run on every PR. The remaining open rows belong to the AI model
+The queue's failure modes and the web tier's security surface are covered by tests that run on **every PR**.
+The `ai`/`db` fault-isolation checks are **destructive** (they stop containers), so they are gated behind
+`FAULT_TEST=1` + `E2E_BASE_URL` and run on demand — what gates every PR instead is the `compose-e2e` job,
+which brings the real three-container stack up and exercises it end to end. The remaining open rows belong to the AI model
 (Shiri) and are tracked in [`ROADMAP.md`](ROADMAP.md).
 
 ---
@@ -408,7 +411,7 @@ between planes (§1). Full detail in [`COLLABORATORS.md`](../COLLABORATORS.md) a
 cp .env.example .env
 docker compose up --build          # 3 containers; only web is published
 # → http://localhost:8000/health   → then register, set a profile, check in, see the dashboard
-pytest -q                          # 1018 pass / 45 env-gated skip
+pytest -q                          # 1019 pass / 45 env-gated skip
 ```
 
 CI reproduces the gate on every PR (ruff → bandit → pytest + a `mongo:7` service). `main` is

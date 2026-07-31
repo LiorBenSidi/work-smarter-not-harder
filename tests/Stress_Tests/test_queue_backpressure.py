@@ -157,3 +157,44 @@ def test_the_job_store_stays_bounded_across_a_long_run(flooded_queue, jobqueue_m
         queue.result(job_id, timeout=5)
 
     assert queue.stats()["tracked_jobs"] <= 18, queue.stats()
+
+
+def test_health_keeps_returning_200_while_the_queue_is_saturated(ai_app_module, jobqueue_module, monkeypatch):
+    """A busy container must not look like a dead one.
+
+    `/health` is what Docker's healthcheck and the external uptime monitor poll. If it degraded while the
+    queue was shedding — a 429 from a rate-limiter, or a 5xx because it touched the saturated queue — both
+    would restart the container *because* it is busy, turning a load spike into a restart storm. So the
+    invariant is: while `/predict` is correctly shedding 503, `/health` still answers 200.
+
+    The queue is saturated directly rather than through concurrent HTTP calls: Flask's test client is not
+    thread-safe, and filling the queue by hand makes the shed deterministic instead of timing-dependent.
+    This is the HTTP-level counterpart to the queue-level shedding tests above — those prove the bound
+    holds, this proves the liveness probe stays honest at the same moment. (Cited in REPORT.md §5.)
+    """
+    valid = {"sleep_hours": 8, "fatigue": 2, "soreness": 1, "training_load": 100}
+    monkeypatch.setattr(jobqueue_module, "_resolve_target", lambda _name: slow)
+    queue = jobqueue_module.JobQueue(
+        workers=1, max_pending=2,
+        executor_factory=lambda: ThreadPoolExecutor(max_workers=1),
+    )
+    app = ai_app_module.create_app(queue=queue)
+    app.config["TESTING"] = True
+    client = app.test_client()
+    try:
+        # Fill the one worker and both pending slots with long jobs, so the next submit must be rejected.
+        for _ in range(3):
+            try:
+                queue.submit({"seconds": 5})
+            except jobqueue_module.QueueFull:
+                break
+
+        shed = client.post("/predict", json={"features": dict(valid)})
+        assert shed.status_code == 503, f"expected the queue to shed, got {shed.status_code}"
+
+        # ...and while it is shedding, liveness must still be 200.
+        health = client.get("/health")
+        assert health.status_code == 200, f"/health degraded to {health.status_code} under load"
+        assert health.get_json()["status"] == "ok"
+    finally:
+        queue.shutdown(wait=False)
