@@ -777,7 +777,7 @@
       justify-content:center; padding:0; -webkit-backdrop-filter:blur(3px); backdrop-filter:blur(3px); }
     @media (min-width:640px) { .hdetail { align-items:center; padding:20px; } }
     @media (prefers-reduced-motion: no-preference) { .hdetail:not([hidden]) .hdetail-card { animation: rise .3s cubic-bezier(.2,.7,.2,1) both; } }
-    .hdetail-card { width:min(560px, 100%); max-height:88vh; overflow-y:auto; background:var(--card); border:1px solid var(--line);
+    .hdetail-card { width:min(560px, 100%); max-height:88vh; overflow-y:auto; overscroll-behavior:contain; background:var(--card); border:1px solid var(--line);
       border-radius:22px 22px 0 0; padding:18px 18px calc(20px + env(safe-area-inset-bottom)); box-shadow:0 -12px 40px rgba(0,0,0,.4); }
     @media (min-width:640px) { .hdetail-card { border-radius:22px; box-shadow:0 24px 60px rgba(0,0,0,.5); } }
     .hdetail-head { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:10px; }
@@ -2560,6 +2560,26 @@
     ];
     const HDETAIL_PROBA = [["ready", "Ready", "--ready"], ["moderate", "Moderate", "--moderate"], ["rest", "Rest", "--rest"]];
     let hdetailTs = null;   // timestamp of the check-in the detail modal is showing (guards the async recs backfill below)
+    // One shared page-scroll lock for the full-screen dialogs (the History detail + the media lightbox).
+    // A position:fixed overlay does NOT stop the page behind it from scrolling: past the card's own scroll
+    // end — or starting the gesture on the dimmed backdrop — the scroll CHAINS to the page, and the list
+    // visibly moves under the blur (#422, seen live on prod). Ref-counted so nested dialogs can't unlock
+    // each other early; paired with overscroll-behavior:contain on the card so its inner scroll can't chain.
+    let pageScrollLocks = 0;
+    function lockPageScroll() {
+      if (++pageScrollLocks !== 1) return;
+      // BOTH elements: this page's real scroll container is the BODY (stylesheet overflow-y auto), so
+      // hiding only <html> still let the list creep ~120px under the modal — measured live before this.
+      document.documentElement.style.overflow = "hidden";
+      document.body.style.overflowY = "hidden";
+    }
+    function unlockPageScroll() {
+      if (pageScrollLocks > 0 && --pageScrollLocks === 0) {
+        document.documentElement.style.overflow = "";
+        document.body.style.overflowY = "";
+      }
+    }
+
     function openHistoryDetail(entry) {
       if (!entry) return;
       hdetailTs = entry.timestamp || null;
@@ -2594,6 +2614,7 @@
       else html += '<p class="muted">Recommendations weren\'t recorded for this check-in.</p>';              // pre-#354 entry with no inputs to regenerate from
       html += "</div>";
       $("hdetail-body").innerHTML = html;
+      if ($("history-detail").hidden) lockPageScroll();    // lock only on a real open -> one unlock always balances
       $("history-detail").hidden = false;
       $("hdetail-close").focus();
       if (canRegen) regenerateHistoryRecs(entry);          // #354 backfill: recompute this old entry's recommendations from its inputs
@@ -2613,7 +2634,10 @@
         : (recs ? '<p class="muted">No recommendations were generated for this check-in.</p>'          // AI ran, returned none
                 : '<p class="muted">Recommendations weren\'t recorded for this check-in.</p>');         // AI unavailable -> keep the honest note
     }
-    function closeHistoryDetail() { const el = $("history-detail"); if (el) el.hidden = true; }
+    function closeHistoryDetail() {
+      const el = $("history-detail");
+      if (el && !el.hidden) { el.hidden = true; unlockPageScroll(); }   // unlock only on a real close (idempotent)
+    }
     (function () {
       const modal = $("history-detail"); if (!modal) return;
       modal.addEventListener("click", (e) => { if (e.target === modal || (e.target.closest && e.target.closest("#hdetail-close"))) closeHistoryDetail(); });
@@ -3533,8 +3557,11 @@
       // Keyed off `data-full` — a behaviour contract, not a DM-specific class — so DM *and* forum images
       // share the one lightbox, and any future zoomable image just adds the attribute (#338 item 1).
       // Images only: video enlarge is the player's native fullscreen control (#338 items 3/4 resolution).
-      const open = (el) => { lbImg.src = el.getAttribute("data-full") || el.src; lb.hidden = false; };
-      const close = () => { lb.hidden = true; lbImg.src = ""; };
+      // Same page-scroll lock as the History detail (#422) — the lightbox is the other full-screen dialog,
+      // and without it the thread/feed behind the enlarged photo scrolls under the overlay. Open/close are
+      // guarded on the CURRENT hidden state so repeated calls can never over- or under-count the lock.
+      const open = (el) => { lbImg.src = el.getAttribute("data-full") || el.src; if (lb.hidden) lockPageScroll(); lb.hidden = false; };
+      const close = () => { if (!lb.hidden) unlockPageScroll(); lb.hidden = true; lbImg.src = ""; };
       document.addEventListener("click", (e) => {
         if (e.target.closest && e.target.closest(".lightbox-close")) { close(); return; }   // the explicit ✕ button
         const img = e.target.closest && e.target.closest("img[data-full]");
