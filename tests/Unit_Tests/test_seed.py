@@ -13,7 +13,12 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-from werkzeug.security import check_password_hash
+
+# importorskip, not a bare import: this is the ONE test file conftest's importorskip("flask") does not
+# shield, so in a lint-only venv (the README quickstart: ruff/bandit/pytest, no requirements.txt) a bare
+# import errored COLLECTION itself and failed the pre-push hook before a single test could skip (#416).
+werkzeug_security = pytest.importorskip("werkzeug.security", reason="app deps not installed (pip install -r requirements.txt)")
+check_password_hash = werkzeug_security.check_password_hash
 
 ROOT = Path(__file__).resolve().parents[2]
 

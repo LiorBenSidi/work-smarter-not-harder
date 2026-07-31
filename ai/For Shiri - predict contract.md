@@ -67,7 +67,8 @@ except (KeyError, TypeError, ValueError):
 ## Training (`ai/model/train.py`) — the plan already in the repo
 1. Load **PMData** (`wellness.csv` + `srpe.csv`), merge per participant **by date**.
 2. **Bin readiness 0–10 into the 3 classes** (`Ready` / `Moderate` / `Rest`).
-3. Train a **Random Forest** on the same feature keys web sends (`sleep_hours`, `resting_hr`, `fatigue`, `soreness`, `training_load` [+ any profile features you use]).
+3. Train a **Random Forest** on feature keys web sends (`sleep_hours`, `resting_hr`, `fatigue`, `soreness`, `training_load` [+ any profile features you use]).
+   *(As shipped: the landed `model.pkl` trains on `sleep_hours` · `fatigue` · `soreness` · `training_load` — `resting_hr` stays a validated wire input but is not a model feature. This doc is the pre-build handoff, kept for history.)*
 4. `joblib.dump(model, "ai/model/model.pkl")`.
 5. **Pin `scikit-learn`** in `ai/requirements.txt` to the exact version you trained with (so the pickle loads inside the container).
 6. **Keep the raw dataset OUT of the repo** — bake only `model.pkl` into the image (the `ai/Dockerfile` copies `model/`).

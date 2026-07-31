@@ -82,6 +82,10 @@ is implemented independently.
 | `/forum/posts/<id>/vote` | POST | Forum: post vote (strict `+1` / `-1`) |
 | `/forum/posts/<id>/comments/<cid>/vote` | POST | Forum: comment vote (strict `+1` / `-1`) |
 | `/me/engagement` | GET | Forum: the caller's received-vote totals (§3.3 "personal area" metric; counts only, never voter identities) — **Elad's lane** |
+| `/register/verify` · `/register/resend` · `/verify-otp` · `/resend-otp` | POST | F1 two-step auth: email-verify at signup + the login OTP challenge (resend caps + attempt lockout) |
+| `/forgot-password` · `/reset-password` | POST | F1 self-service password reset (token emailed; 10-min expiry; §5.1's tested reset surface) |
+| `/account/display-name` · `/account/password` · `/account/email-consent` · `/account/export` · `/account` | POST · GET · DELETE | Account management: rename / change password / consent toggle / **GDPR export** / **two-step account deletion** (cascades: profile, history, forum content, DMs, notifications — identity record removed last) |
+| `/history/recommendations` | POST | recompute recommendations for one stored check-in (the pre-#354 backfill the History detail uses) |
 | `/messages` · `/conversations` · `/conversations/<peer>` · `/users/search` | POST · GET | Direct messages: send / list threads / read a thread / recipient search |
 | `/notifications` · `/notifications/read` | GET · POST | Notifications feed (poll cursor) + mark-read |
 | `/events` | GET | Real-time push — SSE `text/event-stream` (new posts, DMs, notifications) |
@@ -199,8 +203,9 @@ collected cases, not 11 tests written). The suite is deliberately weighted towar
 regression is cheapest to catch — unit and negative input walls — rather than toward volume.
 
 **Pass / skip:** the pre-07-12 snapshot was **747 pass, 36 skip in ~47 s**; the current suite is **1023 pass,
-45 skip in ~86 s** (`python -m pytest tests/ -q`). The env-gated skips are *not broken* —
-they run the moment their dependency is present:
+45 skip in ~86 s** (`python -m pytest tests/ -q`). **43 of the 45** skips are env-gated and *not broken* —
+they run the moment their dependency is present; the other 2 are the unconditional `test_ai` scaffolds
+flagged for removal below (#358):
 
 - `test_db_mongo` (21) — the real-Mongo integration suite; skips without `TEST_MONGO_URI`, and **runs in CI**
   against a `mongo:7` service on every PR.
@@ -218,7 +223,9 @@ With the live stack up (`TEST_MONGO_URI` + `AI_BASE_URL` + `E2E_BASE_URL` set), 
 stress and system-journey suites all execute against the running containers — exactly what CI's `compose-e2e`
 job runs green on every PR; only the `test_ai` model scaffolds and the destructive `FAULT_TEST` cases stay gated.
 
-No test is commented-out or `assert True` (course rule: a broken test is deleted or fixed, never muted).
+No test is commented-out or `assert True` (course rule: a broken test is deleted or fixed, never muted) —
+the one deviation is the `test_ai` scaffold above: unconditionally skipped, disclosed here, and tracked for
+deletion in #358 rather than left silently.
 
 ---
 
@@ -318,7 +325,7 @@ mutation-checked by disabling the fix.)
 | **Load beyond one `ai` worker** | Requests serialize behind the model | Two multiplying axes: the in-container **process pool** (`AI_QUEUE_WORKERS`) and **replicas** (`--scale ai=N`). Measured: **2.86×** and **1.60×** (CPU-bound proxy), and re-measured **directly on the real model** at **~2.5×** and **~1.5×** | ✅ built & **measured on the real model** ([`SCALING_REPORT.md`](SCALING_REPORT.md); `test_pool_scaling.py`) |
 | **Someone "simplifies" the process pool to threads** | Silent total loss of parallelism (and the +5): every mocked test still passes | The pool type is asserted, and a real CPU-bound test measures it. A thread pool scores **0.96×** on that test — the GIL — and fails the `>1.5×` bar | ✅ built & tested (`test_pool_scaling.py`, `test_ai_queue_contract.py`) |
 | **`GET /jobs/<id>` under `--scale ai=N`** | 404s ~(N−1)/N of the time: the job store is per-container and the GET round-robins to a replica that never saw the job | `web` calls **only** `/predict`, which is replica-safe (one request, one response, nothing read back). Documented in three places and guard-tested | ✅ bounded by design — **not** made replica-safe on purpose: an external store (Redis) would add a 4th container, a new failure mode and a new dependency to serve an endpoint nothing calls (`test_scale_contract.py`) |
-| **The CPU-burning benchmark ships as the production model** | Every prediction slow and meaningless | `inference:predict_one` is the default target; a guard asserts no shipped compose file selects `bench:cpu_burn` | ✅ built & tested (`test_scale_contract.py`) |
+| **The CPU-burning benchmark ships as the production model** | Every prediction slow and meaningless | `inference:predict_one` is the default target; a guard asserts none of the dev/prod/test compose files selects `bench:cpu_burn` (`docker-compose.scale.yml` is outside its parametrize — flagged to its owner) | ✅ built & tested (`test_scale_contract.py`) |
 | **A scaled `ai` gets published to the host** | Port collision on replica 2, **and** an unauthenticated `/jobs` reachable from outside | Only `web` publishes a port, in dev, test, prod and the scale override. `ai` has no auth because nothing but `web` can reach it — that assumption is load-bearing, so it is asserted | ✅ built & tested (`test_deploy_contract.py`, `test_ai_queue_contract.py`, `test_scale_contract.py`) |
 | **A bad deploy takes the public site down** | Public app down | CI gates the image build; the build gates the deploy; post-deploy `/ready` is probed over HTTPS and a failure **auto-rolls back** to the previous image while still failing the run. `restart: unless-stopped` survives a VM reboot | ✅ built & tested (`test_deploy_contract.py` locks the pipeline shape; **live** at `app.worksmarternotharder.dev`) |
 | **Single Azure VM (no redundancy)** | Total outage if the VM dies | Accepted. The course supplies one VM; the containers are stateless, so a Swarm overlay or a second host is a configuration change, not a rewrite. UptimeRobot alerts on the outage rather than preventing it | 🟡 accepted risk, mitigation documented ([`DESIGN.md`](DESIGN.md) §L7) |
@@ -379,10 +386,12 @@ Two habits, both visible in the test suite:
    queue, `predict_one` keeps its shape — are asserted in `test_deploy_contract.py`,
    `test_ai_queue_contract.py` and `test_scale_contract.py`, so the breakage surfaces as a red PR rather
    than as a dead container after a merge.
-2. **Mutation testing.** Every guard above was verified by *breaking the invariant on purpose* and
-   confirming the guard went red: bypass the queue, swap the pool to threads, unbound the backlog, rename
-   `predict_one`, restore a second gunicorn worker, leak the depth counter, delete the reaping, publish an
-   `ai` port. A guard that cannot fail is decoration.
+2. **Mutation testing.** The guards above were spot-verified during development by *breaking the invariant
+   on purpose* and confirming the guard went red (bypass the queue, swap the pool to threads, unbound the
+   backlog, rename `predict_one`, restore a second gunicorn worker, leak the depth counter, delete the
+   reaping, publish an `ai` port). Of these, the thread-pool swap is the one **permanently recorded** in the
+   suite — `test_pool_scaling.py` measures it at 0.96× and fails the >1.5× bar; the rest were manual passes.
+   A guard that cannot fail is decoration.
 
 The queue's failure modes and the web tier's security surface are covered by tests that run on **every PR**.
 The `ai`/`db` fault-isolation checks are **destructive** (they stop containers), so they are gated behind
@@ -427,11 +436,11 @@ branch-protected and merges only on green CI.
 - **F6 + F7 merge** — in scope, not pending: the merge is in the v2 proposal the team sent the TA (28 Jun),
   and the TA's guidelines explicitly permit notified feature changes; the balance rule is built
   (`_program_recommendations`). See `ROADMAP.md` → "Scope decision".
-- **Exact readiness categories + final feature set** — finalized by the AI plane during data exploration
-  (the `/predict` contract already pins the shapes: features in, `{state, proba, recommendations, calories}`
-  out).
-- **Deploy ordering** (Azure right after the MVP vs after the 80) and the **forum real-time transport**
-  (SSE vs Flask-SocketIO) — deploy/real-time plane decisions.
+- **Exact readiness categories + final feature set** *(SETTLED — baked into the shipped `model.pkl`:
+  features `sleep_hours` · `fatigue` · `soreness` · `training_load`, class labels + ready-threshold in the
+  same bundle; the `/predict` contract shapes were pinned all along)*.
+- **Deploy ordering** and the **forum real-time transport** *(both SETTLED — live on Azure over HTTPS since
+  8 Jul with redeploy-on-merge, and the real-time layer shipped as SSE (`/events`, `event: forum`) — ✅ in §2)*.
 
 ---
 
