@@ -557,6 +557,14 @@
     .c-main { flex:1; min-width:0; word-break:break-word; }
     .c-vote { flex:none; display:flex; align-items:center; gap:4px; }
     .c-vote .pill { min-width:26px; text-align:center; }
+    /* like/dislike tallies (#409): TWO pills now sit where one score pill used to on the feed row, so
+       tighten their padding — a narrow phone must not squeeze the post title. */
+    .pill.count { padding:6px 9px; }
+    .post-right .pill.count { font-size:12px; }
+    /* the count INSIDE a vote button (post detail + comments): mono + tabular so the number can't jiggle
+       the button's width as it changes, and dimmed so the action label still leads. */
+    .tally { font-family:var(--font-mono); font-variant-numeric: tabular-nums; font-feature-settings:"tnum" 1;
+      opacity:.75; margin-left:1px; }
 
     .info { position:relative; display:inline-flex; align-items:center; justify-content:center; width:16px; height:16px; margin-left:6px;
       border-radius:50%; background:var(--accent); color:var(--on-accent); font-size:10px; font-weight:800; font-style:normal; cursor:help; vertical-align:middle; }
@@ -2693,6 +2701,23 @@
       forumNextBefore = r.data.next_before || null;
       renderForumList();
     }
+    // One like/dislike tally pill (#409). The Online-Forum sub-requirement asks a client to SEE how many
+    // likes a post or comment has, and the net score cannot answer that: 10 likes + 10 dislikes renders the
+    // same 0 as a post nobody touched. Laid out the way YouTube does it — each count sits against its own
+    // icon/button, never merged into one number. `n` is coerced to a Number and `kind` is a literal from
+    // this file, so neither can carry markup and both are safe to interpolate unescaped.
+    // `bare` renders the number ALONE, to sit INSIDE its own vote button (the detail + comment rows) — the
+    // way YouTube does it. Standing beside the button instead, a lone number is ambiguous under even
+    // spacing ("up 2 down 2" — is the 2 the up's or the down's?), and repeating the arrow on both the
+    // button and the pill just reads as noise. The feed row has no buttons, so there it keeps the icon.
+    function countPill(n, kind, bare) {
+      const v = Number(n) || 0;
+      const label = v + " " + kind + (v === 1 ? "" : "s");
+      if (bare) return '<span class="tally" title="' + label + '" aria-label="' + label + '">' + v + "</span>";
+      return '<span class="pill count" title="' + label + '" aria-label="' + label + '">'
+        + (kind === "like" ? ICON.up : ICON.down) + " " + v + "</span>";
+    }
+
     function renderForumList() {
       const el = $("forum-list"); if (!el) return;
       stashDetail();                                          // move an open post's detail out before we wipe the list, then re-slot it below
@@ -2706,7 +2731,8 @@
       el.innerHTML = list.map((p) =>
         '<div class="post' + (p.id === currentPostId ? ' open' : '') + '" data-id="' + escapeHtml(p.id) + '" role="button" tabindex="0" aria-expanded="' + (p.id === currentPostId ? 'true' : 'false') + '">'
         + '<div class="post-top"><strong>' + escapeHtml(p.title) + '</strong>'
-        + '<span class="post-right"><span class="pill">' + ICON.up + ' ' + escapeHtml(p.score) + '</span><span class="post-chev" aria-hidden="true">' + ICON.chev + '</span></span></div>'
+        + '<span class="post-right">' + countPill(p.likes, "like") + countPill(p.dislikes, "dislike")
+        + '<span class="post-chev" aria-hidden="true">' + ICON.chev + '</span></span></div>'
         + '<span class="muted byline">' + avatarHtml(p.author, 20) + 'by ' + escapeHtml(p.author) + ' · ' + escapeHtml(p.comments) + ' comment' + (p.comments === 1 ? '' : 's')
         + (p.created_at ? ' · ' + escapeHtml(timeAgo(p.created_at)) : '') + '</span></div>'
       ).join("");
@@ -2791,8 +2817,8 @@
         + '<p class="muted by">' + avatarHtml(p.author, 26) + 'by ' + escapeHtml(p.author) + '</p>'
         + '<p class="body">' + escapeHtml(p.body) + '</p>'
         + '<div id="post-atts"></div>'
-        + '<div class="vote-row"><button class="ghost" onclick="vote(1)">' + ICON.up + ' up</button> <span class="pill">score ' + escapeHtml(p.score)
-        + '</span> <button class="ghost" onclick="vote(-1)">' + ICON.down + ' down</button></div>'
+        + '<div class="vote-row"><button class="ghost" onclick="vote(1)">' + ICON.up + ' up ' + countPill(p.likes, "like", true) + '</button>'
+        + ' <button class="ghost" onclick="vote(-1)">' + ICON.down + ' down ' + countPill(p.dislikes, "dislike", true) + '</button></div>'
         + (p.mine
             ? '<div class="own-actions"><button class="ghost" onclick="editPost()">Edit</button> <button class="ghost" onclick="deletePost()">Delete</button></div>'
             : '')
@@ -2832,9 +2858,10 @@
       let html = list.length
         ? '<ul class="comments">' + list.map((c) =>
             '<li>' + avatarHtml(c.author, 28) + '<div class="c-main"><strong>' + escapeHtml(c.author) + '</strong> ' + escapeHtml(c.body) + '</div>'
-            + '<div class="c-vote"><button class="ghost mini cvote" data-cid="' + escapeHtml(c.id) + '" data-val="1" aria-label="Upvote comment">' + ICON.up + '</button>'
-            + '<span class="pill">' + escapeHtml(c.score) + '</span>'
-            + '<button class="ghost mini cvote" data-cid="' + escapeHtml(c.id) + '" data-val="-1" aria-label="Downvote comment">' + ICON.down + '</button></div></li>'
+            + '<div class="c-vote"><button class="ghost mini cvote" data-cid="' + escapeHtml(c.id) + '" data-val="1" aria-label="Upvote comment">'
+            + ICON.up + ' ' + countPill(c.likes, "like", true) + '</button>'
+            + '<button class="ghost mini cvote" data-cid="' + escapeHtml(c.id) + '" data-val="-1" aria-label="Downvote comment">'
+            + ICON.down + ' ' + countPill(c.dislikes, "dislike", true) + '</button></div></li>'
           ).join("") + '</ul>'
         : '<p class="muted">No comments yet.</p>';
       if (commentsNextBefore) html += '<button type="button" class="ghost forum-more" id="comments-more" style="margin:10px auto 0;display:block">Load more comments</button>';
@@ -2928,11 +2955,16 @@
         const r = await api("/forum/posts/" + currentPostId + "/comments/" + encodeURIComponent(commentId) + "/vote",
           { method: "POST", body: { value } });
         if (r.ok) {
-          // Patch the voted comment's score in the accumulated list and re-render — so loaded (older) pages
-          // aren't dropped and the new score shows even for a comment not on the newest page (#331).
+          // Patch the voted comment's tallies in the accumulated list and re-render — so loaded (older)
+          // pages aren't dropped and the new counts show even for a comment not on the newest page (#331).
+          // The row renders likes/dislikes now (#409), so a score-only patch would leave stale counts on
+          // screen; when the response carries no counts (the server's re-read failed and it deliberately
+          // omitted them rather than sending a fake 0) reload the thread instead of painting a stale number.
           const c = commentAccum.find((x) => x.id === commentId);
-          if (c && r.data && typeof r.data.score === "number") { c.score = r.data.score; renderComments(); }
-          else loadComments(currentPostId);
+          if (c && r.data && typeof r.data.likes === "number" && typeof r.data.dislikes === "number") {
+            c.score = r.data.score; c.likes = r.data.likes; c.dislikes = r.data.dislikes;
+            renderComments();
+          } else loadComments(currentPostId);
         } else flash("forum-flash", (r.data && r.data.error) || "Couldn't record your vote — please try again.");
       } finally { voteInFlight = false; }
     }

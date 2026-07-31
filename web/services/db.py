@@ -391,16 +391,35 @@ def history_set_recommendations(db, username, timestamp, recommendations):
 
 
 # ---- forum (CRUD seam; the real-time push stays Elad's; the seed mechanism is db/seed.py) ----
+def _vote_counts(doc):
+    """Return ``(likes, dislikes)`` for a post/comment — the COUNTS only, never the voter identities.
+
+    The net ``score`` alone cannot answer "how many likes does this have": 10 likes + 10 dislikes and no
+    votes at all both render 0, which are very different posts (#409). Both counts are derived from the
+    ``votes`` list already on the document, so this costs no extra read and adds no stored counter that
+    could drift out of step with the votes. A row without ``votes`` degrades to 0/0, matching how ``score``
+    already tolerates a partial/legacy document rather than raising.
+    """
+    votes = doc.get("votes") or []
+    likes = sum(1 for v in votes if v.get("value") == 1)
+    dislikes = sum(1 for v in votes if v.get("value") == -1)
+    return likes, dislikes
+
+
 def _comment_public(c):
-    """Public projection of one comment — id/author/body/score/created_at, dropping the internal votes list.
+    """Public projection of one comment — id/author/body/score/likes/dislikes/created_at, dropping the
+    internal votes list (the identities stay in the store; only the tallies are public).
     ``created_at`` is the field the client orders comments on and the cursor ``forum_list_comments`` pages by."""
+    likes, dislikes = _vote_counts(c)
     return {"id": c.get("id"), "author": c.get("author"), "body": c.get("body"),
-            "score": c.get("score", 0), "created_at": c.get("created_at", 0)}
+            "score": c.get("score", 0), "likes": likes, "dislikes": dislikes,
+            "created_at": c.get("created_at", 0)}
 
 
 def _shape(post):
-    """Public projection of a forum post — drops the raw _id and the internal votes list, and surfaces
-    ``comment_count`` (comments themselves live in ``forum_comments`` now, read via ``forum_list_comments``).
+    """Public projection of a forum post — drops the raw _id and the internal votes list (surfacing only its
+    ``likes``/``dislikes`` tallies), and surfaces ``comment_count`` (comments themselves live in
+    ``forum_comments`` now, read via ``forum_list_comments``).
 
     ``comment_count`` reads the stored counter, falling back to the length of a still-embedded ``comments``
     array so a post that has NOT been migrated yet (pre-#331 shape) still reports the right count — the app
@@ -414,8 +433,10 @@ def _shape(post):
                 created = oid.generation_time.timestamp()
             except Exception:
                 created = 0
+    likes, dislikes = _vote_counts(post)
     return {"id": post["id"], "author": post["author"], "anonymous": post.get("anonymous", False),
             "title": post["title"], "body": post["body"], "score": post.get("score", 0),
+            "likes": likes, "dislikes": dislikes,
             "created_at": created,
             "comment_count": post.get("comment_count", len(post.get("comments") or []))}
 

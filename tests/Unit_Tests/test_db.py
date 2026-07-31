@@ -522,6 +522,38 @@ def test_forum_vote_comment_one_per_user_revote_and_distinct_sum(db_mod, db):
     assert isinstance(raw["votes"], list) and {v["user"] for v in raw["votes"]} == {"bob", "carol"}
 
 
+def test_public_shapes_publish_like_and_dislike_tallies_not_only_the_net(db_mod, db):
+    """A contested post/comment must be distinguishable from one nobody voted on (#409).
+
+    The net ``score`` cannot do it: equal likes and dislikes sum to 0 — the exact same 0 an untouched post
+    shows. The Online-Forum sub-requirement asks a client to see HOW MANY likes each post and comment has,
+    so both public projections carry the two tallies alongside the net. The raw ``votes`` list (who voted)
+    must still never leave the store.
+    """
+    contested = db_mod.forum_create_post(db, "alice", "Contested", "Body", False)["id"]
+    quiet = db_mod.forum_create_post(db, "alice", "Quiet", "Body", False)["id"]
+    for user, value in (("bob", 1), ("carol", 1), ("dan", -1), ("erin", -1)):
+        _seed_vote(db, contested, user, value)
+
+    hot, cold = db_mod.forum_get_post(db, contested), db_mod.forum_get_post(db, quiet)
+    assert hot["score"] == cold["score"] == 0             # identical nets — which is precisely the problem
+    assert (hot["likes"], hot["dislikes"]) == (2, 2)      # ...and the tallies tell the two apart
+    assert (cold["likes"], cold["dislikes"]) == (0, 0)
+    assert "votes" not in hot and "votes" not in cold     # tallies are public, voter identities are not
+
+    # The same guarantee on a comment, whose projection is a different function (_comment_public). These
+    # votes are deliberately LOPSIDED (2 up, 1 down): an even split would still read correctly even if both
+    # tallies were counted off the same vote value, so only an asymmetric case proves each side counts its
+    # own — and that the two are not silently the same number.
+    cid = db_mod.forum_add_comment(db, contested, "alice", "hi")["id"]
+    for user, value in (("bob", 1), ("carol", 1), ("dan", -1)):
+        db_mod.forum_vote_comment(db, contested, cid, user, value)
+    comment = db_mod.forum_list_comments(db, contested)[0]
+    assert comment["score"] == 1
+    assert (comment["likes"], comment["dislikes"]) == (2, 1)
+    assert "votes" not in comment
+
+
 def test_migrate_embedded_comments_moves_and_is_idempotent(db_mod, db):
     # #331 migration: a pre-refactor post with an embedded comments array is moved into forum_comments,
     # comment_count is set, the embedded field is dropped, and re-running is a no-op.

@@ -741,3 +741,28 @@ def test_debug_tools_omitted_inside_preview_iframe(client):
     assert 'id="debug-fab"' in normal                              # still present on the real shell
     # Belt-and-suspenders client guard: dev tools never wire up in ANY frame, not just via ?preview.
     assert "window.top !== window.self" in normal
+
+
+def test_forum_rows_render_like_and_dislike_tallies(client):
+    """The served SPA must PRINT both tallies on the feed row, the post detail and every comment (#409).
+
+    The API can carry `likes`/`dislikes` perfectly and still fail the sub-requirement if the template only
+    prints the net score — which is exactly the state this replaced. Pinning the render sites here catches a
+    revert to a score-only row in CI, where no browser is available to look at the page.
+    """
+    html = client.get("/").get_data(as_text=True)
+    assert "function countPill(" in html                       # the shared tally renderer exists
+    # the feed row carries both tallies as icon pills (it has no vote buttons of its own)...
+    assert 'countPill(p.likes, "like")' in html and 'countPill(p.dislikes, "dislike")' in html
+    # ...while the post detail and every comment print the number INSIDE its own vote button (`bare`), so a
+    # count can never be read against the wrong button.
+    assert 'countPill(p.likes, "like", true)' in html and 'countPill(p.dislikes, "dislike", true)' in html
+    assert 'countPill(c.likes, "like", true)' in html and 'countPill(c.dislikes, "dislike", true)' in html
+    # the net score is no longer printed as the only signal on the detail row
+    assert '<span class="pill">score ' not in html
+    # After a comment vote the client patches THAT row in place (it must not drop already-loaded older
+    # pages), so the patch has to carry the tallies too — patching only the score would leave the row's
+    # like/dislike numbers stale on screen until the whole thread was reloaded.
+    vc = html[html.index("async function voteComment("):html.index("// ---- Media attachments")]
+    assert "c.likes = r.data.likes; c.dislikes = r.data.dislikes;" in vc
+    assert 'typeof r.data.likes === "number"' in vc          # ...and falls back to a reload when they're absent
