@@ -170,3 +170,25 @@ def test_votes_aggregate_across_users(forum_client):
     forum_client.post("/logout")
     _login(forum_client, "bob")
     assert forum_client.post(f"/forum/posts/{pid}/vote", json={"value": 1}).get_json()["score"] == 2
+
+
+def test_feed_and_detail_publish_like_and_dislike_tallies(forum_client):
+    # #409 over HTTP: the sub-requirement is that a client can SEE how many likes a post has. A contested
+    # post (equal ups and downs) and an untouched one share the same net score, so the feed row and the
+    # detail must both carry the two tallies or the two posts are indistinguishable on screen.
+    _login(forum_client, "alice")
+    hot = _new_post(forum_client, "Contested", "b").get_json()["post"]["id"]
+    _new_post(forum_client, "Quiet", "b")
+    forum_client.post(f"/forum/posts/{hot}/vote", json={"value": 1})
+    forum_client.post("/logout")
+    _login(forum_client, "bob")
+    forum_client.post(f"/forum/posts/{hot}/vote", json={"value": -1})
+
+    feed = {p["title"]: p for p in forum_client.get("/forum/posts").get_json()["posts"]}
+    assert feed["Contested"]["score"] == feed["Quiet"]["score"] == 0        # the net cannot tell them apart
+    assert (feed["Contested"]["likes"], feed["Contested"]["dislikes"]) == (1, 1)
+    assert (feed["Quiet"]["likes"], feed["Quiet"]["dislikes"]) == (0, 0)
+
+    detail = forum_client.get(f"/forum/posts/{hot}").get_json()["post"]
+    assert (detail["likes"], detail["dislikes"]) == (1, 1)
+    assert "votes" not in detail                                           # counts ship; voters never do

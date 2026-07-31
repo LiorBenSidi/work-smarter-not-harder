@@ -67,20 +67,26 @@ def _mine(post, me):
 
 
 def _summary(post, me):
-    # tolerate partial/seed rows from the store: a missing score/comment_count degrades this row to a
+    # tolerate partial/seed rows from the store: a missing score/likes/comment_count degrades this row to a
     # default rather than 500-ing the whole list. `comments` is the COUNT (comments live in their own
     # collection now, #331); the fallback tolerates a not-yet-migrated post that still embeds the array.
+    # `likes`/`dislikes` ride alongside `score` because the net alone can't answer "how many likes" — the
+    # feed row has to distinguish a contested post from an unvoted one (#409).
     return {"id": post.get("id"), "title": post.get("title"), "author": _author(post),
             "mine": _mine(post, me), "created_at": post.get("created_at", 0),
             "score": post.get("score", 0),
+            "likes": post.get("likes", 0), "dislikes": post.get("dislikes", 0),
             "comments": post.get("comment_count", len(post.get("comments") or []))}
 
 
 def _comment(c):
-    """Public projection of one comment — id/author(display name)/body/score/created_at, never the raw votes.
+    """Public projection of one comment — id/author(display name)/body/score/likes/dislikes/created_at,
+    never the raw votes (the tallies are public, the voters are not).
     ``created_at`` lets the client order comments (oldest-first for display) and render each comment's age."""
     return {"id": c.get("id"), "author": display_name(c.get("author")), "body": c.get("body"),
-            "score": c.get("score", 0), "created_at": c.get("created_at", 0)}
+            "score": c.get("score", 0),
+            "likes": c.get("likes", 0), "dislikes": c.get("dislikes", 0),
+            "created_at": c.get("created_at", 0)}
 
 
 def _detail(post, me):
@@ -88,6 +94,7 @@ def _detail(post, me):
     # the detail carries only the COUNT. The fallback tolerates a not-yet-migrated post that still embeds them.
     return {"id": post.get("id"), "title": post.get("title"), "body": post.get("body"),
             "author": _author(post), "mine": _mine(post, me), "score": post.get("score", 0),
+            "likes": post.get("likes", 0), "dislikes": post.get("dislikes", 0),
             "comment_count": post.get("comment_count", len(post.get("comments") or []))}
 
 
@@ -134,24 +141,32 @@ def _notify_vote(recipient, voter, value, ref, noun):
 
 def _notify_author_of_vote(post_id, voter, value):
     """Notify a post's author their post was up/downvoted (§2.6). The real author is read from the store
-    even for an anonymous post (anonymity is a display-layer projection), so the owner is still pinged."""
+    even for an anonymous post (anonymity is a display-layer projection), so the owner is still pinged.
+
+    Returns the post it read (or None if the read failed / the post is gone), so the caller can reuse THIS
+    read for the fresh like/dislike tallies instead of paying a second round-trip per vote (#409)."""
     try:
         post = _forum().get_post(post_id)
     except Exception:
         logger.warning("could not resolve a post author for a vote notification", exc_info=True)
-        return
+        return None
     _notify_vote(post.get("author") if post else None, voter, value, post_id, "post")
+    return post
 
 
 def _notify_comment_author_of_vote(post_id, comment_id, voter, value):
     """Notify a comment's author their comment was up/downvoted (§2.6). The comment is read from its own
-    collection through the store (#331), so the ping still targets the comment's real author."""
+    collection through the store (#331), so the ping still targets the comment's real author.
+
+    Returns the comment it read (or None), so the caller can reuse THIS read for the fresh like/dislike
+    tallies rather than issuing a second one (#409)."""
     try:
         comment = _forum().get_comment(post_id, comment_id)
     except Exception:
         logger.warning("could not resolve a comment author for a vote notification", exc_info=True)
-        return
+        return None
     _notify_vote(comment.get("author") if comment else None, voter, value, f"{post_id}:{comment_id}", "comment")
+    return comment
 
 
 @forum_bp.get("/forum/posts")
@@ -300,8 +315,15 @@ def vote(post_id):
         return jsonify(error="forum store unavailable"), 503
     if score is None:
         return jsonify(error="post not found"), 404
-    _notify_author_of_vote(post_id, voter, value)   # live push to the author; never fails the vote
-    return jsonify(score=score), 200
+    post = _notify_author_of_vote(post_id, voter, value)   # live push to the author; never fails the vote
+    # Reuse the read the notification just did to hand back the fresh tallies, so the client can repaint
+    # the counts without a follow-up request (#409). If that read failed, the keys are OMITTED rather than
+    # sent as 0 — a wrong 0 would paint a lie over a vote that definitely landed; the client refetches.
+    body = {"score": score}
+    if post is not None:
+        body["likes"] = post.get("likes", 0)
+        body["dislikes"] = post.get("dislikes", 0)
+    return jsonify(**body), 200
 
 
 @forum_bp.get("/me/engagement")
@@ -337,5 +359,11 @@ def vote_comment(post_id, comment_id):
     if score is None:
         # the store returns None for an unknown post OR an unknown comment — report both (it can't tell us which)
         return jsonify(error="post or comment not found"), 404
-    _notify_comment_author_of_vote(post_id, comment_id, voter, value)   # live push; never fails the vote
-    return jsonify(score=score), 200
+    comment = _notify_comment_author_of_vote(post_id, comment_id, voter, value)   # live push; never fails the vote
+    # Same as the post path: reuse that read for the fresh tallies, and omit them (never fake a 0) if it
+    # came back empty — the client then falls back to reloading the thread (#409).
+    body = {"score": score}
+    if comment is not None:
+        body["likes"] = comment.get("likes", 0)
+        body["dislikes"] = comment.get("dislikes", 0)
+    return jsonify(**body), 200

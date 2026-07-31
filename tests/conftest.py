@@ -243,11 +243,24 @@ class FakeForum:
     def get_rev(self):
         return self._rev
 
+    @staticmethod
+    def _counts(votes):
+        """Mirror ``db._vote_counts``: the like/dislike tallies a post/comment publishes (#409).
+
+        The real store keeps votes as a LIST of ``{user, value}``; this fake keys them by user, so the
+        tallies come from the VALUES. Kept in step with ``score`` on every mutation, because the routes read
+        ``likes``/``dislikes`` straight off the shape — a fake that only tracked ``score`` would report 0
+        likes forever and quietly make every forum test that asserts a count vacuous.
+        """
+        values = votes.values() if isinstance(votes, dict) else []
+        return sum(1 for v in values if v == 1), sum(1 for v in values if v == -1)
+
     def create_post(self, author, title, body, anonymous=False):
         self._seq += 1
         pid = str(self._seq)
         self._posts[pid] = {"id": pid, "author": author, "anonymous": anonymous,
                             "title": title, "body": body, "score": 0, "comment_count": 0, "votes": {},
+                            "likes": 0, "dislikes": 0,
                             "created_at": time.time() + self._seq * 1e-6}   # monotonic per creation order
         self._rev += 1
         return self._posts[pid]
@@ -264,11 +277,14 @@ class FakeForum:
     def get_post(self, post_id):
         return self._posts.get(post_id)
 
-    @staticmethod
-    def _comment_public(c):
-        # public shape: id/author/body/score/created_at, dropping the internal votes tally (mirrors db._comment_public)
+    @classmethod
+    def _comment_public(cls, c):
+        # public shape: id/author/body/score/likes/dislikes/created_at, dropping the internal votes tally
+        # (mirrors db._comment_public — the tallies are public, the voter identities are not)
+        likes, dislikes = cls._counts(c.get("votes"))
         return {"id": c["id"], "author": c["author"], "body": c["body"],
-                "score": c.get("score", 0), "created_at": c.get("created_at", 0)}
+                "score": c.get("score", 0), "likes": likes, "dislikes": dislikes,
+                "created_at": c.get("created_at", 0)}
 
     def add_comment(self, post_id, author, body):
         post = self._posts.get(post_id)
@@ -278,6 +294,7 @@ class FakeForum:
         cid = "c" + str(self._seq)
         comment = {"id": cid, "post_id": post_id, "author": author, "body": body,
                    "score": 0, "votes": {}, "created_at": time.time() + self._seq * 1e-6}
+        # (likes/dislikes are derived from `votes` by _comment_public — nothing stored, nothing to drift)
         self._comments[cid] = comment
         post["comment_count"] = post.get("comment_count", 0) + 1
         self._rev += 1
@@ -306,7 +323,7 @@ class FakeForum:
         c.setdefault("votes", {})[username] = value  # one vote per user; re-voting replaces
         c["score"] = sum(c["votes"].values())
         self._rev += 1
-        return c["score"]
+        return c["score"]                            # tallies are derived in _comment_public, never stored here
 
     def vote(self, post_id, username, value):
         post = self._posts.get(post_id)
@@ -314,6 +331,9 @@ class FakeForum:
             return None
         post["votes"][username] = value  # one vote per user; re-voting replaces
         post["score"] = sum(post["votes"].values())
+        # A post is handed back RAW (unlike a comment, which goes through _comment_public), so its tallies
+        # have to be refreshed on the document itself — the routes read likes/dislikes straight off it.
+        post["likes"], post["dislikes"] = self._counts(post["votes"])
         self._rev += 1
         return post["score"]
 

@@ -114,3 +114,17 @@ def test_post_and_comment_votes_notify_independently(forum_client):
     notes = _vote_notes(forum_client)
     texts = " ".join(n["text"] for n in notes)
     assert len(notes) == 2 and "your post" in texts and "your comment" in texts
+
+
+def test_comment_vote_response_carries_the_tallies_for_an_in_place_repaint(forum_client):
+    # #409: the client patches the voted comment in place (it must not drop already-loaded older pages), so
+    # the vote response has to carry the same tallies the row renders — a score-only reply would leave the
+    # like/dislike numbers stale on screen until the whole thread was reloaded.
+    _login(forum_client, "alice")
+    pid = _post(forum_client)
+    cid = _comment(forum_client, pid)
+    assert _cvote(forum_client, pid, cid, 1).get_json() == {"score": 1, "likes": 1, "dislikes": 0}
+    assert _cvote(forum_client, pid, cid, -1).get_json() == {"score": -1, "likes": 0, "dislikes": 1}
+    # and the thread read-back agrees with what the vote reply claimed
+    comment = forum_client.get(f"/forum/posts/{pid}/comments").get_json()["comments"][0]
+    assert (comment["likes"], comment["dislikes"]) == (0, 1)
