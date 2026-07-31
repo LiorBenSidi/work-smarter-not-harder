@@ -237,7 +237,7 @@ auto-deploying every green `main` to Azure over HTTPS. The **Random Forest** beh
 too (`ai/model/model.pkl`, baked into the image). The **forum cold-seed** is built too — a deliberate
 demo/review tool (`db/seed.py`: fake clients + posts + comments + likes); a fresh database is left
 **empty by design** (a real deployment starts empty), so run the seed when you want a populated app to
-show. Suite: **1064 collected** (1019 pass / 45 environment-gated), green in CI (real-Mongo IT runs on the `mongo:7` service).
+show. Suite: **1063 collected** (1018 pass / 45 environment-gated), green in CI (real-Mongo IT runs on the `mongo:7` service).
 
 **Remaining:** the **F5 workout-generator** (Shiri's AI lane). Risk assessment and the honest "what we did
 *not* mitigate" list: [`docs/REPORT.md`](docs/REPORT.md) §5.
