@@ -104,6 +104,23 @@ def test_history_ui_is_wired(client):
     assert "for this check-in." in html                                          # graceful fallback copy for missing recs
     assert 'e.key === "Escape"' in html                                          # ESC closes the modal
 
+    # -- open dialogs lock the page behind them (#422, reproduced live on prod)
+    # A position:fixed overlay does NOT stop the page scrolling underneath: past the card's own scroll end
+    # (or starting the gesture on the backdrop) the scroll chains through and the History list visibly moves
+    # under the blur. Both full-screen dialogs (this modal + the media lightbox) share one ref-counted lock.
+    assert "function lockPageScroll()" in html and "function unlockPageScroll()" in html
+    assert 'document.documentElement.style.overflow = "hidden"' in html          # the lock actually locks...
+    assert 'document.body.style.overflowY = "hidden"' in html                    # ...on BOTH elements — the body is the
+                                                                                 # real scroll container (121px crept
+                                                                                 # through an html-only lock, measured)
+    assert 'if ($("history-detail").hidden) lockPageScroll();' in html           # locked on a real open only
+    assert "{ el.hidden = true; unlockPageScroll(); }" in html                   # ...and released on a real close
+    assert "if (lb.hidden) lockPageScroll(); lb.hidden = false;" in html         # the lightbox locks too...
+    assert "if (!lb.hidden) unlockPageScroll(); lb.hidden = true;" in html       # ...and releases on close
+    assert "overflow-y:auto; overscroll-behavior:contain;" in html               # THE CARD's inner scroll can't chain
+                                                                                 # (site-specific — other elements
+                                                                                 # legitimately use contain elsewhere)
+
     # -- history detail regenerates recs for pre 354 entries
     # #354 backfill: opening a pre-#354 entry (no recommendations) recomputes them on demand from its inputs via
     # POST /history/recommendations, showing a "Generating…" line that's swapped for the list when it returns.
