@@ -6,7 +6,7 @@ state (a small set of states — e.g. Ready / Moderate / Recovery-Needed — fin
 recommendation engine turns that into action plans, workouts, program-balance analysis, and calorie targets.
 
 **Team (Git Push & Pray):** Lior Ben Sidi · Shiri Haboob · Elad Nachalieli
-**Full spec:** [`docs/PROPOSAL.md`](docs/PROPOSAL.md) (the submitted proposal).
+**Full spec:** [`docs/PROPOSAL-v2.md`](docs/PROPOSAL-v2.md) — the binding contract (the 28-Jun revision the TA approved; REPORT's "v2 §N" citations resolve here). The originally-graded proposal is [`docs/PROPOSAL.md`](docs/PROPOSAL.md) (superseded).
 **Presentation kit:** [`presentation/`](presentation/) — deck, speaker script, notes, Q&A, demo shot-list, submission checklist (start at [`presentation/README.md`](presentation/README.md)).
 
 ## Try it live
@@ -20,10 +20,10 @@ it opens full-screen with its own icon + splash (no browser chrome), just like a
 No install is required to use it — that's just the optional app-like shortcut. (There is deliberately **no Android
 APK / Play Store build**; the PWA is the supported way onto a phone.)
 
-## Architecture (3 containers — only `web` is exposed)
+## Architecture (3 application containers — locally only `web` is exposed; prod adds Caddy in front)
 | Container | Role |
 |---|---|
-| `web/` | Flask frontend + authentication (werkzeug hashing) + API. **The only user-facing container.** |
+| `web/` | Flask frontend + authentication (werkzeug hashing) + API. **The only user-facing application container** (in prod, [`docker-compose.prod.yml`](docker-compose.prod.yml) adds a 4th service — **Caddy** — which owns ports 80/443, terminates TLS and proxies to `web`; `web` publishes no host port there). |
 | `db`   | MongoDB — users, profiles, analysis history, forum posts/comments, messages, notifications, media, meta. Internal only. |
 | `ai/`  | Random Forest inference + recommendation engine, behind a **bounded job queue + process pool**. Internal REST (`POST /predict`). |
 
@@ -55,8 +55,8 @@ Two multiplying axes — full numbers + how to reproduce: [`docs/SCALING_REPORT.
 
 | Axis | Knob | Result |
 |---|---|---|
-| Vertical — the pool inside one container | `AI_QUEUE_WORKERS` 1 → 4 | **2.86×** throughput, p95 halved |
-| Horizontal — replicas | `docker compose ... --scale ai=2` | **1.60×** throughput (Docker service-DNS round-robin) |
+| Vertical — the pool inside one container | `AI_QUEUE_WORKERS` 1 → 4 | **2.86×** on the CPU-bound proxy · **~2.5×** re-measured on the shipped Random Forest, p95 halved |
+| Horizontal — replicas | `docker compose ... --scale ai=2` | **1.60×** proxy · **~1.5×** on the shipped model (Docker service-DNS round-robin) |
 
 ```sh
 docker compose -f docker-compose.yml -f docker-compose.scale.yml up --build --scale ai=2
@@ -71,7 +71,8 @@ docker compose -f docker-compose.yml -f docker-compose.scale.yml up --build --sc
 web/      Flask web app + the whole data layer (built)
 ai/       Random Forest + recommendation engine (Shiri — the real model.pkl is baked in),
           behind jobqueue.py (bounded queue + process pool) and inference.py (the model seam)
-tests/    Unit_Tests · Integration_Tests · System_Tests · Stress_Tests · Security_Tests
+tests/    Unit_Tests · Integration_Tests · Negative_Tests · System_Tests · Full_System_Tests ·
+          Security_Tests · Stress_Tests · E2E_Tests (browser scenarios, run as CI's e2e job)
 scripts/  setup-hooks.sh · scaling_benchmark.py (stdlib-only load driver)
 docs/     PROPOSAL · GUIDELINES · DESIGN · ROADMAP · REPORT · SCALING_REPORT · JOB_QUEUE_PLAN
           CICD_REPORT · DEPLOY_DEMO · AUTH_TESTING · meeting-notes
@@ -147,13 +148,14 @@ dockerized stack from commit to a running container on an Azure VM, served over 
 Mongo, `503` if the DB is down). The container healthcheck uses `/health`; the post-deploy gate + external monitor use `/ready`.
 Full requirement-by-requirement mapping: [`docs/CICD_REPORT.md`](docs/CICD_REPORT.md).
 
-**Pipeline stages** (a PR runs only stages 1–2 — it never deploys):
+**Pipeline stages** (a PR runs stages 1–3 — it never deploys):
 ```
 push/PR ─▶ 1. checks      ruff + bandit + pytest (real mongo:7 service)     ← gates everything
 push/PR ─▶ 2. compose-e2e boots web+db+ai + a test-runner container, drives the real wire path
-push    ─▶ 3. build       docker build web + ai (cached) ─▶ GHCR (latest + <short-sha>)
-push    ─▶ 4. deploy      ssh → VM: docker compose pull && up -d  (VM pulls, never builds)
-push    ─▶ 5. verify      curl --fail https://<FQDN>/ready  ← fails the run + auto-rolls-back if unhealthy
+push/PR ─▶ 3. e2e-browser real Chromium drives the SPA (desktop + mobile viewports) against the stack
+push    ─▶ 4. build       docker build web + ai (cached) ─▶ GHCR (latest + <short-sha>)
+push    ─▶ 5. deploy      ssh → VM: docker compose pull && up -d  (VM pulls, never builds)
+push    ─▶ 6. verify      curl --fail https://<FQDN>/ready  ← fails the run + auto-rolls-back if unhealthy
 manual  ─▶    stress      locust, on demand (needs a live stack; never a merge gate)
 ```
 Both `checks` **and** `compose-e2e` gate the build, so a broken `web → ai → db` wire path can never reach GHCR
@@ -165,13 +167,14 @@ certificate and redirects HTTP→HTTPS; the VM runs the prod compose, which **pu
 
 | Kind | Name | Purpose |
 |---|---|---|
-| Secret | `SSH_PRIVATE_KEY` | dedicated deploy key for the VM's `deploy` user (never a personal key) |
+| Secret | `SSH_PRIVATE_KEY` | dedicated deploy key for the VM's login user (`azureuser` on the instructor's VMs — never a personal key) |
 | Secret | `APP_SECRET_KEY` | Flask `SECRET_KEY`, injected into the VM's `.env` at deploy time |
 | Secret | `SMTP_USER` | Brevo relay login — *optional*; set it + `SMTP_PASS` to turn on real inbox email (OTP/reset). Unset → safe log backend |
 | Secret | `SMTP_PASS` | Brevo SMTP key — *optional*; its presence is the switch that flips email from log-backend to real Brevo delivery |
 | Variable | `SSH_HOST` | the VM's FQDN (`<label>.<region>.cloudapp.azure.com`) — the **SSH/deploy target** |
 | Variable | `DEPLOY_ENABLED` | the deploy switch. **The deploy job runs only when `SSH_HOST` is set AND `DEPLOY_ENABLED == 'true'`**; anything else (unset included) → deploy skipped, `main` stays green. Flip live/off with one `gh variable set DEPLOY_ENABLED --body true|false`, never touching `SSH_HOST` |
 | Variable | `SITE_ADDRESS` | *optional* — the **public** HTTPS address (TLS cert + health check + monitor + email links). Set it to serve the app at your own domain (e.g. `app.worksmarternotharder.dev`, CNAME'd to the FQDN); unset → falls back to the Azure FQDN |
+| Variable | `RUN_CI` | the master CI switch — **every** job is gated on `vars.RUN_CI != 'false'`. Unset/anything else = ON; set `false` to pause all runs (required contexts go green-as-skipped, so merges stay possible) |
 | — (built-in) | `GITHUB_TOKEN` | authenticates the GHCR push automatically — no PAT, no signup |
 
 `SSH_USER` is a **variable** (default `azureuser`) — override it only if your VM uses a different login. `SSH_HOST` is a **variable**, not a
@@ -179,10 +182,10 @@ secret — a hostname needs no masking. The `SMTP_*` pair is optional: with it u
 log (fine for the demo); set both to deliver real Brevo email from the authenticated `worksmarternotharder.dev` domain.
 
 > **One-time, after the first `build` runs:** the pushed GHCR packages (`work-smarter-web`, `work-smarter-ai`) are
-> **private** by default (this is a private repo). Set each to **Public** (package → *Package settings → Change
+> **private** by default (GHCR packages start private on first push even though this repo is public). Set each to **Public** (package → *Package settings → Change
 > visibility*) so the VM can `docker compose pull` them without storing a registry credential on the host.
 
-**VM provisioning:** the instructor provisions **one Azure VM per group** (ports 22/80/443 only, `deploy` user, key-only
+**VM provisioning:** the instructor provisions **one Azure VM per group** (ports 22/80/443 only, an `azureuser` login (it replaced the old `deploy` name), key-only
 SSH via cloud-init) and gives you its FQDN. You generate a **dedicated** deploy keypair
 (`ssh-keygen -t ed25519 -f groupNN_deploy -N ""`), send the instructor the `.pub`, store the private key as
 `SSH_PRIVATE_KEY`, and set `SSH_HOST` to the FQDN. Idle VMs auto-stop; start yours from the Azure portal (Technion login).
@@ -239,8 +242,10 @@ demo/review tool (`db/seed.py`: fake clients + posts + comments + likes); a fres
 **empty by design** (a real deployment starts empty), so run the seed when you want a populated app to
 show. Suite: **1068 collected** (1023 pass / 45 environment-gated), green in CI (real-Mongo IT runs on the `mongo:7` service).
 
-**Remaining:** the **F5 workout-generator** (Shiri's AI lane). Risk assessment and the honest "what we did
-*not* mitigate" list: [`docs/REPORT.md`](docs/REPORT.md) §5.
+**Remaining:** tracked live in the [Issues tab](https://github.com/LiorBenSidi/work-smarter-not-harder/issues) —
+the **F5 workout-generator** (#276, the critical path) plus the per-owner graded-gap list in #400 (comment media
+#407 · DM attachment notify #408 · dashboard plan #410 · "eat more" #411). Risk assessment and the honest
+"what we did *not* mitigate" list: [`docs/REPORT.md`](docs/REPORT.md) §5.
 
 **Reviewing / grading this?** Start with [`docs/REVIEWER_NOTES.md`](docs/REVIEWER_NOTES.md) — how to run + log in
 locally (no mailbox needed), and a known-limitations / by-design table so a documented constraint isn't logged as a bug.
