@@ -470,7 +470,8 @@ def test_platform_surfaces_and_polish_are_wired(client):
     assert 'id="dm-avatar-strip"' in html and "function renderAvatarStrip(" in html   # recent-chats avatar row
     assert 'id="menu-backdrop"' in html and 'class="menu-backdrop"' in html            # menu frost element
     assert "bd.hidden = false" in html and "bd.hidden = true" in html                  # backdrop toggled with the menu
-    assert "d.textContent = n > 0 ? label" in html                                     # the nav badge shows a count, not just a dot
+    assert 'text = n > 0 ? label : ""' in html                                         # the nav badge shows a count, not just a dot
+    assert "if (d.textContent !== text) d.textContent = text" in html                  # ...written value-aware (#420: idle ticks mutate nothing)
 
     # -- illustrated empty states
     # Friendly illustrated empty states (icon + title + guidance) instead of a bare grey line, across
@@ -636,7 +637,11 @@ def test_forum_realtime_sse_is_wired_on_the_client(client):
     body = html[html.index("function onForumEvent()"):html.index("function startEvents()")]
     assert 'currentScreen !== "forum"' in body                                  # scoped to the forum screen
     assert "loadForum({ quiet: true })" in body                                 # ...refreshed IN PLACE (no skeleton flash)
-    assert "openPost(currentPostId)" in body                                    # refreshes the open post
+    # #420: the open post is refreshed by the in-place patcher, NEVER by a full openPost teardown — the
+    # SSE push and the 45s backstop route through here forever, and openPost recreates the attachment
+    # <video> (resetting playback) plus the whole comments box on every single tick.
+    assert "refreshOpenPost()" in body                                          # refreshes the open post in place
+    assert "openPost(currentPostId)" not in body                                # the teardown path is gone
     assert "document.activeElement" in body and ".value.trim()" in body         # ...but not over a live draft
     # If the OPEN post was deleted live, close it with an accurate note — NOT re-fetch it (a 404 -> the
     # generic "couldn't open, try again", which is misleading when the post is simply gone).
@@ -766,3 +771,72 @@ def test_forum_rows_render_like_and_dislike_tallies(client):
     vc = html[html.index("async function voteComment("):html.index("// ---- Media attachments")]
     assert "c.likes = r.data.likes; c.dislikes = r.data.dislikes;" in vc
     assert 'typeof r.data.likes === "number"' in vc          # ...and falls back to a reload when they're absent
+
+
+def test_forum_updates_patch_in_place_never_teardown(client):
+    """#420: a vote / new comment / background tick must repaint NUMBERS, not rebuild the forum DOM.
+
+    The old flow (openPost + a non-quiet loadForum on every vote, and openPost again on every SSE push and
+    45s backstop tick) flashed the feed to skeleton rows, re-created the attachment <video> mid-play, and
+    re-parented the open detail even when NOTHING had changed — the live app visibly "kept refreshing"
+    forever. Pins the whole in-place contract so no future edit quietly reverts any leg of it.
+    """
+    html = client.get("/").get_data(as_text=True)
+
+    # -- vote() patches in place off the #409 response; the teardown pair is gone
+    v = html[html.index("async function vote(value)"):html.index("async function voteComment(")]
+    assert "applyPostTallies(currentPostId, r.data)" in v
+    assert 'typeof r.data.likes === "number"' in v                     # counts present -> zero refetches
+    assert "openPost(currentPostId); loadForum();" not in v            # the old skeleton-flashing pair is gone
+    assert "loadForum({ quiet: true })" in v                           # even the rare fallback resync is quiet
+
+    # -- the patcher updates the data model AND both render sites, and keeps the row-cache honest
+    ap = html[html.index("function applyPostTallies("):html.index("let voteInFlight")]
+    assert "forumPosts.find(" in ap                                    # the cached list entry (sorts stay right)
+    assert '.pill.count' in ap and ".tally" in ap                      # feed pills + detail tallies
+    assert 'forumSort === "top" ? null : forumRowsKey()' in ap         # Top re-ranks; recent/mine skip the rebuild
+
+    # -- renderForumList skips entirely when the rows it would paint are identical (the idle-tick fix)
+    rl = html[html.index("function renderForumList()"):html.index("function togglePost(")]
+    assert "if (el.__rowsKey === key) return;" in rl                   # no-change -> DOM untouched (exact line)
+    assert "function forumRowsKey()" in html                           # ...keyed on the shared row builder
+    assert "function forumRowHtml(" in html and "function visibleForumPosts(" in html
+    # ...and a REAL rebuild restores what the re-parent broke: a playing attachment video AND a focused field
+    assert "v.play().catch(() => {})" in rl                            # spec pauses a re-parented <video> — resume it
+    assert "keepFocus.focus({ preventScroll: true })" in rl            # re-focus a blurred composer (caret kept)
+    assert rl.count("restore();") >= 3                                 # ...on the empty-state early-returns too
+
+    # -- the change-key must NOT self-invalidate on the wall clock: ages are keyed as a constant and rolled
+    #    by a value-aware text write instead (else the whole list rebuilt once a minute for nothing)
+    assert 'const age = forKey ? "×"' in html
+    assert "function refreshRowAges()" in html
+    assert "refreshRowAges();" in html[html.index("function onForumEvent()"):html.index("function pollBackstop()")]
+    assert "if (span.textContent !== text) span.textContent = text" in html
+
+    # -- sticky-null: a mid-Refresh skeleton marker must never be overwritten by open/close/tally writers,
+    #    or the landing render skips and the skeletons strand forever (review HIGH)
+    assert html.count("__rowsKey !== null") >= 3                       # openPost + closePost + applyPostTallies
+
+    # -- the quiet loadForum path neither stashes the detail nor paints skeletons
+    lf = html[html.index("async function loadForum("):html.index("async function loadMoreForum(")]
+    assert 'if (!(opts && opts.quiet)) { stashDetail(); el.__rowsKey = null; el.innerHTML = sk("rows"); }' in lf
+    # ...but its ERROR path must still stash before wiping: on a QUIET load nothing has stashed yet, and the
+    # open detail lives INSIDE #forum-list — an unstashed wipe destroys it (the "can't open any post" wedge).
+    assert "if (!r.ok) { stashDetail(); el.__rowsKey = null;" in lf
+
+    # -- the background refresh of an OPEN post merges, guards, and never touches attachments
+    rp = html[html.index("async function refreshOpenPost()"):html.index("async function voteComment(")]
+    assert 'document.getElementById("edit-form")' in rp                # never repaints over an edit in progress
+    assert "commentAccum.push(c)" in rp and "Object.assign(old, c)" in rp   # merge, never replace (#331 paging kept)
+    assert "if (changed) renderComments()" in rp                       # re-render only when something changed
+    assert "/attachments" not in rp                                    # media never re-fetched by a background refresh
+    assert rp.count('sessionChanged(u, "refreshOpenPost")') == 2       # cross-user stale-paint guard after BOTH awaits
+    assert rp.count("seq !== refreshOpenSeq") == 2                     # overlapping refreshes: latest wins, after BOTH awaits
+    assert "r.status === 404" in rp and '"This post was removed."' in rp    # a just-deleted post closes with the accurate note
+    # a no-change tick writes NOTHING: the tally patcher bails before touching the DOM or the row-key
+    ap = html[html.index("function applyPostTallies("):html.index("let voteInFlight")]
+    assert "p0.score === d.score && p0.likes === d.likes && p0.dislikes === d.dislikes) return;" in ap
+
+    # -- posting a comment refreshes in place too (no detail rebuild just to show one new row)
+    assert "if (cr.ok) { f.reset(); refreshOpenPost(); }" in html
+    assert "if (cr.ok) openPost(id);" not in html

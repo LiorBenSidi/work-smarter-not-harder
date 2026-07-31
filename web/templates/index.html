@@ -1637,7 +1637,13 @@
     // the Chat unread "pulse" now lives on both navs (mobile bottom pill + desktop top-nav) -> toggle every .dm-dot
     function setDmDot(count) {
       const n = Math.max(0, Number(count) || 0), label = n > 99 ? "99+" : String(n);   // count pill; hidden at 0
-      document.querySelectorAll(".dm-dot").forEach((d) => { d.hidden = n <= 0; d.textContent = n > 0 ? label : ""; });
+      // Value-aware: this runs on every notifications poll (15-45s, forever), and re-assigning identical
+      // hidden/text is still a DOM mutation each tick — the idle page must mutate NOTHING. (#420)
+      document.querySelectorAll(".dm-dot").forEach((d) => {
+        const hide = n <= 0, text = n > 0 ? label : "";
+        if (d.hidden !== hide) d.hidden = hide;
+        if (d.textContent !== text) d.textContent = text;
+      });
     }
 
     // ---- Home FAB: shown off-Today, hidden on Today — the "home button only when not home" pattern (Wolt).
@@ -2648,9 +2654,9 @@
     // We accumulate the newest-first pages (deduped by id) and render them sorted OLDEST-first, so the
     // reading order matches the old embedded list; "Load more comments" pages back to older comments.
     let commentAccum = [], commentsNextBefore = null;
-    // Supersede-guards: a slower OLDER re-render must not overwrite a newer one. vote()/voteComment() fire
-    // openPost()+loadForum() un-awaited, so rapid up/down clicks launch overlapping fetches whose responses
-    // can arrive out of order and momentarily paint a stale score (#SPA3). The latest call always wins.
+    // Supersede-guards: a slower OLDER re-render must not overwrite a newer one. Votes now patch in place
+    // (#420), but openPost/loadForum still overlap on open-while-loading, entry re-syncs and the SSE/backstop
+    // refresh — responses can arrive out of order and momentarily paint a stale view (#SPA3). Latest wins.
     let openPostSeq = 0, forumLoadSeq = 0;
     // #forum-detail is slotted INSIDE #forum-list while a post is open (inline expand). Any code that wipes
     // the list's innerHTML must move the detail OUT first, or the element is destroyed — after which every
@@ -2663,11 +2669,14 @@
     async function loadForum(opts) {
       const u = currentUser, seq = ++forumLoadSeq;
       const el = $("forum-list");
-      stashDetail();                                          // preserve an open post's detail across the wipe
-      // A background (real-time SSE) refresh updates the list IN PLACE — no skeleton flash — so a teammate's
-      // live post/vote lands smoothly. Only a user-initiated load (open tab / Refresh) shows the skeleton.
+      // A background (real-time SSE / backstop) refresh updates the list IN PLACE — no skeleton flash — so a
+      // teammate's live post/vote lands smoothly. Only a non-quiet load (Refresh / post-submit / delete /
+      // boot) shows the skeleton; entering the tab re-syncs quietly. The QUIET path deliberately does NOT
+      // stashDetail here: re-parenting #forum-detail pauses an embedded <video> mid-play, so the detail is
+      // only moved when renderForumList actually rebuilds rows — a no-change tick must leave the whole DOM
+      // untouched (the 45s backstop fires this forever). (#420)
       // (opts is a MouseEvent when wired straight to the Refresh button's click — its .quiet is undefined.)
-      if (!(opts && opts.quiet)) el.innerHTML = sk("rows");
+      if (!(opts && opts.quiet)) { stashDetail(); el.__rowsKey = null; el.innerHTML = sk("rows"); }
       const r = await api("/forum/posts");
       if (sessionChanged(u, "loadForum") || seq !== forumLoadSeq) return;   // stale session OR superseded -> don't paint
       // This load owns the list from here on: page 1 only, so any older pages are gone from the screen —
@@ -2675,7 +2684,10 @@
       // or a failed load would strand the flag at true and permanently silence the backstop that would have
       // retried, leaving the user parked on "Could not load the forum." until a manual Refresh. (#342)
       forumPaged = false;
-      if (!r.ok) { el.innerHTML = '<p class="flash error">Could not load the forum.</p>'; return; }
+      // stashDetail BEFORE this wipe, always: on a QUIET load nothing has stashed yet, and with a post open
+      // the detail node lives INSIDE #forum-list — wiping without stashing destroys it and resurrects the
+      // "can't open any post after voting" wedge the moment a background refresh hits a network blip.
+      if (!r.ok) { stashDetail(); el.__rowsKey = null; el.innerHTML = '<p class="flash error">Could not load the forum.</p>'; return; }
       forumPosts = (r.data && r.data.posts) || [];
       forumNextBefore = (r.data && r.data.next_before) || null;   // reset paging: a fresh load starts at page 1
       renderForumList();                                     // the visible list applies the active sort/filter
@@ -2710,32 +2722,88 @@
     // way YouTube does it. Standing beside the button instead, a lone number is ambiguous under even
     // spacing ("up 2 down 2" — is the 2 the up's or the down's?), and repeating the arrow on both the
     // button and the pill just reads as noise. The feed row has no buttons, so there it keeps the icon.
+    // `data-n` carries the rendered count as data: the in-place patcher compares THAT, not outerHTML —
+    // the browser re-serializes the embedded SVG (`/>` -> `></path>`), so a string comparison against the
+    // generated markup never matches and would rewrite an unchanged pill on every background tick. (#420)
     function countPill(n, kind, bare) {
       const v = Number(n) || 0;
       const label = v + " " + kind + (v === 1 ? "" : "s");
-      if (bare) return '<span class="tally" title="' + label + '" aria-label="' + label + '">' + v + "</span>";
-      return '<span class="pill count" title="' + label + '" aria-label="' + label + '">'
+      if (bare) return '<span class="tally" data-n="' + v + '" title="' + label + '" aria-label="' + label + '">' + v + "</span>";
+      return '<span class="pill count" data-n="' + v + '" title="' + label + '" aria-label="' + label + '">'
         + (kind === "like" ? ICON.up : ICON.down) + " " + v + "</span>";
     }
 
-    function renderForumList() {
-      const el = $("forum-list"); if (!el) return;
-      stashDetail();                                          // move an open post's detail out before we wipe the list, then re-slot it below
-      if (!forumPosts.length) { el.innerHTML = emptyState(EMPTY_ICONS.forum, "Quiet in here", "Start the conversation. Share something above."); return; }
+    // The visible (sorted + filtered) list — one definition shared by the renderer and the change-key, so
+    // the two can never disagree about what "the rows on screen" means. (#420)
+    function visibleForumPosts() {
       let list = forumPosts.slice();
       if (forumSort === "mine") list = list.filter((p) => p.mine);
       const sign = forumDir === "asc" ? 1 : -1;              // desc (default): newest / highest first
       if (forumSort === "top") list.sort((a, b) => sign * ((a.score || 0) - (b.score || 0)) || (b.created_at || 0) - (a.created_at || 0));
       else list.sort((a, b) => sign * ((a.created_at || 0) - (b.created_at || 0)));   // recent + mine order by time
-      if (!list.length) { el.innerHTML = emptyState(EMPTY_ICONS.pencil, "You haven't posted yet", "Your posts will show up here once you share something."); return; }
-      el.innerHTML = list.map((p) =>
-        '<div class="post' + (p.id === currentPostId ? ' open' : '') + '" data-id="' + escapeHtml(p.id) + '" role="button" tabindex="0" aria-expanded="' + (p.id === currentPostId ? 'true' : 'false') + '">'
+      return list;
+    }
+    // `forKey` renders the age slot as a CONSTANT: the relative age ("2m ago") is derived from the wall
+    // clock, so keying on its rendered text would make the key self-invalidate every time any row crossed a
+    // minute bucket — a full rebuild per minute with zero data change (review finding). The real ages are
+    // kept fresh by refreshRowAges(), a value-aware text write on each background tick.
+    function forumRowHtml(p, forKey) {
+      const age = forKey ? "×" : (p.created_at ? " · " + timeAgo(p.created_at) : "");
+      return '<div class="post' + (p.id === currentPostId ? ' open' : '') + '" data-id="' + escapeHtml(p.id) + '" role="button" tabindex="0" aria-expanded="' + (p.id === currentPostId ? 'true' : 'false') + '">'
         + '<div class="post-top"><strong>' + escapeHtml(p.title) + '</strong>'
         + '<span class="post-right">' + countPill(p.likes, "like") + countPill(p.dislikes, "dislike")
         + '<span class="post-chev" aria-hidden="true">' + ICON.chev + '</span></span></div>'
         + '<span class="muted byline">' + avatarHtml(p.author, 20) + 'by ' + escapeHtml(p.author) + ' · ' + escapeHtml(p.comments) + ' comment' + (p.comments === 1 ? '' : 's')
-        + (p.created_at ? ' · ' + escapeHtml(timeAgo(p.created_at)) : '') + '</span></div>'
-      ).join("");
+        + '<span class="row-age">' + escapeHtml(age) + '</span></span></div>';
+    }
+    // Keep every row's relative age fresh WITHOUT a rebuild: textContent-compare each age span and write
+    // only the (at most one or two) that actually crossed a minute bucket. Safe by construction — a text
+    // node, never markup. (#420)
+    function refreshRowAges() {
+      const el = $("forum-list"); if (!el) return;
+      el.querySelectorAll(".post").forEach((rowEl) => {
+        const p = forumPosts.find((x) => x.id === rowEl.dataset.id);
+        const span = rowEl.querySelector(".row-age");
+        if (!p || !span) return;
+        const text = p.created_at ? " · " + timeAgo(p.created_at) : "";
+        if (span.textContent !== text) span.textContent = text;
+      });
+    }
+    // Everything the rendered list depends on, folded into one string. If this key hasn't changed since the
+    // last paint, the DOM is already exactly right and renderForumList must not touch it — the 45s backstop
+    // re-renders the forum forever, and an unconditional rebuild re-parented the open detail every tick,
+    // pausing an embedded video and dropping hover/focus state with NOTHING to show for it. (#420)
+    function forumRowsKey() {
+      const list = visibleForumPosts();
+      const rows = !forumPosts.length ? "EMPTY" : (!list.length ? "EMPTY-MINE" : list.map((p) => forumRowHtml(p, true)).join(""));
+      return rows + "§" + String(forumNextBefore);
+    }
+    function renderForumList() {
+      const el = $("forum-list"); if (!el) return;
+      const key = forumRowsKey();
+      if (el.__rowsKey === key) return;                       // rows identical -> leave the DOM (and the open detail) alone
+      el.__rowsKey = key;
+      // A REAL rebuild must still move the open detail out and back (stash/place), and that re-parent has
+      // side effects the user can see: the HTML spec pauses a media element on removal from the document,
+      // and moving the node blurs a focused field (dropping the mobile keyboard mid-reply). Capture both and
+      // restore after the re-slot, so even a legitimate rebuild is seamless (review findings). (#420)
+      const detailEl = $("forum-detail");
+      const playing = [...document.querySelectorAll("#forum-detail video")].filter((v) => !v.paused && !v.ended);
+      const focused = document.activeElement;
+      const keepFocus = detailEl && focused && detailEl.contains(focused) ? focused : null;
+      const selStart = keepFocus && keepFocus.selectionStart, selEnd = keepFocus && keepFocus.selectionEnd;
+      const restore = () => {
+        playing.forEach((v) => { if (document.contains(v)) v.play().catch(() => {}); });
+        if (keepFocus && document.contains(keepFocus)) {
+          keepFocus.focus({ preventScroll: true });
+          try { if (typeof selStart === "number") keepFocus.setSelectionRange(selStart, selEnd); } catch (_) {}
+        }
+      };
+      stashDetail();                                          // move an open post's detail out before we wipe the list, then re-slot it below
+      if (!forumPosts.length) { el.innerHTML = emptyState(EMPTY_ICONS.forum, "Quiet in here", "Start the conversation. Share something above."); restore(); return; }
+      const list = visibleForumPosts();
+      if (!list.length) { el.innerHTML = emptyState(EMPTY_ICONS.pencil, "You haven't posted yet", "Your posts will show up here once you share something."); restore(); return; }
+      el.innerHTML = list.map((p) => forumRowHtml(p)).join("");   // explicit lambda: .map(forumRowHtml) would pass the INDEX as forKey
       el.querySelectorAll(".post").forEach((d) => {
         d.addEventListener("click", () => togglePost(d.dataset.id));
         d.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); togglePost(d.dataset.id); } });
@@ -2750,6 +2818,7 @@
         el.appendChild(more);
       }
       placeDetail();                                         // if a post is open, drop its detail back in place under it
+      restore();                                             // resume paused video + re-focus what the re-parent blurred
     }
     // Click an open post to collapse it; click a closed one to expand it in place.
     function togglePost(id) {
@@ -2797,6 +2866,7 @@
     }
     async function openPost(id) {
       const u = currentUser, seq = ++openPostSeq;
+      refreshOpenSeq++;    // a full (re)open supersedes any in-flight background refresh — even of the SAME post
       currentPostId = id;
       let r;
       try { r = await api("/forum/posts/" + id); }
@@ -2829,7 +2899,9 @@
       loadComments(id);                                     // #331: fetch this post's comments (paginated) into #comments-box
       onSubmit("comment-form", async (f) => {
         const cr = await api("/forum/posts/" + id + "/comments", { method: "POST", body: { body: f.body.value } });
-        if (cr.ok) openPost(id);
+        // On success: clear the composer and pull the new comment in via the in-place refresh — a full
+        // openPost() here rebuilt the detail and reset an attachment video just for one new row (#420).
+        if (cr.ok) { f.reset(); refreshOpenPost(); }
         else flash("forum-flash", (cr.data && cr.data.error) || "Couldn't post your comment — please try again.");
       });
       // Load this post's media attachments and render them under the body (best-effort; never wedges the post).
@@ -2847,6 +2919,10 @@
         d.setAttribute("aria-expanded", on ? "true" : "false");
       });
       placeDetail();
+      // The manual .open toggles above changed the rows outside renderForumList — refresh the change-key so
+      // the next background tick sees the DOM as already-correct rather than rebuilding it. Sticky-null:
+      // if a Refresh is mid-flight (skeletons on screen), leave its marker alone (review HIGH). (#420)
+      if (listEl && listEl.__rowsKey !== null) listEl.__rowsKey = forumRowsKey();
     }
 
     // ---- Comments (#331: own collection, fetched paginated) ----
@@ -2901,6 +2977,12 @@
       if (detail) { detail.hidden = true; if (el && detail.parentNode === el) el.parentNode.appendChild(detail); }
       if (el) el.querySelectorAll(".post.open").forEach((d) => { d.classList.remove("open"); d.setAttribute("aria-expanded", "false"); });
       currentPostId = null; currentPost = null; updateCtxBack();
+      refreshOpenSeq++;                                        // orphan any in-flight background refresh of the closed post
+      // The rows now show no .open highlight while the cached key still encodes one — refresh the key so the
+      // next background tick sees "already correct" instead of rebuilding (and re-parenting) for nothing.
+      // Sticky-null: while a Refresh is mid-flight the list shows skeletons, not rows — never overwrite that
+      // marker or the landing render would skip and strand the skeletons (review HIGH). (#420)
+      if (el && el.__rowsKey !== null) el.__rowsKey = forumRowsKey();
     }
 
     let deleteInFlight = false;
@@ -2935,6 +3017,45 @@
 
     function cancelEdit() { if (currentPost) openPost(currentPost.id); }
 
+    // #420: paint fresh vote numbers onto the EXISTING row + detail, without tearing anything down. The old
+    // path (openPost + a non-quiet loadForum) refetched the detail, comments and attachments, flashed the
+    // feed to skeleton rows, and re-created an embedded <video> mid-play — for a change that is just four
+    // small numbers. The vote response carries the fresh tallies (#409), so the repaint needs ZERO refetches.
+    function applyPostTallies(pid, d) {
+      const p0 = forumPosts.find((x) => x.id === pid);
+      // Nothing moved -> nothing to do. Without this, the background refresh (which calls in here on every
+      // tick) would re-stamp __rowsKey each time — and on the "Top" sort that means nulling it, forcing a
+      // full pointless rebuild every tick, exactly the churn this fix removes (review finding).
+      if (p0 && p0.score === d.score && p0.likes === d.likes && p0.dislikes === d.dislikes) return;
+      if (p0) { p0.score = d.score; p0.likes = d.likes; p0.dislikes = d.dislikes; }
+      if (currentPost && currentPost.id === pid) { currentPost.score = d.score; currentPost.likes = d.likes; currentPost.dislikes = d.dislikes; }
+      // Value-aware writes: a routine background refresh calls this with UNCHANGED numbers on every tick,
+      // and rewriting identical markup is still a DOM mutation (style/animation invalidation for nothing).
+      // A whole-page mutation census must read ZERO on a no-change tick. Compared via the data-n stamp,
+      // NOT outerHTML — the browser re-serializes the pill's SVG, so string equality never holds.
+      const swap = (node, v, html) => {
+        if (node && node.getAttribute("data-n") !== String(Number(v) || 0)) node.outerHTML = html;
+      };
+      const row = document.querySelector('#forum-list .post[data-id="' + pid + '"]');   // ids are server hex — selector-safe
+      if (row) {
+        const pills = row.querySelectorAll(".pill.count");
+        swap(pills[0], d.likes, countPill(d.likes, "like"));
+        swap(pills[1], d.dislikes, countPill(d.dislikes, "dislike"));
+      }
+      if (currentPostId === pid) {
+        const tallies = document.querySelectorAll("#forum-detail .vote-row .tally");
+        swap(tallies[0], d.likes, countPill(d.likes, "like", true));
+        swap(tallies[1], d.dislikes, countPill(d.dislikes, "dislike", true));
+      }
+      const el = $("forum-list");
+      // On the score-ranked "Top" sort the new numbers may change the ORDER, which only a real re-render
+      // can fix — drop the key so the next tick re-ranks. On recent/mine the rows now match the data
+      // exactly, so refresh the key and the next tick leaves the DOM alone. A null key is STICKY: it means
+      // "the list is showing skeletons/an error, not rows" (a Refresh is in flight) — overwriting it here
+      // would make the landing render see "already correct" and strand the skeletons forever (review HIGH).
+      if (el && el.__rowsKey !== null) el.__rowsKey = forumSort === "top" ? null : forumRowsKey();
+    }
+
     // The vote buttons are inline onclick (not a <form>), so they miss onSubmit's in-flight disable. Guard
     // here so a rapid ▲/▼ mash doesn't fire N un-awaited requests that trip the 60/min rate limit (429).
     let voteInFlight = false;
@@ -2943,9 +3064,64 @@
       voteInFlight = true;
       try {
         const r = await api("/forum/posts/" + currentPostId + "/vote", { method: "POST", body: { value } });
-        if (r.ok) { openPost(currentPostId); loadForum(); }
-        else flash("forum-flash", (r.data && r.data.error) || "Couldn't record your vote — please try again.");
+        if (!r.ok) { flash("forum-flash", (r.data && r.data.error) || "Couldn't record your vote — please try again."); return; }
+        if (r.data && typeof r.data.likes === "number" && typeof r.data.dislikes === "number") {
+          applyPostTallies(currentPostId, r.data);             // in place — no teardown, no refetch (#420)
+        } else {
+          // The server's post-vote re-read failed, so the response carries no tallies (#409) — this is the
+          // rare full-resync path. QUIET, so even the fallback never flashes the feed to skeletons.
+          openPost(currentPostId); loadForum({ quiet: true });
+        }
       } finally { voteInFlight = false; }
+    }
+
+    // #420: refresh the OPEN post from the server WITHOUT tearing its DOM down. openPost() rebuilds the whole
+    // detail — recreating the attachment <video> (which resets playback) and the comments box — so the SSE
+    // push and the 45s backstop must never route through it for a routine "did anything change?" pass. This
+    // patches text + tallies in place, merges the newest comment page into the accumulator (keeping any older
+    // pages the reader paged in, #331), and re-renders the comments list only when something actually changed.
+    // Attachments are deliberately left alone: media can't change after a post is created, so re-rendering
+    // them could only ever do harm. A remote edit of title/body lands as a text patch; a remotely-deleted
+    // open post never reaches here (onForumEvent closes it with its accurate note first).
+    let refreshOpenSeq = 0;   // supersede-guard: overlapping refreshes (comment-submit + its own SSE echo) — latest wins
+    async function refreshOpenPost() {
+      const id = currentPostId; if (!id) return;
+      if (document.getElementById("edit-form")) return;        // never repaint over an edit in progress
+      const u = currentUser, seq = ++refreshOpenSeq;
+      const r = await api("/forum/posts/" + id);
+      if (sessionChanged(u, "refreshOpenPost") || currentPostId !== id || seq !== refreshOpenSeq) return;
+      if (r.status === 404) {                                  // deleted between the list check and this read —
+        closePost();                                           // close with the accurate note, same as onForumEvent's
+        flash("forum-flash", "This post was removed.", "warn");
+        return;
+      }
+      if (!r.ok || !r.data || !r.data.post) return;            // transient — the next tick simply retries
+      const p = r.data.post;
+      currentPost = p;
+      const h3 = document.querySelector("#forum-detail .detail h3");
+      const body = document.querySelector("#forum-detail .detail .body");
+      if (h3 && h3.textContent !== p.title) h3.textContent = p.title;      // textContent -> escaping-safe
+      if (body && body.textContent !== p.body) body.textContent = p.body;
+      applyPostTallies(id, p);
+      const h4 = document.querySelector("#forum-detail .detail h4");
+      const h4Html = 'Comments' + (p.comment_count ? ' <span class="muted">(' + escapeHtml(p.comment_count) + ')</span>' : '');
+      if (h4 && h4.innerHTML !== h4Html) h4.innerHTML = h4Html;   // value-aware: a no-change tick writes nothing
+      const cr = await api("/forum/posts/" + id + "/comments");
+      if (sessionChanged(u, "refreshOpenPost") || currentPostId !== id || seq !== refreshOpenSeq) return;
+      if (cr.ok && cr.data && Array.isArray(cr.data.comments)) {
+        // Merge, never replace: the newest page updates/extends what's held, so older paged-in comments
+        // survive. (A comment can't be deleted through the UI, so merge-only can't strand a ghost row.)
+        const byId = new Map(commentAccum.map((c) => [c.id, c]));
+        let changed = false;
+        for (const c of cr.data.comments) {
+          const old = byId.get(c.id);
+          if (!old) { commentAccum.push(c); changed = true; }
+          else if (old.score !== c.score || old.likes !== c.likes || old.dislikes !== c.dislikes || old.body !== c.body) {
+            Object.assign(old, c); changed = true;
+          }
+        }
+        if (changed) renderComments();
+      }
     }
 
     async function voteComment(commentId, value) {
@@ -3450,6 +3626,7 @@
     async function onForumEvent() {
       if (currentScreen !== "forum") return;
       await loadForum({ quiet: true });                            // list: new posts / deletes / score changes (in place, no skeleton flash)
+      refreshRowAges();                                            // roll the "2m ago" texts (value-aware; ages are keyed OUT of the rebuild check)
       if (!currentPostId) return;
       // If the post I'm viewing is gone from the refreshed list, someone deleted it — close it with an
       // accurate note. (Re-fetching a deleted post 404s -> the generic "couldn't open, try again", which is
@@ -3459,7 +3636,8 @@
       }
       const draft = document.querySelector('#forum-detail [name="body"]');
       const typing = draft && (document.activeElement === draft || draft.value.trim());
-      if (!typing) openPost(currentPostId);                        // detail: new comments / live votes
+      if (!typing) refreshOpenPost();                              // detail: new comments / live votes — patched in
+                                                                   // place, never a teardown (#420)
     }
     // The 45s poll backstop. Besides the DM/notify catch-up, it SELF-HEALS real-time: EventSource
     // auto-reconnects a dropped stream (readyState CONNECTING), but a FATAL error leaves it CLOSED
