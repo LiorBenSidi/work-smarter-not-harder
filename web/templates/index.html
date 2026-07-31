@@ -1187,7 +1187,6 @@
               <span id="dm-files-hint" class="muted" style="font-size:12px"></span>
               <div class="dm-attach-hint muted">PNG · JPEG · WebP · GIF · MP4 · up to 10 MB</div>
               <div id="dm-reply-flash" class="flash" aria-live="polite"></div>
-              <div id="lightbox" class="lightbox" hidden role="dialog" aria-modal="true" aria-label="Enlarged photo"><button type="button" class="lightbox-close" aria-label="Close">&times;</button><img id="lightbox-img" src="" alt="Shared photo, enlarged"></div>
             </div>
           </div>
         </section>
@@ -1305,6 +1304,12 @@
   <button id="ctx-back" class="ctx-back" type="button" hidden aria-label="Go to Today"></button>
   <!-- Frosted backdrop behind the open account menu (body-level so its blur covers the whole viewport). -->
   <div id="menu-backdrop" class="menu-backdrop" hidden></div>
+
+  <!-- Enlarged-photo lightbox. BODY-level for the SAME reason as the history dialog below (#424): it used to
+       live inside #dm-thread-view, so off the Chat screen its ancestors were display:none and it opened
+       0x0 — invisible, not hit-testable, and (since the #422 scroll lock) it FROZE the page with no tappable
+       way out. Forum attachments carry data-full too, so the delegated opener fires from the Forum screen. -->
+  <div id="lightbox" class="lightbox" hidden role="dialog" aria-modal="true" aria-label="Enlarged photo"><button type="button" class="lightbox-close" aria-label="Close">&times;</button><img id="lightbox-img" src="" alt="Shared photo, enlarged"></div>
 
   <!-- History check-in detail (#354). BODY-level fixed dialog: it opens from the History screen, and a fixed
        child of a hidden .screen would not paint. Populated by openHistoryDetail() from the in-memory entry. -->
@@ -3560,7 +3565,18 @@
       // Same page-scroll lock as the History detail (#422) — the lightbox is the other full-screen dialog,
       // and without it the thread/feed behind the enlarged photo scrolls under the overlay. Open/close are
       // guarded on the CURRENT hidden state so repeated calls can never over- or under-count the lock.
-      const open = (el) => { lbImg.src = el.getAttribute("data-full") || el.src; if (lb.hidden) lockPageScroll(); lb.hidden = false; };
+      // Never lock the page for a dialog that did not actually paint. The lightbox used to sit inside
+      // #dm-thread-view, so off the Chat screen it opened 0x0 and the lock left the page frozen with no
+      // tappable way out (#424). It is body-level now, but this stays as a cheap invariant: if the overlay
+      // has no box, undo the open instead of trapping the user.
+      const open = (el) => {
+        lbImg.src = el.getAttribute("data-full") || el.src;
+        if (lb.hidden) lockPageScroll();
+        lb.hidden = false;
+        if (!lb.getBoundingClientRect().width) {         // did not paint -> back out, never freeze the page
+          lb.hidden = true; lbImg.src = ""; unlockPageScroll();
+        }
+      };
       const close = () => { if (!lb.hidden) unlockPageScroll(); lb.hidden = true; lbImg.src = ""; };
       document.addEventListener("click", (e) => {
         if (e.target.closest && e.target.closest(".lightbox-close")) { close(); return; }   // the explicit ✕ button

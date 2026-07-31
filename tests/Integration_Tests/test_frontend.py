@@ -115,9 +115,22 @@ def test_history_ui_is_wired(client):
                                                                                  # through an html-only lock, measured)
     assert 'if ($("history-detail").hidden) lockPageScroll();' in html           # locked on a real open only
     assert "{ el.hidden = true; unlockPageScroll(); }" in html                   # ...and released on a real close
-    assert "if (lb.hidden) lockPageScroll(); lb.hidden = false;" in html         # the lightbox locks too...
+    assert "if (lb.hidden) lockPageScroll();" in html                            # the lightbox locks too...
     assert "if (!lb.hidden) unlockPageScroll(); lb.hidden = true;" in html       # ...and releases on close
     assert "overflow-y:auto; overscroll-behavior:contain;" in html               # THE CARD's inner scroll can't chain
+
+    # -- #424: a fixed dialog nested in a hidden screen opens 0x0 — invisible, not hit-testable — and once
+    # the #422 lock exists that FREEZES the page with no tappable way out (only ESC, which touch lacks).
+    # The lightbox lived inside #dm-thread-view and forum attachments carry data-full, so tapping a forum
+    # photo froze the page. Both full-screen dialogs must be BODY-level, and the opener must refuse to lock
+    # for an overlay that did not paint.
+    body_tail = html[html.index('<div id="menu-backdrop"'):]                     # the body-level dialog block
+    assert '<div id="lightbox"' in body_tail, "the lightbox must be body-level, not nested in a screen"
+    assert '<div id="history-detail"' in body_tail
+    dm = html[html.index('id="dm-thread-view"'):html.index('<div id="menu-backdrop"')]
+    assert 'id="lightbox"' not in dm, "the lightbox must not live inside the DM thread view again"
+    assert "if (!lb.getBoundingClientRect().width) {" in html                    # did-not-paint -> back out
+    assert 'lb.hidden = true; lbImg.src = ""; unlockPageScroll();' in html       # ...releasing the lock
                                                                                  # (site-specific — other elements
                                                                                  # legitimately use contain elsewhere)
 
