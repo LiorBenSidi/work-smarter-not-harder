@@ -2371,7 +2371,7 @@
     async function loadDashboard(opts) {
       // freshReveal = a check-in just landed -> the recs cascade in (only then, not on tab-switch/refresh).
       const freshReveal = !!(opts && opts.fresh) && !reducedMotion();
-      const u = currentUser;
+      const u = currentUser, seq = ++dashLoadSeq;
       const el = $("dashboard");
       // Optimistic instant paint (perf, from Lior's "the home score takes long to load"): if today's check-in is
       // already in historyItems, show ITS stored readiness NOW so the orb is never blank while the AI-backed
@@ -2382,7 +2382,7 @@
         readiness: { state: opt.assessment, proba: opt.proba, recommendations: opt.recommendations } }, false);
       else el.innerHTML = sk("card");
       const r = await api("/dashboard");
-      if (sessionChanged(u, "loadDashboard")) return;        // stale session -> don't paint another user's readiness
+      if (sessionChanged(u, "loadDashboard") || seq !== dashLoadSeq) return;   // stale session OR superseded -> don't paint
       if (!r.ok) { if (!opt) el.innerHTML = '<p class="flash error">Could not load the dashboard.</p>'; return; }   // a transient error keeps the optimistic paint
       const d = r.data || {};   // a 200 with a null/unparseable body must not throw on d.readiness (mirrors the other loaders)
       // keep the glanceable stats in sync with the AI's latest read (the stat strip shows the SAME 0-100 score as the orb)
@@ -2431,10 +2431,10 @@
     // ---- History ----
     let historyItems = [], historyFilter = "all", historyDir = "desc";   // desc = newest first (default)
     async function loadHistory() {
-      const u = currentUser;
+      const u = currentUser, seq = ++historyLoadSeq;
       const el = $("history"); el.innerHTML = sk("rows");
       const r = await api("/history");
-      if (sessionChanged(u, "loadHistory")) return;          // stale session -> don't paint another user's history
+      if (sessionChanged(u, "loadHistory") || seq !== historyLoadSeq) return;   // stale session OR superseded -> don't paint
       if (!r.ok) { el.innerHTML = '<p class="flash error">Could not load history.</p>'; return; }
       historyItems = (r.data && r.data.history) || [];
       statCheckins = historyItems.length; renderStats();
@@ -2725,6 +2725,11 @@
     // (#420), but openPost/loadForum still overlap on open-while-loading, entry re-syncs and the SSE/backstop
     // refresh — responses can arrive out of order and momentarily paint a stale view (#SPA3). Latest wins.
     let openPostSeq = 0, forumLoadSeq = 0;
+    // Same supersede guard for the other read-refresh loaders (#432). They each had a session guard but no
+    // sequence counter, so two in-flight loads (a double-tapped Refresh, or a tab re-entry landing on top of
+    // a background one) could resolve out of order and let the OLDER response paint last — showing stale
+    // readiness, history or inbox until the next event. loadForum already had this; these three did not.
+    let dashLoadSeq = 0, historyLoadSeq = 0, convLoadSeq = 0;
     // #forum-detail is slotted INSIDE #forum-list while a post is open (inline expand). Any code that wipes
     // the list's innerHTML must move the detail OUT first, or the element is destroyed — after which every
     // openPost throws on a null box and the forum wedges ("can't open any post", seen after voting, which
@@ -3358,10 +3363,10 @@
       strip.querySelectorAll(".dm-av").forEach((b) => b.addEventListener("click", () => openThread(b.dataset.peer)));
     }
     async function loadConversations() {
-      const u = currentUser;
+      const u = currentUser, seq = ++convLoadSeq;
       const el = $("dm-conversations");
       const r = await api("/conversations");
-      if (sessionChanged(u, "loadConversations")) return;    // stale session -> don't paint another user's inbox
+      if (sessionChanged(u, "loadConversations") || seq !== convLoadSeq) return;   // stale session OR superseded -> don't paint
       if (!r.ok) { el.innerHTML = '<p class="flash error">Could not load conversations.</p>'; el.__lastHtml = undefined; renderAvatarStrip([]); return; }   // invalidate the cache so recovery repaints the list
       const cs = (r.data && r.data.conversations) || [];
       renderAvatarStrip(cs);                                 // Slack-style recent-chats row above the list
