@@ -870,3 +870,37 @@ def test_forum_updates_patch_in_place_never_teardown(client):
     # -- posting a comment refreshes in place too (no detail rebuild just to show one new row)
     assert "if (cr.ok) { f.reset(); refreshOpenPost(); }" in html
     assert "if (cr.ok) openPost(id);" not in html
+
+
+def test_user_written_text_is_bidi_aware(client):
+    """Hebrew content must lay out right-to-left (#426).
+
+    The app is bilingual — teammates post in Hebrew and the course staff read it — but every user-written
+    string was rendered inside the page's LTR paragraph direction. Measured on the real forum title
+    "היום מציגים פרויקט בכתיבת תוכנה לML": the trailing Latin "ML" painted at x=263 (as if the line ended
+    LTR) instead of x=32, and the Hebrew started at the left edge instead of the right. `dir="auto"` makes
+    each string follow its OWN first strong character, so Hebrew goes RTL and English stays LTR — with no
+    per-string language detection anywhere in the code.
+
+    Only user-written text carries it. Chrome around it (the "by … · 3 comments · 3d ago" byline, the DM
+    timestamp/tick) stays LTR, or a Hebrew name would drag the whole line's punctuation to the wrong side.
+    """
+    html = client.get("/").get_data(as_text=True)
+
+    # forum: feed title, detail title, detail body
+    assert '<strong dir="auto">\' + escapeHtml(p.title)' in html
+    assert '<h3 dir="auto">\' + escapeHtml(p.title)' in html
+    assert '<p class="body" dir="auto">\' + escapeHtml(p.body)' in html
+    # comments: author name and body each follow their own direction
+    assert '<strong dir="auto">\' + escapeHtml(c.author)' in html
+    assert '<span dir="auto">\' + escapeHtml(c.body)' in html
+    # DMs: the bubble follows the message, but its meta (time + delivery tick) stays LTR
+    assert '<div class="\' + cls + \'" dir="auto">\' + escapeHtml(it.m.body)' in html
+    assert '<span class="dm-meta" dir="ltr">' in html
+    # inbox: peer name + last-message preview; activity feed line
+    assert '<div class="dm-name" dir="auto">\' + escapeHtml(c.peer_name || c.peer)' in html
+    assert '<div class="dm-last" dir="auto">\' + escapeHtml(c.last_message || "")' in html
+    assert '<div class="dm-name" dir="auto">\' + escapeHtml(((n.actor' in html
+    # bylines: ONLY the name is auto — the surrounding chrome must stay LTR
+    assert '\'by \' + \'<span dir="auto">\' + escapeHtml(p.author) + \'</span>\'' in html
+    assert 'by <span dir="auto">\' + escapeHtml(p.author) + \'</span></p>\'' in html
