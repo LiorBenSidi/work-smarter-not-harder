@@ -2817,11 +2817,26 @@
       // and moving the node blurs a focused field (dropping the mobile keyboard mid-reply). Capture both and
       // restore after the re-slot, so even a legitimate rebuild is seamless (review findings). (#420)
       const detailEl = $("forum-detail");
+      // Reading-position anchor (#428). A teammate's post arriving over SSE prepends a row, and because the
+      // rebuild replaces the whole subtree the browser's own scroll anchoring has no surviving node to
+      // anchor to — the line being read jumped 112px (measured) while scrollY never moved. Remember where
+      // the topmost visible row sits, and after the paint scroll by exactly the delta it moved.
+      const anchorRow = [...el.querySelectorAll(".post")].find((d) => d.getBoundingClientRect().bottom > 0);
+      const anchorId = anchorRow ? anchorRow.dataset.id : null;
+      const anchorTop = anchorRow ? anchorRow.getBoundingClientRect().top : 0;
       const playing = [...document.querySelectorAll("#forum-detail video")].filter((v) => !v.paused && !v.ended);
       const focused = document.activeElement;
       const keepFocus = detailEl && focused && detailEl.contains(focused) ? focused : null;
       const selStart = keepFocus && keepFocus.selectionStart, selEnd = keepFocus && keepFocus.selectionEnd;
       const restore = () => {
+        // put the row the reader was looking at back under the same pixel (#428)
+        if (anchorId) {
+          const again = el.querySelector('.post[data-id="' + anchorId + '"]');
+          if (again) {
+            const delta = Math.round(again.getBoundingClientRect().top - anchorTop);
+            if (delta) window.scrollBy(0, delta);
+          }
+        }
         playing.forEach((v) => { if (document.contains(v)) v.play().catch(() => {}); });
         if (keepFocus && document.contains(keepFocus)) {
           keepFocus.focus({ preventScroll: true });
@@ -3140,17 +3155,45 @@
       if (cr.ok && cr.data && Array.isArray(cr.data.comments)) {
         // Merge, never replace: the newest page updates/extends what's held, so older paged-in comments
         // survive. (A comment can't be deleted through the UI, so merge-only can't strand a ghost row.)
+        // Split the merge by KIND of change (#428). A remote vote moves only the tallies — patch those rows
+        // in place, so a background tick can't yank focus out of a comment box someone is using. A new
+        // comment, or an edited body, genuinely changes the list and needs a real render.
         const byId = new Map(commentAccum.map((c) => [c.id, c]));
-        let changed = false;
+        let needsRender = false;
+        const tallyOnly = [];
         for (const c of cr.data.comments) {
           const old = byId.get(c.id);
-          if (!old) { commentAccum.push(c); changed = true; }
-          else if (old.score !== c.score || old.likes !== c.likes || old.dislikes !== c.dislikes || old.body !== c.body) {
-            Object.assign(old, c); changed = true;
-          }
+          if (!old) { commentAccum.push(c); needsRender = true; continue; }
+          if (old.body !== c.body) { Object.assign(old, c); needsRender = true; continue; }
+          if (old.score !== c.score || old.likes !== c.likes || old.dislikes !== c.dislikes) tallyOnly.push(c);
         }
-        if (changed) renderComments();
+        for (const c of tallyOnly) {
+          if (!applyCommentTallies(c.id, c)) needsRender = true;   // row off-screen -> fall back to a render
+        }
+        if (needsRender) renderComments();
       }
+    }
+
+    // Paint one comment's fresh tallies onto the EXISTING row (#428). renderComments() rewrites the whole
+    // box, which destroys the very button the user just pressed: a keyboard user pressing Enter on ▲ was
+    // dumped to the top of the tab order, and the same happened unprompted when a REMOTE vote arrived
+    // through refreshOpenPost. Posts already avoid this via applyPostTallies; comments only got the counts
+    // (#409), never the in-place patcher. Returns false when the row isn't on screen, so the caller can
+    // fall back to a full render.
+    function applyCommentTallies(commentId, d) {
+      const c = commentAccum.find((x) => x.id === commentId);
+      if (c) { c.score = d.score; c.likes = d.likes; c.dislikes = d.dislikes; }
+      const row = document.querySelector('#comments-box .cvote[data-cid="' + commentId + '"]');
+      if (!row) return false;
+      const li = row.closest("li"); if (!li) return false;
+      // value-aware, via the data-n stamp — a no-change repaint must write nothing (same rule as #420)
+      const tallies = li.querySelectorAll(".c-vote .tally");
+      const swap = (node, v, html) => {
+        if (node && node.getAttribute("data-n") !== String(Number(v) || 0)) node.outerHTML = html;
+      };
+      swap(tallies[0], d.likes, countPill(d.likes, "like", true));
+      swap(tallies[1], d.dislikes, countPill(d.dislikes, "dislike", true));
+      return true;
     }
 
     async function voteComment(commentId, value) {
@@ -3165,10 +3208,12 @@
           // The row renders likes/dislikes now (#409), so a score-only patch would leave stale counts on
           // screen; when the response carries no counts (the server's re-read failed and it deliberately
           // omitted them rather than sending a fake 0) reload the thread instead of painting a stale number.
+          // Patched IN PLACE (#428) — a full renderComments() would destroy the button just pressed and
+          // dump a keyboard user to the top of the tab order. Falls back to a render only if the row is
+          // not on screen (e.g. it sits on a page that has not been loaded).
           const c = commentAccum.find((x) => x.id === commentId);
           if (c && r.data && typeof r.data.likes === "number" && typeof r.data.dislikes === "number") {
-            c.score = r.data.score; c.likes = r.data.likes; c.dislikes = r.data.dislikes;
-            renderComments();
+            if (!applyCommentTallies(commentId, r.data)) renderComments();
           } else loadComments(currentPostId);
         } else flash("forum-flash", (r.data && r.data.error) || "Couldn't record your vote — please try again.");
       } finally { voteInFlight = false; }
@@ -3622,14 +3667,29 @@
       if (!el) return;
       const items = (notifications || []).filter((n) => n.type !== "dm");
       if (!items.length) { setHtmlIfChanged(el, '<p class="muted">No new activity yet.</p>'); btn.hidden = true; return; }
+      // The relative age is rendered as an EMPTY slot here and filled separately below (#428). It used to
+      // sit inside the string handed to setHtmlIfChanged, so every time any notification crossed a minute
+      // bucket the key differed and the whole aria-live feed was torn down and re-announced — with zero
+      // data change, on every 45s poll. Same trap the forum list documents at forumRowHtml/refreshRowAges.
       setHtmlIfChanged(el, items.map((n) =>
-        '<div class="dm-row act' + (n.read ? "" : " unread") + '">' + avatarHtml(n.actor || "·", 40)
+        '<div class="dm-row act' + (n.read ? "" : " unread") + '" data-ts="' + escapeHtml(n.created_at || 0) + '">' + avatarHtml(n.actor || "·", 40)
         // compose "{live actor} {text}" — the actor is re-resolved to the current display name each list,
         // and the stored text is name-less, so a rename never leaves a stale name (F1).
         + '<div class="dm-main"><div class="dm-name" dir="auto">' + escapeHtml(((n.actor ? n.actor + " " : "") + (n.text || "")).trim()) + '</div>'
-        + '<div class="dm-last">' + escapeHtml(timeAgo(n.created_at)) + '</div></div></div>'
+        + '<div class="dm-last act-age"></div></div></div>'
       ).join(""));
+      refreshActivityAges();
       btn.hidden = !items.some((n) => !n.read);
+    }
+    // Keep each activity row's relative age fresh with a value-aware TEXT write — no rebuild, so the
+    // aria-live region is never re-announced and nothing inside it loses focus or selection (#428).
+    function refreshActivityAges() {
+      const el = $("activity-list"); if (!el) return;
+      el.querySelectorAll(".dm-row.act").forEach((row) => {
+        const span = row.querySelector(".act-age"); if (!span) return;
+        const text = timeAgo(Number(row.dataset.ts) || 0);
+        if (span.textContent !== text) span.textContent = text;
+      });
     }
     $("activity-read").addEventListener("click", async () => {
       const u = currentUser;                               // snapshot: bail if the session changes mid-await (the #109 guard)

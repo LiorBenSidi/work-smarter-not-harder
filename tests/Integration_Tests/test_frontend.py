@@ -799,7 +799,7 @@ def test_forum_rows_render_like_and_dislike_tallies(client):
     # pages), so the patch has to carry the tallies too — patching only the score would leave the row's
     # like/dislike numbers stale on screen until the whole thread was reloaded.
     vc = html[html.index("async function voteComment("):html.index("// ---- Media attachments")]
-    assert "c.likes = r.data.likes; c.dislikes = r.data.dislikes;" in vc
+    assert "applyCommentTallies(commentId, r.data)" in vc     # patched IN PLACE (#428), never a full re-render
     assert 'typeof r.data.likes === "number"' in vc          # ...and falls back to a reload when they're absent
 
 
@@ -824,6 +824,7 @@ def test_forum_updates_patch_in_place_never_teardown(client):
     ap = html[html.index("function applyPostTallies("):html.index("let voteInFlight")]
     assert "forumPosts.find(" in ap                                    # the cached list entry (sorts stay right)
     assert '.pill.count' in ap and ".tally" in ap                      # feed pills + detail tallies
+    assert 'if (node && node.getAttribute("data-n") !== String(Number(v) || 0)) node.outerHTML = html;' in ap   # value-aware
     assert 'forumSort === "top" ? null : forumRowsKey()' in ap         # Top re-ranks; recent/mine skip the rebuild
 
     # -- renderForumList skips entirely when the rows it would paint are identical (the idle-tick fix)
@@ -841,7 +842,8 @@ def test_forum_updates_patch_in_place_never_teardown(client):
     assert 'const age = forKey ? "×"' in html
     assert "function refreshRowAges()" in html
     assert "refreshRowAges();" in html[html.index("function onForumEvent()"):html.index("function pollBackstop()")]
-    assert "if (span.textContent !== text) span.textContent = text" in html
+    rra = html[html.index("function refreshRowAges()"):html.index("function forumRowsKey()")]
+    assert "if (span.textContent !== text) span.textContent = text" in rra
 
     # -- sticky-null: a mid-Refresh skeleton marker must never be overwritten by open/close/tally writers,
     #    or the landing render skips and the skeletons strand forever (review HIGH)
@@ -858,7 +860,8 @@ def test_forum_updates_patch_in_place_never_teardown(client):
     rp = html[html.index("async function refreshOpenPost()"):html.index("async function voteComment(")]
     assert 'document.getElementById("edit-form")' in rp                # never repaints over an edit in progress
     assert "commentAccum.push(c)" in rp and "Object.assign(old, c)" in rp   # merge, never replace (#331 paging kept)
-    assert "if (changed) renderComments()" in rp                       # re-render only when something changed
+    assert "if (needsRender) renderComments()" in rp                   # re-render ONLY for a new/edited comment
+    assert "applyCommentTallies(c.id, c)" in rp                        # a remote VOTE patches in place instead (#428)
     assert "/attachments" not in rp                                    # media never re-fetched by a background refresh
     assert rp.count('sessionChanged(u, "refreshOpenPost")') == 2       # cross-user stale-paint guard after BOTH awaits
     assert rp.count("seq !== refreshOpenSeq") == 2                     # overlapping refreshes: latest wins, after BOTH awaits
@@ -904,3 +907,39 @@ def test_user_written_text_is_bidi_aware(client):
     # bylines: ONLY the name is auto — the surrounding chrome must stay LTR
     assert '\'by \' + \'<span dir="auto">\' + escapeHtml(p.author) + \'</span>\'' in html
     assert 'by <span dir="auto">\' + escapeHtml(p.author) + \'</span></p>\'' in html
+def test_updates_never_steal_focus_or_reading_position(client):
+    """#428 — three sites still rebuilt a whole subtree for a small change.
+
+    Each one is visible to a user who is simply reading or typing while a background tick or a teammate's
+    action lands. #420 fixed this class for the forum LIST and the post detail; these are the three that
+    were left.
+    """
+    html = client.get("/").get_data(as_text=True)
+
+    # 1. a comment vote patches THAT row — the button the user pressed must survive (keyboard focus)
+    assert "function applyCommentTallies(" in html
+    ac = html[html.index("function applyCommentTallies("):html.index("async function voteComment(")]
+    assert 'data-cid="\' + commentId + \'"' in ac                  # finds the live row
+    assert 'if (node && node.getAttribute("data-n") !== String(Number(v) || 0)) node.outerHTML = html;' in ac   # value-aware, like #420
+    assert "return false" in ac                                    # row off-screen -> caller re-renders
+    # ...and the REMOTE path splits a vote from a real list change
+    rp = html[html.index("async function refreshOpenPost()"):html.index("function applyCommentTallies(")]
+    assert "tallyOnly.push(c)" in rp and "needsRender = true" in rp
+
+    # 2. the activity feed keys its ages OUT of the change-string and rolls them with a text write,
+    #    so a minute rollover cannot re-announce the aria-live region
+    ra = html[html.index("function renderActivity("):html.index("function refreshActivityAges()")]
+    assert '<div class="dm-last act-age"></div>' in ra             # age slot rendered EMPTY
+    assert "escapeHtml(timeAgo(n.created_at))" not in ra           # ...never inside the keyed string
+    assert "refreshActivityAges();" in ra                          # ...and renderActivity must call it
+    assert "function refreshActivityAges()" in html
+    aa = html[html.index("function refreshActivityAges()"):html.index("function refreshActivityAges()") + 700]
+    assert "if (span.textContent !== text) span.textContent = text" in aa   # value-aware text write
+    assert "span.textContent = text;\n" not in aa.replace("if (span.textContent !== text) span.textContent = text;\n", "")
+
+    # 3. a real forum rebuild puts the row the reader was looking at back under the same pixel
+    rl = html[html.index("function renderForumList()"):html.index("function togglePost(")]
+    assert "const anchorRow = [...el.querySelectorAll(\".post\")].find((d) => d.getBoundingClientRect().bottom > 0)" in rl
+    assert "if (anchorId) {" in rl                                 # the anchor is actually consulted...
+    assert 'el.querySelector(\'.post[data-id="\' + anchorId + \'"]\')' in rl   # ...to re-find the row
+    assert "window.scrollBy(0, delta)" in rl
