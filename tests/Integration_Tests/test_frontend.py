@@ -1008,3 +1008,44 @@ def test_read_loaders_have_supersede_guards(client):
         assert f"seq !== {seq}" in body, f"{fn} must drop a superseded response"
         # the guard has to sit on the SAME line as the session check, i.e. before any paint
         assert f'|| seq !== {seq}) return;' in body, f"{fn}'s supersede guard must gate the paint"
+
+
+def test_profile_form_collects_f5_equipment_and_split_preference(client):
+    """F5 (#276) plans from goal + training days + EQUIPMENT + SPLIT PREFERENCE. The first two were
+    already collected; these two had no way into the app at all, so the generator could never be fed.
+    Pins that the controls exist, that the submit actually sends them, and that a profile saved
+    before they existed still loads without leaving stale boxes ticked."""
+    html = client.get("/").get_data(as_text=True)
+
+    # -- the controls are on the profile form
+    assert 'id="split_preference" name="split_preference"' in html
+    for split in ("no_preference", "full_body", "upper_lower", "push_pull_legs"):
+        assert f'value="{split}"' in html, f"split option {split} missing from the form"
+    for item in ("bodyweight", "dumbbell", "barbell", "kettlebell", "machine", "bands", "pullup_bar"):
+        assert f'name="equipment" value="{item}"' in html, f"equipment option {item} missing from the form"
+
+    # -- the submit sends them. `f.equipment` is a RadioNodeList across several checkboxes, so the
+    #    handler must read the checked ones directly; f.equipment.value would send one wrong string.
+    submit = html[html.index('onSubmit("profile-form"'):html.index('onSubmit("displayname-form"')]
+    assert "split_preference: f.split_preference.value" in submit
+    assert 'querySelectorAll(\'input[name="equipment"]:checked\')' in submit
+    assert "f.equipment.value" not in submit
+
+    # -- loading an OLD profile (neither key present) resets the controls instead of leaving
+    #    whatever the previously-viewed profile had ticked.
+    load = html[html.index("async function loadProfile"):html.index("async function loadEngagement")]
+    assert 'p.split_preference || "no_preference"' in load
+    assert "Array.isArray(p.equipment)" in load
+    assert "c.checked = owned.includes(c.value)" in load
+
+
+def test_equipment_pills_wrap_instead_of_giving_the_page_a_horizontal_scroll(client):
+    """`.settings-group .seg-row` is a nowrap flex row built for the 3 theme pills. Seven equipment
+    pills do not fit a phone width, so without an explicit wrap they overflowed the viewport and gave
+    the whole PAGE a horizontal scroll (measured at 390px: pageScrollsX true -> false after the fix).
+    Scoped to #equipment-group so the theme control keeps its single-row layout."""
+    html = client.get("/").get_data(as_text=True)
+    assert "#equipment-group .seg-row { flex-wrap:wrap; }" in html
+    assert "#equipment-group .seg { flex:0 1 auto;" in html
+    # the shared rule must stay nowrap — widening it would relayout the theme control too
+    assert ".settings-group .seg-row { display:flex; gap:8px; margin-top:6px; }" in html
