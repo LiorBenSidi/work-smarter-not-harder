@@ -13,7 +13,7 @@
 > +10 Azure deploy + CI/CD; supersedes [`FEEDBACK.md`](FEEDBACK.md)). Architecture detail lives in [`DESIGN.md`](DESIGN.md); the phased plan in
 > [`ROADMAP.md`](ROADMAP.md).
 >
-> **Last updated:** 2026-07-29 · **Suite at this snapshot:** **1072 checks, 1027 passing / 45 environment-gated**
+> **Last updated:** 2026-08-01 · **Suite at this snapshot:** **1072 checks, 1027 passing / 45 environment-gated**
 > (+ 17 browser e2e scenarios)
 > (`python -m pytest tests/ -q`; the env-gated ones run in CI's `compose-e2e` job against the live containers).
 > Since the 07-12 snapshot (783 tests): **Shiri's Random Forest landed** — a real `ai/model/model.pkl` +
@@ -23,7 +23,9 @@
 > consolidated 51 template-shape tests into 7 grouped ones and removed 11 verified duplicates (#384–#386),
 > and Elad's removed 16 duplicated/vacuous checks and replaced 2 prose assertions with executable guards —
 > then rose to **1063** as the Forum cold-seed, its test-validation pass, and the dashboard read-cap landed (#391–#398),
-
+> and to **1072** as the like/dislike counts and a round of SPA rendering, bidi, a11y and supersede-guard
+> fixes landed (#417–#433).
+>
 > Every assertion was kept; the count fell because copies did, not coverage.
 >
 > ⚠️ **Sections still owned by their planes.** §5 (risk), §2's deploy/scale/queue rows and §3's Elad rows are
