@@ -987,3 +987,24 @@ def test_dialogs_trap_and_restore_focus(client):
     assert "lockPageScroll();" in ou
     cu = html[html.index("function closeUserMenu()"):html.index("function openUserMenu()")]
     assert "if (wasOpen) unlockPageScroll();" in cu                 # released only on a REAL close
+
+
+def test_read_loaders_have_supersede_guards(client):
+    """#432 — an older in-flight response must never paint over a newer one.
+
+    Every read-refresh loader already bailed on a session change, but only `loadForum` also had a SEQUENCE
+    counter. Without one, two in-flight loads (a double-tapped Refresh, or a screen re-entry landing on top
+    of a background poll) can resolve out of order and let the OLDER response paint last — showing stale
+    readiness, history or inbox until the next event happens to correct it.
+    """
+    html = client.get("/").get_data(as_text=True)
+    assert "let dashLoadSeq = 0, historyLoadSeq = 0, convLoadSeq = 0;" in html
+
+    for fn, seq, end in (("loadDashboard(opts)", "dashLoadSeq", "async function loadHistory()"),
+                         ("loadHistory()", "historyLoadSeq", "function renderHistoryList()"),
+                         ("loadConversations()", "convLoadSeq", "function sizeDmThreadPane()")):
+        body = html[html.index("async function " + fn):html.index(end)]
+        assert f"seq = ++{seq}" in body, f"{fn} must claim a sequence number before its await"
+        assert f"seq !== {seq}" in body, f"{fn} must drop a superseded response"
+        # the guard has to sit on the SAME line as the session check, i.e. before any paint
+        assert f'|| seq !== {seq}) return;' in body, f"{fn}'s supersede guard must gate the paint"
