@@ -2779,10 +2779,10 @@
     function forumRowHtml(p, forKey) {
       const age = forKey ? "×" : (p.created_at ? " · " + timeAgo(p.created_at) : "");
       return '<div class="post' + (p.id === currentPostId ? ' open' : '') + '" data-id="' + escapeHtml(p.id) + '" role="button" tabindex="0" aria-expanded="' + (p.id === currentPostId ? 'true' : 'false') + '">'
-        + '<div class="post-top"><strong>' + escapeHtml(p.title) + '</strong>'
+        + '<div class="post-top"><strong dir="auto">' + escapeHtml(p.title) + '</strong>'
         + '<span class="post-right">' + countPill(p.likes, "like") + countPill(p.dislikes, "dislike")
         + '<span class="post-chev" aria-hidden="true">' + ICON.chev + '</span></span></div>'
-        + '<span class="muted byline">' + avatarHtml(p.author, 20) + 'by ' + escapeHtml(p.author) + ' · ' + escapeHtml(p.comments) + ' comment' + (p.comments === 1 ? '' : 's')
+        + '<span class="muted byline">' + avatarHtml(p.author, 20) + 'by ' + '<span dir="auto">' + escapeHtml(p.author) + '</span>' + ' · ' + escapeHtml(p.comments) + ' comment' + (p.comments === 1 ? '' : 's')
         + '<span class="row-age">' + escapeHtml(age) + '</span></span></div>';
     }
     // Keep every row's relative age fresh WITHOUT a rebuild: textContent-compare each age span and write
@@ -2912,9 +2912,9 @@
       box.innerHTML =
         '<div class="card detail">'
         + '<button class="ghost close" onclick="closePost()" aria-label="Close">' + ICON.close + '</button>'
-        + '<h3>' + escapeHtml(p.title) + '</h3>'
-        + '<p class="muted by">' + avatarHtml(p.author, 26) + 'by ' + escapeHtml(p.author) + '</p>'
-        + '<p class="body">' + escapeHtml(p.body) + '</p>'
+        + '<h3 dir="auto">' + escapeHtml(p.title) + '</h3>'
+        + '<p class="muted by">' + avatarHtml(p.author, 26) + 'by <span dir="auto">' + escapeHtml(p.author) + '</span></p>'
+        + '<p class="body" dir="auto">' + escapeHtml(p.body) + '</p>'
         + '<div id="post-atts"></div>'
         + '<div class="vote-row"><button class="ghost" onclick="vote(1)">' + ICON.up + ' up ' + countPill(p.likes, "like", true) + '</button>'
         + ' <button class="ghost" onclick="vote(-1)">' + ICON.down + ' down ' + countPill(p.dislikes, "dislike", true) + '</button></div>'
@@ -2962,7 +2962,7 @@
       const list = commentAccum.slice().sort((a, b) => (a.created_at || 0) - (b.created_at || 0));
       let html = list.length
         ? '<ul class="comments">' + list.map((c) =>
-            '<li>' + avatarHtml(c.author, 28) + '<div class="c-main"><strong>' + escapeHtml(c.author) + '</strong> ' + escapeHtml(c.body) + '</div>'
+            '<li>' + avatarHtml(c.author, 28) + '<div class="c-main"><strong dir="auto">' + escapeHtml(c.author) + '</strong> <span dir="auto">' + escapeHtml(c.body) + '</span></div>'
             + '<div class="c-vote"><button class="ghost mini cvote" data-cid="' + escapeHtml(c.id) + '" data-val="1" aria-label="Upvote comment">'
             + ICON.up + ' ' + countPill(c.likes, "like", true) + '</button>'
             + '<button class="ghost mini cvote" data-cid="' + escapeHtml(c.id) + '" data-val="-1" aria-label="Downvote comment">'
@@ -3285,8 +3285,8 @@
       if (!cs.length) { setHtmlIfChanged(el, emptyState(EMPTY_ICONS.chat, "No conversations yet", "Send a message above to start one.")); return; }
       const changed = setHtmlIfChanged(el, cs.map((c) =>
         '<div class="dm-row" data-peer="' + escapeHtml(c.peer) + '">' + avatarHtml(c.peer, 40)
-        + '<div class="dm-main"><div class="dm-name">' + escapeHtml(c.peer_name || c.peer) + '</div>'
-        + '<div class="dm-last">' + escapeHtml(c.last_message || "") + '</div></div>'
+        + '<div class="dm-main"><div class="dm-name" dir="auto">' + escapeHtml(c.peer_name || c.peer) + '</div>'
+        + '<div class="dm-last" dir="auto">' + escapeHtml(c.last_message || "") + '</div></div>'
         + (c.unread ? '<span class="dm-unread">' + escapeHtml(c.unread) + '</span>' : '') + '</div>'
       ).join(""));
       if (changed) el.querySelectorAll(".dm-row").forEach((d) => d.addEventListener("click", () => openThread(d.dataset.peer)));
@@ -3395,7 +3395,7 @@
             }
             // every bubble shows its own time; my bubbles also carry a delivery tick
             const inner = mine ? timeHtml + dmTick(it.m) : timeHtml;
-            return sep + '<div class="' + cls + '">' + escapeHtml(it.m.body) + '<span class="dm-meta">' + inner + "</span></div>";
+            return sep + '<div class="' + cls + '" dir="auto">' + escapeHtml(it.m.body) + '<span class="dm-meta" dir="ltr">' + inner + "</span></div>";
           }).join("")
         : '<p class="muted">No messages yet — say hi.</p>'));
       if (!changed) return;
@@ -3626,7 +3626,7 @@
         '<div class="dm-row act' + (n.read ? "" : " unread") + '">' + avatarHtml(n.actor || "·", 40)
         // compose "{live actor} {text}" — the actor is re-resolved to the current display name each list,
         // and the stored text is name-less, so a rename never leaves a stale name (F1).
-        + '<div class="dm-main"><div class="dm-name">' + escapeHtml(((n.actor ? n.actor + " " : "") + (n.text || "")).trim()) + '</div>'
+        + '<div class="dm-main"><div class="dm-name" dir="auto">' + escapeHtml(((n.actor ? n.actor + " " : "") + (n.text || "")).trim()) + '</div>'
         + '<div class="dm-last">' + escapeHtml(timeAgo(n.created_at)) + '</div></div></div>'
       ).join(""));
       btn.hidden = !items.some((n) => !n.read);
