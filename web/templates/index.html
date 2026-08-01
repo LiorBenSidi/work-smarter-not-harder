@@ -2585,6 +2585,45 @@
       }
     }
 
+    // ---- Modal focus management (#430) ----
+    // Both full-screen dialogs declare role="dialog" aria-modal="true", which TELLS assistive tech the rest
+    // of the page is inert — but nothing enforced it: 89 focusable elements behind an open dialog stayed
+    // Tab-reachable (measured), so the ARIA promise was a lie and a keyboard user could wander out of the
+    // dialog without knowing. And on close, focus was never returned to whatever opened it — it landed on
+    // an unrelated button, losing the reader's place in a 48-row list. The user menu already does this
+    // correctly (closeUserMenu -> btn.focus()); these two never got it.
+    let modalReturnFocus = null;
+    const FOCUSABLE = 'a[href],button:not([disabled]),input:not([disabled]),select,textarea,[tabindex]:not([tabindex="-1"])';
+    function trapModalTab(dialog, e) {
+      if (e.key !== "Tab" || dialog.hidden) return;
+      const items = [...dialog.querySelectorAll(FOCUSABLE)].filter((el) => el.offsetParent !== null);
+      if (!items.length) { e.preventDefault(); return; }            // nothing to land on -> keep focus put
+      const first = items[0], last = items[items.length - 1];
+      // wrap at both ends, and pull focus back in if it ever escaped (a re-render can drop it to <body>)
+      if (e.shiftKey && (document.activeElement === first || !dialog.contains(document.activeElement))) {
+        e.preventDefault(); last.focus();
+      } else if (!e.shiftKey && (document.activeElement === last || !dialog.contains(document.activeElement))) {
+        e.preventDefault(); first.focus();
+      }
+    }
+    function openModal(dialog, focusTarget) {
+      modalReturnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+      lockPageScroll();
+      dialog.hidden = false;
+      if (focusTarget) focusTarget.focus();
+    }
+    function closeModal(dialog) {
+      if (dialog.hidden) return false;                              // idempotent: never unbalance the lock
+      dialog.hidden = true;
+      unlockPageScroll();
+      // hand focus back to whatever opened the dialog, if it is still on screen
+      if (modalReturnFocus && document.contains(modalReturnFocus) && modalReturnFocus.offsetParent !== null) {
+        modalReturnFocus.focus({ preventScroll: true });
+      }
+      modalReturnFocus = null;
+      return true;
+    }
+
     function openHistoryDetail(entry) {
       if (!entry) return;
       hdetailTs = entry.timestamp || null;
@@ -2619,9 +2658,7 @@
       else html += '<p class="muted">Recommendations weren\'t recorded for this check-in.</p>';              // pre-#354 entry with no inputs to regenerate from
       html += "</div>";
       $("hdetail-body").innerHTML = html;
-      if ($("history-detail").hidden) lockPageScroll();    // lock only on a real open -> one unlock always balances
-      $("history-detail").hidden = false;
-      $("hdetail-close").focus();
+      openModal($("history-detail"), $("hdetail-close"));   // locks, remembers the trigger, focuses the ✕ (#430)
       if (canRegen) regenerateHistoryRecs(entry);          // #354 backfill: recompute this old entry's recommendations from its inputs
     }
     // Pre-#354 check-ins were stored before recommendations were persisted. On demand (when its detail opens),
@@ -2641,12 +2678,13 @@
     }
     function closeHistoryDetail() {
       const el = $("history-detail");
-      if (el && !el.hidden) { el.hidden = true; unlockPageScroll(); }   // unlock only on a real close (idempotent)
+      if (el) closeModal(el);            // unlocks + returns focus to the row that opened it (#430)
     }
     (function () {
       const modal = $("history-detail"); if (!modal) return;
       modal.addEventListener("click", (e) => { if (e.target === modal || (e.target.closest && e.target.closest("#hdetail-close"))) closeHistoryDetail(); });
       document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !modal.hidden) closeHistoryDetail(); });
+      document.addEventListener("keydown", (e) => trapModalTab(modal, e));   // aria-modal must actually hold (#430)
       const openFromRow = (row) => { const e = (historyItems || []).find((it) => String((it && it.timestamp) || "") === row.dataset.ts); if (e) openHistoryDetail(e); };
       const hist = $("history");
       if (hist) {
@@ -3616,13 +3654,12 @@
       // has no box, undo the open instead of trapping the user.
       const open = (el) => {
         lbImg.src = el.getAttribute("data-full") || el.src;
-        if (lb.hidden) lockPageScroll();
-        lb.hidden = false;
+        if (lb.hidden) openModal(lb, lb.querySelector(".lightbox-close"));   // focus moves IN, trigger remembered (#430)
         if (!lb.getBoundingClientRect().width) {         // did not paint -> back out, never freeze the page
-          lb.hidden = true; lbImg.src = ""; unlockPageScroll();
+          lbImg.src = ""; closeModal(lb);
         }
       };
-      const close = () => { if (!lb.hidden) unlockPageScroll(); lb.hidden = true; lbImg.src = ""; };
+      const close = () => { if (closeModal(lb)) lbImg.src = ""; };
       document.addEventListener("click", (e) => {
         if (e.target.closest && e.target.closest(".lightbox-close")) { close(); return; }   // the explicit ✕ button
         const img = e.target.closest && e.target.closest("img[data-full]");
@@ -3630,6 +3667,7 @@
         if (e.target === lb || e.target === lbImg) close();      // click the overlay or the enlarged image closes it
       });
       document.addEventListener("keydown", (e) => {
+        trapModalTab(lb, e);                                       // aria-modal must actually hold (#430)
         if (e.key === "Escape" && !lb.hidden) { close(); return; }
         if ((e.key === "Enter" || e.key === " ") && e.target.hasAttribute && e.target.hasAttribute("data-full")) {
           e.preventDefault(); open(e.target);                    // keyboard-open a focused image
@@ -3918,14 +3956,19 @@
 
     // ---- Corner account menu: avatar-in-header -> identity + quick actions (Profile / Theme / Log out) ----
     function closeUserMenu() {
-      const p = $("user-menu-panel"); if (p) p.hidden = true;
+      const p = $("user-menu-panel");
+      const wasOpen = p && !p.hidden;
+      if (p) p.hidden = true;
       const b = $("user-menu-btn"); if (b) b.setAttribute("aria-expanded", "false");
       const bd = $("menu-backdrop"); if (bd) bd.hidden = true;   // drop the frosted backdrop
+      if (wasOpen) unlockPageScroll();   // release only on a REAL close, so the ref-count stays balanced
     }
     function openUserMenu() {
       $("user-menu-panel").hidden = false;
       $("user-menu-btn").setAttribute("aria-expanded", "true");
       const bd = $("menu-backdrop"); if (bd) bd.hidden = false;  // frost the content behind the menu
+      lockPageScroll();   // it paints a full-screen backdrop, so it reads as modal — the page must not
+                          // scroll 200px underneath it (measured), which is what made it feel broken (#430)
     }
     (function initUserMenu() {
       const btn = $("user-menu-btn"), panel = $("user-menu-panel");

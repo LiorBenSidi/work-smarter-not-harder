@@ -113,10 +113,11 @@ def test_history_ui_is_wired(client):
     assert 'document.body.style.overflowY = "hidden"' in html                    # ...on BOTH elements — the body is the
                                                                                  # real scroll container (121px crept
                                                                                  # through an html-only lock, measured)
-    assert 'if ($("history-detail").hidden) lockPageScroll();' in html           # locked on a real open only
-    assert "{ el.hidden = true; unlockPageScroll(); }" in html                   # ...and released on a real close
-    assert "if (lb.hidden) lockPageScroll();" in html                            # the lightbox locks too...
-    assert "if (!lb.hidden) unlockPageScroll(); lb.hidden = true;" in html       # ...and releases on close
+    # both dialogs go through the shared openModal/closeModal, which lock, trap Tab and restore focus (#430)
+    assert 'openModal($("history-detail"), $("hdetail-close"));' in html         # locked + focused on a real open
+    assert "if (el) closeModal(el);" in html                                     # ...and released on a real close
+    assert 'openModal(lb, lb.querySelector(".lightbox-close"))' in html          # the lightbox locks too...
+    assert "const close = () => { if (closeModal(lb)) lbImg.src = \"\"; };" in html  # ...and releases on close
     assert "overflow-y:auto; overscroll-behavior:contain;" in html               # THE CARD's inner scroll can't chain
 
     # -- #424: a fixed dialog nested in a hidden screen opens 0x0 — invisible, not hit-testable — and once
@@ -130,7 +131,7 @@ def test_history_ui_is_wired(client):
     dm = html[html.index('id="dm-thread-view"'):html.index('<div id="menu-backdrop"')]
     assert 'id="lightbox"' not in dm, "the lightbox must not live inside the DM thread view again"
     assert "if (!lb.getBoundingClientRect().width) {" in html                    # did-not-paint -> back out
-    assert 'lb.hidden = true; lbImg.src = ""; unlockPageScroll();' in html       # ...releasing the lock
+    assert 'lbImg.src = ""; closeModal(lb);' in html                             # ...releasing the lock
                                                                                  # (site-specific — other elements
                                                                                  # legitimately use contain elsewhere)
 
@@ -943,3 +944,46 @@ def test_updates_never_steal_focus_or_reading_position(client):
     assert "if (anchorId) {" in rl                                 # the anchor is actually consulted...
     assert 'el.querySelector(\'.post[data-id="\' + anchorId + \'"]\')' in rl   # ...to re-find the row
     assert "window.scrollBy(0, delta)" in rl
+
+
+def test_dialogs_trap_and_restore_focus(client):
+    """#430 — `aria-modal="true"` must actually hold, and focus must come back.
+
+    Both full-screen dialogs DECLARED the rest of the page inert, but nothing enforced it: 89 focusable
+    elements behind an open dialog stayed Tab-reachable (measured), so the ARIA promise was a lie to
+    assistive tech. On close, focus was never returned to whatever opened the dialog — it landed on an
+    unrelated button, losing a keyboard user's place in a 48-row list. The user menu already did this
+    correctly (`closeUserMenu` → `btn.focus()`); these are the two that never got it.
+    """
+    html = client.get("/").get_data(as_text=True)
+
+    # one shared implementation, so the two dialogs cannot drift apart
+    assert "function openModal(dialog, focusTarget)" in html
+    assert "function closeModal(dialog)" in html
+    assert "function trapModalTab(dialog, e)" in html
+
+    om = html[html.index("function openModal(dialog, focusTarget)"):html.index("function closeModal(dialog)")]
+    assert "modalReturnFocus = document.activeElement" in om        # remember the trigger
+    assert "lockPageScroll();" in om                                # ...and lock, in one place
+
+    cm = html[html.index("function closeModal(dialog)"):html.index("function openHistoryDetail(entry)")]
+    assert "if (dialog.hidden) return false;" in cm                 # idempotent -> the ref-count can't drift
+    assert "unlockPageScroll();" in cm
+    assert "modalReturnFocus.focus({ preventScroll: true })" in cm  # ...and hand focus back
+
+    tm = html[html.index("function trapModalTab(dialog, e)"):html.index("function openModal(dialog, focusTarget)")]
+    assert 'if (e.key !== "Tab" || dialog.hidden) return;' in tm
+    assert "e.preventDefault(); last.focus();" in tm                # wraps backwards at the first element
+    assert "e.preventDefault(); first.focus();" in tm               # ...and forwards at the last
+    # pulls focus back if it ever escaped — BOTH directions, else a Shift+Tab from outside walks away
+    assert tm.count("|| !dialog.contains(document.activeElement)") == 2
+
+    # both dialogs are wired to it
+    assert "document.addEventListener(\"keydown\", (e) => trapModalTab(modal, e));" in html   # history detail
+    assert "trapModalTab(lb, e);" in html                                                     # lightbox
+
+    # the account menu paints a full-screen backdrop, so it locks the page like the dialogs do
+    ou = html[html.index("function openUserMenu()"):html.index("function openUserMenu()") + 700]
+    assert "lockPageScroll();" in ou
+    cu = html[html.index("function closeUserMenu()"):html.index("function openUserMenu()")]
+    assert "if (wasOpen) unlockPageScroll();" in cu                 # released only on a REAL close
