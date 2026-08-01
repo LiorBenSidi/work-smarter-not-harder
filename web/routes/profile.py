@@ -1,7 +1,8 @@
 """Profile routes — GET/POST /profile (gated). OWNER: Lior (F2 route + the db side).
 
 The current user's profile (docs/DESIGN.md §2: age, gender, height, weight, goal,
-training_frequency). Input is validated + injection-safe before any query; the profile store is
+training_frequency) plus the two OPTIONAL training preferences F5 plans from — equipment and
+split_preference. Input is validated + injection-safe before any query; the profile store is
 injected (``app.config["PROFILES"]`` — the web->db seam: ``.get`` / ``.save``).
 """
 import logging
@@ -16,6 +17,46 @@ logger = logging.getLogger(__name__)
 profile_bp = Blueprint("profile", __name__)
 
 GOALS = {"lose", "maintain", "gain"}
+
+# F5 (the workout generator, #276) needs FOUR inputs: goal · available training days · equipment ·
+# split preference. `goal` and `training_frequency` above already cover the first two; these are the
+# missing half — until they exist, F5 has nothing to plan from (see #276's 29 Jul comment).
+#
+# Both are OPTIONAL and are OMITTED from the stored profile when the caller doesn't send them, so
+# every profile saved before this shipped keeps exactly its old shape and no existing client is
+# forced to change. An explicit empty `equipment` list is kept: "I have no equipment" is an answer,
+# and it is not the same as "not asked yet".
+EQUIPMENT = ("bodyweight", "dumbbell", "barbell", "kettlebell", "machine", "bands", "pullup_bar")
+SPLITS = ("full_body", "upper_lower", "push_pull_legs", "no_preference")
+
+
+def _validate_equipment(value):
+    """Return a clean equipment list, or ``None`` when the caller supplied none."""
+    if value is None:
+        return None
+    if not isinstance(value, list):
+        # catches an injection object AND a bare string — a string is not a list, so it never
+        # reaches the loop below, where it would otherwise be iterated one character at a time
+        raise ValueError("equipment must be a list")
+    if len(value) > len(EQUIPMENT):
+        raise ValueError(f"equipment may list at most {len(EQUIPMENT)} items")
+    clean = []
+    for item in value:
+        # no separate bool guard is needed here (unlike the numeric fields): True is not a `str`
+        if not isinstance(item, str) or item not in EQUIPMENT:
+            raise ValueError(f"equipment items must each be one of {sorted(EQUIPMENT)}")
+        if item not in clean:                    # de-duplicate, keeping the caller's order
+            clean.append(item)
+    return clean
+
+
+def _validate_split(value):
+    """Return a clean split preference, or ``None`` when the caller supplied none."""
+    if value is None:
+        return None
+    if not isinstance(value, str) or value not in SPLITS:   # True is not a `str`, so no bool guard
+        raise ValueError(f"split_preference must be one of {sorted(SPLITS)}")
+    return value
 
 
 def validate_profile(data):
@@ -46,7 +87,10 @@ def validate_profile(data):
     if not isinstance(goal, str) or goal not in GOALS:
         raise ValueError(f"goal must be one of {sorted(GOALS)}")
 
-    return {
+    equipment = _validate_equipment(data.get("equipment"))
+    split_preference = _validate_split(data.get("split_preference"))
+
+    clean = {
         "age": _num("age", 10, 120, integer=True),
         "gender": gender.strip(),
         "height": _num("height", 50, 300, integer=False),
@@ -54,6 +98,12 @@ def validate_profile(data):
         "goal": goal,
         "training_frequency": _num("training_frequency", 0, 14, integer=True),
     }
+    # Added only when supplied — a payload without them stores exactly the six fields it always did.
+    if equipment is not None:
+        clean["equipment"] = equipment
+    if split_preference is not None:
+        clean["split_preference"] = split_preference
+    return clean
 
 
 def _profiles():
