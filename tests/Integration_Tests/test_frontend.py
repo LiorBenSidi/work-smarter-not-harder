@@ -1049,3 +1049,79 @@ def test_equipment_pills_wrap_instead_of_giving_the_page_a_horizontal_scroll(cli
     assert "#equipment-group .seg { flex:0 1 auto;" in html
     # the shared rule must stay nowrap — widening it would relayout the theme control too
     assert ".settings-group .seg-row { display:flex; gap:8px; margin-top:6px; }" in html
+
+
+def test_boot_separates_unreachable_from_signed_out(client):
+    """A boot `/me` that never completes is not the same as a server saying "not logged in", but the
+    app treated both as "show the sign-in form" — so a user whose session was perfectly valid was
+    asked for credentials that could not work, and concluded the app was broken (#440).
+
+    `api()` already distinguishes them: a failed fetch returns the synthetic `status: 0`. This pins
+    that boot branches on it, and that the offline state is a real sibling of the other auth
+    sub-forms rather than a banner over a login form the user cannot use."""
+    html = client.get("/").get_data(as_text=True)
+
+    boot = html[html.index("async function bootSession()"):html.index("async function retryBoot(")]
+    assert 'const r = await api("/me")' in boot
+    assert "if (r.status === 0) showOffline(); else showTab(\"login\");" in boot, \
+        "boot must send an unreachable server to the offline state, not to the login form"
+
+    # -- the offline state exists, and is mutually exclusive with every other auth sub-form
+    assert 'id="offline-form" hidden' in html
+    assert 'id="offline-retry"' in html
+    show_offline = html[html.index("function showOffline()"):html.index("let otpMode =")]
+    for sibling in ("login-form", "register-form", "forgot-form", "reset-form", "otp-form"):
+        assert sibling in show_offline, f"showOffline must hide {sibling}"
+    # ...and every other sub-form must hide it back, or it would linger under them
+    for fn, end in (("function showTab(", "function showForgot()"),
+                    ("function showForgot()", "function showReset()"),
+                    ("function showReset()", "// The auth card's"),
+                    ("function showOtp(", "function showView(")):
+        body = html[html.index(fn):html.index(end)]
+        assert "offline-form" in body, f"{fn.strip('function (')} must hide the offline state"
+
+
+def test_the_app_retries_by_itself_when_connectivity_returns(client):
+    """Nothing in the SPA listened for `online`, so recovery meant the user retrying each panel by
+    hand. Boot now re-runs on the browser's own signal — guarded, because `online` fires per
+    interface change and un-guarded retries would stack overlapping /me calls."""
+    html = client.get("/").get_data(as_text=True)
+    assert 'window.addEventListener("online", () => retryBoot(false));' in html
+    retry = html[html.index("async function retryBoot("):html.index('window.addEventListener("online"')]
+    assert "bootRetrying = true;" in retry and "finally { bootRetrying = false; }" in retry
+
+
+def test_auto_retry_cannot_disturb_a_user_mid_otp_or_mid_password_reset(client):
+    """Regression. `online` fires on any interface change — a Wi-Fi flap, a VPN toggle — and the
+    first version of this retry re-ran boot from wherever the user happened to be. On the OTP screen
+    that meant /me returning 401 (nobody is signed in *yet*), which reset the auth card to the login
+    tab: the code the user had just typed was discarded and its countdown stopped. The password-reset
+    screen had the same exposure.
+
+    `currentUser` does not guard it — it is assigned only in enterApp(), so it is null throughout
+    both flows. The retry must additionally require that the offline state is the thing on screen,
+    which is the only situation it exists for. Verified live: with the guard, the OTP form survives
+    an `online` event with its code intact and its timer still counting down."""
+    html = client.get("/").get_data(as_text=True)
+    retry = html[html.index("async function retryBoot("):html.index('window.addEventListener("online"')]
+    assert 'if (bootRetrying || currentUser || $("offline-form").hidden) return;' in retry, \
+        "auto-retry must be inert unless the offline state is actually displayed"
+    # the screens this protects must still be reachable sub-forms, or the guard is guarding nothing
+    for fn in ("function showOtp(", "function showReset()"):
+        assert fn in html
+
+
+def test_forgot_password_does_not_promise_an_email_it_never_requested(client):
+    """The handler flashed "a reset link is on its way" from a `||` fallback whenever the response
+    carried no body — which is exactly what a dropped request (status 0) or a rate-limit 429 looks
+    like. The user was sent to wait for an email nobody had asked for. The anti-enumeration wording
+    on the SUCCESS path is deliberate and must survive untouched."""
+    html = client.get("/").get_data(as_text=True)
+    handler = html[html.index('onSubmit("forgot-form"'):html.index('onSubmit("reset-form"')]
+
+    assert "if (!r.ok) {" in handler, "a refused or dropped request must not reach the success wording"
+    # the failure branch has to come BEFORE the reassuring flash, or it changes nothing
+    assert handler.index("if (!r.ok) {") < handler.index("reset link is on its way"), \
+        "the failure branch must short-circuit before the success message"
+    assert "r.status === 0" in handler, "a dropped request should read as a connection problem"
+    assert 'reset link is on its way.", "ok")' in handler, "the hedged success wording must stay as-is"
