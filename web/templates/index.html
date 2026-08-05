@@ -1036,6 +1036,19 @@
           <p id="otp-nudge" class="hint" style="margin:8px 0 0">Didn't get the code? Check your spam folder — or resend it above once the timer ends.</p>
           <div id="otp-flash" class="flash" aria-live="polite"></div>
         </form>
+
+        <!-- Shown INSTEAD of the sign-in form when the app boots and the server cannot be reached at all
+             (api() reports status 0). The session cookie may still be perfectly valid — only the network is
+             down — so presenting a login form would ask for credentials that cannot work and read as "the
+             app is broken". Not a <form>: there is nothing to submit until the network returns. -->
+        <div id="offline-form" hidden>
+          <p class="muted" style="margin:0 0 12px">We can't reach the server right now. This is usually your
+            connection — your account is fine, and you don't need to sign in again.</p>
+          <div style="margin-top:16px"><button type="button" id="offline-retry">Try again</button>
+            <button type="button" class="ghost" onclick="showTab('login')">Sign in instead</button></div>
+          <p class="hint" style="margin:10px 0 0">We'll retry on our own as soon as you're back online.</p>
+          <div id="offline-flash" class="flash" aria-live="polite"></div>
+        </div>
       </div>
       </div>
       </div>
@@ -1550,25 +1563,33 @@
       $("login-form").hidden = which !== "login";
       $("register-form").hidden = which !== "register";
       $("forgot-form").hidden = true; $("reset-form").hidden = true; $("otp-form").hidden = true;
+      $("offline-form").hidden = true;
       document.querySelector(".tabs").hidden = false;
     }
 
     function showForgot() {
-      ["login-form", "register-form", "reset-form", "otp-form"].forEach((id) => { $(id).hidden = true; });
+      ["login-form", "register-form", "reset-form", "otp-form", "offline-form"].forEach((id) => { $(id).hidden = true; });
       $("forgot-form").hidden = false;
       document.querySelector(".tabs").hidden = true;
     }
 
     function showReset() {
-      ["login-form", "register-form", "forgot-form", "otp-form"].forEach((id) => { $(id).hidden = true; });
+      ["login-form", "register-form", "forgot-form", "otp-form", "offline-form"].forEach((id) => { $(id).hidden = true; });
       $("reset-form").hidden = false;
+      document.querySelector(".tabs").hidden = true;
+    }
+
+    // The auth card's "the server is unreachable" state — a sibling of showForgot/showReset, not a new screen.
+    function showOffline() {
+      ["login-form", "register-form", "forgot-form", "reset-form", "otp-form"].forEach((id) => { $(id).hidden = true; });
+      $("offline-form").hidden = false;
       document.querySelector(".tabs").hidden = true;
     }
 
     let otpMode = "login";                              // "login" (2FA) or "register" (email verification) — same UI
     function showOtp(expiresIn, mode, codeSent) {
       otpMode = mode === "register" ? "register" : "login";
-      ["login-form", "register-form", "forgot-form", "reset-form"].forEach((id) => { $(id).hidden = true; });
+      ["login-form", "register-form", "forgot-form", "reset-form", "offline-form"].forEach((id) => { $(id).hidden = true; });
       $("otp-form").hidden = false;
       document.querySelector(".tabs").hidden = true;
       const reg = otpMode === "register";
@@ -1865,6 +1886,17 @@
 
     onSubmit("forgot-form", async (f) => {
       const r = await api("/forgot-password", { method: "POST", body: { email: f.email.value } });
+      // Only claim a link is on its way once the server has actually accepted the request. A request that
+      // never completed (status 0) or was refused (e.g. a 429 from the rate limiter) carries no `data`, so
+      // it used to fall through to the reassuring wording below — styled as success — and send the user off
+      // to wait for an email nobody had been asked to send. The "if that email is registered" hedge on the
+      // success path is untouched: it is deliberate anti-enumeration, not vagueness.
+      if (!r.ok) {
+        flash("forgot-flash", r.status === 0
+          ? "We couldn't reach the server — check your connection and try again."
+          : (r.data && r.data.error) || "Couldn't send the reset link — please try again.");
+        return;
+      }
       flash("forgot-flash", (r.data && r.data.status) || "If that email is registered, a reset link is on its way.", "ok");
       if (r.data && r.data.dev_reset_link) {   // dev/mock (no SMTP): surface the link so reset is testable with no inbox
         $("forgot-flash").innerHTML += ' — <a href="' + escapeHtml(r.data.dev_reset_link) + '" style="text-decoration:underline">open reset link (dev)</a>';
@@ -4032,6 +4064,34 @@
     });
 
     // ---- Boot: am I already logged in? (GET /me) ----
+    // Three outcomes, not two. `status === 0` is api()'s marker for "the request never completed" — no
+    // signal, DNS down, server unreachable — which is NOT the same as the server answering "you are not
+    // logged in". Treating them alike is what put a user with a perfectly valid session in front of a
+    // sign-in form they had no way to satisfy (#440).
+    let bootRetrying = false;
+    async function bootSession() {
+      const r = await api("/me");
+      if (r.ok && r.data && r.data.username) { enterApp(r.data.username, r.data.display_name); return true; }
+      showView("auth");
+      if (r.status === 0) showOffline(); else showTab("login");
+      return false;
+    }
+
+    // Retry, by hand or the moment the browser says we're back. Guarded so a burst of `online` events (they
+    // fire per interface change) cannot stack overlapping /me calls.
+    async function retryBoot(fromUser) {
+      if (bootRetrying || currentUser) return;
+      bootRetrying = true;
+      if (fromUser) flash("offline-flash", "Trying…", "ok");
+      try {
+        if (!await bootSession() && $("offline-form").hidden === false) {
+          flash("offline-flash", "Still can't reach the server.", "warn");
+        }
+      } finally { bootRetrying = false; }
+    }
+    window.addEventListener("online", () => retryBoot(false));
+    $("offline-retry").addEventListener("click", () => retryBoot(true));
+
     (async function init() {
       applyCredentialHints();
       let t = new URLSearchParams(location.search).get("reset_token");
@@ -4048,8 +4108,7 @@
         try { t = sessionStorage.getItem("pending_reset_token"); if (t) sessionStorage.removeItem("pending_reset_token"); } catch (_) { t = null; }
       }
       if (t) { resetToken = t; showView("auth"); showReset(); return; }   // form reads resetToken, not the URL
-      const r = await api("/me");
-      if (r.ok && r.data && r.data.username) { enterApp(r.data.username, r.data.display_name); } else { showView("auth"); }
+      await bootSession();
     })();
   </script>
   <script>
