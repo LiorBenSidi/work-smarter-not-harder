@@ -26,10 +26,31 @@ def test_save_then_get_profile_roundtrip(profile_client):
     assert {k: got[k] for k in _profile()} == _profile()
 
 
+def test_save_then_get_keeps_the_training_preferences(profile_client):
+    # `equipment` and `split_preference` are optional and were added after the original six, so a
+    # save path that quietly dropped them would leave every unit test green — the validator would
+    # still return them, they would just never reach the store. F5 (#276) plans from these two
+    # values, so the read-back below is the assertion that matters, not the POST echo.
+    _login(profile_client)
+    payload = {**_profile(), "equipment": ["barbell", "bands"], "split_preference": "upper_lower"}
+    assert profile_client.post("/profile", json=payload).status_code == 200
+    got = profile_client.get("/profile").get_json()["profile"]
+    assert got["equipment"] == ["barbell", "bands"]
+    assert got["split_preference"] == "upper_lower"
+
+
 def test_save_invalid_profile_returns_400(profile_client):
     _login(profile_client)
     bad = _profile()
     bad["age"] = "old"
+    assert profile_client.post("/profile", json=bad).status_code == 400
+
+
+def test_save_rejects_an_unknown_equipment_item(profile_client):
+    # the preference rules are proven per-value as a unit; this proves the route is wired to them
+    # at all, which the six original fields cannot demonstrate on their behalf.
+    _login(profile_client)
+    bad = {**_profile(), "equipment": ["barbell", "treadmill"]}
     assert profile_client.post("/profile", json=bad).status_code == 400
 
 
