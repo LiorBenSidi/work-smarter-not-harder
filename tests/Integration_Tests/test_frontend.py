@@ -1088,8 +1088,27 @@ def test_the_app_retries_by_itself_when_connectivity_returns(client):
     html = client.get("/").get_data(as_text=True)
     assert 'window.addEventListener("online", () => retryBoot(false));' in html
     retry = html[html.index("async function retryBoot("):html.index('window.addEventListener("online"')]
-    assert "if (bootRetrying || currentUser) return;" in retry, "retry must not stack or fire while signed in"
     assert "bootRetrying = true;" in retry and "finally { bootRetrying = false; }" in retry
+
+
+def test_auto_retry_cannot_disturb_a_user_mid_otp_or_mid_password_reset(client):
+    """Regression. `online` fires on any interface change — a Wi-Fi flap, a VPN toggle — and the
+    first version of this retry re-ran boot from wherever the user happened to be. On the OTP screen
+    that meant /me returning 401 (nobody is signed in *yet*), which reset the auth card to the login
+    tab: the code the user had just typed was discarded and its countdown stopped. The password-reset
+    screen had the same exposure.
+
+    `currentUser` does not guard it — it is assigned only in enterApp(), so it is null throughout
+    both flows. The retry must additionally require that the offline state is the thing on screen,
+    which is the only situation it exists for. Verified live: with the guard, the OTP form survives
+    an `online` event with its code intact and its timer still counting down."""
+    html = client.get("/").get_data(as_text=True)
+    retry = html[html.index("async function retryBoot("):html.index('window.addEventListener("online"')]
+    assert 'if (bootRetrying || currentUser || $("offline-form").hidden) return;' in retry, \
+        "auto-retry must be inert unless the offline state is actually displayed"
+    # the screens this protects must still be reachable sub-forms, or the guard is guarding nothing
+    for fn in ("function showOtp(", "function showReset()"):
+        assert fn in html
 
 
 def test_forgot_password_does_not_promise_an_email_it_never_requested(client):

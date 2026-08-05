@@ -13,7 +13,7 @@
 > +10 Azure deploy + CI/CD; supersedes [`FEEDBACK.md`](FEEDBACK.md)). Architecture detail lives in [`DESIGN.md`](DESIGN.md); the phased plan in
 > [`ROADMAP.md`](ROADMAP.md).
 >
-> **Last updated:** 2026-08-05 · **Suite at this snapshot:** **1116 checks, 1071 passing / 45 environment-gated**
+> **Last updated:** 2026-08-05 · **Suite at this snapshot:** **1117 checks, 1072 passing / 45 environment-gated**
 > (+ 17 browser e2e scenarios)
 > (`python -m pytest tests/ -q`; the env-gated ones run in CI's `compose-e2e` job against the live containers).
 > Since the 07-12 snapshot (783 tests): **Shiri's Random Forest landed** — a real `ai/model/model.pkl` +
@@ -25,7 +25,7 @@
 > then rose to **1063** as the Forum cold-seed, its test-validation pass, and the dashboard read-cap landed (#391–#398),
 > and to **1072** as the like/dislike counts and a round of SPA rendering, bidi, a11y and supersede-guard
 > fixes landed (#417–#433), then to **1111** with the F5 training preferences on the profile (#410), and to **1113** with the
-> route-level round-trip proving those preferences actually reach the store (#434), then **1116** with the
+> route-level round-trip proving those preferences actually reach the store (#434), then **1117** with the
 > offline-boot and reset-honesty guards (#440).
 >
 > Every assertion was kept; the count fell because copies did, not coverage.
@@ -188,7 +188,7 @@ Columns are the test-type dirs under `tests/`. Cells name representative file(s)
 | **Deploy / scale (Elad)** | — | `test_deploy_contract` (24) · `test_scale_contract` (9) · `test_pin_contract` (4) | — | — | — | — |
 | **Rate-limiting / anti-spam (Elad)** | — | — | — | — | `test_rate_limit` (9) | in `test_load` |
 | **Data layer (`db.py` + Mongo)** | `test_db` (56) · `test_backup_script` (2) | `test_db_mongo` (21, real Mongo) | — | — | (injection-safe queries) | — |
-| **Frontend (SPA / CSRF / a11y / mobile)** | `test_frontend_mobile_guards` (14) | `test_frontend` (37) | — | `test_e2e` leg | `test_csrf` (6) · `test_web_hardening` (4) · `test_review_hardening` (3) | — |
+| **Frontend (SPA / CSRF / a11y / mobile)** | `test_frontend_mobile_guards` (14) | `test_frontend` (38) | — | `test_e2e` leg | `test_csrf` (6) · `test_web_hardening` (4) · `test_review_hardening` (3) | — |
 | **Observability (logging)** | `test_logging_config` (19) | — | — | — | (access-log path escaping) | — |
 | **App config / debug flag / secret** | `test_config` (13) · `test_scaffold` (4) | — | — | — | (no `.env` tracked) | — |
 | **Error handling · ready gate · perf** | — | `test_error_handlers` (5) · `test_ready` (3) · `test_perf` (7) | — | — | — | — |
@@ -196,17 +196,17 @@ Columns are the test-type dirs under `tests/`. Cells name representative file(s)
 | **Fault tolerance / isolation** | — | — | — | `test_fault_isolation` (2) · Full-System `test_parts_in_isolation` (12) | — | — |
 | **Whole-system journey** | — | — | — | `test_e2e` (1) · Full-System `test_everything_together_sync` (15) | — | — |
 
-**Totals by type (full suite, `pytest --collect-only`):** Unit **419** · Integration **399** · Negative **157** ·
-System **14** · Full-System **27** · Security **88** · Stress **12** → **1116 automated checks across the seven
+**Totals by type (full suite, `pytest --collect-only`):** Unit **419** · Integration **400** · Negative **157** ·
+System **14** · Full-System **27** · Security **88** · Stress **12** → **1117 automated checks across the seven
 pytest suites**, plus **17 browser end-to-end scenarios** driven separately (`tests/E2E_Tests/`, run in CI as
 the *e2e (browser · desktop + mobile)* job — not counted in the pytest total). This matches the header count.
 
-Read the total as *checks*, not as hand-written test functions: 1116 collected cases come from **840 test
+Read the total as *checks*, not as hand-written test functions: 1117 collected cases come from **841 test
 functions** (measured with `grep -c "^def test_"` across `tests/`), the remainder being parametrised cases (one `@parametrize` over 11 malformed payloads is 11
 collected cases, not 11 tests written). The suite is deliberately weighted toward the layers where a
 regression is cheapest to catch — unit and negative input walls — rather than toward volume.
 
-**Pass / skip:** the pre-07-12 snapshot was **747 pass, 36 skip in ~47 s**; the current suite is **1071 pass,
+**Pass / skip:** the pre-07-12 snapshot was **747 pass, 36 skip in ~47 s**; the current suite is **1072 pass,
 45 skip in ~85 s** (`python -m pytest tests/ -q`). **43 of the 45** skips are env-gated and *not broken* —
 they run the moment their dependency is present; the other 2 are the unconditional `test_ai` scaffolds
 flagged for removal below (#358):
@@ -260,7 +260,7 @@ machine (env vars, no local paths), and are exercised by CI on every PR. A run t
   (`test_csrf`), NoSQL-injection-safe queries (`test_profile`, `test_forum`), ownership enforcement on
   forum edit/delete (403), auth-gating of dashboard/history, and response-hardening (`test_web_hardening`).
 
-The two supporting directories complete the 1116: **Negative (157)** — adversarial and malformed input across
+The two supporting directories complete the 1117: **Negative (157)** — adversarial and malformed input across
 auth, profile, check-in, forum and media — and **Full-System (27)** — whole-stack journeys in-process, plus the
 parts-in-isolation suite. The per-type figures here are the same ones tabulated in §3; both are
 `pytest --collect-only` counts, not estimates.
@@ -424,7 +424,7 @@ between planes (§1). Full detail in [`COLLABORATORS.md`](../COLLABORATORS.md) a
 cp .env.example .env
 docker compose up --build          # 3 containers; only web is published
 # → http://localhost:8000/health   → then register, set a profile, check in, see the dashboard
-pytest -q                          # 1071 pass / 45 env-gated skip
+pytest -q                          # 1072 pass / 45 env-gated skip
 ```
 
 CI reproduces the gate on every PR (ruff → bandit → pytest + a `mongo:7` service). `main` is

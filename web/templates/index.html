@@ -4077,10 +4077,15 @@
       return false;
     }
 
-    // Retry, by hand or the moment the browser says we're back. Guarded so a burst of `online` events (they
-    // fire per interface change) cannot stack overlapping /me calls.
+    // Retry, by hand or the moment the browser says we're back. Guarded three ways, and the third is the
+    // subtle one: `online` fires on any interface change (Wi-Fi flap, VPN toggle), and re-running boot from
+    // an auth screen would send /me, get a 401 — nobody is signed in *yet* — and reset the card to the login
+    // tab. That would throw a user off the OTP form mid-verification, discarding the code they had typed and
+    // stopping its countdown, and would do the same to the password-reset form. `currentUser` does not cover
+    // it: it is only set in enterApp(), so it is null throughout those flows. Retry only while the offline
+    // state is the thing actually on screen — the only case this exists for.
     async function retryBoot(fromUser) {
-      if (bootRetrying || currentUser) return;
+      if (bootRetrying || currentUser || $("offline-form").hidden) return;
       bootRetrying = true;
       if (fromUser) flash("offline-flash", "Trying…", "ok");
       try {
