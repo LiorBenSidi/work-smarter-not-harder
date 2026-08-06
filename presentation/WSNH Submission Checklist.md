@@ -56,6 +56,11 @@
 - [ ] **Everyone has commits** — GitHub history is graded per member (course requirement); make sure each
       member's work lands as their own commits before submission.
 
+**Operational:**
+- [ ] **Freeze deploys during Noam's review window** — don't push to `main` or merge PRs while the TA is
+      on the live site. A mid-review SW reload drops the user to the login screen (known; not worth a code
+      fix given the 17-day window, but avoidable by not deploying).
+
 **Belt-and-suspenders:**
 - [ ] Make sure the **Azure VM is running** at demo/submission time (instructor auto-shutdown at 23:50 UTC —
       start it from the Azure portal beforehand; `DEPLOY_ENABLED=true`).
