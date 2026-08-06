@@ -574,6 +574,16 @@ def test_service_worker_is_stamped_with_a_build_version(client):
     assert re.search(r'CACHE\s*=\s*"ws-shell-[0-9a-f]{8}"', sw), "SW cache name must carry the build hash"
 
 
+def test_service_worker_navigation_is_cache_first(client):
+    sw = client.get("/sw.js").get_data(as_text=True)
+    assert "caches.match" in sw and 'req.mode === "navigate"' in sw
+    nav_block = sw[sw.index('req.mode === "navigate"'):]
+    nav_block = nav_block[:nav_block.index("return;")]
+    assert "caches.match" in nav_block, "navigation must try the cache"
+    assert nav_block.index("caches.match") < nav_block.index("fetch"), \
+        "navigation must serve from cache before falling back to network"
+
+
 def test_hero_display_font_is_actually_served(client):
     # The guard test asserts the wiring STRINGS exist; this proves Flask really serves the font bytes, so a
     # font missing from the image or a mis-set static route is caught in CI, not at the demo (fallback font).

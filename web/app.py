@@ -387,9 +387,10 @@ def create_app(config=Config, *, users=None, profiles=None, history=None, forum=
         # conditional is control-flow, not data: the dev-tools markup is omitted when the shell is
         # rendered inside the mobile-preview iframe (?preview=1), so even a stale cached bundle can
         # never nest the dev tools recursively inside the preview (the #138 recursion).
-        # No-store on the shell: a deployed UI change (e.g. a CSS/colour fix) must show on the next load,
-        # not sit behind the browser's heuristic cache until a manual hard-refresh. The SW handles offline
-        # separately (navigations are network-first), and static assets keep their own long cache headers.
+        # No-store on the shell: the SW serves navigations cache-first for instant boot (even offline),
+        # but a deploy ships new SW bytes (ASSET_VERSION hash) → install/activate/controllerchange →
+        # auto-reload onto the fresh build. No-store ensures the SW's background revalidation and the
+        # browser's SW byte-check always see the latest response, not a stale HTTP cache entry.
         return render_template("index.html", preview=bool(request.args.get("preview"))), 200, \
             {"Cache-Control": "no-cache, no-store, must-revalidate"}
 
