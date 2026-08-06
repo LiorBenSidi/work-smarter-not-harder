@@ -389,8 +389,8 @@ def create_app(config=Config, *, users=None, profiles=None, history=None, forum=
         # never nest the dev tools recursively inside the preview (the #138 recursion).
         # No-store on the shell: the SW serves navigations cache-first for instant boot (even offline),
         # but a deploy ships new SW bytes (ASSET_VERSION hash) → install/activate/controllerchange →
-        # auto-reload onto the fresh build. No-store ensures the SW's background revalidation and the
-        # browser's SW byte-check always see the latest response, not a stale HTTP cache entry.
+        # auto-reload onto the fresh build. No-store ensures the install-event addAll always fetches
+        # the latest shell HTML, not a stale HTTP-cache entry.
         return render_template("index.html", preview=bool(request.args.get("preview"))), 200, \
             {"Cache-Control": "no-cache, no-store, must-revalidate"}
 
