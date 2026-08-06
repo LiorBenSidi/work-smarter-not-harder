@@ -45,8 +45,13 @@ self.addEventListener("fetch", (e) => {
   // It's a dev-only tool, so no offline need. The server strips the dev-tools markup from this response.
   if (url.searchParams.has("preview")) { e.respondWith(fetch(req)); return; }
 
-  if (req.mode === "navigate") {                          // page loads: network-first, offline -> cached shell
-    e.respondWith(fetch(req).catch(() => caches.match("/")));
+  if (req.mode === "navigate") {                          // page loads: cache-first, offline-capable
+    e.respondWith(
+      caches.match("/").then((cached) => {
+        if (!cached) return fetch(req);                    // cache miss (evicted or cleared): fall back to network
+        return cached;                                     // serve the shell instantly from disk
+      })
+    );
     return;
   }
   e.respondWith(caches.match(req).then((r) => r || fetch(req)));  // static assets: cache-first
