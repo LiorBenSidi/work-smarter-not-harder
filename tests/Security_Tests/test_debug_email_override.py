@@ -24,8 +24,10 @@ def _login(client, headers=None):
 
 
 def test_header_alone_does_not_leak_code_when_flag_off(make_otp_client, fake_users, auth_module):
-    # SMTP configured, AUTH_DEBUG_EMAIL NOT set (the default). The X-Debug-Email header must be INERT:
-    # the code goes out by email and is never returned. This is the property that keeps prod safe.
+    """With the server flag unset — the default, and therefore what production runs — the client header is inert and the code only ever leaves by email.
+
+    This is the single property that stops a public deploy from being an account-takeover machine.
+    """
     client = make_otp_client(fake_users, SMTP_HOST="smtp.example.com")
     with patch.object(auth_module, "send_email", return_value=True) as sent:
         _register(client)
@@ -36,8 +38,7 @@ def test_header_alone_does_not_leak_code_when_flag_off(make_otp_client, fake_use
 
 
 def test_flag_and_header_together_return_code_over_smtp(make_otp_client, fake_users, auth_module):
-    # Server opted in (AUTH_DEBUG_EMAIL) AND the client asked (header): the code comes back on-screen
-    # even though SMTP is configured, and send_email is told to use the log backend (nothing is sent).
+    """When the server has opted in AND the client asks, the code comes back on-screen and the log backend is forced — so a developer can exercise login on a live-SMTP deploy without an inbox and without sending real mail."""
     client = make_otp_client(fake_users, SMTP_HOST="smtp.example.com", AUTH_DEBUG_EMAIL=True)
     with patch.object(auth_module, "send_email", return_value=True) as sent:
         _register(client)
@@ -48,7 +49,7 @@ def test_flag_and_header_together_return_code_over_smtp(make_otp_client, fake_us
 
 
 def test_flag_on_but_no_header_still_emails(make_otp_client, fake_users, auth_module):
-    # Opt-in is PER REQUEST: with the flag on but no header, a normal login takes the real email path.
+    """Opt-in is per REQUEST, not per deploy: with the flag on but no header, an ordinary login still takes the real email path, so enabling the flag does not silently disable email for everyone."""
     client = make_otp_client(fake_users, SMTP_HOST="smtp.example.com", AUTH_DEBUG_EMAIL=True)
     with patch.object(auth_module, "send_email", return_value=True) as sent:
         _register(client)
@@ -58,8 +59,10 @@ def test_flag_on_but_no_header_still_emails(make_otp_client, fake_users, auth_mo
 
 
 def test_forgot_password_reset_link_gated_off_by_default(make_otp_client, fake_users, auth_module):
-    # The critical vector: forgot-password only needs the email. With the flag OFF the reset link must
-    # NEVER come back — even with the mock header — or anyone knowing an email could reset the password.
+    """The critical vector — forgot-password needs nothing but an email address, so with the flag off the reset link must never come back even when the header is sent.
+
+    If it did, knowing any registered address would be enough to seize that account.
+    """
     client = make_otp_client(fake_users, SMTP_HOST="smtp.example.com")   # flag off (default)
     with patch.object(auth_module, "send_email", return_value=True):
         _register(client)
@@ -70,8 +73,10 @@ def test_forgot_password_reset_link_gated_off_by_default(make_otp_client, fake_u
 
 
 def test_forgot_password_reset_link_surfaced_when_opted_in(make_otp_client, fake_users, auth_module):
-    # With the server flag on + the header, the same flow may surface the link (the developer's inbox-free
-    # reset path). This is the deliberate behaviour the flag guards.
+    """The deliberate counterpart: opted in, the same flow may surface the link — the inbox-free reset path.
+
+    It has to genuinely work, or developers route around the gate instead of using it.
+    """
     client = make_otp_client(fake_users, SMTP_HOST="smtp.example.com", AUTH_DEBUG_EMAIL=True)
     with patch.object(auth_module, "send_email", return_value=True):
         _register(client)
@@ -82,8 +87,8 @@ def test_forgot_password_reset_link_surfaced_when_opted_in(make_otp_client, fake
 
 
 def test_predicate_gate_matrix(web_app_module, fake_users, auth_module):
-    # Directly pin _debug_email_mock()'s truth table — the single choke point every auth flow routes
-    # through. flag off -> False; flag on + header -> True; flag on + no header -> False; TESTING wins.
+    """Pins the full truth table of the single predicate every auth flow routes through, so the gate cannot be weakened in one branch while the per-route tests above still pass."""
+    # flag off -> False; flag on + header -> True; flag on + no header -> False; TESTING wins.
     app = web_app_module.create_app(users=fake_users)
     app.config.update(SECRET_KEY="k", TESTING=False, AUTH_DEBUG_EMAIL=False)
     with app.test_request_context(headers={"X-Debug-Email": "mock"}):
@@ -101,8 +106,7 @@ def test_predicate_gate_matrix(web_app_module, fake_users, auth_module):
 
 
 def test_auth_config_advertises_toggle_only_when_enabled(make_otp_client, fake_users):
-    # The panel reveals the Live/Mock switch iff /auth/config says so — true only when the flag is on AND
-    # not under TESTING (so the switch never shows on a deploy that can't honour it).
+    """The Live/Mock switch is advertised only on a deploy that can actually honour it, so a user is never shown a control that silently does nothing."""
     off = make_otp_client(fake_users)                          # AUTH_DEBUG_EMAIL unset
     assert off.get("/auth/config").get_json()["email_debug_toggle"] is False
     on = make_otp_client(fake_users, AUTH_DEBUG_EMAIL=True)

@@ -13,12 +13,14 @@ def _register_then_login(client):
 
 
 def test_session_cookie_is_httponly_and_samesite_lax(client):
+    """The session cookie is unreadable from JavaScript (HttpOnly) and is not attached to cross-site requests (SameSite), so an XSS or a forged form cannot lift or ride the session."""
     cookie = _register_then_login(client).headers.get("Set-Cookie", "")
     assert "HttpOnly" in cookie
     assert "SameSite=Lax" in cookie
 
 
 def test_session_cookie_secure_attribute_follows_config(web_app_module, fake_users):
+    """On an HTTPS deploy the session cookie carries Secure, so it is never sent over a plain-HTTP request where it could be captured in transit."""
     app = web_app_module.create_app(users=fake_users)
     app.config.update(SECRET_KEY="x-test", TESTING=True, SESSION_COOKIE_SECURE=True)
     c = app.test_client()
@@ -32,13 +34,14 @@ def test_session_cookie_secure_attribute_follows_config(web_app_module, fake_use
 
 
 def test_oversized_request_body_is_rejected_413(client):
+    """An over-large body is refused at the edge with a 413 rather than being parsed, so a single request cannot exhaust memory on the way in."""
     big = "a" * (64 * 1024 + 1)  # one byte over the 64 KB cap
     resp = client.post("/register", data=big, content_type="application/json")
     assert resp.status_code == 413
 
 
 def test_generates_ephemeral_secret_key_when_unset(web_app_module):
-    # with no SECRET_KEY configured, the app must still boot on a generated key (never an empty one)
+    """With no SECRET_KEY configured the app boots on a generated one of real length — never an empty key, which would make every session cookie trivially forgeable."""
     base = sys.modules["config"].Config
     cfg = type("NoSecret", (base,), {"SECRET_KEY": ""})
     app = web_app_module.create_app(config=cfg)

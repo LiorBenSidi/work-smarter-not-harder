@@ -15,8 +15,8 @@ def _login(client, ident):
 
 
 def test_checkin_and_profile_reject_non_finite_numbers(web_app_module):
-    # NaN/Infinity now fail an EXPLICIT finiteness check, not just the range bound (so the defense
-    # survives a future widened bound). Validators are pure functions -> call them directly.
+    """NaN and +/-Infinity fail an EXPLICIT finiteness check rather than only the range bound, so the defence survives someone widening a bound later."""
+    # Validators are pure functions -> call them directly.
     validate_checkin = sys.modules["routes.checkin"].validate_checkin
     validate_profile = sys.modules["routes.profile"].validate_profile
     checkin = {"sleep_hours": 7, "resting_hr": 60, "fatigue": 5, "soreness": 5, "training_load": 5}
@@ -31,7 +31,7 @@ def test_checkin_and_profile_reject_non_finite_numbers(web_app_module):
 
 
 def test_mark_notifications_read_rejects_a_non_string_id(messages_client):
-    # a hostile {"ids": [{"$gt": ""}]} used to reach set(ids) -> TypeError -> 503; now it's a clean 400.
+    """A hostile id element used to reach `set(ids)`, raise TypeError and surface as a 503; it is now a clean 400, so bad input reads as the caller's mistake rather than an outage."""
     _register(messages_client, "eddie", "eddie@example.com")
     _login(messages_client, "eddie")
     resp = messages_client.post("/notifications/read", json={"ids": [{"$gt": ""}]})
@@ -41,8 +41,9 @@ def test_mark_notifications_read_rejects_a_non_string_id(messages_client):
 
 
 def test_notification_actor_is_the_display_name_not_the_internal_handle(forum_client):
-    # the forum hides handles (shows display names); a vote notification must not re-expose the voter's
-    # handle. Use a SUFFIXED voter (handle "voter-2", display "voter") so handle != display name.
+    """The forum shows display names, so a vote notification must not re-expose the voter's internal handle."""
+    # Uses a SUFFIXED voter (handle "voter-2", display "voter") so the two genuinely differ — with a
+    # non-colliding username the assertion would pass either way and prove nothing.
     _register(forum_client, "poster", "poster@example.com")
     _register(forum_client, "voter", "voter1@example.com")           # handle "voter"
     _register(forum_client, "voter", "voter2@example.com")           # handle "voter-2", display "voter"

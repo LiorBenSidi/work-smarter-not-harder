@@ -14,6 +14,7 @@ class _BrokenProfiles:
 
 
 def test_dashboard_degrades_to_503_when_profile_store_fails(make_client, fake_users):
+    """The dashboard answers 503 when the PROFILE store is down — its own dependency, and the only place /dashboard is driven with that store failing."""
     c = make_client(fake_users, _BrokenProfiles())
     c.post("/register", json={"username": "alice", "password": "s3cretpw!", "email": "alice@example.com"})
     c.post("/login", json={"username": "alice", "password": "s3cretpw!", "email": "alice@example.com"})

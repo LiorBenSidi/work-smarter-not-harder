@@ -16,6 +16,7 @@ def _login(client, name):
 
 
 def test_a_third_user_cannot_read_a_private_conversation(messages_client):
+    """A DM is private to its two participants: an outsider naming either party's thread, or listing their own inbox, comes away with nothing."""
     c = messages_client
     for n in ("alice", "bob", "carol"):
         _register(c, n)
@@ -32,6 +33,7 @@ def test_a_third_user_cannot_read_a_private_conversation(messages_client):
 
 
 def test_a_third_user_does_not_receive_others_notifications(messages_client):
+    """Notification delivery is scoped to the recipient, so a bystander is never even told that two other people are talking."""
     c = messages_client
     for n in ("alice", "bob", "carol"):
         _register(c, n)
@@ -43,8 +45,7 @@ def test_a_third_user_does_not_receive_others_notifications(messages_client):
 
 
 def test_a_delimiter_username_cannot_hijack_another_pairs_thread(messages_client):
-    # regression for the thread-id collision: with a "|".join(pair) id, attacker "bob|carol" asking for
-    # their thread with "dave" would resolve to the SAME id as bob <-> "carol|dave" and leak it.
+    """Regression for the thread-id collision: under a `"|".join(pair)` id, a user named `bob|carol` asking for their thread with `dave` resolved to the same id as `bob` <-> `carol|dave` and read their messages."""
     c = messages_client
     for n in ("bob", "carol|dave", "bob|carol", "dave"):
         _register(c, n)
@@ -60,6 +61,7 @@ def test_a_delimiter_username_cannot_hijack_another_pairs_thread(messages_client
 
 
 def test_marking_read_only_affects_your_own_notifications(messages_client):
+    """Clearing notifications is scoped to the caller — one user opening their inbox must not silently wipe another user's unread badge."""
     c = messages_client
     for n in ("alice", "bob", "carol"):
         _register(c, n)

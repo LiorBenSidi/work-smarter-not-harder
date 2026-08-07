@@ -11,6 +11,7 @@ def _register(client, username="alice", password="s3cretpw!"):
 
 
 def test_password_is_hashed_not_plaintext(client, fake_users):
+    """A stolen user record must not hand over the password: what is stored is a werkzeug hash and the plaintext appears nowhere inside it."""
     _register(client, "alice", "s3cretpw!")
     stored = fake_users.get("alice")["password_hash"]
     assert stored != "s3cretpw!"             # never the plaintext
@@ -19,7 +20,7 @@ def test_password_is_hashed_not_plaintext(client, fake_users):
 
 
 def test_unknown_user_and_wrong_password_are_indistinguishable(client):
-    # no user-enumeration: same status + same body whether the user is missing or the password is wrong
+    """Login cannot be used to enumerate accounts: a wrong password and a non-existent user return the identical status AND the identical body."""
     _register(client, "alice", "s3cretpw!")
     wrong_pw = client.post("/login", json={"username": "alice", "password": "wrongpass1"})
     no_user = client.post("/login", json={"username": "ghost", "password": "s3cretpw!"})
@@ -32,17 +33,19 @@ def test_unknown_user_and_wrong_password_are_indistinguishable(client):
 
 
 def test_nosql_injection_login_payload_rejected(client):
-    # {"username": {"$gt": ""}} must be rejected as malformed input, never run as a query
+    """A Mongo operator sent where a username belongs is rejected as malformed input, so it can never be interpolated into a query and match every user."""
     resp = client.post("/login", json={"username": {"$gt": ""}, "password": {"$gt": ""}})
     assert resp.status_code == 400
 
 
 def test_nosql_injection_cannot_register(client):
+    """The same operator rejection covers registration, so no account can be created through a crafted query document."""
     resp = client.post("/register", json={"username": {"$ne": None}, "password": "s3cretpw!"})
     assert resp.status_code == 400
 
 
 def test_non_json_body_returns_400(client):
+    """A body that is not JSON is answered with a deliberate 400 rather than an unhandled parse error surfacing as a 500."""
     resp = client.post("/login", data="not json", content_type="text/plain")
     assert resp.status_code == 400
 
@@ -58,17 +61,19 @@ class _BrokenUsers:
 
 
 def test_register_degrades_to_503_when_store_fails(make_client):
+    """A database outage during registration reads as "temporarily unavailable" (503), not as a broken app (500) that leaks a stack trace."""
     resp = make_client(_BrokenUsers()).post("/register", json={"username": "alice", "password": "s3cretpw!", "email": "alice@example.com"})
     assert resp.status_code == 503
 
 
 def test_login_degrades_to_503_when_store_fails(make_client):
+    """Login degrades identically, so the same outage produces one consistent signal across both entry points instead of two different failures."""
     resp = make_client(_BrokenUsers()).post("/login", json={"username": "alice", "password": "s3cretpw!"})
     assert resp.status_code == 503
 
 
 def test_me_degrades_to_503_when_store_fails(client, fake_users, monkeypatch):
-    # /me was an unguarded 500 on a store hiccup; it must degrade to 503 like every other route.
+    """/me was an unguarded 500 on a store hiccup; it must degrade to 503 like every other route — the regression guard for that fix."""
     _register(client, "alice", "s3cretpw!")
     client.post("/login", json={"username": "alice", "password": "s3cretpw!"})   # session established first
     def boom(*a, **k):
@@ -78,14 +83,14 @@ def test_me_degrades_to_503_when_store_fails(client, fake_users, monkeypatch):
 
 
 def test_same_password_yields_different_hashes(client, fake_users):
-    # werkzeug salts each hash -> two users with the same password must not share a hash
+    """Hashes are salted per user, so a leaked table cannot be cracked once and reused, and two equal hashes never reveal two equal passwords."""
     _register(client, "alice", "samePassw0rd")
     _register(client, "bob", "samePassw0rd")
     assert fake_users.get("alice")["password_hash"] != fake_users.get("bob")["password_hash"]
 
 
 def test_login_with_unknown_user_still_verifies_a_hash(client, auth_module, monkeypatch):
-    # constant-time defense: the missing-user path must still run a password check (no timing oracle)
+    """The missing-user path still runs a password check, so response time cannot be used as an oracle for which usernames exist."""
     seen = []
     real = auth_module.check_password_hash
     monkeypatch.setattr(auth_module, "check_password_hash", lambda h, p: seen.append(h) or real(h, p))
