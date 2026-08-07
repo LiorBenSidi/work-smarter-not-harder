@@ -459,6 +459,25 @@ export const SCENARIOS = [
       const shown = await b.evaluate(
         `() => (document.querySelector("#forum-list") || {}).textContent || ""`);
       assert(shown.includes(marker), "the post vanished from the feed — a defence must not drop the content");
+
+      // Teardown. The forum is shared state for the whole run: leaving a post whose title carries markup
+      // changes what every later scenario renders. Delete our own post before handing the app on.
+      const removed = await b.pageExec(`(async () => {
+        const csrf = (document.cookie.match(/csrf_token=([^;]+)/) || [])[1] || "";
+        const list = await (await fetch("/forum/posts")).json();
+        const mine = (list.posts || []).filter((p) => String(p.title).includes(${JSON.stringify(marker)}));
+        for (const p of mine) {
+          await fetch("/forum/posts/" + p.id, { method: "DELETE", headers: { "X-CSRF-Token": csrf } });
+        }
+        return mine.length;
+      })()`);
+      assert(removed >= 1, "teardown could not find the probe post — it would leak into later scenarios");
+
+      const left = await b.pageExec(`(async () => {
+        const list = await (await fetch("/forum/posts")).json();
+        return (list.posts || []).filter((p) => String(p.title).includes(${JSON.stringify(marker)})).length;
+      })()`);
+      assert(left === 0, `teardown left ${left} probe post(s) in the shared forum`);
     },
   },
 ];
