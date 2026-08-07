@@ -202,7 +202,7 @@ System **14** · Full-System **27** · Security **88** · Stress **12** → **11
 pytest suites**, plus **19 browser end-to-end scenarios** driven separately (`tests/E2E_Tests/`, run in CI as
 the *e2e (browser · desktop + mobile)* job — not counted in the pytest total). This matches the header count.
 
-Read the total as *checks*, not as hand-written test functions: 1118 collected cases come from **842 test
+Read the total as *checks*, not as hand-written test functions: 1118 collected cases come from **837 test
 functions** (measured with `grep -c "^def test_"` across `tests/`), the remainder being parametrised cases (one `@parametrize` over 11 malformed payloads is 11
 collected cases, not 11 tests written). The suite is deliberately weighted toward the layers where a
 regression is cheapest to catch — unit and negative input walls — rather than toward volume.
