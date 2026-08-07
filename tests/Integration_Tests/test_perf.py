@@ -1,6 +1,6 @@
 """Integration tests for the response-perf layer: gzip + static-asset caching. OWNER: Lior.
 
-These pin the wire-level optimizations (course L7) so a regression is caught in CI: the SPA shell is
+These pin the wire-level optimizations so a regression is caught in CI: the SPA shell is
 gzipped and round-trips intact, gzip self-skips when it shouldn't apply (no Accept-Encoding, tiny bodies,
 binary files), and the static assets carry a cacheable header while the service worker stays no-cache.
 """

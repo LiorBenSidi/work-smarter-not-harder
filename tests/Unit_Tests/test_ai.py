@@ -1,7 +1,7 @@
 """MANDATORY unit tests for the AI — OWNER: Shiri (F3 readiness + recommendations).
 
 TDD: write these before/with the model. Remove the module `skip` + fill each body as you implement.
-Never comment out a broken test — fix it or delete it (course rule).
+Never comment out a broken test — fix it or delete it.
 """
 import pytest
 

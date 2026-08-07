@@ -208,7 +208,7 @@ def test_link_email_html_has_a_button_and_the_raw_link():
 
 
 def test_send_email_async_stays_sync_for_the_log_backend(caplog):
-    # No SMTP_HOST (dev / CI / grading): no thread — logs synchronously, so ordering + the dev-surfaced code
+    # No SMTP_HOST (dev / CI): no thread — logs synchronously, so ordering + the dev-surfaced code
     # in the response stay deterministic. The AUTH-H1/H2 oracle only exists on the live SMTP path.
     with caplog.at_level(logging.INFO):
         ok = email_mod.send_email_async({}, "a@b.co", "Your code", "code: 771")

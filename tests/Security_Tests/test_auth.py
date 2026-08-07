@@ -1,4 +1,4 @@
-"""MANDATORY auth/security tests — OWNER: Lior (F1). Required by the rubric (docs/FEEDBACK.md) + DESIGN §5.
+"""MANDATORY auth/security tests — OWNER: Lior (F1). Required by DESIGN §5.
 
 Adversarial: a stored password must be a werkzeug hash (never plaintext); bad / injection inputs must
 never authenticate or reach a query; login must not leak which half was wrong (no user-enumeration);
