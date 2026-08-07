@@ -889,7 +889,7 @@ def test_forum_updates_patch_in_place_never_teardown(client):
 def test_user_written_text_is_bidi_aware(client):
     """Hebrew content must lay out right-to-left (#426).
 
-    The app is bilingual — teammates post in Hebrew and the course staff read it — but every user-written
+    The app is bilingual — users post in Hebrew and in English — but every user-written
     string was rendered inside the page's LTR paragraph direction. Measured on the real forum title
     "היום מציגים פרויקט בכתיבת תוכנה לML": the trailing Latin "ML" painted at x=263 (as if the line ended
     LTR) instead of x=32, and the Hebrew started at the left edge instead of the right. `dir="auto"` makes

@@ -1,6 +1,6 @@
 """Stress: what the job queue does when it is overrun — OWNER: Elad.
 
-The course rule for stress tests is "decide in advance what can crash, and defend it". For the `ai`
+The rule for stress tests here: decide in advance what can crash, and defend it. For the `ai`
 container the answer is the unbounded queue: a traffic spike grows the backlog until memory runs out,
 and long before that the pool is burning cores on jobs whose callers already timed out. The defence is
 backpressure — reject early, cheaply, and keep serving. VM size sets when it breaks, not whether.

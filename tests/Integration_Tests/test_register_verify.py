@@ -23,7 +23,7 @@ def test_register_starts_verification_and_creates_no_account(verify_client):
     r = _start(verify_client)
     body = r.get_json()
     assert r.status_code == 200 and body["status"] == "verify_required" and body["email"] == "alice@example.com"
-    assert "dev_code" in body                                    # no SMTP -> code surfaced for dev/grading
+    assert "dev_code" in body                                    # no SMTP -> code surfaced in the response
     # the account does NOT exist yet -> login can't succeed
     assert verify_client.post("/login", json={"username": "alice@example.com", "password": PW}).status_code == 401
 

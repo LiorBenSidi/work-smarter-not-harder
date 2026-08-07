@@ -1,7 +1,7 @@
-"""Unit tests for the cold-seed (rubric §7 — fake clients + posts + comments). OWNER: Lior.
+"""Unit tests for the cold-seed (fake clients + posts + comments). OWNER: Lior.
 
 The seed is exercised two ways:
-- here, against an in-memory fake db (the course's mocking technique), so the orchestration —
+- here, against an in-memory fake db, so the orchestration —
   who gets created, idempotency, the backdated timeline, login-ability — runs on any machine with no
   Mongo; the one op the fake can't do (``forum_vote``'s server-side aggregation-pipeline update) is
   monkeypatched to an equivalent read-modify-write (the real pipeline is covered by ``test_db`` and by
@@ -129,7 +129,7 @@ def test_seed_data_is_internally_consistent(seed_mod):
 
 
 def test_seed_meets_the_rubric_minimums(seed_mod):
-    # rubric §7: "a few fake clients, with a few posts and comments".
+    # the seed ships a few fake clients, with a few posts and comments.
     assert len(seed_mod.SEED_USERS) >= 2
     assert len(seed_mod.SEED_POSTS) >= 2
     assert len(seed_mod.SEED_COMMENTS) >= 2

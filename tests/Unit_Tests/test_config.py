@@ -2,7 +2,7 @@
 
 A typo'd integer env var must NOT crash the app at import — it falls back to the default so a worker
 still boots (a bad MAX_CONTENT_LENGTH should degrade to the safe default, not kill gunicorn on import).
-Also pins the course-mandated `debug` flag: FLASK_DEBUG must toggle Flask's debug mode.
+Also pins the `debug` flag: FLASK_DEBUG must toggle Flask's debug mode.
 """
 import importlib.util
 import re
@@ -86,7 +86,7 @@ def test_web_gunicorn_timeout_exceeds_ai_client_timeout(cfg, rel):
     assert t > cfg.Config.AI_CLIENT_TIMEOUT, f"{rel}: gunicorn --timeout {t} must exceed AI_CLIENT_TIMEOUT"
 
 
-# ---- the course-mandated `debug` flag (TA notes: "a debug flag that enables debug mode") ----
+# ---- the `debug` flag: an explicit switch into debug mode ----
 def test_flask_debug_flag_on(monkeypatch):
     monkeypatch.setenv("FLASK_DEBUG", "1")
     assert _reload_config().Config.DEBUG is True

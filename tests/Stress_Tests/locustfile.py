@@ -7,7 +7,7 @@ Run it on demand (never as a per-commit merge gate — it needs a live stack and
     locust -f tests/Stress_Tests/locustfile.py --headless -u 50 -r 10 -t 1m \
            --host http://localhost:8000 --exit-code-on-error 1
 
-WHAT WE DECIDED CAN CRASH, AND HOW IT IS DEFENDED (course: "decide in advance what can crash"):
+WHAT WE DECIDED CAN CRASH, AND HOW IT IS DEFENDED (decided in advance, then defended):
 
 * ``/login`` + ``/register`` — the brute-force / bulk-signup surface. Defence: ``flask-limiter``
   (20/min, 10/min). So **429 is a PASS here, not a failure** — it proves the defence engaged. Only a

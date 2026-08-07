@@ -1,6 +1,6 @@
 """Unit tests for the DM + notification seams in web/services/db.py (Lior's data layer).
 
-Exercised against an in-memory fake collection — no Mongo, no Docker (the course's mocking technique).
+Exercised against an in-memory fake collection — no Mongo, no Docker, so it runs anywhere.
 These pin the behaviour contract the web stores depend on. Time is driven by a monkeypatched clock so
 ordering is deterministic instead of racing the wall clock.
 """

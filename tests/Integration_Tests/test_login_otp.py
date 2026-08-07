@@ -32,7 +32,7 @@ def test_login_returns_otp_required_when_active(otp_client):
 
 def test_dev_otp_surfaced_without_smtp_and_verifies(otp_client):
     _register(otp_client)
-    code = _login(otp_client).get_json()["dev_otp"]           # dev/no-SMTP -> code surfaced for grading
+    code = _login(otp_client).get_json()["dev_otp"]           # dev/no-SMTP -> code surfaced in the response
     assert re.fullmatch(r"\d{6}", code)
     v = otp_client.post("/verify-otp", json={"code": code})
     assert v.status_code == 200 and v.get_json()["status"] == "logged in"

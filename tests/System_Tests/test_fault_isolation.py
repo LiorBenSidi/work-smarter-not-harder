@@ -1,11 +1,11 @@
 """MANDATORY fault-tolerance system test — OWNER: Elad.
 
-The course rule: an AI or DB outage must NOT take the user-facing service down. The in-process test
+The rule: an AI or DB outage must NOT take the user-facing service down. The in-process test
 ``tests/Integration_Tests/test_web_ai.py`` proves the *code path* degrades when ``ai_client.predict``
 returns None. This proves the *deployment* does: it stops a real container and re-probes the real web
 service over HTTP.
 
-    /health  liveness   -> stays 200 with ai down AND with db down (course rule: Mongo-independent,
+    /health  liveness   -> stays 200 with ai down AND with db down (Mongo-independent by design,
                            otherwise Docker's healthcheck would kill the container during a DB blip)
     /ready   readiness  -> stays 200 with ai down (ai is non-critical); 503 with db down (db is core)
 
