@@ -7,9 +7,9 @@ regression guards (readiness shows without a profile #266; a check-in prompt ins
 #263).
 
 They are static (no browser) but validate a genuine property — NOT "does this code string exist". The
-cosmetic/duplicate UX greps that used to live here were removed per the course's test-quality rule (a test
+cosmetic/duplicate UX greps that used to live here were removed on the rule that a test
 must assert behaviour or an invariant, not mirror the implementation, and a test that isn't real shouldn't
-stay). The UX behaviour they nominally covered is exercised for real by the browser E2E
+stay. The UX behaviour they nominally covered is exercised for real by the browser E2E
 nav/responsive/forum scenarios (tests/E2E_Tests) and, for device-specific rendering, by the manual smoke
 test (docs/MOBILE_SMOKE_TEST.md).
 """

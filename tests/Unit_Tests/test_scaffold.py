@@ -5,7 +5,7 @@ never stops mattering: `test_env_secrets_not_committed` shells out to `git ls-fi
 the moment anyone commits a secret — deliberately asking git rather than the filesystem, so a
 developer's own gitignored `.env` is not a false positive.
 
-These guard the project's required structure and a cardinal course rule (never commit secrets).
+These guard the project's required structure and one cardinal rule: never commit secrets.
 They run in CI on every PR (see .github/workflows/ci.yml) and genuinely fail if an invariant breaks.
 """
 import subprocess

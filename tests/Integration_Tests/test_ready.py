@@ -1,6 +1,6 @@
 """Readiness endpoint (`/ready`) — the DB-ping gate used by the post-deploy check + external monitor.
 
-Distinct from `/health` (liveness, Mongo-independent by course rule): `/ready` returns 503 when the
+Distinct from `/health` (liveness, deliberately Mongo-independent): `/ready` returns 503 when the
 database is unreachable, so a green deploy proves the whole stack serves — not just that web answers.
 """
 from unittest.mock import MagicMock, patch
@@ -26,7 +26,7 @@ def test_ready_503_when_db_unreachable(make_client):
 
 
 def test_health_and_ready_are_distinct(make_client):
-    # /health = liveness (Mongo-independent, course rule); /ready = readiness (reflects a DB outage).
+    # /health = liveness (Mongo-independent by design); /ready = readiness (reflects a DB outage).
     client = make_client()
     with patch("services.db.get_db", side_effect=Exception("db down")):
         assert client.get("/health").status_code == 200   # liveness unaffected

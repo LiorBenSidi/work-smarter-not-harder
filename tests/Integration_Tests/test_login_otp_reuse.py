@@ -7,7 +7,7 @@ mode, reuse a still-valid code instead of minting a new one, so N rapid logins =
 
 These run with OTP ACTIVE (make_otp_client). Live-SMTP behaviour is exercised by setting SMTP_HOST and
 capturing send_email (the code otherwise only leaves by real email); the dev/no-SMTP path is regression-
-guarded so grading — which reads the surfaced code — keeps working.
+guarded so the no-SMTP sign-in flow — which reads the surfaced code — keeps working.
 """
 import re
 import time
@@ -88,8 +88,8 @@ def test_reuse_preserves_attempt_counter(live_otp):
 
 
 def test_dev_mode_mints_fresh_each_login(otp_client):
-    # No SMTP -> the code is surfaced in the response for grading. Reuse is LIVE-mode only, so dev keeps
-    # minting fresh every login (a reused code would return no dev_otp) — the grading flow is unchanged.
+    # No SMTP -> the code is surfaced in the response. Reuse is LIVE-mode only, so dev keeps
+    # minting fresh every login (a reused code would return no dev_otp) — that flow is unchanged.
     _register(otp_client)
     b1 = _login(otp_client).get_json()
     b2 = _login(otp_client).get_json()
