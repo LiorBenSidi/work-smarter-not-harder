@@ -13,6 +13,7 @@ SCRIPT = Path(__file__).resolve().parents[2] / "db" / "backup.sh"
 
 
 def test_backup_script_exists_and_is_executable():
+    """The backup script is present and runnable on the deploy target — a backup that cannot be invoked is the same as having no backup at all."""
     assert SCRIPT.is_file(), "db/backup.sh is missing"
     if sys.platform == "win32":
         # The Unix executable bit isn't a Windows concept (git may not preserve it on checkout); the
@@ -27,7 +28,10 @@ def test_backup_script_exists_and_is_executable():
            "can't run locally — the fail-fast-without-MONGO_URI contract is verified on Linux CI",
 )
 def test_backup_requires_mongo_uri():
-    # with no MONGO_URI the script must exit non-zero and name the missing var — before any mongodump
+    """With no connection string the script exits non-zero and names the missing variable, BEFORE touching the database.
+
+    A backup that silently does nothing is worse than one that fails loudly, because nobody finds out until they need to restore.
+    """
     result = subprocess.run(
         ["bash", str(SCRIPT)], capture_output=True, text=True, env={"PATH": "/usr/bin:/bin"}
     )

@@ -45,6 +45,7 @@ def _managed(root):
 
 
 def test_adds_a_single_console_handler(logmod, isolated_root_logger):
+    """Turning logging on attaches exactly one console handler, so every record appears once instead of being duplicated per attached handler."""
     root = logmod.configure_logging(enable=True, level="INFO", log_file="", force=True)
     managed = _managed(root)
     assert len(managed) == 1
@@ -52,28 +53,33 @@ def test_adds_a_single_console_handler(logmod, isolated_root_logger):
 
 
 def test_level_is_applied(logmod, isolated_root_logger):
+    """The configured level is genuinely applied, so raising it in production actually silences the quieter records rather than only appearing to."""
     logmod.configure_logging(enable=True, level="WARNING", log_file="", force=True)
     assert logging.getLogger().level == logging.WARNING
 
 
 def test_unknown_level_falls_back_to_info(logmod, isolated_root_logger):
+    """A typo in the level name falls back to a usable default instead of leaving the app running with no logging at all."""
     logmod.configure_logging(enable=True, level="NONSENSE", log_file="", force=True)
     assert logging.getLogger().level == logging.INFO
 
 
 def test_enable_false_suppresses_logging_and_adds_no_handler(logmod, isolated_root_logger):
+    """The off switch both suppresses records AND attaches nothing, so the cost of logging can be measured against a genuinely quiet baseline."""
     root = logmod.configure_logging(enable=False, force=True)
     assert logging.root.manager.disable == logging.CRITICAL   # the Lab-9.1 cost toggle
     assert _managed(root) == []                               # nothing attached when off
 
 
 def test_idempotent_without_force(logmod, isolated_root_logger):
+    """Configuring twice does not stack a second handler, so an accidental re-entry cannot silently double every log line."""
     logmod.configure_logging(enable=True, log_file="", force=True)
     logmod.configure_logging(enable=True, log_file="")        # no force -> no-op
     assert len(_managed(logging.getLogger())) == 1
 
 
 def test_force_replaces_handlers_without_stacking(logmod, isolated_root_logger):
+    """A forced reconfigure replaces the handler rather than adding to it, and the new level takes effect — so logging can be re-tuned at runtime without growing a handler per call."""
     logmod.configure_logging(enable=True, level="INFO", log_file="", force=True)
     logmod.configure_logging(enable=True, level="DEBUG", log_file="", force=True)
     assert len(_managed(logging.getLogger())) == 1            # replaced, not duplicated
@@ -81,6 +87,7 @@ def test_force_replaces_handlers_without_stacking(logmod, isolated_root_logger):
 
 
 def test_rotating_file_handler_writes_and_creates_parent(logmod, isolated_root_logger, tmp_path):
+    """Pointing at a log file attaches a rotating file handler alongside the console, creates the parent directory that does not exist yet, and the records genuinely arrive in the file."""
     from logging.handlers import RotatingFileHandler
     log_file = tmp_path / "nested" / "web.log"               # parent dir must be auto-created
     root = logmod.configure_logging(enable=True, level="INFO", log_file=str(log_file), force=True)
@@ -94,6 +101,7 @@ def test_rotating_file_handler_writes_and_creates_parent(logmod, isolated_root_l
 
 
 def test_bad_log_path_is_swallowed_console_still_works(logmod, isolated_root_logger):
+    """An unusable log path must not take the app down: the failure is swallowed and console logging keeps working."""
     bad = os.path.join("/dev/null", "cannot", "web.log")     # mkdir under a file -> OSError
     root = logmod.configure_logging(enable=True, log_file=bad, force=True)
     # the failure is swallowed: the console handler is still attached and no exception propagated
@@ -102,6 +110,7 @@ def test_bad_log_path_is_swallowed_console_still_works(logmod, isolated_root_log
 
 
 def test_re_enabling_clears_a_prior_disable(logmod, isolated_root_logger):
+    """Turning logging back on genuinely clears an earlier suppression, so a process cannot end up permanently muted."""
     logmod.configure_logging(enable=False, force=True)
     assert logging.root.manager.disable == logging.CRITICAL
     logmod.configure_logging(enable=True, log_file="", force=True)
@@ -109,6 +118,7 @@ def test_re_enabling_clears_a_prior_disable(logmod, isolated_root_logger):
 
 
 def test_request_emits_access_log_with_timing(make_client, fake_users, caplog):
+    """A real request produces an access line carrying the path and how long it took — the record that makes a slow endpoint visible at all."""
     # the app factory's after_request access log fires on a real request (web/app.py)
     client = make_client(fake_users)
     with caplog.at_level(logging.INFO):
@@ -118,7 +128,10 @@ def test_request_emits_access_log_with_timing(make_client, fake_users, caplog):
 
 
 def test_access_log_sanitizes_crlf_in_path(make_client, fake_users, caplog):
-    # a CRLF-bearing path must NOT produce a raw newline in the log line (CWE-117 log forging)
+    """A path containing CR/LF must not put a raw newline in the log, or an attacker could forge a second, entirely fabricated log line.
+
+    The characters are escaped rather than silently dropped, so the attempt itself stays visible to whoever reads the log.
+    """
     client = make_client(fake_users)
     with caplog.at_level(logging.INFO):
         client.get("/foo%0d%0afake-log-line")
@@ -129,6 +142,7 @@ def test_access_log_sanitizes_crlf_in_path(make_client, fake_users, caplog):
 
 
 def test_disabled_then_enabled_without_force_recovers(logmod, isolated_root_logger):
+    """Disabling and then re-enabling restores logging even WITHOUT forcing, so a process cannot get stuck permanently muted by an ordinary pair of calls."""
     # refutes the adversarial "stuck-mute" claim: disabling then re-enabling restores logging even
     # WITHOUT force=True — the disabled branch attaches no managed handler, so the next enable=True
     # never hits the idempotency early-return and reaches logging.disable(NOTSET).
@@ -141,29 +155,34 @@ def test_disabled_then_enabled_without_force_recovers(logmod, isolated_root_logg
 
 # ---- worker_log_file (per-worker path) — adversarial round 2 (F3) ----
 def test_worker_log_file_inserts_pid_before_extension(logmod):
+    """Each worker writes to its own file, so several processes cannot interleave and corrupt one another's lines."""
     assert logmod.worker_log_file("/app/logs/web.log", 123) == "/app/logs/web.123.log"
 
 
 def test_worker_log_file_defaults_missing_extension_to_log(logmod):
-    # extension-less path -> .log so ELK *.log globs still match
+    """A path with no extension still gets one, so the log-shipping glob that collects these files keeps matching them."""
     assert logmod.worker_log_file("/app/logs/web", 123) == "/app/logs/web.123.log"
 
 
 def test_worker_log_file_empty_is_passthrough(logmod):
+    """An empty path stays empty — file logging turned off means off, not a file named after the process id."""
     assert logmod.worker_log_file("", 123) == ""
 
 
 def test_worker_log_file_rejects_trailing_slash_dir(logmod):
+    """A path that names a directory is refused rather than quietly producing a strangely-named file inside it."""
     with pytest.raises(ValueError):
         logmod.worker_log_file("/app/logs/", 123)
 
 
 def test_worker_log_file_rejects_existing_directory(logmod, tmp_path):
+    """An existing directory is refused outright instead of writing a sibling file beside it, which nobody would think to look for."""
     with pytest.raises(ValueError):
         logmod.worker_log_file(str(tmp_path), 123)          # a real directory -> refuse, don't write a sibling
 
 
 def test_bad_log_path_logs_at_error_level(logmod, isolated_root_logger, caplog, tmp_path):
+    """An unusable log path is reported at error level, so file logging can never fail silently and leave someone hunting for records that were never written."""
     # Impossible on EVERY OS: a regular file used as a parent directory — makedirs can't create a
     # subdir under a file. (The old "/dev/null/cannot/web.log" is impossible only on Unix; on Windows
     # makedirs happily creates C:\dev\null\cannot, so no error fired and the test failed there.)
@@ -177,6 +196,7 @@ def test_bad_log_path_logs_at_error_level(logmod, isolated_root_logger, caplog, 
 
 
 def test_access_log_marks_a_truncated_long_path(make_client, fake_users, caplog):
+    """A very long path is capped AND the truncation is marked, so a reader can tell a shortened line from a complete one rather than trusting a partial path as the whole request."""
     client = make_client(fake_users)
     with caplog.at_level(logging.INFO):
         client.get("/" + "a" * 300)                         # path longer than the 200-char cap

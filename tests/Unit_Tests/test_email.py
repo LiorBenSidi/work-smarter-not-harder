@@ -22,6 +22,7 @@ email_mod = _load()
 
 
 def test_log_backend_returns_true_and_surfaces_the_body(caplog):
+    """With no relay configured the code is written to the log and nothing leaves the machine — the development path a teammate can run without a mail account."""
     with caplog.at_level(logging.INFO):
         ok = email_mod.send_email({}, "athlete@example.com", "Your code", "code: 482913")
     assert ok is True
@@ -29,6 +30,7 @@ def test_log_backend_returns_true_and_surfaces_the_body(caplog):
 
 
 def test_smtp_failure_returns_false_and_never_raises(monkeypatch):
+    """A mail server that is down must not 500 a login or a password reset: the failure is reported and swallowed, so the user still gets an answer."""
     def boom(*a, **k):
         raise OSError("relay unreachable")
     monkeypatch.setattr(email_mod.smtplib, "SMTP", boom)
@@ -64,6 +66,7 @@ def _fake_smtp(seen):
 
 
 def test_smtp_backend_uses_the_configured_relay(monkeypatch):
+    """Mail genuinely goes to the configured relay, over TLS, authenticated — with an explicit clean envelope sender rather than whatever the library would infer."""
     seen = {}
     monkeypatch.setattr(email_mod.smtplib, "SMTP", _fake_smtp(seen))
     ok = email_mod.send_email(
@@ -77,9 +80,10 @@ def test_smtp_backend_uses_the_configured_relay(monkeypatch):
 
 
 def test_smtp_message_carries_date_message_id_and_reply_to(monkeypatch):
-    # Strict receivers (Outlook/Microsoft, Proton, institutional mail like Technion) treat a MISSING Date or
-    # Message-ID as a spam signal and folder/drop otherwise-legitimate OTP/reset mail. Pin that both are set
-    # (Message-ID scoped to the sending domain) plus a Reply-To — the deliverability fix for #270.
+    """Strict receivers treat a missing Date or Message-ID as a spam signal and folder or drop otherwise-legitimate login and reset mail.
+
+    Both are set — the Message-ID scoped to the sending domain — alongside a Reply-To.
+    """
     seen = {}
     monkeypatch.setattr(email_mod.smtplib, "SMTP", _fake_smtp(seen))
     ok = email_mod.send_email(
@@ -93,10 +97,10 @@ def test_smtp_message_carries_date_message_id_and_reply_to(monkeypatch):
 
 
 def test_smtp_from_and_envelope_survive_a_comma_display_name(monkeypatch):
-    # Regression: MAIL_FROM with a COMMA in the display name (the full "Work Smarter, Not Harder" rename)
-    # made smtplib read it as an address list and collapse the envelope sender to a bare name -> SMTP 501,
-    # so OTP / reset emails silently never sent. The From header must be quoted and the envelope sender must
-    # be the clean address.
+    """A comma in the display name made the mail library read it as an address LIST and collapse the envelope sender to a bare name, which the relay rejected — so login and reset emails silently never sent.
+
+    The From header must be quoted and the envelope sender must be the clean address.
+    """
     seen = {}
     monkeypatch.setattr(email_mod.smtplib, "SMTP", _fake_smtp(seen))
     ok = email_mod.send_email(
@@ -109,6 +113,7 @@ def test_smtp_from_and_envelope_survive_a_comma_display_name(monkeypatch):
 
 
 def test_split_sender_bare_valid_and_malformed():
+    """The sender parser handles every shape the configuration can hold: a named address, a bare address, a name containing a comma, an empty pair of brackets, and stray angle brackets inside the name."""
     assert email_mod._split_sender("Coach <x@y.co>") == ("Coach", "x@y.co")
     assert email_mod._split_sender("x@y.co") == ("", "x@y.co")                         # bare address
     assert email_mod._split_sender("Work Smarter, Not Harder <a@b.co>") == ("Work Smarter, Not Harder", "a@b.co")
@@ -117,8 +122,7 @@ def test_split_sender_bare_valid_and_malformed():
 
 
 def test_malformed_mail_from_falls_back_and_never_emits_a_bare_comma(monkeypatch):
-    # A comma display name with NO real address ("<>") must NOT reintroduce the comma bug: the envelope
-    # falls back to a clean address, and the From header keeps the (quoted) name — never a bare comma.
+    """A comma display name with no real address must not reintroduce the comma bug: the envelope falls back to a clean address while the header keeps the quoted name — never a bare comma."""
     seen = {}
     monkeypatch.setattr(email_mod.smtplib, "SMTP", _fake_smtp(seen))
     ok = email_mod.send_email({"SMTP_HOST": "relay.test", "MAIL_FROM": "Work Smarter, Not Harder <>"},
@@ -129,7 +133,7 @@ def test_malformed_mail_from_falls_back_and_never_emits_a_bare_comma(monkeypatch
 
 
 def test_control_chars_in_recipient_abort_the_send(monkeypatch):
-    # SMTP-injection guard: a CR/LF in the recipient must abort (return False) before any SMTP command runs.
+    """A newline in the recipient is an attempt to append extra SMTP commands, so the send aborts before the connection is so much as opened."""
     sent = {"connected": False}
 
     class NoSend:
@@ -161,9 +165,10 @@ def test_control_chars_in_recipient_abort_the_send(monkeypatch):
 
 
 def test_html_alternative_is_attached_with_plaintext_fallback(monkeypatch):
-    # When `html` is provided the message is multipart/alternative: HTML-capable clients render the rich
-    # version, everything else falls back to the plaintext — so the code always arrives either way. Both
-    # parts carry the code, and the deliverability headers stay on the multipart root.
+    """With an HTML body the message is multipart/alternative: rich clients render the styled version and everything else falls back to plaintext, so the code arrives either way.
+
+    Both parts carry it, and the deliverability headers stay on the multipart root.
+    """
     seen = {}
     monkeypatch.setattr(email_mod.smtplib, "SMTP", _fake_smtp(seen))
     html = email_mod.code_email_html("246813", 10, "Here's your login code:", "why you got this")
@@ -181,8 +186,7 @@ def test_html_alternative_is_attached_with_plaintext_fallback(monkeypatch):
 
 
 def test_no_html_stays_single_part_plaintext(monkeypatch):
-    # Backward compatible: without `html`, the message is a plain text/plain single part (the pre-existing
-    # behaviour) — a client stripping HTML, or a caller that passes no template, is unaffected.
+    """Without an HTML body the message stays a single plaintext part, so a caller that passes no template is untouched by the multipart support."""
     seen = {}
     monkeypatch.setattr(email_mod.smtplib, "SMTP", _fake_smtp(seen))
     ok = email_mod.send_email(
@@ -193,6 +197,7 @@ def test_no_html_stays_single_part_plaintext(monkeypatch):
 
 
 def test_code_email_html_shows_the_code_and_select_to_copy_hint():
+    """The code email renders the code, tells the reader to select it to copy it (email cannot run JavaScript), states how long it lasts, and explains why they received it."""
     html = email_mod.code_email_html("135790", 7, "Here's your code:", "a reason line")
     assert "135790" in html                                          # the code is rendered
     assert "copy" in html.lower()                                    # select-to-copy guidance (email has no JS)
@@ -201,6 +206,7 @@ def test_code_email_html_shows_the_code_and_select_to_copy_hint():
 
 
 def test_link_email_html_has_a_button_and_the_raw_link():
+    """The link email carries a real anchor button AND the raw URL, so a client that blocks buttons still leaves the reader a way through."""
     link = "https://app.worksmarternotharder.dev/?reset_token=abc.def"
     html = email_mod.link_email_html("Reset it:", link, "Reset your password", "a reason")
     assert 'href="' + link in html and "Reset your password" in html  # a real <a> button (Outlook-safe, no JS)
@@ -208,16 +214,14 @@ def test_link_email_html_has_a_button_and_the_raw_link():
 
 
 def test_send_email_async_stays_sync_for_the_log_backend(caplog):
-    # No SMTP_HOST (dev / CI): no thread — logs synchronously, so ordering + the dev-surfaced code
-    # in the response stay deterministic. The AUTH-H1/H2 oracle only exists on the live SMTP path.
+    """With no relay configured there is no background thread, so log ordering and the development-surfaced code stay deterministic."""
     with caplog.at_level(logging.INFO):
         ok = email_mod.send_email_async({}, "a@b.co", "Your code", "code: 771")
     assert ok is True and "771" in caplog.text
 
 
 def test_send_email_async_offloads_the_live_send_to_a_thread(monkeypatch):
-    # Live SMTP: the send runs in a background thread so the request returns immediately regardless of which
-    # (registered vs not) branch it took -> no response-time enumeration (AUTH-H1/H2).
+    """On the live path the send is backgrounded so the request returns at the same speed whether or not the address belongs to a registered user — otherwise the response time itself reveals which emails have accounts."""
     import threading
     seen, done = {}, threading.Event()
     Fake = _fake_smtp(seen)
