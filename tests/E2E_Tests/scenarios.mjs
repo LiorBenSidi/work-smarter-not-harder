@@ -524,4 +524,143 @@ export const SCENARIOS = [
       assert(left === 0, `teardown left ${left} probe post(s) in the shared forum`);
     },
   },
+
+  // Account deletion is the one irreversible action in the app, so the confirmation word is the last
+  // thing standing between a mis-click and a wiped account. `test_account_and_auth_ui_is_wired` greps the
+  // served shell for `!== "DELETE"` — which passes just as happily if the comparison is inverted, made
+  // case-insensitive, or never wired to the button at all. Only a browser can prove the button is
+  // genuinely unusable until the exact word is present.
+  //
+  // Deliberately never submits: the assertion is about the GATE, and a scenario that actually deleted its
+  // user would also destroy the evidence it was testing.
+  {
+    name: "account: the delete gate stays shut until the exact confirmation word is typed",
+    tags: ["profile", "account", "security"],
+    async fn(b) {
+      await registerAndLogin(b);
+      // Profile is deliberately NOT a bottom-nav tab — it lives behind the corner account menu, so
+      // gotoScreen() cannot reach it. (That absence is itself an asserted design decision.)
+      await b.pageExec(`(() => { const btn = document.getElementById("user-menu-btn"); if (btn) btn.click(); return true; })()`);
+      await b.wait(300);
+      await b.pageExec(`(() => { const p = document.querySelector('[data-act="profile"]'); if (p) p.click(); return true; })()`);
+      await b.waitFor("#delete-reveal");
+
+      // the danger zone starts collapsed — revealing it must not by itself arm anything
+      await b.pageExec(`(() => { document.getElementById("delete-reveal").click(); return true; })()`);
+      await b.wait(250);
+      const btnDisabled = `() => {
+        const btn = document.querySelector("#delete-form button[type=submit]");
+        return btn ? btn.disabled : "no-button";
+      }`;
+      assert(await b.evaluate(btnDisabled) === true,
+        "the delete button was already usable the moment the form appeared");
+
+      // a password alone must not arm it — the confirmation word is a SEPARATE gate
+      await b.type("#delete-password", "Passw0rd!23");
+      await b.wait(150);
+      assert(await b.evaluate(btnDisabled) === true,
+        "the correct password alone armed the delete button — the typed word is meant to be a second gate");
+
+      // near-misses stay shut. Lower-case is the one that matters: the input carries
+      // autocapitalize=characters, so a phone may well offer "delete" and a case-insensitive
+      // comparison would arm the button on a word the user never deliberately typed.
+      for (const near of ["delete", "DELET", "DELETED", " DELETE X"]) {
+        await b.pageExec(`(() => {
+          const el = document.getElementById("delete-confirm");
+          el.value = ${JSON.stringify(near)};
+          el.dispatchEvent(new Event("input", { bubbles: true }));
+          return true;
+        })()`);
+        await b.wait(120);
+        assert(await b.evaluate(btnDisabled) === true,
+          `typing ${JSON.stringify(near)} armed the delete button — only the exact word may open this gate`);
+      }
+
+      // ...and the exact word opens it, or the gate would be impossible to pass legitimately
+      await b.pageExec(`(() => {
+        const el = document.getElementById("delete-confirm");
+        el.value = "DELETE";
+        el.dispatchEvent(new Event("input", { bubbles: true }));
+        return true;
+      })()`);
+      await b.wait(150);
+      assert(await b.evaluate(btnDisabled) === false,
+        "the exact confirmation word did NOT arm the button — the gate cannot be passed at all");
+
+      // nothing was submitted, so the account must still be there
+      const stillAlive = await b.pageExec(`(async () => (await fetch("/me")).status)()`);
+      assert(stillAlive === 200, `the account did not survive a gate-only test (GET /me -> ${stillAlive})`);
+    },
+  },
+
+  // History's per-entry detail is where a user checks what they actually logged on a given day. The
+  // served-shell test greps for `openHistoryDetail` and the modal's ids; that passes even if the modal
+  // renders a fixed template, another entry's numbers, or nothing at all.
+  //
+  // This logs a check-in with deliberately distinctive values and asserts the modal shows THOSE — so it
+  // fails if the detail is wired to anything other than the entry that was opened.
+  {
+    name: "history: opening an entry shows the values that were actually logged",
+    tags: ["history", "checkin"],
+    async fn(b) {
+      await registerAndLogin(b);                                  // fresh user => exactly one entry after this
+      await b.waitFor("#checkin-form");
+
+      // distinctive on purpose: 6.5h / 61bpm are unlikely to appear by coincidence in a template
+      await b.type("#sleep_hours", "6.5");
+      await b.type("#resting_hr", "61");
+      const pick = async (field, value) => {
+        const ok = await b.pageExec(`(() => {
+          const sc = document.querySelector('[data-field="${field}"]');
+          if (!sc) return "no-scale";
+          const btn = [...sc.querySelectorAll("button")].find((x) => x.textContent.trim() === "${value}");
+          if (!btn) return "no-button";
+          btn.click();
+          return document.getElementById("${field}").value;
+        })()`);
+        assert(String(ok) === String(value), `could not set ${field} to ${value} (got ${ok})`);
+      };
+      await pick("fatigue", 7);
+      await pick("soreness", 3);
+      await pick("training_load", 8);
+
+      await b.pageExec(`(() => { document.querySelector("#checkin-form").requestSubmit(); return true; })()`);
+      await b.wait(2500);                                          // the check-in round-trips through the ai container
+      const saved = await b.pageExec(`(async () => {
+        const r = await fetch("/history", { headers: { "X-CSRF-Token": (document.cookie.match(/csrf_token=([^;]+)/)||[])[1] || "" } });
+        return ((await r.json()).history || []).length;
+      })()`);
+      assert(saved === 1, `expected exactly one stored check-in before opening it, got ${saved}`);
+
+      await gotoScreen(b, "history");
+      await b.waitFor("#history");
+      const opened = await b.pageExec(`(() => {
+        const row = document.querySelector("#history .hrow");
+        if (!row) return "no-row";
+        row.click();
+        return true;
+      })()`);
+      assert(opened === true, "the stored check-in did not render a row in History");
+      await b.wait(600);
+
+      assert(await b.visible("#history-detail"), "clicking a History row did not open its detail");
+
+      // the load-bearing assertion: the modal shows the inputs THIS entry was logged with
+      const shown = await b.text("#hdetail-body");
+      for (const [label, value] of [["sleep", "6.5"], ["resting hr", "61"], ["fatigue", "7"], ["soreness", "3"], ["training load", "8"]]) {
+        assert(shown.includes(value),
+          `the detail is missing the ${label} value that was logged (${value}) — body was: ${shown.slice(0, 400)}`);
+      }
+
+      // ESC closes it and hands the page back — a modal that traps the user is worse than no modal
+      await b.pageExec(`(() => { document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })); return true; })()`);
+      await b.wait(400);
+      assert(!(await b.visible("#history-detail")), "ESC did not close the History detail");
+      const locked = await b.evaluate(`() => document.documentElement.style.overflow + "|" + document.body.style.overflowY`);
+      assert(!/hidden/.test(locked), `the page scroll lock survived the modal closing (${locked})`);
+
+      // No teardown: the only state is one check-in belonging to this scenario's own throwaway user,
+      // which no other scenario reads. Nothing is written to the shared forum.
+    },
+  },
 ];
