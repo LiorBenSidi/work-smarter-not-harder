@@ -51,10 +51,15 @@ _AI_QUEUE_TIMEOUT_DEFAULT = 30
 
 
 def test_ai_client_timeout_default_is_not_below_the_ai_queue_timeout(cfg):
+    """Web must wait at least as long as the AI queue is allowed to compute.
+
+    If its client timeout drops below the queue's, web abandons and discards a result the worker is still busy producing — the user sees a failure for work that succeeded.
+    """
     assert cfg.Config.AI_CLIENT_TIMEOUT >= _AI_QUEUE_TIMEOUT_DEFAULT
 
 
 def test_ai_client_timeout_is_env_tunable(monkeypatch):
+    """The timeout is genuinely tunable from the environment, so a slow deploy can be given more room without rebuilding the image."""
     monkeypatch.setenv("AI_CLIENT_TIMEOUT_SECONDS", "45")
     assert _reload_config().Config.AI_CLIENT_TIMEOUT == 45
 
@@ -77,6 +82,10 @@ def _web_gunicorn_timeout(text):
 
 @pytest.mark.parametrize("rel", ["web/Dockerfile", "docker-compose.prod.yml"])
 def test_web_gunicorn_timeout_exceeds_ai_client_timeout(cfg, rel):
+    """The worker timeout must EXCEED the AI client timeout, in both places the web command is defined.
+
+    Otherwise gunicorn kills the worker mid-request before the graceful degrade can fire, turning a handled slow response into a dropped connection.
+    """
     t = _web_gunicorn_timeout((_REPO / rel).read_text())
     assert t is not None, f"{rel}: web gunicorn command has no --timeout"
     assert t > cfg.Config.AI_CLIENT_TIMEOUT, f"{rel}: gunicorn --timeout {t} must exceed AI_CLIENT_TIMEOUT"
@@ -98,7 +107,7 @@ def test_flask_debug_flag_is_on_only_when_explicitly_set(monkeypatch, raw, expec
 
 
 def test_create_app_honours_the_debug_flag(monkeypatch, web_app_module):
-    # end-to-end: FLASK_DEBUG -> Config.DEBUG -> app.config["DEBUG"] (Flask's debug mode)
+    """The environment variable reaches Flask's actual debug mode end to end, so the switch that exposes the interactive debugger is proven to be the one being read — not merely a value stored in a config object nothing consults."""
     monkeypatch.setenv("FLASK_DEBUG", "1")
     app = web_app_module.create_app(config=_reload_config().Config)
     app.config.update(SECRET_KEY="test-secret-key")

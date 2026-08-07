@@ -109,6 +109,7 @@ def _patch_post_vote(monkeypatch, db_mod):
 # --------------------------------------------------------------- data integrity (no db)
 
 def test_seed_data_is_internally_consistent(seed_mod):
+    """The seed data is validated before it is ever applied: handles and emails unique, every author a real seeded user, and every comment attached to a post that exists and dated after it."""
     handles = {h for h, _, _ in seed_mod.SEED_USERS}
     assert len(handles) == len(seed_mod.SEED_USERS), "fake-client handles must be unique"
     emails = [e for _, _, e in seed_mod.SEED_USERS]
@@ -128,8 +129,8 @@ def test_seed_data_is_internally_consistent(seed_mod):
         assert 0 <= comment_index < len(seed_mod.SEED_COMMENTS) and voter in handles
 
 
-def test_seed_meets_the_rubric_minimums(seed_mod):
-    # the seed ships a few fake clients, with a few posts and comments.
+def test_seed_ships_enough_content_to_look_populated(seed_mod):
+    """The seed ships enough users, posts and comments that a first-time visitor lands on a forum that looks alive rather than on an empty page."""
     assert len(seed_mod.SEED_USERS) >= 2
     assert len(seed_mod.SEED_POSTS) >= 2
     assert len(seed_mod.SEED_COMMENTS) >= 2
@@ -138,6 +139,7 @@ def test_seed_meets_the_rubric_minimums(seed_mod):
 # --------------------------------------------------------------- behaviour (fake db)
 
 def test_apply_seed_creates_the_fake_clients_posts_and_comments(seed_mod, db_mod, db, monkeypatch):
+    """Applying the seed creates exactly what it declares — the counts it reports match what actually landed in the store, so a partial seed cannot pass as a complete one."""
     _patch_post_vote(monkeypatch, db_mod)
     result = seed_mod.apply_seed(db_mod, db)
 
@@ -150,6 +152,7 @@ def test_apply_seed_creates_the_fake_clients_posts_and_comments(seed_mod, db_mod
 
 
 def test_each_post_carries_its_real_comment_count(seed_mod, db_mod, db, monkeypatch):
+    """Each seeded post's comment counter matches the comments actually created for it, so the feed never advertises a count the thread cannot show."""
     _patch_post_vote(monkeypatch, db_mod)
     seed_mod.apply_seed(db_mod, db)
     expected = {}
@@ -161,6 +164,7 @@ def test_each_post_carries_its_real_comment_count(seed_mod, db_mod, db, monkeypa
 
 
 def test_likes_land_as_positive_scores(seed_mod, db_mod, db, monkeypatch):
+    """Seeded votes produce real positive scores, so a visitor does not meet a flat wall of zeros that makes voting look broken."""
     _patch_post_vote(monkeypatch, db_mod)
     seed_mod.apply_seed(db_mod, db)
     scored = [p for p in db.forum_posts.docs if p["score"] > 0]
@@ -171,6 +175,7 @@ def test_likes_land_as_positive_scores(seed_mod, db_mod, db, monkeypatch):
 
 
 def test_content_is_backdated_onto_a_recent_timeline(seed_mod, db_mod, db, monkeypatch):
+    """Seeded content is spread backwards across distinct recent times rather than all stamped with the moment of seeding, so the feed reads as a history instead of one burst."""
     _patch_post_vote(monkeypatch, db_mod)
     now = time.time()
     seed_mod.apply_seed(db_mod, db)
@@ -182,7 +187,7 @@ def test_content_is_backdated_onto_a_recent_timeline(seed_mod, db_mod, db, monke
 
 
 def test_seeded_accounts_can_actually_log_in(seed_mod, db_mod, db, monkeypatch):
-    # a 'fake client' is only useful if it's a real account: its stored hash must verify the seed password.
+    """A seeded persona is only useful if it is a real account: its stored hash must verify against the seed password, so anyone can sign in as one and look around."""
     _patch_post_vote(monkeypatch, db_mod)
     seed_mod.apply_seed(db_mod, db)
     a_user = db.users.find_one({"username": "coach_maya"})
@@ -191,6 +196,7 @@ def test_seeded_accounts_can_actually_log_in(seed_mod, db_mod, db, monkeypatch):
 
 
 def test_apply_seed_is_idempotent(seed_mod, db_mod, db, monkeypatch):
+    """Re-running the seed creates nothing new, so a container restart cannot quietly multiply the demo content every time it boots."""
     _patch_post_vote(monkeypatch, db_mod)
     first = seed_mod.apply_seed(db_mod, db)
     users_after_first = len(db.users.docs)

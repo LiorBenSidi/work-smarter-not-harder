@@ -1,7 +1,7 @@
 """Unit tests for the thin core CRUD in web/services/db.py. OWNER: Lior (thin core CRUD).
 
-The data layer is exercised against an in-memory fake collection (the course's mocking technique —
-no real Mongo, no Docker), so these pin the *behaviour contract* the web stores depend on:
+The data layer is exercised against an in-memory fake collection — no real Mongo, no Docker, so it runs
+anywhere — and these pin the *behaviour contract* the web stores depend on:
 ``get_user`` / ``create_user`` / ``get_profile`` / ``save_profile`` / ``list_history`` and the five
 ``forum_*`` functions. The fake implements only the pymongo operators db.py uses.
 """
@@ -168,6 +168,7 @@ def db():
 
 # ---- indexes + schema ----
 def test_ensure_indexes_creates_unique_constraints(db_mod, db):
+    """Every index the app leans on is actually created: the unique constraints that make a duplicate account or a duplicate post impossible, and the compound indexes that keep the feed, comment, history and notification reads off a collection scan."""
     db_mod.ensure_indexes(db)
     assert ("username", True) in db.users.indexes            # unique username
     assert ("email", True) in db.users.indexes               # unique email (partial) — one account per email
@@ -189,6 +190,7 @@ def test_ensure_indexes_creates_unique_constraints(db_mod, db):
 
 
 def test_ensure_schema_applies_a_jsonschema_validator_to_every_collection(db_mod, db):
+    """Every collection carries a shape validator, so a malformed document is refused by the database itself rather than only by whichever code path happened to write it."""
     db_mod.ensure_schema(db)
     targets = {value for (cmd, value, kw) in db.commands if cmd == "collMod"}
     assert targets == {"users", "profiles", "analysis_history", "forum_posts", "messages", "notifications"}
@@ -197,7 +199,7 @@ def test_ensure_schema_applies_a_jsonschema_validator_to_every_collection(db_mod
 
 
 def test_ensure_schema_skips_when_collmod_is_unauthorized(db_mod):
-    # a restricted user (no collMod rights) is skipped, not crashed, and never falls through to create (C1)
+    """A restricted database user is skipped rather than crashing the app at start-up — and must never fall through to CREATING the collection, which would shadow the real data with an empty one."""
     from pymongo.errors import OperationFailure
 
     class _UnauthDB:
@@ -216,6 +218,7 @@ def test_ensure_schema_skips_when_collmod_is_unauthorized(db_mod):
 
 
 def test_ensure_schema_creates_collection_when_namespace_absent(db_mod):
+    """On a fresh database the collections do not exist yet, so each is created carrying its validator; without this a first boot would silently run with no validation at all."""
     # NamespaceNotFound (code 26) -> create the collection WITH the validator (C1/C2 path)
     from pymongo.errors import OperationFailure
 
@@ -236,6 +239,7 @@ def test_ensure_schema_creates_collection_when_namespace_absent(db_mod):
 
 # ---- users ----
 def test_create_user_then_get(db_mod, db):
+    """A created account reads back with its credentials intact, and the raw Mongo `_id` never comes out with it."""
     assert db_mod.create_user(db, "alice", "hash123") is True
     rec = db_mod.get_user(db, "alice")
     assert rec["username"] == "alice"
@@ -244,12 +248,14 @@ def test_create_user_then_get(db_mod, db):
 
 
 def test_create_duplicate_user_returns_false(db_mod, db):
+    """A second registration of a taken username is refused AND the original credential survives — a duplicate must never overwrite the existing account's password."""
     assert db_mod.create_user(db, "alice", "h1") is True
     assert db_mod.create_user(db, "alice", "h2") is False
     assert db_mod.get_user(db, "alice")["password_hash"] == "h1"  # original wins, no overwrite
 
 
 def test_get_missing_user_is_none(db_mod, db):
+    """An unknown handle reads as None rather than raising, so every caller can branch on absence instead of guarding a lookup."""
     assert db_mod.get_user(db, "nobody") is None
 
 
@@ -261,6 +267,7 @@ def _seed_search_users(db_mod, db):
 
 
 def test_search_users_matches_username_and_display_name(db_mod, db):
+    """The people-picker finds someone by either the handle they registered or the name they chose to display, because the person searching usually knows only one of the two."""
     _seed_search_users(db_mod, db)
     by_user = [r["username"] for r in db_mod.search_users(db, "mar")]      # username substring
     assert by_user == ["marco_r"]
@@ -269,12 +276,14 @@ def test_search_users_matches_username_and_display_name(db_mod, db):
 
 
 def test_search_users_excludes_the_caller(db_mod, db):
+    """You never appear in your own people-search — you cannot start a conversation with yourself."""
     _seed_search_users(db_mod, db)
     names = [r["username"] for r in db_mod.search_users(db, "ma", exclude="coach_maya")]
     assert "coach_maya" not in names and "marco_r" in names
 
 
 def test_search_users_requires_two_chars(db_mod, db):
+    """A one-character or blank query returns nothing, so an idle keystroke cannot trigger a scan that matches most of the user base."""
     _seed_search_users(db_mod, db)
     assert db_mod.search_users(db, "m") == []
     assert db_mod.search_users(db, "") == []
@@ -282,6 +291,7 @@ def test_search_users_requires_two_chars(db_mod, db):
 
 
 def test_search_users_returns_only_public_fields(db_mod, db):
+    """The picker returns exactly the handle and the display name — never the password hash, the email address, or the internal id."""
     _seed_search_users(db_mod, db)
     for r in db_mod.search_users(db, "ma"):
         assert set(r) == {"username", "display_name"}   # never password_hash / email / _id
@@ -289,6 +299,7 @@ def test_search_users_returns_only_public_fields(db_mod, db):
 
 
 def test_search_users_treats_regex_metacharacters_literally(db_mod, db):
+    """A query is matched as literal text, so typing `.*` finds users whose names contain `.*` instead of returning the entire directory."""
     _seed_search_users(db_mod, db)
     assert db_mod.search_users(db, ".*") == []            # ".*" is a literal search, NOT match-everything
     db_mod.create_user(db, "weird.*name", "h", display_name="Odd")
@@ -296,6 +307,7 @@ def test_search_users_treats_regex_metacharacters_literally(db_mod, db):
 
 
 def test_search_users_ranks_prefix_matches_first(db_mod, db):
+    """Someone typing a name gets the person whose name STARTS with it at the top, rather than buried under mid-word matches."""
     db_mod.create_user(db, "xander", "h", display_name="has an in the middle")  # 'an' mid-substring
     db_mod.create_user(db, "ana", "h", display_name="Ana")                      # 'an' prefix
     names = [r["username"] for r in db_mod.search_users(db, "an")]
@@ -303,6 +315,7 @@ def test_search_users_ranks_prefix_matches_first(db_mod, db):
 
 
 def test_search_users_ignores_accounts_without_password_hash(db_mod, db):
+    """A partial or corrupt row with no credential is not a real account, so it must not be offered as someone you can message."""
     db_mod.create_user(db, "realuser", "h", display_name="Real")
     db.users.docs.append({"username": "ghostuser", "display_name": "Ghost"})   # partial/corrupt: no hash
     names = [r["username"] for r in db_mod.search_users(db, "user")]
@@ -310,6 +323,7 @@ def test_search_users_ignores_accounts_without_password_hash(db_mod, db):
 
 
 def test_search_users_bounds_the_db_read(db_mod, db):
+    """An unanchored regex is a collection scan, so the cap has to be pushed into the query — capping afterwards still pulls every match into memory first."""
     # HIGH-fix regression: an unanchored $regex is a collection scan, so search_users must .limit() the cursor
     # rather than pull every match into memory before capping. With 50 matches the caller still gets <=8 AND
     # the DB read was bounded (last_limit set + small). Without the .limit(), last_limit stays None -> fails.
@@ -322,27 +336,32 @@ def test_search_users_bounds_the_db_read(db_mod, db):
 
 # ---- profiles ----
 def test_save_then_get_profile(db_mod, db):
+    """A saved profile reads back exactly as it was written."""
     profile = {"age": 30, "goal": "maintain"}
     db_mod.save_profile(db, "alice", profile)
     assert db_mod.get_profile(db, "alice") == profile
 
 
 def test_save_profile_overwrites(db_mod, db):
+    """Saving again replaces the profile instead of accumulating a second one, so a user always has exactly one."""
     db_mod.save_profile(db, "alice", {"age": 30})
     db_mod.save_profile(db, "alice", {"age": 31})
     assert db_mod.get_profile(db, "alice") == {"age": 31}
 
 
 def test_get_missing_profile_is_none(db_mod, db):
+    """A user who has not filled in a profile reads as None — the signal the dashboard branches on to prompt them."""
     assert db_mod.get_profile(db, "alice") is None
 
 
 # ---- history ----
 def test_list_history_empty(db_mod, db):
+    """A new user's history is an empty list rather than None, so callers can iterate it without a guard."""
     assert db_mod.list_history(db, "alice") == []
 
 
 def test_list_history_returns_entries_for_user_only(db_mod, db):
+    """History is scoped to its owner: one user's check-ins never surface in another's."""
     db.analysis_history.docs.append({"username": "alice", "entry": {"assessment": "Ready"}})
     db.analysis_history.docs.append({"username": "bob", "entry": {"assessment": "Rest"}})
     out = db_mod.list_history(db, "alice")
@@ -350,6 +369,7 @@ def test_list_history_returns_entries_for_user_only(db_mod, db):
 
 
 def test_add_history_then_list_roundtrip(db_mod, db):
+    """Check-ins written for a user come back in the order they were added, with another user's entries not mixed in."""
     db_mod.add_history(db, "alice", {"assessment": "Ready", "timestamp": "t1"})
     db_mod.add_history(db, "alice", {"assessment": "Rest", "timestamp": "t2"})
     db_mod.add_history(db, "bob", {"assessment": "Go", "timestamp": "t3"})
@@ -375,6 +395,7 @@ def _seed_vote(db, post_id, user, value):
 
 
 def test_forum_create_then_get_and_list(db_mod, db):
+    """A new post is readable by id and appears in the feed, starting at zero score and zero comments — and the internal vote list and Mongo id never reach the caller."""
     post = db_mod.forum_create_post(db, "alice", "Title", "Body", False)
     assert post["id"] and isinstance(post["id"], str)
     assert post["score"] == 0 and post["comment_count"] == 0     # #331: count, not an embedded array
@@ -384,8 +405,7 @@ def test_forum_create_then_get_and_list(db_mod, db):
 
 
 def test_forum_post_carries_a_created_at_timestamp(db_mod, db):
-    # The forum orders newest-first by default + shows each post's age, so every post must carry a positive
-    # created_at that survives get + list (it's the field the client sorts on and renders).
+    """Every post carries a positive creation time that survives both reads, because that field is what the feed sorts on and renders each post's age from."""
     post = db_mod.forum_create_post(db, "alice", "T", "B", False)
     assert isinstance(post["created_at"], (int, float)) and post["created_at"] > 0
     assert db_mod.forum_get_post(db, post["id"])["created_at"] == post["created_at"]
@@ -393,7 +413,7 @@ def test_forum_post_carries_a_created_at_timestamp(db_mod, db):
 
 
 def test_forum_list_posts_is_a_bounded_newest_first_page(db_mod, db):
-    # #325: the feed read must be BOUNDED (a .limit() applied — never a full-collection scan) and newest-first.
+    """The feed read is newest-first AND bounded by a limit pushed into the query, so the forum does not get slower for everyone as it fills up."""
     for i in range(5):
         db.forum_posts.insert_one({"id": f"p{i}", "author": "a", "title": f"t{i}", "body": "b",
                                    "score": 0, "comment_count": 0, "votes": [], "created_at": float(i)})
@@ -403,7 +423,7 @@ def test_forum_list_posts_is_a_bounded_newest_first_page(db_mod, db):
 
 
 def test_forum_list_posts_limit_is_clamped_to_the_max(db_mod, db):
-    # A hostile ?limit=99999999 must NOT reopen an unbounded scan: the store clamps to FORUM_PAGE_MAX.
+    """A hostile limit cannot reopen an unbounded scan: the store clamps to its own maximum no matter what the caller asks for."""
     db.forum_posts.insert_one({"id": "p", "author": "a", "title": "t", "body": "b",
                                "score": 0, "comment_count": 0, "votes": [], "created_at": 1.0})
     db_mod.forum_list_posts(db, limit=99999999)
@@ -411,7 +431,7 @@ def test_forum_list_posts_limit_is_clamped_to_the_max(db_mod, db):
 
 
 def test_forum_list_posts_before_cursor_pages_to_older(db_mod, db):
-    # `before` = a created_at cursor: only STRICTLY-older posts come back, so the client can walk to the oldest.
+    """Paging back through the feed reaches every post exactly once — no gaps, no repeats — because the cursor selects strictly-older posts."""
     for i in range(5):
         db.forum_posts.insert_one({"id": f"p{i}", "author": "a", "title": f"t{i}", "body": "b",
                                    "score": 0, "comment_count": 0, "votes": [], "created_at": float(i)})
@@ -429,9 +449,10 @@ def test_forum_list_posts_before_cursor_pages_to_older(db_mod, db):
 
 
 def test_shape_backfills_created_at_from_the_object_id(db_mod):
-    # A post created BEFORE the created_at field existed has none -> it must still get a real, positive
-    # created_at (derived from the Mongo _id's embedded insertion time), else the sort/direction toggle is a
-    # no-op on old posts and the age doesn't render. Regression for the "↓ Newest / ↑ Oldest does nothing" bug.
+    """A post written before this field existed still gets a real timestamp, derived from its id's insertion time.
+
+    Without it the newest/oldest sort toggle silently does nothing on older posts and their age does not render.
+    """
     from bson import ObjectId
     oid = ObjectId()
     shaped = db_mod._shape({"_id": oid, "id": "p1", "author": "a", "title": "t", "body": "b"})   # no created_at
@@ -441,11 +462,12 @@ def test_shape_backfills_created_at_from_the_object_id(db_mod):
 
 
 def test_forum_get_missing_post_is_none(db_mod, db):
+    """An id that does not exist reads as None rather than raising."""
     assert db_mod.forum_get_post(db, "does-not-exist") is None
 
 
 def test_forum_add_comment(db_mod, db):
-    # #331: the comment lands in forum_comments (NOT embedded on the post), and the post's comment_count bumps.
+    """A comment is stored in its own collection with the post's counter bumped — never embedded on the post — and reads back in the public shape with the internal vote tally withheld."""
     pid = db_mod.forum_create_post(db, "alice", "T", "B", False)["id"]
     comment = db_mod.forum_add_comment(db, pid, "bob", "nice")
     assert comment["author"] == "bob" and comment["body"] == "nice" and comment["score"] == 0
@@ -463,12 +485,13 @@ def test_forum_add_comment(db_mod, db):
 
 
 def test_forum_add_comment_on_missing_post_is_none(db_mod, db):
+    """Commenting on a post that does not exist is refused and writes nothing, so orphan comments cannot accumulate."""
     assert db_mod.forum_add_comment(db, "nope", "bob", "x") is None
     assert db.forum_comments.docs == []                  # nothing inserted for an unknown post
 
 
 def test_forum_list_comments_is_a_bounded_newest_first_page(db_mod, db):
-    # #331: like the feed, a post's comments read is BOUNDED (a .limit() applied) and newest-first.
+    """A post's comments read is bounded and newest-first, so one heavily-commented thread cannot slow the whole forum."""
     pid = db_mod.forum_create_post(db, "alice", "T", "B", False)["id"]
     for i in range(5):
         db.forum_comments.insert_one({"id": f"c{i}", "post_id": pid, "author": "u", "body": f"b{i}",
@@ -479,6 +502,7 @@ def test_forum_list_comments_is_a_bounded_newest_first_page(db_mod, db):
 
 
 def test_forum_list_comments_limit_is_clamped_to_the_max(db_mod, db):
+    """The comment limit is clamped exactly like the feed's, so no caller can talk the store into an unbounded read."""
     pid = db_mod.forum_create_post(db, "alice", "T", "B", False)["id"]
     db.forum_comments.insert_one({"id": "c", "post_id": pid, "author": "u", "body": "b",
                                   "score": 0, "votes": [], "created_at": 1.0})
@@ -487,6 +511,7 @@ def test_forum_list_comments_limit_is_clamped_to_the_max(db_mod, db):
 
 
 def test_forum_list_comments_before_cursor_and_post_scoping(db_mod, db):
+    """Paging a post's comments reaches each one exactly once and never returns another post's — the cursor and the post scope both have to hold at the same time."""
     pid = db_mod.forum_create_post(db, "alice", "T", "B", False)["id"]
     other = db_mod.forum_create_post(db, "alice", "T2", "B2", False)["id"]
     for i in range(5):
@@ -508,8 +533,10 @@ def test_forum_list_comments_before_cursor_and_post_scoping(db_mod, db):
 
 
 def test_forum_vote_comment_one_per_user_revote_and_distinct_sum(db_mod, db):
-    # #331: comment votes are a read-modify-write on the comment's own doc. One vote per user; re-voting
-    # replaces; distinct users sum; a wrong post_id OR unknown comment -> None.
+    """One vote per person on a comment: re-voting replaces rather than stacks, different people sum, and a wrong post or unknown comment changes nothing.
+
+    Votes stay a LIST because a username may contain '.' or '$', which Mongo forbids in a key.
+    """
     pid = db_mod.forum_create_post(db, "alice", "T", "B", False)["id"]
     cid = db_mod.forum_add_comment(db, pid, "alice", "hi")["id"]
     assert db_mod.forum_vote_comment(db, pid, cid, "bob", 1) == 1
@@ -555,8 +582,7 @@ def test_public_shapes_publish_like_and_dislike_tallies_not_only_the_net(db_mod,
 
 
 def test_migrate_embedded_comments_moves_and_is_idempotent(db_mod, db):
-    # #331 migration: a pre-refactor post with an embedded comments array is moved into forum_comments,
-    # comment_count is set, the embedded field is dropped, and re-running is a no-op.
+    """The one-shot migration moves pre-refactor embedded comments into their own collection, sets the count and drops the old array — and re-running it moves nothing and duplicates nothing."""
     db.forum_posts.insert_one({"id": "old", "author": "a", "title": "t", "body": "b", "score": 0,
                                "votes": [], "created_at": 100.0,
                                "comments": [{"id": "c1", "author": "bob", "body": "one", "score": 2,
@@ -577,6 +603,7 @@ def test_migrate_embedded_comments_moves_and_is_idempotent(db_mod, db):
 
 
 def test_forum_update_post_by_author(db_mod, db):
+    """An author can edit their own post, and the edit is what every later read returns."""
     pid = db_mod.forum_create_post(db, "alice", "Old", "old body", False)["id"]
     out = db_mod.forum_update_post(db, pid, "alice", "New", "new body")
     assert out["title"] == "New" and out["body"] == "new body"
@@ -584,32 +611,38 @@ def test_forum_update_post_by_author(db_mod, db):
 
 
 def test_forum_update_post_by_non_author_is_forbidden(db_mod, db):
+    """Another user's post cannot be edited, and the refusal leaves the original text exactly as it was."""
     pid = db_mod.forum_create_post(db, "alice", "T", "b", False)["id"]
     assert db_mod.forum_update_post(db, pid, "bob", "X", "y") == db_mod.FORBIDDEN
     assert db_mod.forum_get_post(db, pid)["title"] == "T"  # unchanged
 
 
 def test_forum_update_missing_post_is_none(db_mod, db):
+    """A missing post is distinguishable from a forbidden one — None rather than FORBIDDEN — so the route can answer 404 instead of 403."""
     assert db_mod.forum_update_post(db, "nope", "alice", "X", "y") is None
 
 
 def test_forum_delete_post_by_author(db_mod, db):
+    """An author can delete their own post, and it is genuinely gone afterwards rather than merely hidden."""
     pid = db_mod.forum_create_post(db, "alice", "T", "b", False)["id"]
     assert db_mod.forum_delete_post(db, pid, "alice") is True
     assert db_mod.forum_get_post(db, pid) is None  # gone
 
 
 def test_forum_delete_post_by_non_author_is_forbidden(db_mod, db):
+    """Another user's post cannot be deleted, and it is still there after the attempt."""
     pid = db_mod.forum_create_post(db, "alice", "T", "b", False)["id"]
     assert db_mod.forum_delete_post(db, pid, "bob") == db_mod.FORBIDDEN
     assert db_mod.forum_get_post(db, pid) is not None  # still there
 
 
 def test_forum_delete_missing_post_is_none(db_mod, db):
+    """Deleting a post that does not exist reads as None, letting the route answer 404 rather than 403."""
     assert db_mod.forum_delete_post(db, "nope", "alice") is None
 
 
 def test_forum_rev_starts_at_zero_and_every_mutation_bumps_it(db_mod, db):
+    """The real-time stream watches this counter, so every successful change must advance it — otherwise open clients never learn there is something new to fetch."""
     # Real-time push contract: the SSE stream watches forum_get_rev; each MUTATION must advance it so open
     # clients re-fetch. (vote / vote_comment run a Mongo pipeline the fake can't execute — their bump is
     # pinned against real Mongo in test_db_mongo.py. Here: create / comment / update / delete.)
@@ -625,8 +658,7 @@ def test_forum_rev_starts_at_zero_and_every_mutation_bumps_it(db_mod, db):
 
 
 def test_forum_rev_does_not_move_on_a_no_op_mutation(db_mod, db):
-    # A rejected mutation is NOT a change — an unknown post or a non-author edit/delete must leave the rev
-    # untouched, so the stream doesn't ping every client for a write that never landed.
+    """A rejected write is not a change: an unknown post or a forbidden edit leaves the counter alone, so the stream does not wake every connected client for a write that never landed."""
     pid = db_mod.forum_create_post(db, "alice", "T", "B", False)["id"]
     rev = db_mod.forum_get_rev(db)
     assert db_mod.forum_add_comment(db, "nope", "bob", "x") is None
@@ -637,8 +669,7 @@ def test_forum_rev_does_not_move_on_a_no_op_mutation(db_mod, db):
 
 # ---- robustness fixes (from the adversarial review) ----
 def test_create_user_returns_false_on_duplicate_key_race(db_mod, db):
-    # two registrations of the same username race; the loser's upsert hits the unique index and the
-    # driver raises DuplicateKeyError — create_user must report that as False, not blow up.
+    """When two registrations of the same name race, the loser hits the unique index and the driver raises — that has to surface as an ordinary "name taken", not as a crash."""
     from pymongo.errors import DuplicateKeyError
 
     def _raise(*a, **k):
@@ -649,11 +680,13 @@ def test_create_user_returns_false_on_duplicate_key_race(db_mod, db):
 
 
 def test_get_user_missing_password_hash_is_treated_as_no_user(db_mod, db):
+    """A partial or corrupt row with no credential fails closed as "no such user" instead of raising a KeyError deep inside the login path."""
     db.users.docs.append({"username": "corrupt"})             # no password_hash (partial/corrupt write)
     assert db_mod.get_user(db, "corrupt") is None             # fails closed, no KeyError
 
 
 def test_update_display_name_changes_only_the_shown_name(db_mod, db):
+    """Changing the name others see leaves the handle and the credential untouched, and renaming an unknown handle reports failure rather than inventing a record."""
     db_mod.create_user(db, "alice", "h1", "alice@ex.com", display_name="Alice")
     assert db_mod.update_display_name(db, "alice", "Alice B.") is True
     u = db_mod.get_user(db, "alice")
@@ -664,6 +697,7 @@ def test_update_display_name_changes_only_the_shown_name(db_mod, db):
 
 # ---- account deletion (GDPR erasure) ----
 def test_delete_user_profile_and_history(db_mod, db):
+    """Erasure removes the account, the profile and the history, and a second attempt reports that there was nothing left to remove."""
     db_mod.create_user(db, "alice", "h1")
     db_mod.save_profile(db, "alice", {"age": 30})
     db_mod.add_history(db, "alice", {"x": 1})
@@ -677,6 +711,7 @@ def test_delete_user_profile_and_history(db_mod, db):
 
 
 def test_forum_purge_user_strips_authored_and_voted_content(db_mod, db):
+    """Erasure reaches into other people's posts too: the departing user's own posts go, their comments are removed with the count corrected, and their votes are stripped while everyone else's survive."""
     pa = db_mod.forum_create_post(db, "alice", "A", "a", False)["id"]
     pb = db_mod.forum_create_post(db, "bob", "B", "b", False)["id"]
     db_mod.forum_add_comment(db, pb, "alice", "hi")         # alice's comment on bob's post -> forum_comments
@@ -692,6 +727,7 @@ def test_forum_purge_user_strips_authored_and_voted_content(db_mod, db):
 
 
 def test_message_and_notification_delete_for_user(db_mod, db):
+    """Erasure clears the user's messages and notifications in both directions — including notifications where they were only the actor — without touching conversations between other people."""
     db_mod.message_send(db, "alice", "bob", "hi")
     db_mod.message_send(db, "bob", "alice", "yo")
     db_mod.message_send(db, "bob", "carol", "unrelated")
@@ -709,6 +745,7 @@ def test_message_and_notification_delete_for_user(db_mod, db):
 
 # ---- email consent + data export (GDPR) ----
 def test_email_consent_get_set(db_mod, db):
+    """Email consent starts off and is on only because the user turned it on; an unknown handle cannot be opted in on someone's behalf."""
     db_mod.create_user(db, "alice", "h1")
     assert db_mod.get_email_consent(db, "alice") is False                # default (opt-in)
     assert db_mod.set_email_consent(db, "alice", True) is True
@@ -720,6 +757,7 @@ def test_email_consent_get_set(db_mod, db):
 
 
 def test_forum_export_user(db_mod, db):
+    """A data export returns exactly this user's posts, comments and votes — including a comment left on somebody else's post — and nothing belonging to anyone else."""
     db_mod.forum_create_post(db, "alice", "A", "a", False)
     bp = db_mod.forum_create_post(db, "bob", "B", "b", False)["id"]
     db_mod.forum_add_comment(db, bp, "alice", "hi")
@@ -731,6 +769,7 @@ def test_forum_export_user(db_mod, db):
 
 
 def test_message_export_for_user(db_mod, db):
+    """A message export covers both directions of the user's own conversations and excludes threads they were never part of."""
     db_mod.message_send(db, "alice", "bob", "hi")
     db_mod.message_send(db, "bob", "alice", "yo")
     db_mod.message_send(db, "bob", "carol", "unrelated")
@@ -739,17 +778,20 @@ def test_message_export_for_user(db_mod, db):
 
 
 def test_get_profile_with_no_profile_field_is_none(db_mod, db):
+    """A profile row that exists but carries no profile blob reads as None, so a half-written record does not surface to the user as a blank profile."""
     db.profiles.docs.append({"username": "amy"})              # row exists but has no profile blob
     assert db_mod.get_profile(db, "amy") is None
 
 
 def test_list_history_skips_rows_without_entry(db_mod, db):
+    """A malformed history row is skipped rather than raising, so one bad document cannot make a user's entire history unreadable."""
     db.analysis_history.docs.append({"username": "alice", "entry": {"assessment": "Ready"}})
     db.analysis_history.docs.append({"username": "alice"})    # malformed: no entry -> skipped, not raised
     assert db_mod.list_history(db, "alice") == [{"assessment": "Ready"}]
 
 
 def test_forum_update_post_returns_none_if_deleted_during_write(db_mod, db):
+    """If the post is deleted between the ownership check and the write, the edit reports None instead of claiming a success that never happened."""
     pid = db_mod.forum_create_post(db, "alice", "T", "b", False)["id"]
     db.forum_posts.update_one = lambda *a, **k: SimpleNamespace(matched_count=0)  # post gone before write
     assert db_mod.forum_update_post(db, pid, "alice", "X", "y") is None

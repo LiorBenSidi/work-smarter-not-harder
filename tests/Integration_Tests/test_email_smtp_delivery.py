@@ -64,6 +64,10 @@ class _SMTPSinkServer(socketserver.ThreadingTCPServer):
 
 
 def test_smtp_backend_transmits_the_message_over_a_socket():
+    """The real bytes — headers and the one-time code — are proven to leave the app correctly, over a genuine socket with no mock in the path.
+
+    Mocking the client proves we call it right; only this proves a message actually goes out.
+    """
     server = _SMTPSinkServer(("127.0.0.1", 0), _SMTPSinkHandler)
     server.messages = []
     port = server.server_address[1]
@@ -71,13 +75,13 @@ def test_smtp_backend_transmits_the_message_over_a_socket():
     try:
         cfg = {"SMTP_HOST": "127.0.0.1", "SMTP_PORT": port, "SMTP_STARTTLS": False, "SMTP_USER": "",
                "MAIL_FROM": "Work Smarter, Not Harder <no-reply@worksmarter.local>"}
-        ok = email_mod.send_email(cfg, "grader@example.com", "Your Work Smarter, Not Harder login code",
+        ok = email_mod.send_email(cfg, "recipient@example.com", "Your Work Smarter, Not Harder login code",
                                   "Your Work Smarter, Not Harder login code is: 123456\n")
         assert ok is True
         assert server.messages, "the SMTP sink received no message"
         raw = server.messages[0].decode("latin1")
         assert "Subject: Your Work Smarter, Not Harder login code" in raw   # headers transmitted
-        assert "To: grader@example.com" in raw
+        assert "To: recipient@example.com" in raw
         assert "123456" in raw                                   # the OTP body actually went over the wire
     finally:
         server.shutdown()
@@ -85,8 +89,10 @@ def test_smtp_backend_transmits_the_message_over_a_socket():
 
 
 def test_smtp_backend_returns_false_when_the_relay_refuses(monkeypatch):
-    # a relay that refuses the connection (e.g. a bad host / blocked port) must be swallowed, not raised,
-    # so a down mail server can't 500 a login or a reset — the code/link stays valid server-side.
+    """A relay that refuses the connection — a bad host, a blocked port — is swallowed rather than raised, so a down mail server cannot 500 a login or a reset.
+
+    The code or link stays valid on the server, so the user can retry rather than starting over.
+    """
     def refusing_handle(self):
         self.wfile.write(b"554 no service here\r\n")   # non-220 greeting -> smtplib SMTPConnectError
     monkeypatch.setattr(_SMTPSinkHandler, "handle", refusing_handle)

@@ -52,8 +52,7 @@ def test_predict_posts_the_agreed_request_and_returns_parsed_json(ai_client, mon
 
 
 def test_predict_defaults_to_the_safe_timeout_floor(ai_client, monkeypatch):
-    # the docstring's contract: the default must match the ai queue's own default, or web abandons
-    # work the worker is still busy computing.
+    """The default timeout matches the AI queue's own default, so web does not abandon work the worker is still busy computing."""
     sent = {}
 
     def _capture(url, **kwargs):
@@ -66,6 +65,7 @@ def test_predict_defaults_to_the_safe_timeout_floor(ai_client, monkeypatch):
 
 
 def test_predict_returns_none_on_network_error(ai_client, monkeypatch):
+    """An unreachable AI container yields None rather than an exception, which is what lets the dashboard degrade to a readable message instead of a 500."""
     def boom(*a, **k):
         raise ai_client.requests.RequestException("down")
 
@@ -74,5 +74,6 @@ def test_predict_returns_none_on_network_error(ai_client, monkeypatch):
 
 
 def test_predict_returns_none_on_bad_json(ai_client, monkeypatch):
+    """A 200 carrying an unparseable body is treated as a failure like any other — a malformed reply must not be mistaken for a real prediction."""
     monkeypatch.setattr(ai_client.requests, "post", lambda *a, **k: _Resp(None, raise_json=True))
     assert ai_client.predict("http://ai:5000", {"x": 1}) is None

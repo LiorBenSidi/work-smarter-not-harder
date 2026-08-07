@@ -126,8 +126,10 @@ def db(db_mod, monkeypatch):
 
 
 def test_thread_key_cannot_collide_on_delimiter_usernames(db_mod, db):
-    # regression for the "|".join(sorted(pair)) collision: a username may contain any char, so a joined
-    # id let a DIFFERENT pair address the same thread. Matching on the real {sender, recipient} can't.
+    """A username may contain any character, so a thread id built by joining the pair let a DIFFERENT pair address the same conversation and read it.
+
+    Matching on the real sender and recipient fields cannot collide that way.
+    """
     db_mod.message_send(db, "bob", "carol|dave", "private for carol|dave")
     assert db_mod.message_list_conversation(db, "bob|carol", "dave") == []          # colliding pair sees nothing
     assert [m["body"] for m in db_mod.message_list_conversation(db, "bob", "carol|dave")] \
@@ -135,6 +137,7 @@ def test_thread_key_cannot_collide_on_delimiter_usernames(db_mod, db):
 
 
 def test_send_then_list_conversation_roundtrips(db_mod, db):
+    """A conversation reads back oldest-first and resolves to the same thread whichever participant asks — the two of them are looking at one conversation, not two."""
     db_mod.message_send(db, "alice", "bob", "hi bob")
     db_mod.message_send(db, "bob", "alice", "hi alice")
     thread = db_mod.message_list_conversation(db, "alice", "bob")
@@ -143,6 +146,7 @@ def test_send_then_list_conversation_roundtrips(db_mod, db):
 
 
 def test_list_conversations_summarizes_unread(db_mod, db):
+    """The inbox row carries who the conversation is with, the latest message, and how many are unread — everything the list needs without opening the thread."""
     db_mod.message_send(db, "alice", "bob", "one")
     db_mod.message_send(db, "alice", "bob", "two")
     convos = db_mod.message_list_conversations(db, "bob")
@@ -153,6 +157,7 @@ def test_list_conversations_summarizes_unread(db_mod, db):
 
 
 def test_mark_read_clears_only_the_recipients_side(db_mod, db):
+    """Opening a thread clears the reader's unread count and marks the messages read, without touching the sender's own view of their inbox."""
     db_mod.message_send(db, "alice", "bob", "yo")
     db_mod.message_mark_read(db, "bob", "alice")
     assert db_mod.message_list_conversations(db, "bob")[0]["unread"] == 0
@@ -160,6 +165,7 @@ def test_mark_read_clears_only_the_recipients_side(db_mod, db):
 
 
 def test_count_since_counts_only_the_sender_after_the_cutoff(db_mod, db):
+    """The since-count is scoped to one sender and one cutoff, so an anti-spam check counts what that person actually sent rather than all recent traffic."""
     db_mod.message_send(db, "alice", "bob", "a")
     db_mod.message_send(db, "alice", "bob", "b")
     db_mod.message_send(db, "carol", "bob", "c")
@@ -168,6 +174,7 @@ def test_count_since_counts_only_the_sender_after_the_cutoff(db_mod, db):
 
 
 def test_notification_add_list_newest_first_and_mark_read(db_mod, db):
+    """Notifications arrive newest-first and marking read clears them all, so the badge reflects what the user has actually seen."""
     db_mod.notification_add(db, "bob", "dm", "alice", "alice", "from alice")
     db_mod.notification_add(db, "bob", "dm", "carol", "carol", "from carol")
     items = db_mod.notification_list(db, "bob")
@@ -177,6 +184,7 @@ def test_notification_add_list_newest_first_and_mark_read(db_mod, db):
 
 
 def test_notification_since_returns_only_newer(db_mod, db):
+    """The polling read returns only what arrived after the caller's cursor, so a client is not handed the same notifications on every poll."""
     first = db_mod.notification_add(db, "bob", "dm", "a", "a", "first")
     db_mod.notification_add(db, "bob", "dm", "c", "c", "second")
     newer = db_mod.notification_list(db, "bob", since=first["created_at"])
@@ -184,12 +192,14 @@ def test_notification_since_returns_only_newer(db_mod, db):
 
 
 def test_notifications_are_per_user(db_mod, db):
+    """Notifications are scoped to their owner — one user's alerts never appear in another's feed."""
     db_mod.notification_add(db, "bob", "dm", "alice", "alice", "for bob")
     assert db_mod.notification_list(db, "carol") == []                    # carol sees nothing
 
 
 # ---- #331: the DM thread read is a BOUNDED, cursor-paged page (not a whole-thread load) ----
 def test_conversation_page_is_bounded_and_clamped(db_mod, db):
+    """Opening a long conversation loads a PAGE, not the whole thread, and a hostile limit is clamped — so one thread cannot pull an unbounded slice into memory."""
     for i in range(120):
         db_mod.message_send(db, "alice", "bob", f"m{i}")
     default_page = db_mod.message_list_conversation(db, "alice", "bob")
@@ -201,6 +211,7 @@ def test_conversation_page_is_bounded_and_clamped(db_mod, db):
 
 
 def test_conversation_default_page_is_the_newest_messages_oldest_first(db_mod, db):
+    """The default page is the most RECENT messages, presented oldest-first — opening a thread should land on what was just said, not on the beginning of the history."""
     for i in range(60):
         db_mod.message_send(db, "alice", "bob", f"m{i}")
     page = [m["body"] for m in db_mod.message_list_conversation(db, "alice", "bob")]   # default 50
@@ -209,6 +220,7 @@ def test_conversation_default_page_is_the_newest_messages_oldest_first(db_mod, d
 
 
 def test_conversation_before_cursor_pages_to_older(db_mod, db):
+    """Scrolling back loads the previous page, every row strictly older than the cursor, so a long conversation can be walked without gaps or repeats."""
     for i in range(60):
         db_mod.message_send(db, "alice", "bob", f"m{i}")
     page1 = db_mod.message_list_conversation(db, "alice", "bob")          # newest 50: m10..m59
@@ -220,8 +232,7 @@ def test_conversation_before_cursor_pages_to_older(db_mod, db):
 
 # ---- #331: the inbox summary + notification feed are BOUNDED reads too ----
 def test_inbox_summary_is_a_bounded_read(db_mod, db):
-    # The inbox must derive its rows from a .limit()-bounded read of recent messages — never the user's whole
-    # message history pulled into the app — and cap the result to `limit`.
+    """The inbox derives its rows from a bounded read of recent messages — never the user's entire message history pulled into the app — and caps the result to what was asked for."""
     db_mod.message_send(db, "alice", "bob", "hi")
     db_mod.message_send(db, "carol", "bob", "yo")
     rows = db_mod.message_list_conversations(db, "bob")
@@ -231,8 +242,7 @@ def test_inbox_summary_is_a_bounded_read(db_mod, db):
 
 
 def test_notification_feed_is_bounded_and_since_filters_in_query(db_mod, db):
-    # The feed read is newest-first, capped by `limit` (a .limit()-bounded read), and `since` filters in the
-    # query (off the index) rather than loading everything and filtering in Python.
+    """The feed read is newest-first and bounded, and the `since` cursor filters in the QUERY rather than loading everything and discarding it in Python — the difference between a poll that stays cheap and one that grows with the user's history."""
     first = db_mod.notification_add(db, "bob", "dm", "a", "a", "first")
     db_mod.notification_add(db, "bob", "dm", "c", "c", "second")
     db_mod.notification_add(db, "bob", "dm", "d", "d", "third")
