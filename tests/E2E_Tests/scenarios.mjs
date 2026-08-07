@@ -381,26 +381,63 @@ export const SCENARIOS = [
     },
   },
 
-  // The check-in gate, driven through the real form. A served-shell test can only prove the validator is
-  // PRESENT in the bundle; only a browser proves it DECIDES anything. Replacing validateCheckin's body
-  // with `return true` leaves every served-shell assertion green — these steps go red.
+  // The check-in gate, driven through the real form. Two DIFFERENT requirements are covered here and it is
+  // worth being explicit about which is which:
+  //
+  //   1. VALIDATION — an incomplete or out-of-range check-in must not be saved. Asserted by the outcome
+  //      (submit, then read /history back), so any implementation that refuses would pass.
+  //   2. ACCESSIBILITY — the button must ANNOUNCE that it is unavailable. aria-disabled is the contract a
+  //      screen reader reads; hiding or restyling the button would leave those users with no affordance,
+  //      so this one is asserted on the attribute deliberately, not as a proxy for (1).
+  //
+  // A served-shell test can only prove the validator is PRESENT in the bundle. Replacing validateCheckin's
+  // body with `return true` leaves every served-shell assertion green — these steps go red.
   {
-    name: "checkin: submit stays greyed until every field is valid",
+    name: "checkin: an incomplete check-in is refused, and the button says so",
     tags: ["checkin"],
     async fn(b) {
-      await registerAndLogin(b);
+      await registerAndLogin(b);                                  // fresh user => history starts empty
       await b.waitFor("#checkin-form");
       const gate = `() => {
         const btn = document.querySelector("#checkin-form button[type=submit]");
         return btn ? btn.getAttribute("aria-disabled") : "no-button";
       }`;
+      // The requirement's ground truth: what the server actually stored.
+      const savedCount = async () => b.pageExec(`(async () => {
+        const r = await fetch("/history", { headers: { "X-CSRF-Token": (document.cookie.match(/csrf_token=([^;]+)/)||[])[1] || "" } });
+        const j = await r.json();
+        return (j.history || j.items || []).length;
+      })()`);
 
-      assert(await b.evaluate(gate) === "true", "an untouched check-in form must leave Submit greyed");
+      assert(await savedCount() === 0, "a brand-new user should start with no check-ins");
+      assert(await b.evaluate(gate) === "true", "an untouched check-in form must announce Submit as unavailable");
+
+      // (1) EMPTY form — stopped by the FIRST defence: `required` on the two numeric inputs means the
+      // browser's own constraint validation rejects the submit before any app code runs. Nothing is saved,
+      // and deliberately no app message appears — the browser shows its native bubble instead.
+      assert(await b.evaluate(`() => document.querySelector("#checkin-form").checkValidity()`) === false,
+        "an empty check-in form should be natively invalid — the required inputs are the first defence");
+      await b.pageExec(`(() => { document.querySelector("#checkin-form").requestSubmit(); return true; })()`);
+      await b.wait(900);
+      assert(await savedCount() === 0, "an empty check-in was SAVED — nothing refused it");
 
       await b.type("#sleep_hours", "7");
       await b.type("#resting_hr", "55");
       assert(await b.evaluate(gate) === "true",
         "the numbers alone must not open the gate — fatigue/soreness/training_load are still unset");
+
+      // (2) The SECOND defence, and the one that actually matters. Only the two numeric inputs are
+      // `required`, so filling them satisfies the browser and the submit now reaches the app. The scales
+      // are still unset, so the app itself must refuse it — and tell the user why.
+      assert(await b.evaluate(`() => document.querySelector("#checkin-form").checkValidity()`) === true,
+        "with both numbers filled the form is natively valid, so the app's own guard is what is under test");
+      await b.pageExec(`(() => { document.querySelector("#checkin-form").requestSubmit(); return true; })()`);
+      await b.wait(900);
+      assert(await savedCount() === 0,
+        "a check-in with no fatigue/soreness/training_load was SAVED — the app's own guard did not refuse it");
+      const why = await b.text("#checkin-flash");
+      assert(why && why.trim().length > 0,
+        "the app refused the check-in but told the user nothing about why");
 
       await b.pageExec(`(() => {
         document.querySelectorAll("#checkin-form .scale").forEach((sc) => {
@@ -410,9 +447,9 @@ export const SCENARIOS = [
         return true;
       })()`);
       await b.wait(150);
-      assert(await b.evaluate(gate) === "false", "a fully-filled check-in must enable Submit");
+      assert(await b.evaluate(gate) === "false", "a fully-filled check-in must announce Submit as available");
 
-      // Below the model's floor (sleep_hours >= 1): the gate must shut again.
+      // (3) Below the model's floor (sleep_hours >= 1): the gate shuts AND a submit must still save nothing.
       await b.pageExec(`(() => {
         const el = document.getElementById("sleep_hours");
         el.value = "0";
@@ -421,7 +458,14 @@ export const SCENARIOS = [
       })()`);
       await b.wait(150);
       assert(await b.evaluate(gate) === "true",
-        "sleep_hours below the model's minimum must re-grey Submit");
+        "sleep_hours below the model's minimum must re-announce Submit as unavailable");
+      await b.pageExec(`(() => { document.querySelector("#checkin-form").requestSubmit(); return true; })()`);
+      await b.wait(900);
+      assert(await savedCount() === 0,
+        "a check-in with sleep_hours below the model's minimum was SAVED");
+
+      // No teardown needed: every submit above is expected to be refused, so this scenario stores nothing.
+      // If that ever stops being true the assertions fail first, which is the point.
     },
   },
 
