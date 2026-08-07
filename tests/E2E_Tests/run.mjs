@@ -7,6 +7,13 @@
 //         E2E_TAGS       comma-separated tag filter (e.g. "forum,auth"); empty = all
 //         E2E_SKIP_TAGS  comma-separated tags to skip (e.g. "anim" on a slow CI box)
 //
+// THE STACK UNDER TEST needs five switches, or scenarios fail for reasons unrelated to the app:
+//   REGISTER_VERIFY_EMAIL=0  OTP_ENABLED=0  SMTP_HOST=  SESSION_COOKIE_SECURE=0  RATELIMIT_ENABLED=0
+// A `both` run registers one user per scenario per viewport (38) against a 5-per-minute /register cap, so
+// without the last one the excess scenarios fail as `waitFor timeout: #login-form` — which reads as a
+// broken login rather than a rate limit. SCENARIOS.md ("Running it locally") has the copy-paste stack
+// command and the two traps around it.
+//
 // The two runs ("desktop" and "mobile") give per-viewport coverage; "both" runs them back-to-back in one
 // invocation so a single CI step reports full coverage.
 
