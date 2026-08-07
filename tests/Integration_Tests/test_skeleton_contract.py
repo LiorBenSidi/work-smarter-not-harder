@@ -12,6 +12,10 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 def test_only_web_publishes_a_host_port():
+    """Only the web service is reachable from outside; the model and the database stay on the internal network, so neither is exposed to the host or the internet.
+
+    The specific port also avoids one macOS reserves, which would silently fail to bind for half the team.
+    """
     compose = (ROOT / "docker-compose.yml").read_text()
     assert "8000:5000" in compose, "web must publish host 8000 -> container 5000"
     # ai/db are internal (`expose`, not `ports`), so the whole file must have exactly one `ports:`.
@@ -24,34 +28,38 @@ def test_only_web_publishes_a_host_port():
 
 
 def test_all_three_services_have_healthchecks():
+    """Every service reports whether it is actually working, so orchestration can tell "running" apart from "running but broken"."""
     compose = (ROOT / "docker-compose.yml").read_text()
     assert compose.count("healthcheck:") == 3, "web, ai and db must each define a healthcheck"
 
 
 def test_all_services_have_a_restart_policy():
-    # fault tolerance: every service must self-heal on a crash, not just the DB. (text-based to avoid a
-    # yaml dependency, consistent with the other contract checks.)
+    """Every service self-heals after a crash, not just the database — otherwise one container dying quietly takes a feature offline until somebody notices."""
     compose = (ROOT / "docker-compose.yml").read_text()
     assert compose.count("restart:") == 3, "web, ai and db must each define a restart policy"
 
 
 def test_all_healthchecks_define_a_start_period():
-    # a cold first boot (fresh Azure VM) must not exhaust the healthcheck retries before the app/db is up.
+    """A cold first boot must not exhaust the health retries before the service has finished starting, which would mark a perfectly healthy deploy as failed."""
     compose = (ROOT / "docker-compose.yml").read_text()
     assert compose.count("start_period:") == 3, "each healthcheck needs a start_period for a slow cold boot"
 
 
 def test_web_does_not_hard_depend_on_ai_health():
-    # fault tolerance: if AI is down, web must still BOOT and degrade per-request — so the dependency on
-    # ai is service_started, NOT service_healthy (else an AI outage takes the whole system down).
+    """The web service must BOOT even when the model is down, degrading per request instead.
+
+    A hard health dependency would turn a model outage into a total outage — nobody could even sign in.
+    """
     compose = (ROOT / "docker-compose.yml").read_text()
     assert "ai: { condition: service_started }" in compose, \
         "web must not hard-wait on ai health — an AI outage must not block web from booting"
 
 
 def test_ai_predict_returns_the_contract_shape():
-    # the web -> ai contract (docs/DESIGN.md §3): /predict returns state (str) + proba (dict)
-    # + recommendations (list). Behavioural — exercise the real app, don't grep source text.
+    """The prediction endpoint returns the three fields the web service reads, checked by exercising the real app rather than by reading its source.
+
+    This is the seam between two containers, so a silent shape change here breaks the app without either side failing its own tests.
+    """
     pytest.importorskip("flask")
     spec = importlib.util.spec_from_file_location("ai_app_under_test", str(ROOT / "ai" / "app.py"))
     module = importlib.util.module_from_spec(spec)
@@ -69,6 +77,7 @@ def test_ai_predict_returns_the_contract_shape():
 
 
 def test_app_containers_run_via_gunicorn():
+    """Both application containers run under a production server rather than the development one, which is single-threaded, unsupervised, and prints a warning nobody sees in a container log."""
     for container in ("web", "ai"):
         dockerfile = (ROOT / container / "Dockerfile").read_text()
         assert "gunicorn" in dockerfile, f"{container} should run via gunicorn (production WSGI)"

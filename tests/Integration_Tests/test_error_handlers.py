@@ -6,6 +6,7 @@ the SPA's fetch layer can't parse) and never a traceback. OWNER: Lior.
 
 
 def test_unknown_path_returns_json_404_not_html(client):
+    """A stray URL answers in JSON, because the client's fetch layer parses JSON and would choke on the framework's HTML page — turning a plain "not found" into an unhandled crash."""
     r = client.get("/no/such/route")
     assert r.status_code == 404
     assert r.is_json, "a 404 must be JSON so the SPA can read it, not an HTML page"
@@ -13,6 +14,7 @@ def test_unknown_path_returns_json_404_not_html(client):
 
 
 def test_wrong_method_returns_json_405(client):
+    """A wrong-method request gets the exact curated wording rather than merely some truthy string, so the message a user sees is one that was actually written for them."""
     r = client.get("/login")                                # /login is POST-only
     assert r.status_code == 405
     # the exact curated reason (web/app.py _FRIENDLY_HTTP), not merely "some truthy string" —
@@ -21,14 +23,16 @@ def test_wrong_method_returns_json_405(client):
 
 
 def test_http_error_body_never_leaks_werkzeug_html(client):
-    # belt-and-suspenders: the body is pure JSON, with no HTML traceback/boilerplate.
+    """The error body is pure JSON with no HTML boilerplate, so nothing from the framework's default page reaches the client."""
     body = client.get("/no/such/route").get_data(as_text=True)
     assert "<!doctype" not in body.lower() and "<html" not in body.lower()
 
 
 def test_unexpected_exception_is_a_generic_json_500(web_app_module, fake_users):
-    # A route that raises an unwrapped, unexpected error (e.g. a disk/store failure) must degrade to a
-    # generic JSON 500 — no traceback, no internal detail — and the real error is logged server-side.
+    """A genuinely unexpected failure degrades to a generic JSON error carrying no traceback and no internal detail — the raised message here names a path that must NOT appear in the response.
+
+    The real error still goes to the server log, where it belongs.
+    """
     app = web_app_module.create_app(users=fake_users)
     app.config.update(SECRET_KEY="test-secret-key", TESTING=True, RATELIMIT_ENABLED=False)
 
@@ -44,8 +48,7 @@ def test_unexpected_exception_is_a_generic_json_500(web_app_module, fake_users):
 
 
 def test_known_json_errors_are_unchanged(client):
-    # The new catch-alls must not disturb the routes that already return curated JSON errors:
-    # an unauthenticated API call is still a clean 401 JSON (not swallowed into a 500).
+    """The catch-all handlers must not swallow the routes that already return curated errors: an unauthenticated call is still a clean 401, not a generic 500."""
     r = client.get("/dashboard")
     assert r.status_code == 401
     assert r.is_json and r.get_json()["error"]

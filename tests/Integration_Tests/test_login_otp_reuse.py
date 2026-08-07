@@ -43,6 +43,10 @@ def live_otp(make_otp_client, fake_users, auth_module, monkeypatch):
 
 
 def test_rapid_relogin_reuses_code_and_sends_one_email(live_otp):
+    """A burst of sign-in attempts sends ONE email and keeps one code alive.
+
+    Minting a fresh code each time invalidated the previous one and flooded the mail provider, so codes arrived late, batched, and mostly already dead. The remaining time is reported as what is actually left, not a reset full window.
+    """
     client, _users, sent = live_otp
     _register(client)
     b1 = _login(client).get_json()
@@ -54,6 +58,7 @@ def test_rapid_relogin_reuses_code_and_sends_one_email(live_otp):
 
 
 def test_reused_code_still_verifies(live_otp):
+    """The single code from the burst genuinely works, so collapsing the emails does not cost the user their way in."""
     client, _users, sent = live_otp
     _register(client)
     for _ in range(3):                                                    # 3 rapid logins
@@ -64,6 +69,7 @@ def test_reused_code_still_verifies(live_otp):
 
 
 def test_expired_code_is_reminted(live_otp):
+    """Once the code has expired a fresh one is minted and sent — reuse must never mean a user is handed something already dead."""
     client, users, sent = live_otp
     _register(client)
     _login(client)
@@ -75,6 +81,7 @@ def test_expired_code_is_reminted(live_otp):
 
 
 def test_reuse_preserves_attempt_counter(live_otp):
+    """Reusing the code keeps the failed-attempt count, so signing in again cannot be used to reset the counter and dodge the lockout."""
     client, users, sent = live_otp
     _register(client)
     _login(client)
@@ -88,8 +95,7 @@ def test_reuse_preserves_attempt_counter(live_otp):
 
 
 def test_dev_mode_mints_fresh_each_login(otp_client):
-    # No SMTP -> the code is surfaced in the response. Reuse is LIVE-mode only, so dev keeps
-    # minting fresh every login (a reused code would return no dev_otp) — that flow is unchanged.
+    """Reuse applies only when mail is really being sent; without a relay each sign-in mints fresh, so the development flow that reads the code from the response keeps working."""
     _register(otp_client)
     b1 = _login(otp_client).get_json()
     b2 = _login(otp_client).get_json()
@@ -98,8 +104,10 @@ def test_dev_mode_mints_fresh_each_login(otp_client):
 
 
 def test_failed_send_clears_challenge_so_next_login_reattempts(make_otp_client, fake_users, auth_module, monkeypatch):
-    # If a live SMTP send FAILS (send_email returns False), the stored challenge is cleared so the NEXT
-    # login re-mints + re-sends — reuse must not lock onto a code the user never received (self-heal).
+    """If the send fails, the stored challenge is discarded so the next attempt mints and sends again.
+
+    Otherwise reuse would lock onto a code the user never received and every retry would helpfully reuse it.
+    """
     calls = {"n": 0}
 
     def failing_send(cfg, to, subject, body, **kw):
@@ -116,6 +124,7 @@ def test_failed_send_clears_challenge_so_next_login_reattempts(make_otp_client, 
 
 
 def test_locked_challenge_is_reminted_not_reused(live_otp):
+    """A challenge that has already hit the attempt cap is replaced rather than reused, so a locked-out user is not handed back the same dead code forever."""
     client, users, sent = live_otp
     _register(client)
     _login(client)                                                       # code A, one email
@@ -127,6 +136,7 @@ def test_locked_challenge_is_reminted_not_reused(live_otp):
 
 
 def test_resend_still_mints_fresh_even_with_a_valid_code(live_otp):
+    """An explicit resend always issues a new code, because the user asking for one is saying the previous one did not reach them — reuse would answer that request with silence."""
     client, _users, sent = live_otp
     _register(client)
     _login(client)                                                       # code A emailed

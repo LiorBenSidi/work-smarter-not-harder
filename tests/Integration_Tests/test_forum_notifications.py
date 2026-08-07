@@ -38,6 +38,10 @@ def _vote_notes(c, unread_only=False):
 
 
 def test_upvote_notifies_the_post_author(forum_client):
+    """The author learns their post was upvoted, with exactly one unread alert.
+
+    The wording is pinned EXACTLY rather than by substring: a loose check still passed when the text regressed to "upvoted your comment", which is precisely the post-versus-comment confusion this file exists to catch.
+    """
     pid = _post_as(forum_client, "bob")
     _login(forum_client, "alice")
     assert _vote(forum_client, pid, 1).status_code == 200
@@ -52,6 +56,7 @@ def test_upvote_notifies_the_post_author(forum_client):
 
 
 def test_self_vote_creates_no_notification(forum_client):
+    """Voting on your own post pings nobody, so the notification badge means someone else engaged rather than that you clicked."""
     _login(forum_client, "bob")
     pid = forum_client.post("/forum/posts", json={"title": "T", "body": "b"}).get_json()["post"]["id"]
     assert _vote(forum_client, pid, 1).status_code == 200
@@ -59,6 +64,7 @@ def test_self_vote_creates_no_notification(forum_client):
 
 
 def test_downvote_notification_reads_as_a_downvote(forum_client):
+    """A downvote is reported as a downvote, so the author is not told they were praised when they were not."""
     pid = _post_as(forum_client, "bob")
     _login(forum_client, "alice")
     _vote(forum_client, pid, -1)
@@ -69,6 +75,7 @@ def test_downvote_notification_reads_as_a_downvote(forum_client):
 
 
 def test_the_voter_is_not_notified(forum_client):
+    """The person who cast the vote gets nothing — an alert about your own action is noise."""
     pid = _post_as(forum_client, "bob")
     _login(forum_client, "alice")
     _vote(forum_client, pid, 1)
@@ -76,6 +83,7 @@ def test_the_voter_is_not_notified(forum_client):
 
 
 def test_an_uninvolved_user_sees_no_vote_notification(forum_client):
+    """Someone who never touched the post sees nothing, so notifications are strictly per-recipient rather than broadcast."""
     pid = _post_as(forum_client, "bob")
     _vote_as(forum_client, "alice", pid, 1)
     _login(forum_client, "carol")                   # carol never touched this post
@@ -83,6 +91,7 @@ def test_an_uninvolved_user_sees_no_vote_notification(forum_client):
 
 
 def test_distinct_voters_each_notify_once(forum_client):
+    """Each separate person produces one alert, so the author can tell two people engaged rather than one person twice."""
     pid = _post_as(forum_client, "bob")
     _vote_as(forum_client, "alice", pid, 1)
     _vote_as(forum_client, "carol", pid, 1)
@@ -91,8 +100,7 @@ def test_distinct_voters_each_notify_once(forum_client):
 
 
 def test_rapid_revotes_are_coalesced(forum_client):
-    # anti-spam (§2.7): a voter flipping their vote in quick succession must not flood the author —
-    # the three votes land inside the coalesce window, so they collapse to a single ping
+    """One voter flipping their vote in quick succession collapses to a SINGLE alert, so an author cannot be flooded by someone clicking repeatedly."""
     pid = _post_as(forum_client, "bob")
     _login(forum_client, "alice")
     _vote(forum_client, pid, 1)
@@ -104,8 +112,10 @@ def test_rapid_revotes_are_coalesced(forum_client):
 
 
 def test_a_vote_past_the_coalesce_window_pings_again(make_client, fake_users, fake_forum, fake_notifications):
-    # coalescing is time-bounded, never a permanent mute: a genuinely later vote (past the window)
-    # pings again. We reach into the fake store to backdate the first ping instead of sleeping 60s.
+    """Coalescing is time-bounded, never a permanent mute: a genuinely later vote pings again, so two real engagements produce two alerts.
+
+    The stored timestamp is backdated rather than waiting out the real window.
+    """
     c = make_client(fake_users, forum=fake_forum, notifications=fake_notifications)
     pid = _post_as(c, "bob")
     _vote_as(c, "alice", pid, 1)                     # first ping
@@ -138,8 +148,10 @@ def test_vote_succeeds_even_if_the_notification_store_is_down(make_client, fake_
 
 
 def test_vote_notification_text_is_name_less_and_survives_a_rename(forum_client):
-    # F1: the stored notification text must NOT freeze the voter's display name — a rename would desync it
-    # from the re-resolved actor. The text is name-less; the actor re-resolves to the CURRENT display name.
+    """The stored text does NOT freeze the voter's name — it is resolved fresh at read time.
+
+    Otherwise a rename leaves the alert claiming one name while the profile beside it shows another.
+    """
     pid = _post_as(forum_client, "bob")
     _login(forum_client, "alice")
     _vote(forum_client, pid, 1)

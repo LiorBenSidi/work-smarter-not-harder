@@ -19,6 +19,7 @@ def _setup(client, *names):
 
 
 def test_send_and_read_dm(messages_client):
+    """The round trip a user performs: a message sent to someone arrives in their thread, attributed to whoever wrote it."""
     c = messages_client
     _setup(c, "alice", "bob")
     _login(c, "alice")
@@ -30,7 +31,10 @@ def test_send_and_read_dm(messages_client):
 
 
 def test_conversation_read_is_paged_by_before_and_limit(messages_client):
-    # #331: the thread read is bounded + cursor-paged, so a huge thread can't be pulled in one request.
+    """A thread read is bounded and cursor-paged, so a years-long conversation cannot be pulled down in one request.
+
+    A malformed cursor falls back to the newest page rather than returning an empty thread, which would look to the user like their messages had vanished.
+    """
     c = messages_client
     _setup(c, "alice", "bob")
     _login(c, "alice")
@@ -45,6 +49,7 @@ def test_conversation_read_is_paged_by_before_and_limit(messages_client):
 
 
 def test_conversation_list_and_unread_clears_on_open(messages_client):
+    """The inbox shows who wrote and how many are waiting, and opening the thread clears the count — so the badge tracks what has actually been read."""
     c = messages_client
     _setup(c, "alice", "bob")
     _login(c, "alice")
@@ -58,7 +63,10 @@ def test_conversation_list_and_unread_clears_on_open(messages_client):
 
 
 def test_dm_read_receipt_lifecycle(messages_client):
-    # The sender's ticks progress sent -> delivered (recipient loads inbox) -> read (recipient opens thread).
+    """The sender's ticks progress through sent, delivered when the recipient loads their inbox, and read when they open the thread.
+
+    Each step is driven by a real action of the recipient's, so a tick never claims more than happened.
+    """
     c = messages_client
     _setup(c, "alice", "bob")
     _login(c, "alice")
@@ -78,8 +86,10 @@ def test_dm_read_receipt_lifecycle(messages_client):
 
 
 def test_dm_read_always_implies_delivered(messages_client):
-    # Opening a thread straight from a notification (without loading the inbox first) must still leave the
-    # message delivered=True — a message can never be read-but-not-delivered (the middle tick is never skipped).
+    """Opening a thread straight from a notification, without loading the inbox first, still marks the message delivered.
+
+    A message can never be read-but-not-delivered — the middle tick must not be skippable.
+    """
     c = messages_client
     _setup(c, "alice", "bob")
     _login(c, "alice")
@@ -92,6 +102,7 @@ def test_dm_read_always_implies_delivered(messages_client):
 
 
 def test_dm_creates_a_notification_for_the_recipient(messages_client):
+    """A message produces an alert for the person it was sent to, naming who sent it — otherwise a new message is invisible until they happen to open the inbox."""
     c = messages_client
     _setup(c, "alice", "bob")
     _login(c, "alice")
@@ -104,6 +115,7 @@ def test_dm_creates_a_notification_for_the_recipient(messages_client):
 
 
 def test_notifications_poll_since_returns_only_newer(messages_client):
+    """The poll returns only what arrived after the client's cursor, so a client is not re-handed the same alerts on every tick."""
     c = messages_client
     _setup(c, "alice", "bob")
     _login(c, "alice")
@@ -118,6 +130,7 @@ def test_notifications_poll_since_returns_only_newer(messages_client):
 
 
 def test_mark_notifications_read(messages_client):
+    """Marking read genuinely clears the unread count, so the badge reflects what the user has seen."""
     c = messages_client
     _setup(c, "alice", "bob")
     _login(c, "alice")
@@ -129,7 +142,7 @@ def test_mark_notifications_read(messages_client):
 
 
 def test_mark_read_with_empty_ids_is_a_noop(messages_client):
-    # {"ids": []} means "mark these zero notifications" -> must NOT mark the whole feed read
+    """Asking to mark ZERO notifications read marks zero — it must not be read as "mark everything", which would silently wipe alerts the user never looked at."""
     c = messages_client
     _setup(c, "alice", "bob")
     _login(c, "alice")
@@ -141,6 +154,7 @@ def test_mark_read_with_empty_ids_is_a_noop(messages_client):
 
 
 def test_mark_read_specific_ids_only(messages_client):
+    """Marking one notification read leaves the others untouched, so dismissing one alert does not quietly clear the rest."""
     c = messages_client
     _setup(c, "alice", "bob", "carol")
     _login(c, "alice")
@@ -155,7 +169,7 @@ def test_mark_read_specific_ids_only(messages_client):
 
 
 def test_non_finite_since_returns_all_not_nothing(messages_client):
-    # a nan/inf polling cursor must not silently blackhole the feed
+    """A malformed polling cursor returns the feed rather than an empty result — silently blackholing every notification would look exactly like "nothing is happening"."""
     c = messages_client
     _setup(c, "alice", "bob")
     _login(c, "alice")
@@ -171,6 +185,7 @@ def test_non_finite_since_returns_all_not_nothing(messages_client):
 
 
 def test_all_endpoints_require_login(messages_client):
+    """The routes not covered by the shared auth matrix are gated too, including the event stream, which is refused before a single byte is streamed."""
     c = messages_client
     # only the routes the Negative_Tests 401 matrix does NOT cover — POST /messages, GET /conversations
     # and GET /notifications are already in it.
@@ -180,9 +195,10 @@ def test_all_endpoints_require_login(messages_client):
 
 
 def test_events_caps_concurrent_streams_and_reserves_a_thread(messages_client):
-    # HIGH-fix regression: /events pins one worker thread for the stream's whole lifetime, so a burst of
-    # streams could starve the gunicorn pool and hang EVERY request (login, health...). Over the per-worker
-    # cap the endpoint must return IMMEDIATELY, holding NO thread, so ordinary requests keep a free thread.
+    """An open stream pins one worker thread for its whole life, so a burst of streams could starve the pool and hang EVERY request — sign-in and health included.
+
+    Over the cap the endpoint answers immediately holding no thread, so ordinary requests always have one free.
+    """
     from routes import messages
     c = messages_client
     _setup(c, "alice")
@@ -200,8 +216,7 @@ def test_events_caps_concurrent_streams_and_reserves_a_thread(messages_client):
 
 
 def test_events_stream_releases_its_slot_when_it_ends(messages_client, monkeypatch):
-    # The slot MUST be freed when the stream ends (or the client disconnects) via the generator's finally,
-    # else the cap leaks and the worker slowly strangles itself. EVENTS_MAX_SECONDS=0 ends it immediately.
+    """The slot is freed when the stream ends or the client disconnects, otherwise the cap leaks and the worker slowly strangles itself one abandoned tab at a time."""
     from routes import messages
     monkeypatch.setattr(messages, "EVENTS_MAX_SECONDS", 0)
     c = messages_client
@@ -217,10 +232,10 @@ def test_events_stream_releases_its_slot_when_it_ends(messages_client, monkeypat
 
 
 def test_sse_cap_is_clamped_below_thread_count_so_streams_cant_starve_the_worker():
-    # An SSE stream pins one gthread thread for its whole life. If the cap ever reached --threads, a burst of
-    # streams could hold EVERY thread and starve /health -> failed healthcheck -> container restart (a self-
-    # inflicted DoS). _safe_stream_cap must clamp the cap to <= threads//2 (>= half the pool always free for
-    # requests/health) no matter how EVENTS_MAX_STREAMS is (mis)configured, and never drop below 1.
+    """The cap is clamped to at most half the worker's threads no matter how it is configured, and never below one.
+
+    A cap equal to the thread count would let streams hold every thread, starve the health check, and get the container restarted — a self-inflicted outage.
+    """
     from routes import messages
     cap = messages._safe_stream_cap
     assert cap(3, 16) == 3            # the shipped default: safe, unchanged
@@ -235,9 +250,10 @@ def test_sse_cap_is_clamped_below_thread_count_so_streams_cant_starve_the_worker
 
 
 def test_events_pushes_a_forum_ping_when_the_forum_rev_changes(messages_client, monkeypatch):
-    # Real-time forum (the "wow"): the SSE stream reads forum.get_rev() each tick and pushes `event: forum`
-    # when it moves, so every open client re-fetches. Inject a forum whose rev advances once after the
-    # stream's baseline read -> exactly one forum ping. Tiny deadline + zero tick keeps the test instant.
+    """The stream pushes when the forum changes, which is what makes new posts appear for everyone without a refresh.
+
+    No notifications happened, so no notification ping fires either — the two signals stay independent.
+    """
     from routes import messages
     monkeypatch.setattr(messages, "EVENTS_MAX_SECONDS", 0.05)
     monkeypatch.setattr(messages, "EVENTS_TICK_SECONDS", 0)
@@ -261,7 +277,7 @@ def test_events_pushes_a_forum_ping_when_the_forum_rev_changes(messages_client, 
 
 
 def test_events_does_not_push_forum_when_the_rev_is_steady(messages_client, monkeypatch):
-    # No forum change -> no forum ping (the stream must not spam every client on keepalive ticks).
+    """With nothing happening the stream sends only keepalives, so every connected client is not woken on each tick to re-fetch a feed that has not moved."""
     from routes import messages
     monkeypatch.setattr(messages, "EVENTS_MAX_SECONDS", 0.05)
     monkeypatch.setattr(messages, "EVENTS_TICK_SECONDS", 0)
@@ -288,6 +304,7 @@ def _reset_search_throttle(messages_client):
 
 
 def test_user_search_finds_by_username(messages_client):
+    """The picker finds people by name, which is the only way to start a conversation with someone you have not talked to before."""
     c = messages_client
     _setup(c, "alice", "marco_r", "marina")
     _login(c, "alice")
@@ -296,6 +313,7 @@ def test_user_search_finds_by_username(messages_client):
 
 
 def test_user_search_excludes_the_caller(messages_client):
+    """You never find yourself in the picker, because you cannot message yourself."""
     c = messages_client
     _setup(c, "maya", "marco_r")
     _login(c, "maya")
@@ -307,10 +325,12 @@ def test_user_search_excludes_the_caller(messages_client):
 
 
 def test_user_search_requires_login(messages_client):
+    """The user directory is gated, so it cannot be scraped by an anonymous caller."""
     assert messages_client.get("/users/search?q=ab").status_code == 401
 
 
 def test_user_search_returns_no_pii(messages_client):
+    """Only the handle and display name leave the server — an email address must never appear in a search anyone can run."""
     c = messages_client
     _setup(c, "alice", "bob")
     _login(c, "alice")
@@ -321,6 +341,7 @@ def test_user_search_returns_no_pii(messages_client):
 
 
 def test_user_search_caps_results_at_eight(messages_client):
+    """Results are capped, so a broad query returns a usable short list instead of the entire user base."""
     c = messages_client
     _setup(c, "alice", *[f"runner{i:02d}" for i in range(12)])
     _login(c, "alice")
@@ -328,6 +349,7 @@ def test_user_search_caps_results_at_eight(messages_client):
 
 
 def test_user_search_regex_metacharacters_are_literal(messages_client):
+    """A query is matched as literal text, so a pattern like ".*" finds nothing rather than returning every user in the system."""
     c = messages_client
     _setup(c, "alice", "bob")
     _login(c, "alice")
@@ -335,6 +357,7 @@ def test_user_search_regex_metacharacters_are_literal(messages_client):
 
 
 def test_user_search_is_rate_limited(messages_client):
+    """A scripted flood eventually trips the throttle, so the directory cannot be enumerated by brute force one query at a time."""
     from routes import messages
     c = messages_client
     _setup(c, "alice", "bob")
@@ -382,8 +405,10 @@ def _stream_with(monkeypatch, make_client, fake_users, fake_messages, fake_notif
 
 def test_events_pushes_forum_when_the_rev_moves(monkeypatch, make_client, fake_users, fake_messages,
                                                 fake_notifications):
-    # The control for the two regressions below: a healthy stream MUST push when the rev moves. Without
-    # this passing, "no push" in those tests would prove nothing (a broken harness looks identical).
+    """The control for the two recovery tests below: a healthy stream MUST push when the forum changes.
+
+    Without this passing, "no push" in those tests would prove nothing — a broken harness looks identical to a broken feature.
+    """
     forum = _ScriptedForum(revs=[0, 1])                              # baseline 0, then someone posts
     body = _stream_with(monkeypatch, make_client, fake_users, fake_messages, fake_notifications, forum)
     assert body.startswith("retry: 3000")                            # a real stream (not the at-capacity one)
@@ -392,8 +417,10 @@ def test_events_pushes_forum_when_the_rev_moves(monkeypatch, make_client, fake_u
 
 def test_events_recovers_when_the_rev_baseline_read_fails(monkeypatch, make_client, fake_users,
                                                           fake_messages, fake_notifications):
-    # #342: the baseline read raises (Mongo hiccup at stream open), then recovers. A change AFTER the
-    # baseline is re-established must still push. The old code left forum_rev=None forever -> silence.
+    """A database hiccup when the stream opens must not disable the forum push for that stream's whole life.
+
+    The old code left the baseline unset forever and went silent — while the stream stayed OPEN and notifications kept working, so neither the log nor the client could reveal it.
+    """
     forum = _ScriptedForum(revs=[0, 0, 1], fail_on_calls=[1])        # call 1 raises; rebaseline at 0; then 1
     body = _stream_with(monkeypatch, make_client, fake_users, fake_messages, fake_notifications, forum)
     assert body.startswith("retry: 3000")
@@ -402,8 +429,10 @@ def test_events_recovers_when_the_rev_baseline_read_fails(monkeypatch, make_clie
 
 def test_events_recovers_when_a_rev_tick_read_fails(monkeypatch, make_client, fake_users, fake_messages,
                                                     fake_notifications):
-    # Same defect on the tick path. The failed read must keep the LAST known baseline (not reset it), so
-    # the very next successful read still sees the change and pushes it — nothing is lost to one hiccup.
+    """The same defect on the polling path: a failed read keeps the LAST known baseline rather than resetting it, so the next successful read still sees the change and pushes it.
+
+    Nothing is lost to a single hiccup.
+    """
     forum = _ScriptedForum(revs=[0, 1], fail_on_calls=[2])           # baseline 0; first tick raises; then 1
     body = _stream_with(monkeypatch, make_client, fake_users, fake_messages, fake_notifications, forum)
     assert body.startswith("retry: 3000")
@@ -412,8 +441,10 @@ def test_events_recovers_when_a_rev_tick_read_fails(monkeypatch, make_client, fa
 
 def test_events_survives_a_rev_read_that_never_recovers(monkeypatch, make_client, fake_users,
                                                         fake_messages, fake_notifications):
-    # The forum rev being unreadable for the whole stream must degrade to "no forum pushes", never to a
-    # dead stream: DM/notify keepalives keep flowing and the client's poll backstop covers the forum.
+    """A forum read that is broken for the entire stream degrades to "no forum pushes" — never to a dead stream.
+
+    Messages and keepalives keep flowing, and the client's periodic poll covers the forum in the meantime.
+    """
     forum = _ScriptedForum(revs=[0], fail_on_calls=range(1, 100))
     body = _stream_with(monkeypatch, make_client, fake_users, fake_messages, fake_notifications, forum)
     assert body.startswith("retry: 3000")

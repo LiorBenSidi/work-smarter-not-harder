@@ -67,6 +67,10 @@ def real_db():
 
 
 def test_seed_populates_clients_posts_comments_and_likes(seed_mod, db_mod, real_db):
+    """Against a REAL database the seed creates everything it reports, and the likes genuinely move the scores.
+
+    The voting path runs server-side in the database and cannot be exercised by the in-memory fake at all, so this is the only place it is proven — including that a post's score equals the sum of its votes.
+    """
     result = seed_mod.apply_seed(db_mod, real_db)
 
     assert result == {"users": len(seed_mod.SEED_USERS),
@@ -84,6 +88,7 @@ def test_seed_populates_clients_posts_comments_and_likes(seed_mod, db_mod, real_
 
 
 def test_seeded_feed_reads_newest_first_after_backdating(seed_mod, db_mod, real_db):
+    """The real indexed feed read returns the backdated content newest-first, which is the exact call the app serves — so a visitor's first screen is ordered the way it looks in development."""
     seed_mod.apply_seed(db_mod, real_db)
     # the real indexed, bounded feed read — the exact call the app serves.
     posts = db_mod.forum_list_posts(real_db)
@@ -93,6 +98,7 @@ def test_seeded_feed_reads_newest_first_after_backdating(seed_mod, db_mod, real_
 
 
 def test_seeded_accounts_authenticate_against_real_mongo(seed_mod, db_mod, real_db):
+    """Every seeded account's stored credential verifies against the real database, so anyone can actually sign in as one of them rather than merely seeing their posts."""
     seed_mod.apply_seed(db_mod, real_db)
     for handle, _display, _email in seed_mod.SEED_USERS:
         doc = real_db.users.find_one({"username": handle})
@@ -100,6 +106,7 @@ def test_seeded_accounts_authenticate_against_real_mongo(seed_mod, db_mod, real_
 
 
 def test_seed_is_idempotent_against_real_mongo(seed_mod, db_mod, real_db):
+    """Re-running the seed against a populated database creates nothing, so a container restart cannot multiply the demo content in production."""
     seed_mod.apply_seed(db_mod, real_db)
     posts_before = real_db.forum_posts.count_documents({})
     comments_before = real_db.forum_comments.count_documents({})

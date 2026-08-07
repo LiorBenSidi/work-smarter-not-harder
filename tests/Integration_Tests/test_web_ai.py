@@ -25,6 +25,10 @@ def _ai_client(web_app_module):
 
 
 def test_dashboard_triggers_ai_predict_roundtrip(make_client, fake_users, fake_profiles, fake_history, web_app_module):
+    """The dashboard genuinely CALLS the model service and surfaces what comes back — the state, the advice and the calorie target all reach the user.
+
+    Asserting the call happened matters as much as the values: a route that quietly stopped asking would still render a plausible page.
+    """
     client = make_client(fake_users, fake_profiles, history=fake_history)
     _login_with_profile_and_checkin(client, fake_profiles, fake_history)
     prediction = {"state": "Ready", "proba": {"Ready": 0.9},
@@ -41,6 +45,7 @@ def test_dashboard_triggers_ai_predict_roundtrip(make_client, fake_users, fake_p
 
 
 def test_dashboard_degrades_when_ai_unreachable(make_client, fake_users, fake_profiles, fake_history, web_app_module):
+    """With the model unreachable the page still loads and reports the score as unavailable, so one container being down never takes the whole app with it."""
     client = make_client(fake_users, fake_profiles, history=fake_history)
     _login_with_profile_and_checkin(client, fake_profiles, fake_history)
     with patch.object(_ai_client(web_app_module), "predict", return_value=None):   # ai down -> None

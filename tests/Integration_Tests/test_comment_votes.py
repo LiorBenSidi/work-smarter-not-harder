@@ -25,6 +25,7 @@ def _vote_notes(c):
 
 
 def test_comment_vote_changes_score_one_per_user(forum_client):
+    """A comment vote moves its score and voting again replaces the previous vote, and the thread read-back shows the score while keeping the voter identities to itself."""
     _login(forum_client, "alice")
     pid = _post(forum_client)
     cid = _comment(forum_client, pid)
@@ -35,7 +36,7 @@ def test_comment_vote_changes_score_one_per_user(forum_client):
 
 
 def test_a_comment_needs_an_id_to_be_voted(forum_client):
-    # the add-comment response must carry the id the vote endpoint needs
+    """The response to posting a comment carries the id the vote endpoint needs, so a reader can vote on a comment they just made without reloading the thread to find it."""
     _login(forum_client, "alice")
     pid = _post(forum_client)
     body = forum_client.post(f"/forum/posts/{pid}/comments", json={"body": "hi"}).get_json()
@@ -43,6 +44,7 @@ def test_a_comment_needs_an_id_to_be_voted(forum_client):
 
 
 def test_comment_vote_notifies_the_comment_author(forum_client):
+    """Voting on a comment pings the person who wrote it, which is the whole point of the notification — recognition reaching the right person."""
     _login(forum_client, "alice")
     pid = _post(forum_client)                       # alice owns the post
     forum_client.post("/logout")
@@ -58,7 +60,7 @@ def test_comment_vote_notifies_the_comment_author(forum_client):
 
 
 def test_the_post_author_is_not_notified_for_a_comment_vote(forum_client):
-    # voting bob's comment must ping bob (the comment author), NOT alice (the post author)
+    """A vote on a comment notifies the COMMENT's author, not the post's — otherwise anyone with a busy thread is buried in alerts about other people's replies."""
     _login(forum_client, "alice")
     pid = _post(forum_client)
     forum_client.post("/logout")
@@ -73,6 +75,7 @@ def test_the_post_author_is_not_notified_for_a_comment_vote(forum_client):
 
 
 def test_self_comment_vote_creates_no_notification(forum_client):
+    """Voting on your own comment notifies nobody, so the feed is not filled with alerts about your own actions."""
     _login(forum_client, "bob")
     pid = _post(forum_client)
     cid = _comment(forum_client, pid)
@@ -81,12 +84,14 @@ def test_self_comment_vote_creates_no_notification(forum_client):
 
 
 def test_comment_vote_on_missing_comment_is_404(forum_client):
+    """Voting on a comment that does not exist is a 404, so a stale thread on screen cannot create a score against nothing."""
     _login(forum_client, "alice")
     pid = _post(forum_client)
     assert _cvote(forum_client, pid, "no-such-comment", 1).status_code == 404
 
 
 def test_comment_vote_rejects_bad_value(forum_client):
+    """Only the two real vote values are accepted — an out-of-range number is refused, and so is a bool, which would otherwise pass as the integer 1."""
     _login(forum_client, "alice")
     pid = _post(forum_client)
     cid = _comment(forum_client, pid)
@@ -95,13 +100,15 @@ def test_comment_vote_rejects_bad_value(forum_client):
 
 
 def test_comment_vote_requires_login(forum_client):
-    # not logged in -> the auth gate rejects (the wrapper still supplies the CSRF token)
+    """Voting requires an account, since one-vote-per-person is meaningless for an anonymous caller."""
     assert forum_client.post("/forum/posts/p/comments/c/vote", json={"value": 1}).status_code == 401
 
 
 def test_post_and_comment_votes_notify_independently(forum_client):
-    # a voter hitting BOTH a post and a comment by the same author -> two distinct pings (refs differ,
-    # so the comment vote is NOT coalesced away by the post vote)
+    """One voter reaching both a post and a comment by the same author produces TWO distinct alerts.
+
+    The two must not be coalesced, or the author learns about only one of them.
+    """
     _login(forum_client, "alice")
     pid = _post(forum_client)
     cid = _comment(forum_client, pid)               # alice authors both the post and the comment
@@ -117,9 +124,10 @@ def test_post_and_comment_votes_notify_independently(forum_client):
 
 
 def test_comment_vote_response_carries_the_tallies_for_an_in_place_repaint(forum_client):
-    # #409: the client patches the voted comment in place (it must not drop already-loaded older pages), so
-    # the vote response has to carry the same tallies the row renders — a score-only reply would leave the
-    # like/dislike numbers stale on screen until the whole thread was reloaded.
+    """The client repaints just the voted row rather than reloading the thread — which would throw away pages the reader already scrolled through — so the vote reply must carry the same tallies that row renders.
+
+    A score-only reply would leave the like and dislike counts visibly stale, and the read-back here confirms the reply told the truth.
+    """
     _login(forum_client, "alice")
     pid = _post(forum_client)
     cid = _comment(forum_client, pid)

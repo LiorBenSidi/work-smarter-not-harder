@@ -25,6 +25,10 @@ def _register_login(client, name, pw="password123"):
 
 def test_delete_account_cascades_across_every_store(full_client, fake_users, fake_profiles, fake_history,
                                                     fake_forum, fake_messages, fake_notifications):
+    """Erasure reaches EVERY store the user touched — identity, profile, history, their posts and comments, their votes, both directions of their messages, and notifications where they were merely the actor.
+
+    A cascade that misses one collection leaves personal data behind after the user was told it was gone.
+    """
     _register_login(full_client, "alice")
     # alice creates data in every collection
     fake_profiles.save("alice", {"age": 30, "goal": "maintain"})
@@ -60,6 +64,7 @@ def test_delete_account_cascades_across_every_store(full_client, fake_users, fak
 
 
 def test_delete_preserves_other_users_forum_content(full_client, fake_forum):
+    """One person leaving must not damage everyone else's forum: another author's post survives with their own comment and vote intact, and only the departing user's contributions are removed and the score recomputed."""
     _register_login(full_client, "alice")
     bp = fake_forum.create_post("bob", "keep me", "body", False)
     fake_forum.add_comment(bp["id"], "bob", "bob comment")
@@ -77,6 +82,7 @@ def test_delete_preserves_other_users_forum_content(full_client, fake_forum):
 
 
 def test_delete_requires_the_password(full_client, fake_users):
+    """Erasure is irreversible, so it demands the password — and an attempt without one leaves the account fully intact."""
     _register_login(full_client, "alice")
     r = full_client.delete("/account", json={})
     assert r.status_code == 400
@@ -84,6 +90,7 @@ def test_delete_requires_the_password(full_client, fake_users):
 
 
 def test_delete_rejects_wrong_password(full_client, fake_users):
+    """A wrong password does not delete the account, so someone at an unattended screen cannot destroy it on a guess."""
     _register_login(full_client, "alice", pw="password123")
     r = full_client.delete("/account", json={"password": "WRONGpass1"})
     assert r.status_code == 403
@@ -91,6 +98,7 @@ def test_delete_rejects_wrong_password(full_client, fake_users):
 
 
 def test_delete_rejects_non_string_password_injection(full_client, fake_users):
+    """An operator object sent as the password is refused, so the confirmation step cannot be turned into a query that matches anything."""
     _register_login(full_client, "alice")
     r = full_client.delete("/account", json={"password": {"$ne": ""}})
     assert r.status_code == 400
@@ -98,11 +106,13 @@ def test_delete_rejects_non_string_password_injection(full_client, fake_users):
 
 
 def test_delete_requires_authentication(full_client):
+    """An anonymous caller cannot delete an account at all, whatever password they supply."""
     r = full_client.delete("/account", json={"password": "password123"})
     assert r.status_code == 401
 
 
 def test_delete_ends_the_session(full_client):
+    """Deletion ends the session immediately, so the browser is not left holding a session for an account that no longer exists."""
     _register_login(full_client, "alice")
     assert full_client.get("/me").status_code == 200
     full_client.delete("/account", json={"password": "password123"})

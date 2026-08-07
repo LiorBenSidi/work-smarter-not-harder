@@ -38,8 +38,7 @@ def _set_predict(monkeypatch, result):
 
 
 def test_dashboard_new_user_prompts_a_checkin_and_flags_the_missing_profile(dash_client):
-    # A brand-new user (no profile, no check-in) can't be scored yet -> prompt a check-in (the metrics are
-    # what the model needs), and flag the missing profile too (for the calorie target). Readiness is None.
+    """A brand-new user cannot be scored yet, so the dashboard asks for the check-in the model actually needs and separately flags the missing profile for the calorie target."""
     _login(dash_client)
     data = dash_client.get("/dashboard").get_json()
     assert data["needs_checkin"] is True
@@ -48,9 +47,10 @@ def test_dashboard_new_user_prompts_a_checkin_and_flags_the_missing_profile(dash
 
 
 def test_dashboard_shows_readiness_without_a_profile(dash_client, monkeypatch):
-    # Issue #266: a user who has checked in must see their readiness even WITHOUT a profile — the model
-    # scores on the daily metrics alone; the profile only adds the calorie target. So readiness renders,
-    # calories is None, and needs_profile is a soft flag (not a hard block that shows the Example card).
+    """Someone who has checked in sees their readiness even WITHOUT a profile — the model scores on the daily metrics alone, and the profile only adds the calorie target.
+
+    The missing profile stays a soft hint rather than a hard block, and only the metrics reach the model.
+    """
     seen = {}
 
     def capture(url, features, **kw):
@@ -71,8 +71,7 @@ def test_dashboard_shows_readiness_without_a_profile(dash_client, monkeypatch):
 
 
 def test_dashboard_with_profile_but_no_checkin_prompts_a_checkin(dash_client, monkeypatch):
-    # Profile set, no check-in yet -> nothing to score. The dashboard must prompt a check-in, NOT fire a
-    # profile-only /predict (which the model would 400) and NOT look like an AI outage.
+    """With a profile but no check-in there is nothing to score, so the dashboard asks for one instead of firing a profile-only prediction the model would reject — which would read to the user as an outage."""
     calls = []
     monkeypatch.setattr(sys.modules["services.ai_client"], "predict",
                         lambda *a, **k: calls.append((a, k)) or {"state": "Ready"})
@@ -86,8 +85,7 @@ def test_dashboard_with_profile_but_no_checkin_prompts_a_checkin(dash_client, mo
 
 
 def test_dashboard_scores_from_the_latest_checkin_metrics(dash_client, monkeypatch):
-    # The dashboard must send the latest check-in's metrics (merged with profile) to the ai — the four
-    # readiness fields the model needs. Capture what predict receives.
+    """The metrics that reach the model are the ones from the latest check-in, merged with the profile context — not a bare profile, and not a stale entry."""
     seen = {}
 
     def capture(url, features, **kw):
@@ -107,12 +105,10 @@ def test_dashboard_scores_from_the_latest_checkin_metrics(dash_client, monkeypat
 
 
 def test_dashboard_forwards_recent_history_for_trend_recs(dash_client, fake_history, monkeypatch):
-    # P1: the dashboard forwards recent check-in history to the AI so its trend-aware recommendations
-    # can fire (a 3x Rest streak, declining sleep, rising fatigue, a load spike). We forward ONLY the two
-    # fields the engine reads per entry — {metrics, assessment} — so the payload stays small and JSON-safe
-    # (the raw stored entry also carries a timestamp/calories the engine never looks at). The engine's own
-    # streak logic is covered in test_ai_recommendations; here we prove the WIRING delivers the history.
-    # A real streak is across DISTINCT days (history is one row per day now), so seed three days directly.
+    """Trend-aware advice — a streak of hard days, declining sleep, a load spike — needs recent history, so the dashboard forwards it.
+
+    Only the two fields the engine reads are sent per entry, keeping the payload small; the engine's own logic is tested separately, so what is proven here is the WIRING.
+    """
     seen = {}
 
     def capture(url, features, **kw):
@@ -138,8 +134,7 @@ def test_dashboard_forwards_recent_history_for_trend_recs(dash_client, fake_hist
 
 
 def test_dashboard_history_forwarded_is_bounded_and_empty_history_is_harmless(dash_client, monkeypatch):
-    # A single check-in yields a one-entry history (no trend, engine no-ops) and the payload still carries a
-    # `history` list — proving a brand-new athlete is unaffected and the key is always well-formed.
+    """A single check-in still produces a well-formed history list, so a brand-new athlete is unaffected by the trend feature rather than hitting a missing key."""
     seen = {}
 
     def capture(url, features, **kw):
@@ -157,12 +152,10 @@ def test_dashboard_history_forwarded_is_bounded_and_empty_history_is_harmless(da
 
 
 def test_dashboard_uses_the_most_recent_checkin(dash_client, fake_history, monkeypatch):
-    # The dashboard scores the LATEST entry (oldest-first history -> [-1]).
-    #
-    # This used to do two _checkin() calls back to back — but both land on the same UTC day, and
-    # same-day replacement keeps ONE row (test_checkin_flow asserts len(hist) == 1 for exactly this
-    # sequence). So [-1] was indexing a single-element list and the test could not tell [-1] from
-    # [0]. Seed DISTINCT days so the selection is actually exercised.
+    """The dashboard scores the LATEST entry, proven across distinct days.
+
+    The earlier version submitted two check-ins back to back, but same-day replacement collapses those into one row — so it was selecting from a single-element list and could not tell the newest from the oldest.
+    """
     seen = {}
 
     def capture(url, features, **kw):
@@ -183,6 +176,7 @@ def test_dashboard_uses_the_most_recent_checkin(dash_client, fake_history, monke
 
 
 def test_dashboard_shows_readiness_and_calories_when_ai_responds(dash_client, monkeypatch):
+    """The happy path: a healthy prediction reaches the user as a readiness state, its advice, and a calorie target."""
     _set_predict(monkeypatch, {"state": "Ready", "proba": {"Ready": 0.9},
                                "recommendations": ["easy run"], "calories": 2500})
     _login(dash_client)
@@ -196,6 +190,7 @@ def test_dashboard_shows_readiness_and_calories_when_ai_responds(dash_client, mo
 
 
 def test_dashboard_degrades_when_ai_unavailable(dash_client, monkeypatch):
+    """An unreachable model leaves the page loading successfully with the score marked unavailable, rather than failing the whole dashboard over one absent number."""
     _set_predict(monkeypatch, None)  # ai unreachable -> ai_client.predict returns None
     _login(dash_client)
     dash_client.post("/profile", json=_profile())
@@ -208,6 +203,7 @@ def test_dashboard_degrades_when_ai_unavailable(dash_client, monkeypatch):
 
 
 def test_dashboard_degrades_when_ai_returns_non_object(dash_client, monkeypatch):
+    """A malformed response is treated as unavailable rather than crashing the page mid-render — the failure mode of trusting a reply's shape."""
     _set_predict(monkeypatch, ["not", "a", "dict"])  # malformed AI response must not crash the page
     _login(dash_client)
     dash_client.post("/profile", json=_profile())
@@ -218,7 +214,7 @@ def test_dashboard_degrades_when_ai_returns_non_object(dash_client, monkeypatch)
 
 
 def test_dashboard_coerces_non_list_recommendations(dash_client, monkeypatch):
-    # a buggy AI returning recommendations as a string must not leak a non-list to the client
+    """Advice that arrives as a bare string is not passed through as one, because the client iterates it — a string would render one character per line."""
     _set_predict(monkeypatch, {"state": "Ready", "recommendations": "go run", "calories": 2000})
     _login(dash_client)
     dash_client.post("/profile", json=_profile())
@@ -229,7 +225,7 @@ def test_dashboard_coerces_non_list_recommendations(dash_client, monkeypatch):
 
 
 def test_dashboard_passes_through_proba_for_the_confidence_viz(dash_client, monkeypatch):
-    # the per-state confidence drives the UI breakdown; numbers pass, non-numeric is dropped (defence).
+    """The per-state confidence drives the breakdown the user sees, so numbers pass through and a non-numeric value is dropped rather than reaching a chart that cannot plot it."""
     _set_predict(monkeypatch, {"state": "Ready", "recommendations": [],
                                "proba": {"Ready": 0.7, "Moderate": 0.2, "Rest": "boom"}, "calories": 2000})
     _login(dash_client)
@@ -240,6 +236,7 @@ def test_dashboard_passes_through_proba_for_the_confidence_viz(dash_client, monk
 
 
 def test_dashboard_proba_is_none_when_absent(dash_client, monkeypatch):
+    """A prediction without confidence figures reports their absence explicitly, so the interface hides the breakdown instead of drawing an empty one."""
     _set_predict(monkeypatch, {"state": "Ready", "recommendations": [], "calories": 2000})
     _login(dash_client)
     dash_client.post("/profile", json=_profile())
@@ -248,10 +245,10 @@ def test_dashboard_proba_is_none_when_absent(dash_client, monkeypatch):
 
 
 def test_dashboard_drops_non_finite_ai_values_keeping_strict_json(dash_client, monkeypatch):
-    # A buggy/hostile AI returning NaN/Infinity must NOT reach the response: jsonify serialises a
-    # non-finite float as the bare tokens NaN/Infinity, which are invalid JSON that a browser's
-    # JSON.parse rejects (blanking the dashboard). Non-finite proba/calories are dropped/nulled;
-    # finite values survive; the body stays strict-valid JSON.
+    """A non-finite number from the model must never reach the response: the encoder writes it as a bare token that is invalid JSON, and the browser then fails to parse the WHOLE body — blanking the dashboard over one bad field.
+
+    The body is parsed strictly here, so any such token fails the test rather than shipping.
+    """
     import json
     _set_predict(monkeypatch, {"state": "Ready", "recommendations": [],
                                "proba": {"Ready": float("nan"), "Rest": 0.4, "Hard": float("inf")},
@@ -270,11 +267,10 @@ def test_dashboard_drops_non_finite_ai_values_keeping_strict_json(dash_client, m
 
 
 def test_dashboard_history_read_is_bounded(dash_client, fake_history, monkeypatch):
-    # #331: the dashboard needs only the LATEST check-in (readiness) + the newest _HISTORY_WINDOW entries
-    # (trend), so its history read must be CAPPED at HISTORY_VIEW_CAP — never an unbounded load of the whole
-    # append-only log. Regression guard: dropping the `limit=` kwarg (reverting to an unbounded read) makes
-    # the store see limit=None and fails this. Mirrors the /history route's existing cap.
-    # (fake_history IS the dash_client's injected HISTORY store, so spying on it sees the route's read.)
+    """The dashboard needs the latest check-in and a short recent window, so its history read is capped rather than loading a user's entire append-only log on every page view.
+
+    Dropping the bound makes the store see no limit at all, which is exactly what this catches.
+    """
     from services.db import HISTORY_VIEW_CAP
     _set_predict(monkeypatch, {"state": "Rest", "proba": {"Rest": 0.8}, "recommendations": []})
     _login(dash_client)

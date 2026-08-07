@@ -25,6 +25,7 @@ def _client(make_client, fake_users, fake_profiles, fake_history):
 
 
 def test_checkin_saves_assessment_to_history(make_client, fake_users, fake_profiles, fake_history, monkeypatch):
+    """A check-in is scored and lands in history in the exact shape the history view renders, so what the user just submitted is what they find when they look back."""
     _set_predict(monkeypatch, {"state": "Ready", "calories": 2200})
     c = _client(make_client, fake_users, fake_profiles, fake_history)
     _login(c)
@@ -42,11 +43,13 @@ def test_checkin_saves_assessment_to_history(make_client, fake_users, fake_profi
 
 
 def test_checkin_requires_login(make_client, fake_users, fake_profiles, fake_history):
+    """A check-in belongs to an account, so an anonymous submission is refused rather than stored against nobody."""
     c = _client(make_client, fake_users, fake_profiles, fake_history)
     assert c.post("/checkin", json=_metrics()).status_code == 401
 
 
 def test_checkin_rejects_bad_metrics_400(make_client, fake_users, fake_profiles, fake_history):
+    """Every class of bad input is refused at the ROUTE — missing fields, an operator object, out of range, a numeric string, a bool — so the client-side validation is a convenience rather than the only line of defence."""
     c = _client(make_client, fake_users, fake_profiles, fake_history)
     _login(c)
     assert c.post("/checkin", json={"sleep_hours": 7.5}).status_code == 400          # missing fields
@@ -57,9 +60,10 @@ def test_checkin_rejects_bad_metrics_400(make_client, fake_users, fake_profiles,
 
 
 def test_checkin_ignores_url_query_params(make_client, fake_users, fake_profiles, fake_history, monkeypatch):
-    # UI-bypass guard: /checkin reads ONLY the JSON body, so smuggling metrics in the URL query string can't
-    # work. A hostile query is ignored (a valid body still succeeds), and an out-of-range BODY is still
-    # rejected regardless of the query string — a curl / URL-param bypass of the client-side validation fails.
+    """The route reads only the JSON body, so metrics smuggled into the query string are ignored and an out-of-range body is still refused.
+
+    Someone bypassing the form with a hand-written request gets nowhere.
+    """
     _set_predict(monkeypatch, {"state": "Ready", "calories": 2000})
     c = _client(make_client, fake_users, fake_profiles, fake_history)
     _login(c)
@@ -68,6 +72,7 @@ def test_checkin_ignores_url_query_params(make_client, fake_users, fake_profiles
 
 
 def test_checkin_still_saved_when_ai_down(make_client, fake_users, fake_profiles, fake_history, monkeypatch):
+    """When the model is unreachable the check-in is STILL saved and the response says the score is unavailable, so a user's own data is never lost to somebody else's outage."""
     _set_predict(monkeypatch, None)  # ai unreachable
     c = _client(make_client, fake_users, fake_profiles, fake_history)
     _login(c)
@@ -88,6 +93,7 @@ class _BrokenHistory:
 
 
 def test_checkin_degrades_to_503_when_history_store_fails(make_client, fake_users, fake_profiles, monkeypatch):
+    """If the entry cannot be stored the request fails honestly instead of reporting success for data that went nowhere."""
     _set_predict(monkeypatch, {"state": "Ready"})
     c = make_client(fake_users, fake_profiles, history=_BrokenHistory())
     _login(c)
@@ -95,8 +101,10 @@ def test_checkin_degrades_to_503_when_history_store_fails(make_client, fake_user
 
 
 def test_checkin_nulls_non_finite_calories(make_client, fake_users, fake_profiles, fake_history, monkeypatch):
-    # A non-finite calories from the AI must be neither persisted nor emitted as an invalid-JSON token
-    # (jsonify would write a bare Infinity/NaN that a browser's JSON.parse rejects).
+    """A non-finite number from the model is neither persisted nor emitted, because the JSON encoder would write a bare token that a browser refuses to parse.
+
+    That breaks the ENTIRE response, not just the one field — so the test parses the body strictly to prove no such token survives.
+    """
     import json
     _set_predict(monkeypatch, {"state": "Ready", "calories": float("inf")})
     c = _client(make_client, fake_users, fake_profiles, fake_history)
@@ -110,9 +118,10 @@ def test_checkin_nulls_non_finite_calories(make_client, fake_users, fake_profile
 
 
 def test_checkin_persists_proba_for_the_real_history_score(make_client, fake_users, fake_profiles, fake_history, monkeypatch):
-    # issue #1: History showed the band level (100/66/33) because only the state word was stored. The
-    # check-in must persist the per-state proba too, so History can compute the SAME 0-100 score the
-    # dashboard shows. Only finite numbers are kept (a NaN/Infinity proba is dropped).
+    """History could only show three banded levels because just the state word was stored; keeping the per-state probabilities lets it compute the same fine-grained score the dashboard shows.
+
+    Only finite values are kept, so a malformed probability cannot poison the stored entry.
+    """
     _set_predict(monkeypatch, {"state": "Ready", "calories": 2200,
                                "proba": {"Ready": 0.82, "Moderate": 0.1, "Rest": 0.08, "bogus": float("nan")}})
     c = _client(make_client, fake_users, fake_profiles, fake_history)
@@ -124,6 +133,7 @@ def test_checkin_persists_proba_for_the_real_history_score(make_client, fake_use
 
 
 def test_checkin_missing_proba_persists_none(make_client, fake_users, fake_profiles, fake_history, monkeypatch):
+    """A response without probabilities stores an explicit absence rather than a fabricated default that would render as a real score."""
     _set_predict(monkeypatch, {"state": "Ready", "calories": 2000})           # no proba in the AI response
     c = _client(make_client, fake_users, fake_profiles, fake_history)
     _login(c)
@@ -131,8 +141,7 @@ def test_checkin_missing_proba_persists_none(make_client, fake_users, fake_profi
 
 
 def test_checkin_persists_recommendations_for_the_detail_view(make_client, fake_users, fake_profiles, fake_history, monkeypatch):
-    # #354: History's per-entry detail shows what was advised at the time, so the check-in must persist the
-    # recommendations that ride the same /predict response — coerced to a bounded list of strings.
+    """The per-entry detail view shows what was advised AT THE TIME, so the advice is stored alongside the entry — coerced to strings, because it is rendered as text."""
     _set_predict(monkeypatch, {"state": "Ready", "calories": 2200,
                                "recommendations": ["Hydrate well", "Push your planned session", 42]})
     c = _client(make_client, fake_users, fake_profiles, fake_history)
@@ -144,7 +153,7 @@ def test_checkin_persists_recommendations_for_the_detail_view(make_client, fake_
 
 
 def test_checkin_missing_recommendations_persists_empty_list(make_client, fake_users, fake_profiles, fake_history, monkeypatch):
-    # No recommendations in the AI response (or ai down) -> an empty list, never a missing key or a crash.
+    """No advice in the response yields an empty list rather than a missing key, so the detail view can iterate it without a guard."""
     _set_predict(monkeypatch, {"state": "Ready", "calories": 2000})           # no recommendations key
     c = _client(make_client, fake_users, fake_profiles, fake_history)
     _login(c)
@@ -159,6 +168,7 @@ def _old_entry(ts="2026-06-01T07:00:00Z", **extra):
 
 
 def test_regenerate_recommendations_backfills_from_the_entrys_inputs(make_client, fake_users, fake_profiles, fake_history, monkeypatch):
+    """An entry stored before advice was persisted can regenerate it from the metrics it did keep, so older history is not permanently blank."""
     fake_history.add("alice", _old_entry())                                   # no `recommendations` key (pre-#354)
     _set_predict(monkeypatch, {"state": "Ready", "recommendations": ["Push your session", 7]})
     c = _client(make_client, fake_users, fake_profiles, fake_history)
@@ -171,6 +181,7 @@ def test_regenerate_recommendations_backfills_from_the_entrys_inputs(make_client
 
 
 def test_regenerate_recommendations_is_idempotent_and_skips_the_ai(make_client, fake_users, fake_profiles, fake_history, monkeypatch):
+    """An entry that already has advice returns it WITHOUT calling the model, so re-opening an old entry does not queue work that has already been done."""
     fake_history.add("alice", _old_entry(ts="2026-06-02T07:00:00Z", recommendations=["Already here"]))
     def _boom(*a, **k):
         raise AssertionError("the ai must not be called when recommendations already exist")
@@ -182,12 +193,14 @@ def test_regenerate_recommendations_is_idempotent_and_skips_the_ai(make_client, 
 
 
 def test_regenerate_recommendations_404_for_an_unknown_entry(make_client, fake_users, fake_profiles, fake_history):
+    """Backfilling an entry that does not exist is a 404, so a stale client cannot conjure a record that was never checked in."""
     c = _client(make_client, fake_users, fake_profiles, fake_history)
     _login(c)
     assert c.post("/history/recommendations", json={"timestamp": "does-not-exist"}).status_code == 404
 
 
 def test_regenerate_recommendations_503_when_the_ai_is_down(make_client, fake_users, fake_profiles, fake_history, monkeypatch):
+    """With the model unreachable the backfill reports unavailable rather than writing an empty result, which would leave the entry looking permanently answered."""
     fake_history.add("alice", _old_entry(ts="2026-06-03T07:00:00Z"))
     _set_predict(monkeypatch, None)                                          # ai unreachable
     c = _client(make_client, fake_users, fake_profiles, fake_history)
@@ -196,13 +209,16 @@ def test_regenerate_recommendations_503_when_the_ai_is_down(make_client, fake_us
 
 
 def test_regenerate_recommendations_requires_login(make_client, fake_users, fake_profiles, fake_history):
+    """The backfill reads and writes a user's own history, so it is gated like every other route that touches it."""
     c = _client(make_client, fake_users, fake_profiles, fake_history)
     assert c.post("/history/recommendations", json={"timestamp": "x"}).status_code == 401
 
 
 def test_second_checkin_same_day_replaces_the_days_entry(make_client, fake_users, fake_profiles, fake_history, monkeypatch):
-    # issue #5: a daily-readiness log is one row per day. A second check-in the same UTC day REPLACES the
-    # first, so History doesn't accrue several rows for one day (both submits are stamped the same UTC day).
+    """A daily readiness log is one row per day: a second check-in on the same day REPLACES the first rather than accruing several rows, and the later one wins.
+
+    Without this a user who corrects a typo ends up with two contradictory entries for one morning.
+    """
     c = _client(make_client, fake_users, fake_profiles, fake_history)
     _login(c)
     _set_predict(monkeypatch, {"state": "Rest", "calories": 2100})
