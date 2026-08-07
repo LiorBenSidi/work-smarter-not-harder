@@ -424,4 +424,41 @@ export const SCENARIOS = [
         "sleep_hours below the model's minimum must re-grey Submit");
     },
   },
+
+  // Stored XSS, end to end. The requirement (GUIDELINES: defences against injection attacks) is that
+  // attacker-supplied content must never execute, while the author's post stays readable. This asserts
+  // that OUTCOME, deliberately not the mechanism: escaping, sanitising or stripping would each pass, so
+  // the test survives a change of defence and only fails if the app becomes vulnerable.
+  //
+  // It is reachable because the API returns titles/bodies verbatim — a title posted as
+  // `<img src=x onerror=...>` comes back byte-identical — and the SPA renders them via innerHTML, so the
+  // client is the only barrier. A served-shell test can grep that escapeHtml appears in the bundle;
+  // only a browser can prove the payload does not RUN.
+  {
+    name: "security: injected markup from another user never executes",
+    tags: ["security", "forum"],
+    async fn(b) {
+      await registerAndLogin(b);
+      const payload = `<img src=x onerror="window.__xssFired = true">`;
+      const marker = "xss-probe-" + Math.floor(performance.now());
+
+      await createPost(b, `${marker} ${payload}`, `body ${payload}`);
+      await gotoScreen(b, "forum");
+      await b.waitFor("#forum-list");
+      await b.wait(400);
+
+      // The requirement: attacker-supplied content must not run.
+      const fired = await b.evaluate(`() => window.__xssFired === true`);
+      assert(fired === false, "the injected onerror handler EXECUTED — user content reached the DOM as live markup");
+
+      // ...and must not become a live element that could fire later or leak a request.
+      const injected = await b.evaluate(`() => document.querySelectorAll('#forum-list img[src="x"]').length`);
+      assert(injected === 0, `the payload became ${injected} live <img> element(s)`);
+
+      // The other half of the requirement: defending must not cost the author their post.
+      const shown = await b.evaluate(
+        `() => (document.querySelector("#forum-list") || {}).textContent || ""`);
+      assert(shown.includes(marker), "the post vanished from the feed — a defence must not drop the content");
+    },
+  },
 ];

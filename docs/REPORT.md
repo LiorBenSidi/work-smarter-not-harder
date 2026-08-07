@@ -14,7 +14,7 @@
 > [`ROADMAP.md`](ROADMAP.md).
 >
 > **Last updated:** 2026-08-06 · **Suite at this snapshot:** **1118 checks, 1073 passing / 45 environment-gated**
-> (+ 18 browser e2e scenarios)
+> (+ 19 browser e2e scenarios)
 > (`python -m pytest tests/ -q`; the env-gated ones run in CI's `compose-e2e` job against the live containers).
 > Since the 07-12 snapshot (783 tests): **Shiri's Random Forest landed** — a real `ai/model/model.pkl` +
 > `inference.py` (exercised by `test_ai_queue_api`), with the readiness recommendation engine and the
@@ -199,7 +199,7 @@ Columns are the test-type dirs under `tests/`. Cells name representative file(s)
 
 **Totals by type (full suite, `pytest --collect-only`):** Unit **419** · Integration **401** · Negative **157** ·
 System **14** · Full-System **27** · Security **88** · Stress **12** → **1118 automated checks across the seven
-pytest suites**, plus **18 browser end-to-end scenarios** driven separately (`tests/E2E_Tests/`, run in CI as
+pytest suites**, plus **19 browser end-to-end scenarios** driven separately (`tests/E2E_Tests/`, run in CI as
 the *e2e (browser · desktop + mobile)* job — not counted in the pytest total). This matches the header count.
 
 Read the total as *checks*, not as hand-written test functions: 1118 collected cases come from **842 test
