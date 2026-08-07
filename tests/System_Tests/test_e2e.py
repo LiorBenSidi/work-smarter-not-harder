@@ -31,6 +31,10 @@ def _h(s):
 
 
 def test_full_user_journey_web_ai_db(client):
+    """The one test that proves the three containers really talk to each other over the wire: a signed-in user's check-in is validated by web, predicted by ai, and lands in the database — and the session is genuinely gated once they log out.
+
+    Everything else in the suite mocks at least one of those hops; only this runs the whole chain.
+    """
     s = client
     user, pw = "e2e_" + uuid.uuid4().hex[:8], "s3cret-e2e-pw!"
 

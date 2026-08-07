@@ -25,6 +25,7 @@ class _BrokenProfiles:
 
 
 def test_profile_degrades_to_503_when_store_fails(make_client, fake_users):
+    """A profile SAVE answers 503 when its store is down — the write path, where silently losing the user's data would be far worse than an honest failure."""
     c = make_client(fake_users, _BrokenProfiles())
     c.post("/register", json={"username": "alice", "password": "s3cretpw!", "email": "alice@example.com"})
     c.post("/login", json={"username": "alice", "password": "s3cretpw!", "email": "alice@example.com"})

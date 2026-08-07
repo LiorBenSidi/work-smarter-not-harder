@@ -14,6 +14,7 @@ class _BrokenHistory:
 
 
 def test_history_degrades_to_503_when_store_fails(make_client, fake_users):
+    """/history answers 503 when the HISTORY store is down — a different dependency from the dashboard's, on the route that reads the user's whole record."""
     c = make_client(fake_users, history=_BrokenHistory())
     c.post("/register", json={"username": "alice", "password": "s3cretpw!", "email": "alice@example.com"})
     c.post("/login", json={"username": "alice", "password": "s3cretpw!", "email": "alice@example.com"})

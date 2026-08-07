@@ -46,7 +46,7 @@ class _PartialForum:
 
 
 def test_partial_store_row_does_not_crash_the_list(make_client, fake_users):
-    # one malformed/partial row from the store must degrade per-row (defaults), not 500 the whole list
+    """One partial row from the store degrades to per-row defaults instead of 500-ing the feed, so a single malformed document cannot take the forum down for everybody."""
     c = make_client(fake_users, forum=_PartialForum())
     c.post("/register", json={"username": "alice", "password": "s3cretpw!", "email": "alice@example.com"})
     c.post("/login", json={"username": "alice", "password": "s3cretpw!", "email": "alice@example.com"})
@@ -58,6 +58,7 @@ def test_partial_store_row_does_not_crash_the_list(make_client, fake_users):
 
 
 def test_forum_degrades_to_503_when_store_fails(make_client, fake_users):
+    """Creating a post while the forum store is down answers 503 rather than a 500 stack trace, so an outage is reported as one."""
     c = make_client(fake_users, forum=_BrokenForum())
     c.post("/register", json={"username": "alice", "password": "s3cretpw!", "email": "alice@example.com"})
     c.post("/login", json={"username": "alice", "password": "s3cretpw!", "email": "alice@example.com"})
@@ -70,5 +71,6 @@ def test_forum_degrades_to_503_when_store_fails(make_client, fake_users):
 
 
 def test_edit_and_delete_require_login(forum_client):
+    """An anonymous edit or delete is refused before ownership is ever consulted — PATCH and DELETE are absent from the Negative_Tests auth-gate matrix, so this is the only gate on those two verbs."""
     assert forum_client.patch("/forum/posts/1", json={"title": "x", "body": "y"}).status_code == 401
     assert forum_client.delete("/forum/posts/1").status_code == 401
