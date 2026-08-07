@@ -53,6 +53,7 @@ def real_db():
 
 
 def test_users_roundtrip_and_dedupe(db_mod, real_db):
+    """Against a real database a duplicate registration is refused by the actual unique index rather than by a fake's bookkeeping, and the raw internal id still never comes back with the record."""
     db_mod.ensure_indexes(real_db)
     assert db_mod.create_user(real_db, "alice", "h1") is True
     assert db_mod.create_user(real_db, "alice", "h2") is False           # upsert dup -> False
@@ -60,9 +61,10 @@ def test_users_roundtrip_and_dedupe(db_mod, real_db):
 
 
 def test_email_is_unique_across_handles(db_mod, real_db):
-    # One email = one account (login identity): a DIFFERENT handle claiming an already-registered email is
-    # rejected by the partial-unique users.email index -> create_user raises DuplicateEmailError (so the
-    # route 409s once instead of the handle loop hammering every suffix against the same taken email).
+    """One email means one account: a different handle claiming a registered address is rejected by the real partial-unique index, so the route can answer once instead of looping through suffixes against the same taken address.
+
+    The filter is PARTIAL, so several accounts with no email do not collide with each other on a missing value.
+    """
     db_mod.ensure_indexes(real_db)
     assert db_mod.create_user(real_db, "alex", "h1", "x@e.com") is True
     with pytest.raises(db_mod.DuplicateEmailError):
@@ -76,8 +78,7 @@ def test_email_is_unique_across_handles(db_mod, real_db):
 
 
 def test_create_user_stores_and_returns_the_display_name(db_mod, real_db):
-    # the identity model: the handle is unique; the display name is stored separately (need not be unique)
-    # and comes back on get_user. A second account may share the display name under a different handle.
+    """The handle is unique while the shown name need not be, so two people can pick the same name and still be separate accounts."""
     db_mod.ensure_indexes(real_db)
     assert db_mod.create_user(real_db, "alex", "h1", "alex@example.com", display_name="Alex") is True
     assert db_mod.create_user(real_db, "alex-2", "h2", "alex2@example.com", display_name="Alex") is True
@@ -88,7 +89,7 @@ def test_create_user_stores_and_returns_the_display_name(db_mod, real_db):
 
 
 def test_update_display_name_changes_the_shown_name_only(db_mod, real_db):
-    # renaming updates display_name and leaves the handle (and everything keyed on it) + credential intact.
+    """Renaming touches only the shown name and leaves the handle — which everything else is keyed on — and the credential exactly as they were."""
     db_mod.create_user(real_db, "alice", "h1", "alice@example.com", display_name="Alice")
     assert db_mod.update_display_name(real_db, "alice", "Alice B.") is True
     u = db_mod.get_user(real_db, "alice")
@@ -97,7 +98,10 @@ def test_update_display_name_changes_the_shown_name_only(db_mod, real_db):
 
 
 def test_account_deletion_cascade_erases_all_user_data(db_mod, real_db):
-    # the full GDPR erasure against real Mongo: every collection + the forum-consistency recompute.
+    """The full erasure against a real database, in the order the route performs it: dependent data first, the identity record last.
+
+    Everything of the user's goes, and another author's post survives with their own vote intact and the score correctly recomputed.
+    """
     db_mod.ensure_indexes(real_db)
     db_mod.create_user(real_db, "alice", "h1", "a@ex.com", display_name="Alice")
     db_mod.save_profile(real_db, "alice", {"age": 30})
@@ -128,6 +132,7 @@ def test_account_deletion_cascade_erases_all_user_data(db_mod, real_db):
 
 
 def test_email_consent_and_export_against_mongo(db_mod, real_db):
+    """Consent persists across a real write and read, and the export returns exactly this user's own comment and both of their votes — a post they never wrote is not swept in."""
     db_mod.create_user(real_db, "alice", "h1", "a@ex.com", display_name="Alice")
     assert db_mod.get_email_consent(real_db, "alice") is False           # default
     assert db_mod.set_email_consent(real_db, "alice", True) is True
@@ -143,8 +148,10 @@ def test_email_consent_and_export_against_mongo(db_mod, real_db):
 
 
 def test_otp_challenge_roundtrip(db_mod, real_db):
-    # the login-OTP seam against real Mongo: set -> get -> atomic $inc -> $unset, and clearing the
-    # transient fields must leave the core identity doc untouched.
+    """The login-code seam against a real database: store, read, atomically increment the attempt count, then clear.
+
+    Clearing the transient fields must leave the core identity record untouched — otherwise a failed sign-in could damage the account.
+    """
     db_mod.create_user(real_db, "alice", "h1")
     assert db_mod.get_otp(real_db, "alice") is None
     assert db_mod.set_otp(real_db, "alice", "otp-hash", 9999999999) is True
@@ -157,12 +164,17 @@ def test_otp_challenge_roundtrip(db_mod, real_db):
 
 
 def test_profile_and_history_roundtrip(db_mod, real_db):
+    """A profile written to a real database reads back intact, and a user with no check-ins gets an empty list rather than an error."""
     db_mod.save_profile(real_db, "alice", {"age": 30, "goal": "maintain"})
     assert db_mod.get_profile(real_db, "alice") == {"age": 30, "goal": "maintain"}
     assert db_mod.list_history(real_db, "alice") == []
 
 
 def test_forum_crud_and_problematic_username_vote(db_mod, real_db):
+    """Usernames containing '.' or '$' vote safely, because votes are stored as a LIST rather than keyed by username — as field names those characters are illegal in the database and the write would simply fail.
+
+    Only a real database rejects them, which is why this cannot be caught by the in-memory fake.
+    """
     pid = db_mod.forum_create_post(real_db, "alice", "T", "B", False)["id"]
     assert db_mod.forum_get_post(real_db, pid)["body"] == "B"
     cid = db_mod.forum_add_comment(real_db, pid, "bob", "nice")["id"]
@@ -180,9 +192,7 @@ def test_forum_crud_and_problematic_username_vote(db_mod, real_db):
 
 
 def test_forum_vote_behaviour_against_mongo(db_mod, real_db):
-    # Vote behaviour now lives ONLY on the atomic aggregation-pipeline update (the in-memory fake can't
-    # execute a pipeline), so it's pinned here against real Mongo: set / same-user-replace / distinct-user
-    # aggregate, votes stored as a LIST of {user,value}, and unknown post/comment -> None.
+    """All of vote behaviour lives in a server-side pipeline the in-memory fake cannot execute, so it is pinned here: one vote per person, re-voting replaces, different people aggregate, and an unknown post or comment changes nothing."""
     pid = db_mod.forum_create_post(real_db, "alice", "T", "B", False)["id"]
     assert db_mod.forum_vote(real_db, pid, "alice", 1) == 1
     assert db_mod.forum_vote(real_db, pid, "alice", -1) == -1        # one vote per user -> replaces, not adds
@@ -199,9 +209,10 @@ def test_forum_vote_behaviour_against_mongo(db_mod, real_db):
 
 
 def test_forum_vote_paths_bump_the_realtime_rev_against_mongo(db_mod, real_db):
-    # Real-time push (SSE `event: forum`): the two vote mutations run the Mongo pipeline the fake can't, so
-    # their rev-bump is pinned here. A successful post OR comment vote advances forum_get_rev; a vote on an
-    # unknown post does NOT (nothing changed -> no ping).
+    """The two vote paths run that same server-side pipeline, so their contribution to the real-time counter is only provable here.
+
+    A successful vote advances it and open clients refresh; a vote on a post that does not exist does not, so nobody is woken for a write that never landed.
+    """
     pid = db_mod.forum_create_post(real_db, "alice", "T", "B", False)["id"]
     cid = db_mod.forum_add_comment(real_db, pid, "bob", "hi")["id"]
     r0 = db_mod.forum_get_rev(real_db)
@@ -216,10 +227,10 @@ def test_forum_vote_paths_bump_the_realtime_rev_against_mongo(db_mod, real_db):
 
 
 def test_forum_vote_is_atomic_under_concurrency(db_mod, real_db):
-    # The atomic pipeline update must let many simultaneous voters on ONE hot post all succeed with the
-    # correct final tally and NO spurious error. The old read-rebuild-CAS-retry loop could exhaust its
-    # (8) retries under this contention and raise RuntimeError -> the route surfaced a 503 for a valid
-    # vote on a perfectly healthy DB. Each write is atomic at the document level, so all N land.
+    """Many people voting on one hot post at the same instant must ALL succeed with the correct final tally and no spurious error.
+
+    The previous read-rebuild-retry approach could exhaust its retries under this contention and raise — so a perfectly valid vote surfaced to the user as a server error on a completely healthy database.
+    """
     import threading
     pid = db_mod.forum_create_post(real_db, "author", "T", "B", False)["id"]
     n = 24
@@ -246,8 +257,7 @@ def test_forum_vote_is_atomic_under_concurrency(db_mod, real_db):
 
 
 def test_forum_vote_same_user_concurrent_revote_nets_one(db_mod, real_db):
-    # The same user firing many concurrent votes must end with exactly ONE vote for them (dedup holds
-    # under contention): the pipeline drops their prior vote before appending, atomically, every time.
+    """One person firing many votes at once still ends with exactly one vote, so the one-vote-per-person rule holds under contention rather than only in a calm sequence."""
     import threading
     pid = db_mod.forum_create_post(real_db, "author", "T", "B", False)["id"]
     barrier = threading.Barrier(16)
@@ -265,6 +275,7 @@ def test_forum_vote_same_user_concurrent_revote_nets_one(db_mod, real_db):
 
 
 def test_unique_index_is_actually_enforced(db_mod, real_db):
+    """The unique constraint is enforced by the database itself, so a duplicate is impossible even for a write that bypasses the application's own checks entirely."""
     from pymongo.errors import DuplicateKeyError
     db_mod.ensure_indexes(real_db)
     real_db.users.insert_one({"username": "alice", "password_hash": "x"})
@@ -273,6 +284,7 @@ def test_unique_index_is_actually_enforced(db_mod, real_db):
 
 
 def test_perf_indexes_and_schema_validator_are_applied(db_mod, real_db):
+    """The performance index really exists, and the shape validator genuinely rejects a structurally-wrong document — the last line of defence when application-level validation is bypassed."""
     from pymongo.errors import WriteError
     db_mod.ensure_indexes(real_db)
     db_mod.ensure_schema(real_db)
@@ -288,9 +300,10 @@ def test_perf_indexes_and_schema_validator_are_applied(db_mod, real_db):
 
 
 def test_add_history_replaces_the_same_day_entry_against_mongo(db_mod, real_db):
-    # issue #5: one row per UTC day. Two check-ins the same day -> the second REPLACES the first; a
-    # different day is kept. Pinned on real Mongo because the same-day match is a nested-path $regex the
-    # in-memory fake can't run. list_history returns entries oldest-first.
+    """One row per day: a second check-in the same day replaces the first, a different day is kept alongside it.
+
+    The same-day match is a query the in-memory fake cannot run, so it is only provable here. An entry whose timestamp cannot be parsed is appended rather than dropped — a malformed row must never cost the user their record.
+    """
     db_mod.add_history(real_db, "alice", {"timestamp": "2026-07-15T06:00:00+00:00", "assessment": "Rest"})
     db_mod.add_history(real_db, "alice", {"timestamp": "2026-07-15T21:00:00+00:00", "assessment": "Ready"})
     db_mod.add_history(real_db, "alice", {"timestamp": "2026-07-16T07:00:00+00:00", "assessment": "Moderate"})
@@ -302,9 +315,10 @@ def test_add_history_replaces_the_same_day_entry_against_mongo(db_mod, real_db):
 
 
 def test_dm_thread_read_is_bounded_and_indexed_against_mongo(db_mod, real_db):
-    # #331: a DM thread reads a bounded, cursor-paged page off the two compound (participant-pair, created_at)
-    # indexes, not a full-thread scan. Pinned on real Mongo because the $or + sort + limit is the SORT_MERGE
-    # path the in-memory fake can't model. Order-strict assertions are avoided (wall-clock created_at can tie).
+    """A thread reads a bounded page off the two compound indexes rather than scanning the whole conversation, and a hostile limit is clamped.
+
+    The combined filter, sort and limit is the query plan the fake cannot model, so the indexes are asserted to exist here as well.
+    """
     db_mod.ensure_indexes(real_db)
     keys = [tuple(idx["key"].items()) for idx in real_db.messages.list_indexes()]
     assert (("sender", 1), ("recipient", 1), ("created_at", -1)) in keys
@@ -320,8 +334,7 @@ def test_dm_thread_read_is_bounded_and_indexed_against_mongo(db_mod, real_db):
 
 
 def test_history_view_read_is_bounded_and_indexed_against_mongo(db_mod, real_db):
-    # #331: the History view reads the newest HISTORY_VIEW_CAP check-ins off the (username, entry.timestamp)
-    # index; limit=None (the GDPR export) still returns everything.
+    """The history screen reads the newest entries off its index, bounded — while the data export deliberately returns everything, because there completeness is the point."""
     from datetime import date, timedelta
     db_mod.ensure_indexes(real_db)
     keys = [tuple(idx["key"].items()) for idx in real_db.analysis_history.list_indexes()]
@@ -338,7 +351,7 @@ def test_history_view_read_is_bounded_and_indexed_against_mongo(db_mod, real_db)
 
 
 def test_history_set_recommendations_persists_by_timestamp_against_mongo(db_mod, real_db):
-    # #354 backfill: recompute recs for a pre-#354 entry and persist them onto the row matched by its timestamp.
+    """Backfilled advice is written onto the row matched by its timestamp and coerced to strings, and an unknown timestamp matches nothing rather than writing to an arbitrary row."""
     db_mod.add_history(real_db, "alice", {"assessment": "Ready", "timestamp": "2026-06-01T07:00:00Z",
                                           "metrics": {"sleep_hours": 8}})
     assert db_mod.history_set_recommendations(real_db, "alice", "2026-06-01T07:00:00Z", ["Hydrate", 5]) is True
@@ -348,8 +361,7 @@ def test_history_set_recommendations_persists_by_timestamp_against_mongo(db_mod,
 
 
 def test_inbox_summary_read_is_bounded_against_mongo(db_mod, real_db):
-    # #331: the inbox derives its rows from a bounded read of recent messages + a bounded unread scan, and the
-    # result is capped to `limit` — never the user's whole message history.
+    """The inbox is built from a bounded read with a bounded unread scan and a capped result, so opening it never costs a scan of the user's entire message history."""
     db_mod.ensure_indexes(real_db)
     for peer in ("alice", "carol", "dave"):
         db_mod.message_send(real_db, peer, "bob", f"hi from {peer}")
@@ -360,8 +372,7 @@ def test_inbox_summary_read_is_bounded_against_mongo(db_mod, real_db):
 
 
 def test_notification_feed_read_is_bounded_and_indexed_against_mongo(db_mod, real_db):
-    # #331: notifications read newest-first off the (user, created_at) index, bounded by `limit`; limit=None
-    # (the GDPR export) returns the full feed.
+    """Notifications read newest-first off their index and honour the requested bound, while the export path still returns the full feed."""
     db_mod.ensure_indexes(real_db)
     keys = [tuple(idx["key"].items()) for idx in real_db.notifications.list_indexes()]
     assert (("user", 1), ("created_at", -1)) in keys

@@ -19,6 +19,7 @@ def _register_and_login(client, name="alice", password="password123", email=None
 
 # ---- display name ----
 def test_change_display_name_updates_shown_name_but_not_the_handle(client):
+    """Renaming yourself changes only the name others see; the internal handle that keys ownership, messages and history is untouched, so a rename cannot orphan someone's own content."""
     _register_and_login(client)
     r = client.post("/account/display-name", json={"display_name": "Alice Cooper"})
     assert r.status_code == 200
@@ -29,19 +30,21 @@ def test_change_display_name_updates_shown_name_but_not_the_handle(client):
 
 
 def test_display_name_is_trimmed(client):
+    """Stray whitespace is trimmed, so a name is never stored with padding that makes it sort and render oddly everywhere it appears."""
     _register_and_login(client)
     r = client.post("/account/display-name", json={"display_name": "   Spacey   "})
     assert r.status_code == 200 and r.get_json()["display_name"] == "Spacey"
 
 
 def test_change_display_name_rejects_non_string_injection(client):
-    # the string-type check is the NoSQL-injection gate — a {"$gt": ""} object never reaches a query.
+    """The string-type check is the injection gate here — an operator object never reaches a query through the rename endpoint."""
     _register_and_login(client)
     r = client.post("/account/display-name", json={"display_name": {"$gt": ""}})
     assert r.status_code == 400
 
 
 def test_change_display_name_rejects_out_of_bounds(client):
+    """A too-short or too-long name is refused, so the same bounds enforced at signup cannot be sidestepped by renaming afterwards."""
     _register_and_login(client)
     assert client.post("/account/display-name", json={"display_name": "ab"}).status_code == 400        # too short
     assert client.post("/account/display-name", json={"display_name": "x" * 65}).status_code == 400     # too long
@@ -49,7 +52,7 @@ def test_change_display_name_rejects_out_of_bounds(client):
 
 # ---- auth gate ----
 def test_account_endpoints_require_authentication(client):
-    # no session -> 401 on both (the login_required gate), no store mutation possible
+    """Both account endpoints refuse an anonymous caller, so no unauthenticated request can reach the store at all."""
     assert client.post("/account/display-name", json={"display_name": "Bob"}).status_code == 401
     assert client.post("/account/password",
                        json={"current_password": "x", "new_password": "y" * 8}).status_code == 401
@@ -57,6 +60,7 @@ def test_account_endpoints_require_authentication(client):
 
 # ---- password ----
 def test_change_password_rejects_wrong_current(client):
+    """Changing a password requires proving you know the current one, and a failed attempt leaves the old password working — so someone at an unlocked screen cannot take the account over."""
     _register_and_login(client, password="password123")
     r = client.post("/account/password", json={"current_password": "WRONGpass1", "new_password": "newpassword1"})
     assert r.status_code == 403
@@ -66,6 +70,7 @@ def test_change_password_rejects_wrong_current(client):
 
 
 def test_change_password_success_swaps_the_credential(client):
+    """A successful change genuinely swaps the credential: the old password stops working and the new one starts."""
     _register_and_login(client, password="password123")
     r = client.post("/account/password", json={"current_password": "password123", "new_password": "newpassword1"})
     assert r.status_code == 200
@@ -75,18 +80,24 @@ def test_change_password_success_swaps_the_credential(client):
 
 
 def test_change_password_rejects_short_new(client):
+    """A new password below the minimum is refused, so the rule enforced at signup cannot be bypassed by changing it afterwards."""
     _register_and_login(client, password="password123")
     r = client.post("/account/password", json={"current_password": "password123", "new_password": "short"})
     assert r.status_code == 400
 
 
 def test_change_password_rejects_non_string_injection(client):
+    """An operator object sent as the current password is refused, so the verification step cannot be turned into a query that matches anything."""
     _register_and_login(client, password="password123")
     r = client.post("/account/password", json={"current_password": {"$ne": ""}, "new_password": "newpassword1"})
     assert r.status_code == 400
 
 
 def test_change_password_clears_this_browsers_remember_cookie(client):
+    """The response EXPIRES this browser's trust cookie, so the device you changed the password on also re-verifies next time.
+
+    Merely finding the cookie name is not enough — a response handing back a fresh, valid cookie would match that just as well, which is the exact inverse of the property. The emptied value and the past expiry are what actually clear it.
+    """
     _register_and_login(client, password="password123")
     r = client.post("/account/password", json={"current_password": "password123", "new_password": "newpassword1"})
     # the response expires this browser's remember cookie (belt-and-suspenders alongside the hash-tail

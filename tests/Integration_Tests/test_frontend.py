@@ -7,6 +7,7 @@ import re
 
 
 def test_index_serves_html(client):
+    """The single-page app is actually served as HTML — the one check that has to pass before any other frontend guard means anything."""
     resp = client.get("/")
     assert resp.status_code == 200
     assert "text/html" in resp.content_type
@@ -524,9 +525,10 @@ def test_platform_surfaces_and_polish_are_wired(client):
 
 
 def test_async_renderers_guard_against_stale_session_paint(client):
-    # regression for the cross-user data-bleed race: every session-scoped async renderer snapshots
-    # currentUser before its await and bails (via sessionChanged) if the session changed before it
-    # paints — else a slow response from user A overwrites user B's view after a fast logout->login.
+    """Every session-scoped renderer snapshots who is signed in before it waits, and abandons the paint if the session changed while it was waiting.
+
+    Otherwise a slow response for one user overwrites the next user's screen after a fast sign-out and sign-in — one person's data rendered into another person's session.
+    """
     html = client.get("/").get_data(as_text=True)
     # the guard helper still compares the snapshot against the live session (the load-bearing check)...
     assert "function sessionChanged(u, where)" in html
@@ -540,9 +542,10 @@ def test_async_renderers_guard_against_stale_session_paint(client):
 
 
 def test_touch_targets_meet_44px_minimum(client):
-    # a11y: the compact secondary controls (Refresh / comment votes / detail close ✕ / theme segments)
-    # are enlarged to the 44px WCAG 2.5.5 tap-target minimum. Guards against a future edit silently
-    # shrinking them back below the recommended target on a touch device.
+    """The compact secondary controls meet the recommended minimum tap size, so they stay usable with a thumb rather than demanding a precise tap.
+
+    Guards against a later style edit silently shrinking them back.
+    """
     css = client.get("/").get_data(as_text=True)
     assert css.count("min-height:44px") >= 3       # button.mini, .detail .close, .settings-group .seg
     assert css.count("min-width:44px") >= 2        # button.mini (icon buttons), .detail .close
@@ -550,7 +553,7 @@ def test_touch_targets_meet_44px_minimum(client):
 
 
 def test_manifest_is_served_for_pwa(client):
-    # the web manifest makes the app installable (name + icons + start_url), at the right mimetype.
+    """The manifest is served with the right content type and carries a name, icons and a start URL — without all four the app cannot be installed to a home screen at all."""
     resp = client.get("/manifest.webmanifest")
     assert resp.status_code == 200
     assert "manifest" in resp.content_type              # application/manifest+json
@@ -559,7 +562,7 @@ def test_manifest_is_served_for_pwa(client):
 
 
 def test_service_worker_served_at_root_scope(client):
-    # the SW is served from root with Service-Worker-Allowed:/ so it controls the whole app scope.
+    """The worker is served from the root with the header that widens its scope, so it controls the whole app rather than only the directory it was served from."""
     resp = client.get("/sw.js")
     assert resp.status_code == 200
     assert "javascript" in resp.content_type
@@ -567,14 +570,17 @@ def test_service_worker_served_at_root_scope(client):
 
 
 def test_service_worker_is_stamped_with_a_build_version(client):
-    # The __BUILD__ placeholder must be replaced at serve time so every deploy ships a worker with a new
-    # cache name -> the installed PWA auto-updates. If the raw literal leaked through, no release would.
+    """The build placeholder is replaced at serve time, so every deploy ships a worker with a new cache name and installed apps update themselves.
+
+    If the raw placeholder leaked through, no release would ever reach an installed phone.
+    """
     sw = client.get("/sw.js").get_data(as_text=True)
     assert "__BUILD__" not in sw, "the build placeholder was served unstamped (auto-update won't trigger)"
     assert re.search(r'CACHE\s*=\s*"ws-shell-[0-9a-f]{8}"', sw), "SW cache name must carry the build hash"
 
 
 def test_service_worker_navigation_is_cache_first(client):
+    """A page load is served from the cache before the network is tried, which is what lets the app open at all with no connection — and the ordering is asserted, not just the presence of both calls."""
     sw = client.get("/sw.js").get_data(as_text=True)
     assert "caches.match" in sw and 'req.mode === "navigate"' in sw
     nav_block = sw[sw.index('req.mode === "navigate"'):]
@@ -585,17 +591,17 @@ def test_service_worker_navigation_is_cache_first(client):
 
 
 def test_hero_display_font_is_actually_served(client):
-    # The guard test asserts the wiring STRINGS exist; this proves Flask really serves the font bytes, so a
-    # font missing from the image or a mis-set static route is caught in CI, not at the demo (fallback font).
+    """The self-hosted font really is present and really is a valid font file.
+
+    A guard on the wiring alone would pass while the bytes were missing from the image, and the first anyone would notice is the page rendering in a fallback font in front of an audience.
+    """
     resp = client.get("/static/fonts/bricolage-800-latin-v1.woff2")
     assert resp.status_code == 200, "the self-hosted display font 404s — hero would fall back to system font"
     assert resp.get_data()[:4] == b"wOF2", "served bytes are not a valid woff2 font"
 
 
 def test_responsive_dual_nav_present(client):
-    # Dedicated desktop + mobile layouts from ONE responsive codebase: a desktop top-nav in the header
-    # (shown only when signed in, >=860px) AND a mobile floating bottom-pill bar (<860px). Both drive the
-    # same showScreen via [data-screen], so Safari 'Request Desktop' (a wide viewport) lands on the desktop layout.
+    """One codebase serves a genuine desktop layout and a genuine mobile layout, both driving the same navigation — so a phone asking for the desktop site lands on the desktop layout rather than a stretched mobile one."""
     html = client.get("/").get_data(as_text=True)
     assert 'id="topnav"' in html and 'class="topnav"' in html      # the desktop top-nav
     assert 'class="tabbar"' in html                                # the mobile bottom bar still exists
@@ -610,9 +616,7 @@ def test_responsive_dual_nav_present(client):
 
 
 def test_mobile_nav_pill_is_translucent_and_ios_frosted(client):
-    # The mobile floating pill must be see-through (content shows behind it), not an opaque slab, AND ship the
-    # -webkit- prefix so the frosted blur applies on iOS Safari. It's now an iOS-26 liquid-glass material: a
-    # translucent --glass-fill (a real alpha), an upgraded blur+saturate+brightness, and the rim/sheen layers.
+    """The floating navigation is genuinely translucent — content shows through it — and carries the prefixed blur, without which the frosting silently disappears on iPhone and it renders as an opaque slab."""
     html = client.get("/").get_data(as_text=True)
     assert "background: linear-gradient(180deg, var(--glass-fill)" in html      # translucent glass fill (real alpha token)
     assert "--glass-fill: rgba(255,255,255,.12)" in html                        # the fill IS translucent (not an opaque slab)
@@ -622,11 +626,10 @@ def test_mobile_nav_pill_is_translucent_and_ios_frosted(client):
 
 
 def test_dm_reopen_repaints_even_when_the_thread_is_unchanged(client):
-    # Regression (live bug, 2026-07-15): openThread resets #dm-thread to skeletons with a direct innerHTML=,
-    # which leaves setHtmlIfChanged's per-node __lastHtml cache stale. Re-opening an UNCHANGED thread then
-    # made renderThread compute identical HTML, hit the cache, skip the repaint, and leave the skeletons up
-    # (the thread rendered the FIRST time it was opened and was blank every time after). openThread must
-    # invalidate that cache when it stomps the DOM, so renderThread always repaints on open.
+    """Re-opening an UNCHANGED conversation must still repaint it.
+
+    Opening a thread resets it to loading placeholders by writing the DOM directly, which leaves the render cache believing the old content is still there — so the identical HTML was skipped and the placeholders stayed up. The thread rendered the first time it was opened and was blank every time after.
+    """
     html = client.get("/").get_data(as_text=True)
     start = html.index("async function openThread(")
     body = html[start:html.index("async function renderThread(", start)]   # the openThread function body
@@ -635,9 +638,10 @@ def test_dm_reopen_repaints_even_when_the_thread_is_unchanged(client):
 
 
 def test_checkin_capsule_hidden_over_an_open_dm_thread(client):
-    # #352 follow-up (found in live testing): the "check-in due" capsule floats above the nav and used to sit
-    # ON TOP of an open DM thread's composer. It must hide while a thread is open (you can't check in from a
-    # thread) and return on close. open/closeThread re-evaluate it.
+    """The floating check-in nudge hides while a conversation is open, where it used to sit on top of the message composer — and comes back on close.
+
+    Re-showing it replays its entrance, so it cannot get stuck invisible on a backwards animation fill.
+    """
     html = client.get("/").get_data(as_text=True)
     assert 'const threadOpen = $("dm-thread-view") && !$("dm-thread-view").hidden;' in html
     assert 'const show = checkinDue && currentScreen !== "today" && !threadOpen;' in html   # shows only when due, off-Today, no thread
@@ -648,10 +652,10 @@ def test_checkin_capsule_hidden_over_an_open_dm_thread(client):
 
 
 def test_mutations_and_uploads_surface_their_failures(client):
-    # Robustness (2026-07-15): a failed action must never look like a success. Four sites used to swallow
-    # errors — deletePost / editPost-save had no else branch (a 429/network drop = a click that did nothing),
-    # and the forum-post + DM-reply attachment paths flashed "Posted."/cleared the flash even when every
-    # upload failed (the text landed, the photo vanished silently). Each now surfaces the failure.
+    """A failed action must never look like a success.
+
+    Four paths used to swallow errors: delete and edit had no failure branch at all, so a refused request was a click that appeared to do nothing, and the attachment paths reported "Posted." even when every upload failed — the text landed and the photo vanished silently.
+    """
     html = client.get("/").get_data(as_text=True)
     # deletePost: an in-flight guard (no false error on a double-click) + a failure flash.
     dp = html[html.index("async function deletePost("):html.index("function editPost(")]
@@ -669,9 +673,10 @@ def test_mutations_and_uploads_surface_their_failures(client):
 
 
 def test_forum_realtime_sse_is_wired_on_the_client(client):
-    # Real-time forum (2026-07-15): the client subscribes to the SSE `forum` push and, ONLY on the forum
-    # screen, refreshes the list + the open post's detail — but never over a draft (a focused/non-empty
-    # comment or edit body is preserved, so a teammate's live change can't wipe what the user is typing).
+    """The client subscribes to the live forum push and refreshes in place, but ONLY on the forum screen and NEVER over a draft — a teammate's change must not wipe a comment someone is mid-way through typing.
+
+    An open post that was deleted live closes with an accurate note instead of being re-fetched into a misleading generic error.
+    """
     html = client.get("/").get_data(as_text=True)
     assert 'addEventListener("forum", onForumEvent)' in html            # subscribed to the forum push
     assert "function onForumEvent()" in html
@@ -694,16 +699,11 @@ def test_forum_realtime_sse_is_wired_on_the_client(client):
 
 
 def test_forum_realtime_has_a_self_healing_poll_backstop(client):
-    # Robustness (2026-07-15): EventSource auto-reconnects a dropped stream, but a FATAL error leaves it
-    # CLOSED (readyState 2) with no retries — after which real-time silently dies. Unlike DM/notify, the
-    # forum had no other backstop. The 45s poll (a) restarts a CLOSED stream and (b) re-syncs the forum list.
-    #
-    # #342 STRENGTHENED the (b) half. It used to re-sync only while `evtSource.readyState !== 1` — i.e. it
-    # trusted an OPEN stream to mean "pushes are working". That is false, provably: a stream whose forum-rev
-    # read failed once went silent for its whole life while staying OPEN (see the recovery tests in
-    # test_messages.py), and a rev bump landing in the reconnect gap is absorbed by the next stream's baseline
-    # and never sent. readyState describes the CONNECTION, never the push path — so the gate is now simply
-    # "is the user looking at the forum", which bounds staleness at one tick however a push goes missing.
+    """A stream can die in ways that leave it looking healthy, so a periodic poll restarts a closed stream AND re-syncs the feed.
+
+    The re-sync must not be gated on the connection merely being open: a stream whose read failed once goes silent for its whole life while staying open, and a change landing in a reconnect gap is absorbed by the next stream's baseline and never sent. Connection state describes the CONNECTION, never the push path.
+    It still skips while the reader has paged back or is typing, or the timer would harm the user it exists to help.
+    """
     html = client.get("/").get_data(as_text=True)
     assert "function pollBackstop()" in html
     assert "setInterval(pollBackstop, 45000)" in html                        # the SSE backstop runs it
@@ -728,9 +728,10 @@ def test_forum_realtime_has_a_self_healing_poll_backstop(client):
 
 
 def test_checkin_submit_frees_the_form_on_save_not_after_the_refresh(client):
-    # #6: the Submit button is disabled only while the /checkin POST is in flight. The AI-backed dashboard
-    # reload runs in the BACKGROUND (un-awaited), so a slow/backed-up /predict can't leave Submit stuck-grey
-    # with the values still selected. On save we reset + re-enable immediately; the refresh + count-up follow.
+    """Submit is disabled only while the check-in is being saved; the dashboard reload that follows runs in the background.
+
+    Awaiting it meant a slow prediction left the button stuck grey with the user's values still on screen and no way to tell whether anything had been saved.
+    """
     html = client.get("/").get_data(as_text=True)
     start = html.index('onSubmit("checkin-form"')
     handler = html[start:start + 3300]                                            # the check-in submit handler body
@@ -741,9 +742,10 @@ def test_checkin_submit_frees_the_form_on_save_not_after_the_refresh(client):
 
 
 def test_reset_link_survives_a_service_worker_reload(client):
-    # #3: the reset email link opened the reset form but a service-worker auto-reload (a new build claims the
-    # page) then dropped it to login, because the token was scrubbed from the URL. Now the token is stashed in
-    # sessionStorage so it survives exactly one reload, and is consumed on restore so it can't trap the user.
+    """A password-reset link must survive the automatic reload a new build triggers.
+
+    The token is scrubbed from the URL immediately for safety, so without stashing it the reload dropped the user back to sign-in holding a link they could not use twice. It is consumed on restore, so it survives exactly one reload and cannot trap them.
+    """
     html = client.get("/").get_data(as_text=True)
     init = html[html.index("async function init()"):html.index("async function init()") + 1400]
     assert 'sessionStorage.setItem("pending_reset_token"' in init                 # stashed before the URL is scrubbed
@@ -753,9 +755,10 @@ def test_reset_link_survives_a_service_worker_reload(client):
 
 
 def test_streak_and_heatmap_group_days_in_utc_not_local(client):
-    # Check-ins are stored + de-duplicated by UTC day, so the client must group by UTC day too — else a
-    # non-UTC user's evening/early check-in lands on the wrong day (ghost "future" cell, broken streak,
-    # nag-after-checkin). CI runs in UTC so a LOCAL-date regression is invisible here — hence this guard.
+    """Check-ins are stored and de-duplicated by UTC day, so the client must group by UTC day too — otherwise a user in another timezone sees an evening check-in land on the wrong day, breaking their streak and nagging them for a check-in they already did.
+
+    CI runs in UTC, so a regression to local dates would be invisible here without this guard.
+    """
     html = client.get("/").get_data(as_text=True)
     for fn in ("function computeStreak(", "function renderHeat("):
         block = html[html.index(fn):html.index(fn) + 1200]
@@ -764,8 +767,7 @@ def test_streak_and_heatmap_group_days_in_utc_not_local(client):
 
 
 def test_second_same_day_checkin_asks_to_confirm_the_replace(client):
-    # #5 consequence made explicit: a second check-in today REPLACES today's reading (one row/day). The
-    # submit handler confirms before overwriting, keyed on the UTC day (the server's dedup key).
+    """A second check-in the same day replaces the first, so the user is asked before it happens — and the confirmation is keyed on the same day boundary the server uses, so what is warned about is what occurs."""
     html = client.get("/").get_data(as_text=True)
     assert "function hasCheckedInToday()" in html
     hc = html[html.index("function hasCheckedInToday()"):html.index("function hasCheckedInToday()") + 400]
@@ -776,9 +778,10 @@ def test_second_same_day_checkin_asks_to_confirm_the_replace(client):
 
 
 def test_debug_tools_omitted_inside_preview_iframe(client):
-    # The mobile preview loads this shell as an iframe at ?preview=1. The dev-tools markup must be GONE
-    # from that render (server-side strip), so the preview can never nest its own dev tools into a
-    # preview-in-a-preview recursion (#138). The normal shell keeps the markup (gated client-side).
+    """The development tools are stripped from the embedded preview render, so the preview cannot nest its own preview inside itself indefinitely.
+
+    The real page keeps them, gated on the client side.
+    """
     preview = client.get("/?preview=1").get_data(as_text=True)
     assert 'id="debug-fab"' not in preview
     assert 'id="debug-panel"' not in preview

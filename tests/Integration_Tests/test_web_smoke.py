@@ -32,6 +32,11 @@ def _web_client():
 
 
 def test_web_boots_and_serves_health():
+    """The web app can be constructed and answers its health route — the check the container's own healthcheck depends on.
+
+    If this breaks, orchestration marks the container unhealthy and restarts it forever, so this is the
+    invariant every other feature is built on top of.
+    """
     pytest.importorskip("flask")
     resp = _web_client().get("/health")
     assert resp.status_code == 200

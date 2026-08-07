@@ -25,6 +25,7 @@ def _register_login(client, name="alice", pw="password123"):
 
 # ---- email consent ----
 def test_email_consent_defaults_false_and_toggles(client):
+    """Consent starts OFF and is on only because the user turned it on — an opt-out default would mail people who never agreed — and the choice persists in both directions."""
     _register_login(client)
     assert client.get("/me").get_json()["email_consent"] is False        # opt-in: off by default
     assert client.post("/account/email-consent", json={"consent": True}).status_code == 200
@@ -34,18 +35,22 @@ def test_email_consent_defaults_false_and_toggles(client):
 
 
 def test_email_consent_rejects_non_boolean(client):
+    """Consent must be an explicit boolean: a truthy string or a missing field is refused rather than guessed, because guessing wrong means mailing someone who did not agree."""
     _register_login(client)
     assert client.post("/account/email-consent", json={"consent": "yes"}).status_code == 400
     assert client.post("/account/email-consent", json={}).status_code == 400
 
 
 def test_email_consent_requires_auth(client):
+    """Only the account holder can change their own consent, so it cannot be flipped by an anonymous request."""
     assert client.post("/account/email-consent", json={"consent": True}).status_code == 401
 
 
 def test_security_email_is_sent_regardless_of_consent(make_otp_client, fake_users):
-    # login OTP is transactional -> issued even though consent defaults False (the dev-surfaced code
-    # proves the email path ran). Consent governs only NON-essential mail.
+    """Security mail — a login code, a password reset — is transactional and goes out even with consent off.
+
+    Consent governs marketing, not the messages a user needs to get back into their own account.
+    """
     c = make_otp_client(fake_users)
     c.post("/register", json={"username": "alice", "password": "password123", "email": "a@ex.com"})
     assert fake_users.get_email_consent("alice") is False                 # never opted in
@@ -56,6 +61,7 @@ def test_security_email_is_sent_regardless_of_consent(make_otp_client, fake_user
 # ---- data export ----
 def test_export_returns_all_user_data_as_a_download(full_client, fake_profiles, fake_history, fake_forum,
                                                     fake_messages, fake_notifications):
+    """The export returns everything the app holds about the user, as a real download, scoped to them alone — their own posts and comments, their votes, their messages, their notifications, and nobody else's."""
     _register_login(full_client, "alice")
     fake_profiles.save("alice", {"age": 30, "goal": "maintain"})
     fake_history.add("alice", {"assessment": "Ready", "calories": 2000})
@@ -81,6 +87,7 @@ def test_export_returns_all_user_data_as_a_download(full_client, fake_profiles, 
 
 
 def test_export_never_includes_the_password_hash(full_client):
+    """The credential never appears anywhere in the export blob, so handing someone their own data does not hand over the hash of their password."""
     _register_login(full_client, "alice")
     data = full_client.get("/account/export").get_json()
     assert "password_hash" not in data["account"]
@@ -88,4 +95,5 @@ def test_export_never_includes_the_password_hash(full_client):
 
 
 def test_export_requires_auth(full_client):
+    """The export is gated, so a user's complete personal record cannot be fetched by an anonymous caller."""
     assert full_client.get("/account/export").status_code == 401

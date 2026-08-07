@@ -15,6 +15,7 @@ def _login(client, ident):
 
 
 def test_forum_author_shows_display_name_and_mine_is_per_viewer(forum_client):
+    """Two people sharing a display name get distinct identities: both see the same name on the post, but only its actual author is told it is theirs to edit."""
     h1 = _register(forum_client, "sam", "sam1@example.com").get_json()["username"]
     h2 = _register(forum_client, "sam", "sam2@example.com").get_json()["username"]
     assert h1 != h2                                            # two "sam"s, distinct internal handles
@@ -28,6 +29,7 @@ def test_forum_author_shows_display_name_and_mine_is_per_viewer(forum_client):
 
 
 def test_anonymous_post_hides_the_name_but_owner_still_sees_mine(forum_client):
+    """An anonymous post never names its author to anyone else, yet the author is still told it is theirs — otherwise choosing anonymity would cost them the ability to edit or delete their own post."""
     _register(forum_client, "ann", "ann@example.com")
     _register(forum_client, "bob", "bob@example.com")
     _login(forum_client, "ann@example.com")
@@ -41,8 +43,10 @@ def test_anonymous_post_hides_the_name_but_owner_still_sees_mine(forum_client):
 
 
 def test_suffixed_user_content_shows_display_name_never_the_handle(forum_client):
-    # The SECOND "sam" has handle "sam-2" but display name "sam" — so this exercises resolution where the
-    # handle differs from the shown name. Everything a person sees must say "sam", never the raw "sam-2".
+    """For the account whose name collided, the internal handle differs from the name it shows — so this is where a leak would surface.
+
+    Everything a person reads says the chosen name, never the raw handle, and ownership still resolves correctly.
+    """
     _register(forum_client, "sam", "sam1@example.com")                                   # handle "sam"
     h2 = _register(forum_client, "sam", "sam2@example.com").get_json()["username"]        # handle "sam-2"
     assert h2 == "sam-2"
@@ -57,6 +61,7 @@ def test_suffixed_user_content_shows_display_name_never_the_handle(forum_client)
 
 
 def test_comment_author_shows_display_name(forum_client):
+    """A comment is attributed by the name its author chose, so the thread reads consistently with the rest of the forum."""
     _register(forum_client, "cara", "cara@example.com")
     _login(forum_client, "cara@example.com")
     pid = forum_client.post("/forum/posts", json={"title": "t", "body": "b"}).get_json()["post"]["id"]
@@ -66,6 +71,7 @@ def test_comment_author_shows_display_name(forum_client):
 
 
 def test_dm_conversation_and_thread_expose_the_peer_display_name(messages_client):
+    """A conversation carries both the stable handle it is keyed by and the name to show, so the interface can label the thread without guessing at an identifier the user never chose."""
     _register(messages_client, "dan", "dan@example.com")
     _register(messages_client, "eve", "eve@example.com")
     _login(messages_client, "dan@example.com")
@@ -77,9 +83,10 @@ def test_dm_conversation_and_thread_expose_the_peer_display_name(messages_client
 
 
 def test_vote_notification_carries_the_display_name_in_the_actor_not_the_text(forum_client):
-    # The voter's identity lives in the ACTOR field (re-resolved to the current display name on every list),
-    # and the text is name-LESS — so a rename can't leave a stale name frozen in the stored text (F1). The
-    # client composes "{actor} {text}" at render.
+    """The voter's identity lives in a field resolved fresh on every read, and the stored text names nobody.
+
+    Freezing the name into the text would leave a rename showing one name in the alert and another everywhere else.
+    """
     _register(forum_client, "poster", "poster@example.com")
     _register(forum_client, "voter", "voter@example.com")
     _login(forum_client, "poster@example.com")

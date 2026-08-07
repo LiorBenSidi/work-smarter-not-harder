@@ -20,6 +20,7 @@ def _start(client, display="Alice", email="alice@example.com"):
 
 
 def test_register_starts_verification_and_creates_no_account(verify_client):
+    """Registration creates NOTHING until the emailed code is confirmed, so nobody can take an account on an address they do not control."""
     r = _start(verify_client)
     body = r.get_json()
     assert r.status_code == 200 and body["status"] == "verify_required" and body["email"] == "alice@example.com"
@@ -29,6 +30,7 @@ def test_register_starts_verification_and_creates_no_account(verify_client):
 
 
 def test_register_verify_creates_account_and_signs_in(verify_client):
+    """Confirming the code creates the account and signs the person straight in, so proving the address is not an extra hurdle on top of a separate login."""
     code = _start(verify_client).get_json()["dev_code"]
     r = verify_client.post("/register/verify", json={"code": code})
     body = r.get_json()
@@ -37,20 +39,22 @@ def test_register_verify_creates_account_and_signs_in(verify_client):
 
 
 def test_register_verify_rejects_a_wrong_code(verify_client):
+    """A wrong code creates no account and grants no session — a failed verification leaves nothing half-made behind."""
     _start(verify_client)
     assert verify_client.post("/register/verify", json={"code": "000000"}).status_code == 400
     assert verify_client.get("/me").status_code == 401           # no account, not signed in
 
 
 def test_register_verify_without_a_pending_registration_is_rejected(verify_client):
+    """A code submitted with no registration in progress is refused, so the endpoint cannot be used on its own to conjure an account."""
     assert verify_client.post("/register/verify", json={"code": "123456"}).status_code == 400
 
 
 def test_register_duplicate_email_is_enumeration_safe(make_otp_client, fake_users, auth_module, monkeypatch):
-    # A duplicate email must NOT be distinguishable from a fresh one in the register response — no 409 that
-    # leaks "this email is registered". With SMTP configured (prod), neither surfaces a code, so the two
-    # responses match on every enumeration-relevant field. The existing account is left untouched (no code
-    # is issued for the duplicate; a notice email goes to the owner instead).
+    """A duplicate address must be indistinguishable from a fresh one, so signing up cannot be used to discover who already has an account.
+
+    The existing account is left completely untouched — no code is issued for the duplicate; its owner is notified instead.
+    """
     monkeypatch.setattr(auth_module, "send_email_async", lambda *a, **k: True)  # no network/thread; swallows code + notice
     fake_users.add("existing", "hash", email="taken@example.com")
     client = make_otp_client(fake_users, REGISTER_VERIFY_EMAIL=True, SMTP_HOST="smtp.example.com")
@@ -63,9 +67,10 @@ def test_register_duplicate_email_is_enumeration_safe(make_otp_client, fake_user
 
 
 def test_register_equalizes_kdf_work_on_duplicate_email(make_otp_client, fake_users, auth_module, monkeypatch):
-    # AUTH-H2: a duplicate email must not be distinguishable by response LATENCY. The fresh-signup branch runs
-    # a 2nd KDF (hashing the verification code); the duplicate branch runs an equal-cost dummy hash. Count the
-    # generate_password_hash calls on each path -> they must match, so neither branch is measurably cheaper.
+    """A duplicate address must not be detectable by response LATENCY either.
+
+    The fresh branch hashes the verification code, so the duplicate branch performs an equal-cost dummy hash — counted here, because a branch that skips expensive work is measurably faster and that timing IS the leak.
+    """
     monkeypatch.setattr(auth_module, "send_email_async", lambda *a, **k: True)   # no network/thread
     real = auth_module.generate_password_hash
     calls = {"n": 0}
@@ -83,14 +88,17 @@ def test_register_equalizes_kdf_work_on_duplicate_email(make_otp_client, fake_us
 
 
 def test_register_duplicate_still_409_when_verification_is_off(client, fake_users):
-    # With verify OFF (the default TESTING path), there is no verify_required cover, so a duplicate email is
-    # still a plain 409 — this path is dev/tests only (prod runs verify ON, which is enumeration-safe above).
+    """With verification off there is no cover story to hide behind, so a duplicate is reported plainly.
+
+    That path is for development and tests; production runs with verification on, where the enumeration-safe behaviour above applies.
+    """
     fake_users.add("existing", "hash", email="taken@example.com")
     assert client.post("/register", json={"username": "Bob", "password": PW, "email": "taken@example.com"}
                        ).status_code == 409
 
 
 def test_register_verify_locks_out_after_max_attempts(verify_client):
+    """Repeated wrong codes lock the attempt out, so a six-digit code cannot be brute-forced into a free account on someone else's address."""
     _start(verify_client)
     for _ in range(5):                                           # OTP_MAX_ATTEMPTS wrong tries
         assert verify_client.post("/register/verify", json={"code": "000000"}).status_code == 400
@@ -98,6 +106,7 @@ def test_register_verify_locks_out_after_max_attempts(verify_client):
 
 
 def test_register_resend_reissues_a_working_code(verify_client):
+    """A resent code genuinely works, so a user whose first email was slow or lost is not stuck restarting the whole signup."""
     _start(verify_client)
     body = verify_client.post("/register/resend", json={}).get_json()
     assert body["status"] == "code_sent" and "dev_code" in body
@@ -105,9 +114,10 @@ def test_register_resend_reissues_a_working_code(verify_client):
 
 
 def test_register_409_when_email_race_beats_the_by_email_check(make_client, auth_module):
-    # The by_email pre-check can MISS under a race; the users.email unique index then rejects the insert and
-    # create_user raises DuplicateEmailError. The route must turn that into a 409 (not a 503, not a retry
-    # loop). Modelled with a store whose by_email misses but whose add raises — exactly the real race.
+    """The duplicate pre-check can MISS under a race, and the unique index then rejects the insert.
+
+    That has to surface as an ordinary "already exists" rather than a 503 or a retry loop — modelled with a store whose pre-check misses but whose write raises, which is exactly the real race.
+    """
     class _RaceUsers:
         def by_email(self, email):
             return None                                          # the pre-check misses (the race)
@@ -122,8 +132,10 @@ def test_register_409_when_email_race_beats_the_by_email_check(make_client, auth
 
 
 def test_register_verify_terminal_errors_signal_restart(verify_client):
-    # A wrong code is recoverable (400, no restart -> stay); a lockout and a missing pending registration are
-    # TERMINAL (restart -> the client routes back to register instead of stranding a dead code form).
+    """A wrong code is recoverable and leaves the user on the form; a lockout and a vanished registration are TERMINAL and route the client back to the start.
+
+    Without the distinction, someone locked out is stranded on a form that can never succeed.
+    """
     _start(verify_client)
     wrong = verify_client.post("/register/verify", json={"code": "000000"})
     assert wrong.status_code == 400 and not wrong.get_json().get("restart")           # recoverable -> stay

@@ -4,10 +4,10 @@ These run with OTP ACTIVE (the `otp_client` / `make_otp_client` fixtures set OTP
 SMTP unset so the code is dev-surfaced) — the classic one-step flow is covered by test_auth_flow.py and
 its TESTING gate is regression-guarded here too.
 
-Security bar (must EXCEED kerenhovav1/Olympics, which stores the OTP in plaintext + a raw token +
-secure:false): the code is stored only as a werkzeug hash, expires, locks out after N wrong guesses, is
+Security bar: the code is stored only as a werkzeug hash, expires, locks out after N wrong guesses, is
 bound to the browser session that requested it, and the remember cookie is signed + HttpOnly + tied to
-the password hash so a password change revokes it.
+the password hash so a password change revokes it. Storing a code in plaintext, issuing a raw
+(unsigned) trust token, or dropping the Secure flag would each break one of those properties.
 """
 import re
 
@@ -24,6 +24,7 @@ def _login(client, username="alice", password=PW):
 
 
 def test_login_returns_otp_required_when_active(otp_client):
+    """A correct password alone does NOT grant a session when second-step verification is on — it only earns the right to be asked for the code."""
     _register(otp_client)
     body = _login(otp_client).get_json()
     assert body["status"] == "otp_required" and body["username"] == "alice"
@@ -31,6 +32,7 @@ def test_login_returns_otp_required_when_active(otp_client):
 
 
 def test_dev_otp_surfaced_without_smtp_and_verifies(otp_client):
+    """With no relay configured the code is surfaced in the response so the flow is usable in development, and verifying it genuinely completes the sign-in."""
     _register(otp_client)
     code = _login(otp_client).get_json()["dev_otp"]           # dev/no-SMTP -> code surfaced in the response
     assert re.fullmatch(r"\d{6}", code)
@@ -40,6 +42,7 @@ def test_dev_otp_surfaced_without_smtp_and_verifies(otp_client):
 
 
 def test_otp_not_surfaced_when_smtp_configured(make_otp_client, fake_users, auth_module, monkeypatch):
+    """As soon as a relay is configured the code stops appearing in the response and leaves only by email — otherwise anyone who can see the response can complete somebody else's sign-in."""
     sent = {}
     monkeypatch.setattr(auth_module, "send_email",
                         lambda cfg, to, subject, body, **kw: sent.update(to=to, body=body) or True)
@@ -52,7 +55,7 @@ def test_otp_not_surfaced_when_smtp_configured(make_otp_client, fake_users, auth
 
 
 def test_otp_is_stored_hashed_not_plaintext(otp_client, fake_users):
-    # the differentiator vs Olympics: a DB peek reveals only a hash, never the live code.
+    """A peek at the stored record reveals only a hash, never the live code — so a database leak does not hand over working second factors."""
     _register(otp_client)
     code = _login(otp_client).get_json()["dev_otp"]
     stored = fake_users._by_name["alice"]["otp_hash"]
@@ -60,6 +63,10 @@ def test_otp_is_stored_hashed_not_plaintext(otp_client, fake_users):
 
 
 def test_wrong_code_rejected_then_locks_out(otp_client):
+    """Wrong guesses are refused and then locked out, so a six-digit code cannot simply be enumerated.
+
+    The lockout clears the pending challenge too, forcing a fresh sign-in rather than leaving a half-open one.
+    """
     _register(otp_client)
     _login(otp_client)
     for _ in range(4):                                        # OTP_MAX_ATTEMPTS=5: first four are 401
@@ -71,6 +78,7 @@ def test_wrong_code_rejected_then_locks_out(otp_client):
 
 
 def test_expired_code_is_rejected(otp_client, fake_users):
+    """A code past its lifetime is refused, so one intercepted long ago is worthless."""
     _register(otp_client)
     _login(otp_client)
     fake_users._by_name["alice"]["otp_expires_at"] = 0        # force the stored challenge past its TTL
@@ -79,6 +87,7 @@ def test_expired_code_is_rejected(otp_client, fake_users):
 
 
 def test_remember_this_browser_skips_otp_next_login(otp_client):
+    """A browser the user chose to trust is not challenged again, which is what keeps the second step from becoming a daily tax."""
     _register(otp_client)
     code = _login(otp_client).get_json()["dev_otp"]
     otp_client.post("/verify-otp", json={"code": code, "remember": True})
@@ -87,6 +96,10 @@ def test_remember_this_browser_skips_otp_next_login(otp_client):
 
 
 def test_remember_cookie_is_signed_and_httponly(otp_client):
+    """The trust cookie is unreadable from JavaScript and genuinely SIGNED, so it cannot be forged into a bypass.
+
+    The signature half went unasserted before: nothing here would have failed if the cookie had carried a raw, unsigned value.
+    """
     _register(otp_client)
     code = _login(otp_client).get_json()["dev_otp"]
     v = otp_client.post("/verify-otp", json={"code": code, "remember": True})
@@ -100,6 +113,7 @@ def test_remember_cookie_is_signed_and_httponly(otp_client):
 
 
 def test_no_remember_flag_sets_no_cookie_and_still_prompts(otp_client):
+    """Not asking to be remembered means no trust cookie and a challenge next time — the choice is honoured in both directions."""
     _register(otp_client)
     code = _login(otp_client).get_json()["dev_otp"]
     v = otp_client.post("/verify-otp", json={"code": code})   # remember omitted
@@ -108,6 +122,7 @@ def test_no_remember_flag_sets_no_cookie_and_still_prompts(otp_client):
 
 
 def test_password_change_invalidates_remember_cookie(otp_client, fake_users, auth_module):
+    """Changing the password revokes every remembered browser, so someone locking an intruder out is not left with a trusted device still walking straight in."""
     _register(otp_client)
     code = _login(otp_client).get_json()["dev_otp"]
     otp_client.post("/verify-otp", json={"code": code, "remember": True})
@@ -118,6 +133,7 @@ def test_password_change_invalidates_remember_cookie(otp_client, fake_users, aut
 
 
 def test_logout_clears_remember_cookie(otp_client):
+    """Logging out withdraws trust in that browser, so signing out on a shared machine actually undoes the decision to skip verification there."""
     _register(otp_client)
     code = _login(otp_client).get_json()["dev_otp"]
     otp_client.post("/verify-otp", json={"code": code, "remember": True})
@@ -126,7 +142,7 @@ def test_logout_clears_remember_cookie(otp_client):
 
 
 def test_verify_otp_is_bound_to_the_session_user(make_otp_client, fake_users):
-    # a code issued to alice can't be redeemed from a browser that never started alice's login.
+    """A code issued to one browser cannot be redeemed from another that never started that sign-in — so an intercepted code is useless without the session it belongs to."""
     _register(make_otp_client(fake_users), "alice")
     victim = make_otp_client(fake_users)
     code = victim.post("/login", json={"username": "alice", "password": PW}).get_json()["dev_otp"]
@@ -135,15 +151,17 @@ def test_verify_otp_is_bound_to_the_session_user(make_otp_client, fake_users):
 
 
 def test_otp_is_off_under_testing(client):
-    # regression guard: the TESTING gate keeps the classic one-step flow for the rest of the suite.
+    """The gate that keeps the one-step flow available for the rest of the suite still works, so turning verification on for these tests does not silently turn it on everywhere."""
     client.post("/register", json={"username": "alice", "password": PW, "email": "alice@example.com"})
     r = client.post("/login", json={"username": "alice", "password": PW}).get_json()
     assert r["status"] == "logged in" and "dev_otp" not in r
 
 
 def test_verify_otp_terminal_errors_signal_restart(otp_client):
-    # A wrong code is recoverable (401, no restart -> the client stays on the code form); a lockout is
-    # TERMINAL (429, restart -> the client routes back to login instead of stranding a dead code form).
+    """A wrong code is recoverable and leaves the user on the code form; a lockout is TERMINAL and tells the client to route back to sign-in.
+
+    Without that distinction someone locked out is stranded on a form that can never succeed.
+    """
     _register(otp_client)
     _login(otp_client)
     wrong = otp_client.post("/verify-otp", json={"code": "000000"})
@@ -155,5 +173,6 @@ def test_verify_otp_terminal_errors_signal_restart(otp_client):
 
 
 def test_verify_otp_without_a_pending_login_signals_restart(otp_client):
+    """Submitting a code with no sign-in in progress tells the client to start over rather than leaving it on a form with nothing behind it."""
     r = otp_client.post("/verify-otp", json={"code": "000000"})                       # no pending challenge
     assert r.status_code == 400 and r.get_json().get("restart") is True

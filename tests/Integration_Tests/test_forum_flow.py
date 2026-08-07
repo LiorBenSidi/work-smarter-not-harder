@@ -11,6 +11,7 @@ def _new_post(c, title="First", body="hello"):
 
 
 def test_create_then_list_posts(forum_client):
+    """A post created over HTTP appears in the feed carrying its title, its author and a starting score — the round trip a user actually performs."""
     _login(forum_client)
     assert _new_post(forum_client).status_code == 201
     posts = forum_client.get("/forum/posts").get_json()["posts"]
@@ -21,8 +22,7 @@ def test_create_then_list_posts(forum_client):
 
 
 def test_list_posts_carry_created_at_in_creation_order(forum_client):
-    # The client sorts the forum by created_at (newest-first by default) and renders each post's age, so the
-    # summary must expose a positive, strictly-increasing created_at per creation order.
+    """The client sorts the feed by creation time and renders each post's age, so every summary row must carry a positive timestamp and a later post must be strictly newer than an earlier one."""
     _login(forum_client)
     _new_post(forum_client, "one", "a")
     _new_post(forum_client, "two", "b")
@@ -32,8 +32,7 @@ def test_list_posts_carry_created_at_in_creation_order(forum_client):
 
 
 def test_forum_feed_pages_back_to_the_oldest_via_next_before(forum_client):
-    # #325: the feed is a bounded page + a `next_before` cursor. Walking the cursor must reach EVERY post,
-    # newest-first, exactly once — so a user reads even the oldest post without any unbounded read.
+    """Walking the feed's cursor reaches EVERY post, newest-first, exactly once — so a reader can get to the oldest post without any single request being unbounded."""
     _login(forum_client)
     for i in range(5):
         _new_post(forum_client, f"p{i}", "b")
@@ -49,7 +48,7 @@ def test_forum_feed_pages_back_to_the_oldest_via_next_before(forum_client):
 
 
 def test_forum_feed_last_page_has_no_next_cursor(forum_client):
-    # A page that isn't full means nothing older remains -> next_before is null, so the client stops paging.
+    """A page that is not full means nothing older remains, so the cursor comes back empty and the client knows to stop rather than looping forever."""
     _login(forum_client)
     _new_post(forum_client, "only", "b")
     data = forum_client.get("/forum/posts?limit=5").get_json()
@@ -58,7 +57,7 @@ def test_forum_feed_last_page_has_no_next_cursor(forum_client):
 
 
 def test_forum_feed_ignores_a_garbage_before_cursor(forum_client):
-    # A non-numeric cursor must fall back to the newest page — never a 500, never an unbounded scan.
+    """A non-numeric cursor falls back to the newest page — never a 500, and never an unbounded scan someone could trigger by hand."""
     _login(forum_client)
     _new_post(forum_client, "hi", "b")
     resp = forum_client.get("/forum/posts?before=not-a-number")
@@ -67,8 +66,7 @@ def test_forum_feed_ignores_a_garbage_before_cursor(forum_client):
 
 
 def test_get_post_with_its_comments(forum_client):
-    # #331: comments are NOT embedded in the post detail — the detail carries a count, and the comments
-    # themselves are fetched from the paginated GET /forum/posts/<id>/comments endpoint.
+    """The post detail carries a comment COUNT rather than the comments themselves, which are fetched from their own paginated endpoint — so opening a post with thousands of replies stays one small response."""
     _login(forum_client)
     pid = _new_post(forum_client, "T", "b").get_json()["post"]["id"]
     forum_client.post(f"/forum/posts/{pid}/comments", json={"body": "great"})
@@ -81,8 +79,7 @@ def test_get_post_with_its_comments(forum_client):
 
 
 def test_comments_endpoint_pages_back_to_the_oldest_via_next_before(forum_client):
-    # #331: the comments read is a bounded page + a `next_before` cursor (mirrors the forum feed). Walking
-    # the cursor must reach EVERY comment, newest-first, exactly once — even the oldest, with no unbounded read.
+    """Walking a post's comment cursor reaches every comment, newest-first, exactly once, so even the oldest reply is reachable without an unbounded read."""
     _login(forum_client)
     pid = _new_post(forum_client, "T", "b").get_json()["post"]["id"]
     for i in range(5):
@@ -99,6 +96,7 @@ def test_comments_endpoint_pages_back_to_the_oldest_via_next_before(forum_client
 
 
 def test_comments_endpoint_ignores_a_garbage_before_cursor(forum_client):
+    """A malformed comment cursor falls back to the newest page rather than erroring, so a stale or hand-edited link still renders something."""
     _login(forum_client)
     pid = _new_post(forum_client, "T", "b").get_json()["post"]["id"]
     forum_client.post(f"/forum/posts/{pid}/comments", json={"body": "hi"})
@@ -108,10 +106,12 @@ def test_comments_endpoint_ignores_a_garbage_before_cursor(forum_client):
 
 
 def test_comments_endpoint_requires_login(forum_client):
+    """Reading a thread's comments is gated, so the forum is not readable by anyone who happens to know a post id."""
     assert forum_client.get("/forum/posts/whatever/comments").status_code == 401
 
 
 def test_vote_changes_score_and_one_vote_per_user(forum_client):
+    """A vote moves the score, and voting again REPLACES the previous vote rather than adding to it — so one person cannot drive a post's score by clicking repeatedly."""
     _login(forum_client)
     pid = _new_post(forum_client, "T", "b").get_json()["post"]["id"]
     assert forum_client.post(f"/forum/posts/{pid}/vote", json={"value": 1}).get_json()["score"] == 1
@@ -120,22 +120,26 @@ def test_vote_changes_score_and_one_vote_per_user(forum_client):
 
 
 def test_anonymous_post_hides_the_author(forum_client):
+    """A post submitted anonymously shows no author in the feed, which is the entire promise made to whoever chose that option."""
     _login(forum_client)
     forum_client.post("/forum/posts", json={"title": "T", "body": "b", "anonymous": True})
     assert forum_client.get("/forum/posts").get_json()["posts"][0]["author"] == "Anonymous"
 
 
 def test_comment_on_missing_post_is_404(forum_client):
+    """Commenting on a post that does not exist is a 404, so no orphan comment is created against a phantom thread."""
     _login(forum_client)
     assert forum_client.post("/forum/posts/999/comments", json={"body": "x"}).status_code == 404
 
 
 def test_get_missing_post_is_404(forum_client):
+    """Requesting a post that does not exist is a 404 rather than an empty success that would render as a blank page."""
     _login(forum_client)
     assert forum_client.get("/forum/posts/999").status_code == 404
 
 
 def test_author_can_edit_their_post(forum_client):
+    """An author can edit their own post, and the edit is what subsequent readers get — not a stale copy served from somewhere else."""
     _login(forum_client)
     pid = _new_post(forum_client, "Old", "old body").get_json()["post"]["id"]
     resp = forum_client.patch(f"/forum/posts/{pid}", json={"title": "New", "body": "new body"})
@@ -145,6 +149,7 @@ def test_author_can_edit_their_post(forum_client):
 
 
 def test_author_can_delete_their_post(forum_client):
+    """An author can delete their own post, and it disappears from both the direct link and the feed rather than lingering in one of them."""
     _login(forum_client)
     pid = _new_post(forum_client).get_json()["post"]["id"]
     assert forum_client.delete(f"/forum/posts/{pid}").status_code == 200
@@ -153,6 +158,7 @@ def test_author_can_delete_their_post(forum_client):
 
 
 def test_edit_missing_post_is_404(forum_client):
+    """Editing a post that does not exist is a 404, distinguishing "gone" from "not yours" so the client can say the right thing."""
     _login(forum_client)
     assert forum_client.patch("/forum/posts/999", json={"title": "X", "body": "y"}).status_code == 404
 
@@ -163,7 +169,7 @@ def test_edit_missing_post_is_404(forum_client):
 
 
 def test_votes_aggregate_across_users(forum_client):
-    # one vote per user, but DISTINCT users' votes sum into the score (not last-write-wins)
+    """One vote per person, but DIFFERENT people's votes sum into the score — the alternative, last-write-wins, would make the score meaningless."""
     _login(forum_client, "alice")
     pid = _new_post(forum_client).get_json()["post"]["id"]
     assert forum_client.post(f"/forum/posts/{pid}/vote", json={"value": 1}).get_json()["score"] == 1
@@ -173,9 +179,10 @@ def test_votes_aggregate_across_users(forum_client):
 
 
 def test_feed_and_detail_publish_like_and_dislike_tallies(forum_client):
-    # #409 over HTTP: the sub-requirement is that a client can SEE how many likes a post has. A contested
-    # post (equal ups and downs) and an untouched one share the same net score, so the feed row and the
-    # detail must both carry the two tallies or the two posts are indistinguishable on screen.
+    """A client must be able to see how many likes a post has, and the net score cannot show that: a contested post and an untouched one both sit at zero.
+
+    Both the feed row and the detail carry the two tallies, while the voter identities never leave the server.
+    """
     _login(forum_client, "alice")
     hot = _new_post(forum_client, "Contested", "b").get_json()["post"]["id"]
     _new_post(forum_client, "Quiet", "b")

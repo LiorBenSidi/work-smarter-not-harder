@@ -21,15 +21,17 @@ def _capture_reset(client, auth_module, monkeypatch, email="alice@example.com"):
 
 
 def test_register_requires_a_valid_email(client):
+    """An account cannot be created without a usable email address, because that address is the only route back in if the password is ever lost."""
     assert client.post("/register", json={"username": "alice", "password": "s3cretpw!"}).status_code == 400
     assert client.post("/register", json={"username": "alice", "password": "s3cretpw!", "email": "nope"}).status_code == 400
     assert _register(client).status_code == 201
 
 
 def test_forgot_password_never_enumerates_accounts(client, auth_module, monkeypatch):
-    # No-enumeration is a LIVE (SMTP) property: with real email configured, the link leaves ONLY by email, so
-    # known vs unknown are byte-identical. (In dev/log mode the link is dev-surfaced on-screen — which
-    # necessarily differs for a registered email — a local-only convenience, tested separately below.)
+    """With real email configured, a known and an unknown address get byte-identical answers, so the endpoint cannot be used to discover who has an account.
+
+    The development mode that shows the link on screen necessarily differs, which is why the property is asserted with a relay configured.
+    """
     client.raw.application.config["SMTP_HOST"] = "relay.test"
     monkeypatch.setattr(auth_module, "send_email_async", lambda *a, **k: True)   # don't spawn a real send thread
     _register(client)
@@ -40,8 +42,7 @@ def test_forgot_password_never_enumerates_accounts(client, auth_module, monkeypa
 
 
 def test_forgot_password_dispatches_the_send_asynchronously(client, auth_module, monkeypatch):
-    # AUTH-H1: the registered branch must emit the reset email via the async wrapper, so a live SMTP send
-    # never blocks the response and its latency can't be told apart from the unregistered (no-send) branch.
+    """The registered branch hands the email to the background sender, so a slow relay never blocks the response — otherwise the reply's LATENCY tells an attacker which addresses are registered, even when the body does not."""
     seen = []
     monkeypatch.setattr(auth_module, "send_email_async", lambda cfg, to, *a, **k: seen.append(to) or True)
     _register(client)
@@ -51,8 +52,7 @@ def test_forgot_password_dispatches_the_send_asynchronously(client, auth_module,
 
 
 def test_forgot_password_dev_surfaces_the_link_without_smtp(client):
-    # Dev/log mode (no SMTP_HOST): a registered email gets the reset link surfaced in the response so the flow
-    # is testable with no inbox; an unregistered email does NOT (and none of this is exposed once SMTP is set).
+    """Without a relay, a registered address gets the link on screen so the flow is usable with no inbox — and an unregistered one still gets nothing."""
     _register(client)
     known = client.post("/forgot-password", json={"email": "alice@example.com"}).get_json()
     unknown = client.post("/forgot-password", json={"email": "ghost@nowhere.co"}).get_json()
@@ -61,6 +61,7 @@ def test_forgot_password_dev_surfaces_the_link_without_smtp(client):
 
 
 def test_reset_with_a_valid_token_changes_the_password(client, auth_module, monkeypatch):
+    """The whole point of the flow: a valid link genuinely changes the password, the old one stops working, and the new one does."""
     _register(client)
     box = _capture_reset(client, auth_module, monkeypatch)
     assert box["to"] == "alice@example.com"
@@ -71,6 +72,7 @@ def test_reset_with_a_valid_token_changes_the_password(client, auth_module, monk
 
 
 def test_reset_token_is_single_use(client, auth_module, monkeypatch):
+    """Replaying the same link after the password changed is refused, so an old email sitting in an inbox cannot be used a second time to seize the account."""
     _register(client)
     token = re.search(r"reset_token=([\w.\-]+)",
                       _capture_reset(client, auth_module, monkeypatch)["body"]).group(1)
@@ -80,12 +82,15 @@ def test_reset_token_is_single_use(client, auth_module, monkeypatch):
 
 
 def test_reset_rejects_a_garbage_token(client):
+    """An invented token is refused, so the reset endpoint cannot be driven by guessing."""
     assert client.post("/reset-password", json={"token": "not-a-real-token", "password": "newpass123"}).status_code == 400
 
 
 def test_forgot_password_fails_closed_in_production_posture(client):
-    # Prod posture (SESSION_COOKIE_SECURE on) + no SMTP: the reset link must NOT be surfaced, even for a
-    # registered email — so a mis-deploy without SMTP can't leak a reset token to an unauthenticated caller.
+    """In a production posture with no relay configured, the link is NOT surfaced even for a registered address.
+
+    Without this, a mis-deploy that forgot the mail settings would hand a working reset token to any anonymous caller who knows an email address.
+    """
     client.raw.application.config["SESSION_COOKIE_SECURE"] = True
     _register(client)
     resp = client.post("/forgot-password", json={"email": "alice@example.com"}).get_json()
@@ -93,7 +98,7 @@ def test_forgot_password_fails_closed_in_production_posture(client):
 
 
 def test_deeply_nested_json_is_400_not_500(client):
-    # An over-nested body overflows the JSON parser (RecursionError). That's malformed input -> 400, not a 500.
+    """A deeply nested body overflows the JSON parser, and that is malformed input from the caller — a 400 — not a server fault that should surface as a 500 and page whoever is on call."""
     client.raw.application.config["PROPAGATE_EXCEPTIONS"] = False   # let the app error handler run, as in prod
     depth = 6000
     resp = client.post("/register", data="[" * depth + "]" * depth, content_type="application/json")
@@ -101,15 +106,13 @@ def test_deeply_nested_json_is_400_not_500(client):
 
 
 def test_reset_token_window_is_ten_minutes():
-    # The reset link must expire 10 min after the email is sent (matches the OTP window) so an old email
-    # can't be used to reset. The value is the single source of truth for both enforcement + the email copy.
+    """The link expires on a fixed, single-sourced window, so the enforcement and the wording in the email can never drift apart and promise the user a different lifetime than the server honours."""
     from config import Config
     assert Config.RESET_TOKEN_MAX_AGE == 600
 
 
 def test_reset_link_expires_after_its_max_age(client, auth_module, monkeypatch):
-    # A stale reset email (older than the window) is rejected: the token embeds its issue time and the route
-    # validates it against RESET_TOKEN_MAX_AGE. Shrinking that below the fresh token's age -> "expired".
+    """A stale reset email is refused because the token carries its issue time — and, critically, the password is left unchanged, so a rejected reset never half-applies."""
     _register(client)
     token = re.search(r"reset_token=([\w.\-]+)", _capture_reset(client, auth_module, monkeypatch)["body"]).group(1)
     monkeypatch.setitem(client.raw.application.config, "RESET_TOKEN_MAX_AGE", -1)   # the just-issued token is now "too old"

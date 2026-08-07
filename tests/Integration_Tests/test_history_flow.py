@@ -13,6 +13,7 @@ def _entry(state="Ready", ts="2026-06-28T10:00:00Z"):
 
 
 def test_history_empty_when_none_saved(history_client):
+    """A user with no check-ins gets an empty list rather than an error, so the history screen renders its empty state instead of failing."""
     _login(history_client)
     resp = history_client.get("/history")
     assert resp.status_code == 200
@@ -20,6 +21,7 @@ def test_history_empty_when_none_saved(history_client):
 
 
 def test_history_returns_the_users_entries(history_client, fake_history):
+    """Distinct days come back as distinct entries, which is what makes the history a record rather than a single latest value."""
     fake_history.add("alice", _entry("Ready", "2026-06-27T10:00:00Z"))
     fake_history.add("alice", _entry("Recovery-Needed", "2026-06-28T10:00:00Z"))   # distinct day -> both kept
     _login(history_client, "alice")
@@ -29,15 +31,17 @@ def test_history_returns_the_users_entries(history_client, fake_history):
 
 
 def test_history_is_per_user(history_client, fake_history):
+    """History is scoped to its owner — another signed-in user sees their own, never somebody else's health record."""
     fake_history.add("alice", _entry())
     _login(history_client, "bob")  # bob has no history of his own
     assert history_client.get("/history").get_json()["history"] == []
 
 
 def test_history_view_is_bounded_to_the_newest_cap(history_client, fake_history):
-    # #331: however long a user's daily log grows, GET /history returns at most HISTORY_VIEW_CAP entries — the
-    # NEWEST ones, oldest-first — so one request can't pull an unbounded history. (The GDPR export is unbounded
-    # by design; it calls .list() with no cap.)
+    """However long a user's log grows, one request returns at most a fixed number of entries — the NEWEST ones — so the history screen cannot become slower every day someone uses the app.
+
+    The data export is deliberately unbounded, because there the point is completeness.
+    """
     from datetime import date, timedelta
 
     from services.db import HISTORY_VIEW_CAP
