@@ -380,4 +380,48 @@ export const SCENARIOS = [
       assert(t1 && t2 && t1 !== t2, `the selection capsule should slide between tabs (forum=${t1} chat=${t2})`);
     },
   },
+
+  // The check-in gate, driven through the real form. A served-shell test can only prove the validator is
+  // PRESENT in the bundle; only a browser proves it DECIDES anything. Replacing validateCheckin's body
+  // with `return true` leaves every served-shell assertion green — these steps go red.
+  {
+    name: "checkin: submit stays greyed until every field is valid",
+    tags: ["checkin"],
+    async fn(b) {
+      await registerAndLogin(b);
+      await b.waitFor("#checkin-form");
+      const gate = `() => {
+        const btn = document.querySelector("#checkin-form button[type=submit]");
+        return btn ? btn.getAttribute("aria-disabled") : "no-button";
+      }`;
+
+      assert(await b.evaluate(gate) === "true", "an untouched check-in form must leave Submit greyed");
+
+      await b.type("#sleep_hours", "7");
+      await b.type("#resting_hr", "55");
+      assert(await b.evaluate(gate) === "true",
+        "the numbers alone must not open the gate — fatigue/soreness/training_load are still unset");
+
+      await b.pageExec(`(() => {
+        document.querySelectorAll("#checkin-form .scale").forEach((sc) => {
+          const btn = sc.querySelector("button");
+          if (btn) btn.click();
+        });
+        return true;
+      })()`);
+      await b.wait(150);
+      assert(await b.evaluate(gate) === "false", "a fully-filled check-in must enable Submit");
+
+      // Below the model's floor (sleep_hours >= 1): the gate must shut again.
+      await b.pageExec(`(() => {
+        const el = document.getElementById("sleep_hours");
+        el.value = "0";
+        el.dispatchEvent(new Event("input", { bubbles: true }));
+        return true;
+      })()`);
+      await b.wait(150);
+      assert(await b.evaluate(gate) === "true",
+        "sleep_hours below the model's minimum must re-grey Submit");
+    },
+  },
 ];
