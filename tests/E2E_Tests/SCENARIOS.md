@@ -18,6 +18,34 @@ All state-changing requests use a **double-submit CSRF cookie** (`web/csrf.py`):
 The E2E harness boots the app with `OTP_ENABLED=0 REGISTER_VERIFY_EMAIL=0 SMTP_HOST= SESSION_COOKIE_SECURE=0`
 for the bulk of flows, and flips the flags on for the dedicated OTP / verify-email / reset scenarios.
 
+### Running it locally — the stack needs five switches, not four
+
+Each scenario registers a fresh user, so a `both` run makes **one registration per scenario per viewport**
+(19 x 2 = 38) from a single IP. `/register` is capped at **5 per minute** (`web/routes/auth.py`), so a run
+against a normally-configured stack burns through the cap and the excess scenarios fail — as a
+`waitFor timeout: #login-form`, which looks like a broken login rather than a rate limit.
+
+`RATELIMIT_ENABLED=0` is therefore **required** alongside the four above. CI already does this
+(`.github/workflows/ci.yml`, "Render an E2E .env"); this note is for running it by hand:
+
+```bash
+printf 'SECRET_KEY=local-e2e\nREGISTER_VERIFY_EMAIL=0\nOTP_ENABLED=0\nSMTP_HOST=\nSESSION_COOKIE_SECURE=0\nRATELIMIT_ENABLED=0\n' > .env
+docker compose up -d --build --force-recreate
+node tests/E2E_Tests/run.mjs both        # 38/38
+```
+
+Two traps worth knowing before diagnosing a red run:
+
+- **Setting only `RATELIMIT_ENABLED=0`** and dropping the others is worse, not better: the stack comes back
+  in OTP + verify-email mode and the run collapses to ~10/38 with the *same* `#login-form` timeout — same
+  symptom, completely different cause.
+- **`docker compose up -d` alone does not re-read a changed `.env`.** Use `--force-recreate`, or the
+  container keeps the environment it booted with and the switches appear not to work.
+
+The production rate limits are real and deliberate (§ scenarios 8, 26, 75, 85, 88, 105, 112, 156 below
+exercise them); this switch exists so the *harness* can register 38 users without tripping the anti-spam
+rule it is not testing.
+
 ---
 
 ## A. Screens / Views
