@@ -28,23 +28,19 @@ def _reload_config():
     return mod
 
 
-def test_int_env_missing_uses_default(cfg):
-    assert cfg._int_env("WS_DEFINITELY_UNSET_VAR", 4242) == 4242
-
-
-def test_int_env_garbage_falls_back(cfg, monkeypatch):
-    monkeypatch.setenv("WS_TEST_INT", "64kb")  # a realistic typo
-    assert cfg._int_env("WS_TEST_INT", 4242) == 4242
-
-
-def test_int_env_valid_value_is_used(cfg, monkeypatch):
-    monkeypatch.setenv("WS_TEST_INT", "100")
-    assert cfg._int_env("WS_TEST_INT", 4242) == 100
-
-
-def test_int_env_non_positive_falls_back(cfg, monkeypatch):
-    monkeypatch.setenv("WS_TEST_INT", "-5")  # a body cap <= 0 is nonsensical -> safe default
-    assert cfg._int_env("WS_TEST_INT", 4242) == 4242
+@pytest.mark.parametrize("raw,expected", [
+    (None,   4242),   # unset            -> the default
+    ("64kb", 4242),   # a realistic typo -> the default, never a crash
+    ("100",   100),   # a valid value    -> parsed and used
+    ("-5",   4242),   # a body cap <= 0 is nonsensical -> the default
+])
+def test_int_env_parses_a_value_or_falls_back_to_the_default(cfg, monkeypatch, raw, expected):
+    """_int_env returns the parsed value only when it is a usable positive int, else the default."""
+    if raw is None:
+        monkeypatch.delenv("WS_TEST_INT", raising=False)
+    else:
+        monkeypatch.setenv("WS_TEST_INT", raw)
+    assert cfg._int_env("WS_TEST_INT", 4242) == expected
 
 
 # ---- web->ai timeout invariant: web must wait at least as long as the ai queue computes ----
@@ -87,19 +83,18 @@ def test_web_gunicorn_timeout_exceeds_ai_client_timeout(cfg, rel):
 
 
 # ---- the `debug` flag: an explicit switch into debug mode ----
-def test_flask_debug_flag_on(monkeypatch):
-    monkeypatch.setenv("FLASK_DEBUG", "1")
-    assert _reload_config().Config.DEBUG is True
-
-
-def test_flask_debug_flag_off_by_default(monkeypatch):
-    monkeypatch.delenv("FLASK_DEBUG", raising=False)
-    assert _reload_config().Config.DEBUG is False
-
-
-def test_flask_debug_flag_off_when_zero(monkeypatch):
-    monkeypatch.setenv("FLASK_DEBUG", "0")
-    assert _reload_config().Config.DEBUG is False
+@pytest.mark.parametrize("raw,expected", [
+    ("1",  True),    # explicitly on
+    (None, False),   # unset -> off, so debug can never be on by accident
+    ("0",  False),   # explicitly off
+])
+def test_flask_debug_flag_is_on_only_when_explicitly_set(monkeypatch, raw, expected):
+    """FLASK_DEBUG turns Config.DEBUG on only for "1"; anything else, including unset, leaves it off."""
+    if raw is None:
+        monkeypatch.delenv("FLASK_DEBUG", raising=False)
+    else:
+        monkeypatch.setenv("FLASK_DEBUG", raw)
+    assert _reload_config().Config.DEBUG is expected
 
 
 def test_create_app_honours_the_debug_flag(monkeypatch, web_app_module):
