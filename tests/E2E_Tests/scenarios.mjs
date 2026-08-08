@@ -686,9 +686,23 @@ export const SCENARIOS = [
           const btn = [...sc.querySelectorAll("button")].find((x) => x.textContent.trim() === "${value}"); btn.click(); return true; })()`);
       }
       await b.pageExec(`(() => { document.querySelector("#checkin-form").requestSubmit(); return true; })()`);
-      await b.wait(2800);                                  // the check-in round-trips through the ai container
 
-      const fresh = await b.text("#dashboard");
+      // The check-in round-trips through the ai container, and a shared CI runner takes several times
+      // longer at it than a local machine — so wait for the card to actually paint rather than for a
+      // fixed number of milliseconds. Until it does, `#dashboard` holds the skeleton, whose textContent
+      // is "" — which would read as "the card said nothing" instead of "the card is still loading".
+      // `[role="img"]` is what makes this a REAL score: the pre-check-in card also draws an orb with a
+      // number in it, but that one is the greyed "Example" and is aria-hidden. Matching on the score
+      // alone returns that placeholder instantly and the wait does nothing at all.
+      const cardText = async (timeout = 25000) => {
+        for (let waited = 0; waited < timeout; waited += 400) {
+          if (await b.exists('#dashboard .readiness .orb[role="img"]')) return await b.text("#dashboard");
+          await b.wait(400);
+        }
+        return await b.text("#dashboard");                 // timed out: report whatever is there
+      };
+
+      const fresh = await cardText();
       assert(/today's check-in/i.test(fresh),
         `a check-in logged moments ago is today's, but the card said: ${JSON.stringify(String(fresh).slice(0, 200))}`);
 
@@ -713,8 +727,7 @@ export const SCENARIOS = [
         return true;
       })()`);
       await b.pageExec(`loadDashboard()`);
-      await b.wait(1500);
-      const stale = await b.text("#dashboard");
+      const stale = await cardText();                       // same wait-for-paint, same reason
       await b.pageExec(`(() => { window.Date = window.__RealDate; return true; })()`);
 
       assert(!/today's check-in/i.test(stale),
