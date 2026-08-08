@@ -104,6 +104,12 @@ def dashboard():
     # calories is passed straight to the client too, so it gets the same finite-number guard (a non-finite
     # AI value would otherwise serialise as an invalid-JSON `Infinity`/`NaN` token). Absent/garbage -> null.
     calories = prediction.get("calories")
+    # The timestamp of the entry this score came from. Readiness is scored from the LATEST check-in, which
+    # is only *today's* when the athlete checked in today — so the card can name the day it actually scored
+    # instead of always claiming "today's check-in" (#450). Reporting it from here ties the label to the
+    # scored entry itself; deriving it client-side from a separate /history read could drift.
+    scored_at = latest.get("timestamp") if isinstance(latest, dict) else None
     return jsonify(profile=profile, readiness=readiness,
                    calories=calories if _finite_number(calories) else None,
+                   scored_at=scored_at if isinstance(scored_at, str) else None,
                    ai_status="ok", needs_profile=profile is None), 200

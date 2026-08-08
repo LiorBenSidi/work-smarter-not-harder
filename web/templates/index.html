@@ -2372,6 +2372,19 @@
       return Math.round(50 + tilt * 15);                     // stays in [35,65] ⊂ the moderate band
     }
 
+    // The sentence under the orb names the check-in the score actually came from. /dashboard scores the
+    // LATEST entry, which is today's only when the athlete checked in today — on any other day a flat
+    // "today's check-in" contradicts the streak badge sitting on the same screen (#450). UTC day, matching
+    // computeStreak and the server's one-entry-per-day rule, so the two lines can never disagree.
+    function scoredLabel(scoredAt) {
+      const day = String(scoredAt || "").slice(0, 10);
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return "Based on your latest check-in vs your baseline.";
+      if (day === new Date().toISOString().slice(0, 10)) return "Based on today's check-in vs your baseline.";
+      const d = new Date(scoredAt);
+      const when = isNaN(d.getTime()) ? day : d.toLocaleDateString([], { month: "short", day: "numeric", timeZone: "UTC" });
+      return "Based on your last check-in (" + when + ") vs your baseline.";
+    }
+
     // Render the readiness card (orb + recs + confidence + calorie pill) from a /dashboard-shaped object into el.
     // Shared by the live /dashboard read AND the optimistic instant-paint from the latest stored check-in below.
     function paintReadiness(el, d, freshReveal) {
@@ -2402,7 +2415,7 @@
           + '<div class="orb-inner">'
           + '<div class="score">' + score + '</div>'
           + '<div class="verdict-sub">' + escapeHtml(d.readiness.state || "—") + '</div></div></div>'
-          + '<p class="muted" style="text-align:center;margin:10px 0 0;font-size:12px">Based on today\'s check-in vs your baseline.</p>';
+          + '<p class="muted" style="text-align:center;margin:10px 0 0;font-size:12px">' + escapeHtml(scoredLabel(d.scored_at)) + '</p>';
         const recs = Array.isArray(d.readiness.recommendations) ? d.readiness.recommendations : [];
         if (recs.length) html += '<ul class="recs">' + recs.map((x, i) => "<li" + (freshReveal ? ' style="animation:recIn .42s cubic-bezier(.2,.7,.2,1) both;animation-delay:' + (i * 60) + 'ms"' : "") + ">" + escapeHtml(x) + "</li>").join("") + "</ul>";
         html += confidenceHtml(d.readiness.proba);
@@ -2440,7 +2453,7 @@
       // /dashboard read is in flight. Skipped on a fresh check-in (that path runs its own reveal) and when there's
       // no today-entry (then /dashboard is the fast needs_checkin case anyway).
       const opt = !(opts && opts.fresh) ? latestTodayEntry() : null;
-      if (opt) paintReadiness(el, { ai_status: "ok", needs_profile: false, calories: opt.calories,
+      if (opt) paintReadiness(el, { ai_status: "ok", needs_profile: false, calories: opt.calories, scored_at: opt.timestamp,
         readiness: { state: opt.assessment, proba: opt.proba, recommendations: opt.recommendations } }, false);
       else el.innerHTML = sk("card");
       const r = await api("/dashboard");
