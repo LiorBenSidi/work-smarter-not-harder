@@ -34,6 +34,15 @@ docker compose up -d --build --force-recreate
 node tests/E2E_Tests/run.mjs both        # 46/46
 ```
 
+### Every scenario cleans up what it creates
+
+The whole run — both viewports — shares **one** database. Anything a scenario leaves behind changes what
+every later scenario renders, so a scenario that creates forum content must delete it and **assert** it is
+gone (`cleanupPosts(b, marker)`); a teardown that silently finds nothing re-creates the leak while looking
+like it ran. Give created posts a `uniq()` marker so a teardown can target only its own rows, and note that
+deleting a post takes its comments with it. Ignoring this is what took seven scenarios red at once (#449)
+and left the dev forum filling up run after run (#453).
+
 Two traps worth knowing before diagnosing a red run:
 
 - **Setting only `RATELIMIT_ENABLED=0`** and dropping the others is worse, not better: the stack comes back

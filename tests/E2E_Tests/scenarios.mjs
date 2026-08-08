@@ -41,6 +41,31 @@ async function gotoScreen(b, screen) {
   await b.wait(700);
 }
 
+// Delete the forum posts this scenario created — matched on the unique marker in their titles — and prove
+// none is left. The whole run shares ONE database, so a post left behind changes what every later scenario
+// renders; that is how seven scenarios went red at once in #449. Deleting the post takes its comments with
+// it (`forum_delete_post`), so comment-creating scenarios need nothing extra.
+//
+// The assertions are the point. A teardown that silently finds nothing re-creates the leak while looking
+// like it ran, so this fails loudly both when it cannot find its own posts and when any survive.
+async function cleanupPosts(b, marker, expected = 1) {
+  const find = `(list.posts || []).filter((p) => String(p.title).includes(${JSON.stringify(marker)}))`;
+  const removed = await b.pageExec(`(async () => {
+    const csrf = (document.cookie.match(/csrf_token=([^;]+)/) || [])[1] || "";
+    const list = await (await fetch("/forum/posts")).json();
+    const mine = ${find};
+    for (const p of mine) await fetch("/forum/posts/" + p.id, { method: "DELETE", headers: { "X-CSRF-Token": csrf } });
+    return mine.length;
+  })()`);
+  assert(removed >= expected,
+    `teardown found ${removed} of its own post(s) but created ${expected} — the rest leak into later scenarios`);
+  const left = await b.pageExec(`(async () => {
+    const list = await (await fetch("/forum/posts")).json();
+    return ${find}.length;
+  })()`);
+  assert(left === 0, `teardown left ${left} post(s) matching ${JSON.stringify(marker)} in the shared forum`);
+}
+
 async function createPost(b, title, body, anonymous = false) {
   await gotoScreen(b, "forum");
   await b.waitFor("#forum-form");
@@ -156,11 +181,13 @@ export const SCENARIOS = [
     tags: ["forum"],
     async fn(b) {
       await registerAndLogin(b);
-      await createPost(b, "E2E open test", "body text here");
+      const marker = uniq("E2E open ");            // unique, so teardown deletes only this run's row
+      await createPost(b, marker, "body text here");
       await b.waitFor("#forum-list .post");
       await b.click("#forum-list .post", 900);
       const shown = await b.evaluate(`() => { const d = document.getElementById("forum-detail"); return d && !d.hidden && d.innerHTML.length > 100; }`);
       assert(shown, "post detail did not render on open");
+      await cleanupPosts(b, marker);
     },
   },
   // NOTE: no browser media scenario here — deliberately. The picker+submit version fails on headless CI
@@ -174,8 +201,9 @@ export const SCENARIOS = [
     tags: ["forum", "regression"],
     async fn(b) {
       await registerAndLogin(b);
-      await createPost(b, "E2E vote A", "aaa");
-      await createPost(b, "E2E vote B", "bbb");
+      const marker = uniq("E2Evote");              // one marker, both posts -> one teardown
+      await createPost(b, marker + " A", "aaa");
+      await createPost(b, marker + " B", "bbb");
       await b.waitFor("#forum-list .post");
       await b.click("#forum-list .post", 900);                        // open post 1
       // upvote it (this calls loadForum, which used to destroy #forum-detail)
@@ -186,6 +214,7 @@ export const SCENARIOS = [
       await b.pageExec(`(async () => { const ps = [...document.querySelectorAll("#forum-list .post")]; (ps[1]||ps[0]).click(); await new Promise(r=>setTimeout(r,1000)); })()`);
       const openedSecond = await b.evaluate(`() => { const d = document.getElementById("forum-detail"); return d && !d.hidden && d.innerHTML.length > 100; }`);
       assert(openedSecond, "could not open a post after voting (the wedge)");
+      await cleanupPosts(b, marker, 2);            // the vote goes with the post it was cast on
     },
   },
   {
@@ -193,7 +222,8 @@ export const SCENARIOS = [
     tags: ["forum", "regression"],
     async fn(b) {
       await registerAndLogin(b);
-      await createPost(b, "E2E failopen", "ccc");
+      const marker = uniq("E2E failopen ");
+      await createPost(b, marker, "ccc");
       await b.waitFor("#forum-list .post");
       // force the detail GET to fail via a one-shot fetch monkeypatch, then tap
       await b.pageExec(`(() => { const real = window.fetch; window.__realFetch = real; window.fetch = (u, o) => (typeof u === "string" && /\\/forum\\/posts\\/[0-9a-f]+$/.test(u) && (!o || (o.method||"GET")==="GET")) ? Promise.reject(new Error("forced")) : real(u, o); return true; })()`);
@@ -206,6 +236,7 @@ export const SCENARIOS = [
       await b.click("#forum-list .post", 1000);
       const opensNow = await b.evaluate(`() => { const d = document.getElementById("forum-detail"); return d && !d.hidden && d.innerHTML.length > 100; }`);
       assert(opensNow, "could not open the post after a failed open");
+      await cleanupPosts(b, marker);
     },
   },
   {
@@ -213,7 +244,8 @@ export const SCENARIOS = [
     tags: ["forum"],
     async fn(b) {
       await registerAndLogin(b);
-      await createPost(b, "E2E comment", "ddd");
+      const marker = uniq("E2E comment ");
+      await createPost(b, marker, "ddd");
       await b.waitFor("#forum-list .post");
       await b.click("#forum-list .post", 900);
       await b.waitFor("#comment-form");
@@ -221,6 +253,7 @@ export const SCENARIOS = [
       await b.submit("#comment-form", 1200);
       const hasComment = await b.evaluate(`() => (document.querySelector("#forum-detail .comments") || {}).textContent?.includes("a fine comment") || false`);
       assert(hasComment, "comment did not appear after submit");
+      await cleanupPosts(b, marker);               // deleting the post takes the comment with it
     },
   },
 
@@ -308,6 +341,7 @@ export const SCENARIOS = [
       await openProfile();
       const after = await b.text("#engagement-strip");
       assert(/1/.test(after), `engagement strip still stale after re-entry (got "${after}")`);
+      await cleanupPosts(b, title);                // the second user's vote is stored on this post
     },
   },
   {
@@ -316,7 +350,8 @@ export const SCENARIOS = [
     tags: ["forum", "design"],
     async fn(b) {
       await registerAndLogin(b);
-      await createPost(b, uniq("Avatars "), "does everyone get an avatar?");
+      const marker = uniq("Avatars ");
+      await createPost(b, marker, "does everyone get an avatar?");
       await b.waitFor("#forum-list .post");
       const listAv = await b.evaluate(`() => document.querySelectorAll("#forum-list .post .avatar").length`);
       assert(listAv >= 1, "no generative avatar on the forum list byline");
@@ -327,6 +362,7 @@ export const SCENARIOS = [
       await b.submit("#comment-form", 1100);
       const cAv = await b.evaluate(`() => document.querySelectorAll("#forum-detail .comments li .avatar").length`);
       assert(cAv >= 1, "no avatar on the comment row");
+      await cleanupPosts(b, marker);
     },
   },
   {
@@ -504,24 +540,10 @@ export const SCENARIOS = [
         `() => (document.querySelector("#forum-list") || {}).textContent || ""`);
       assert(shown.includes(marker), "the post vanished from the feed — a defence must not drop the content");
 
-      // Teardown. The forum is shared state for the whole run: leaving a post whose title carries markup
-      // changes what every later scenario renders. Delete our own post before handing the app on.
-      const removed = await b.pageExec(`(async () => {
-        const csrf = (document.cookie.match(/csrf_token=([^;]+)/) || [])[1] || "";
-        const list = await (await fetch("/forum/posts")).json();
-        const mine = (list.posts || []).filter((p) => String(p.title).includes(${JSON.stringify(marker)}));
-        for (const p of mine) {
-          await fetch("/forum/posts/" + p.id, { method: "DELETE", headers: { "X-CSRF-Token": csrf } });
-        }
-        return mine.length;
-      })()`);
-      assert(removed >= 1, "teardown could not find the probe post — it would leak into later scenarios");
-
-      const left = await b.pageExec(`(async () => {
-        const list = await (await fetch("/forum/posts")).json();
-        return (list.posts || []).filter((p) => String(p.title).includes(${JSON.stringify(marker)})).length;
-      })()`);
-      assert(left === 0, `teardown left ${left} probe post(s) in the shared forum`);
+      // Teardown — the same helper the other post-creating scenarios use, so the rule can't hold here and
+      // drift somewhere else. Leaving a post whose title carries markup is the worst version of the leak:
+      // it changes what every later scenario renders.
+      await cleanupPosts(b, marker);
     },
   },
 
