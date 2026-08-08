@@ -64,6 +64,12 @@ for (let vi = 0; vi < viewportNames.length; vi++) {
     } catch (e) {
       ok = false; detail = e && e.message ? e.message : String(e);
     }
+    // Hand back the live stream this scenario opened. Every scenario that logs in starts an EventSource,
+    // and a stream holds a server thread for as long as it is open — nothing closed them, so they piled up
+    // across the run until an unrelated register or login was slow enough to time out (`waitFor timeout:
+    // #login-form`, a different victim each time, which reads like a broken login rather than a starved
+    // server). Cheap, and it fails silently: a page mid-navigation has nothing to close.
+    try { await b.pageExec(`(() => { try { if (typeof evtSource !== "undefined" && evtSource) evtSource.close(); } catch (_) {} return true; })()`); } catch { /* page gone */ }
     if (!ok) totalFail++;
     console.log(`  ${ok ? "PASS" : "FAIL"}  [${vname}] ${s.name}${ok ? "" : "\n        -> " + detail}`);
   }

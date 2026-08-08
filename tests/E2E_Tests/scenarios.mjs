@@ -744,4 +744,67 @@ export const SCENARIOS = [
       // above — the page is handed back exactly as found.
     },
   },
+
+  // A message arriving must not throw away the thread you are reading. It used to re-render the whole
+  // list — measured on the live app, 0 of 21 bubbles survived one incoming message — which silently
+  // dropped whatever text the reader had selected, mid-quote.
+  //
+  // Node identity is the assertion that matters: each bubble is marked before the message arrives, and the
+  // marks are counted after. A mark cannot survive innerHTML being replaced, so this fails the moment the
+  // thread goes back to being rebuilt, even if the finished screen looks identical.
+  {
+    name: "messages: an arriving message keeps the thread you are reading",
+    tags: ["messages", "realtime"],
+    async fn(b) {
+      const me = await registerAndLogin(b);
+      const peer = await apiUser(b.base);
+      for (let i = 1; i <= 6; i++) {                    // /messages caps one sender at 20 a minute
+        const r = await peer.call("/messages", { method: "POST", body: JSON.stringify({ to: me, body: `seeded line ${i} — something worth quoting back` }) });
+        assert(r.status === 201, `seeding message ${i} failed: ${r.status}`);
+      }
+      await gotoScreen(b, "messages");
+      await b.waitFor("#dm-conversations");
+      const opened = await b.pageExec(`(() => { const r = [...document.querySelectorAll("#dm-conversations [data-peer]")]
+        .find((x) => x.dataset.peer === ${JSON.stringify(peer.username)}); if (r) r.click(); return !!r; })()`);
+      assert(opened === true, "the seeded conversation never appeared in the inbox");
+      await b.wait(1400);
+
+      const marked = await b.pageExec(`(() => {
+        const bubbles = [...document.querySelectorAll("#dm-thread .bubble")];
+        bubbles.forEach((el, i) => { el.__kept = i; });
+        const r = document.createRange(); r.selectNodeContents(bubbles[1]);
+        const s = getSelection(); s.removeAllRanges(); s.addRange(r);
+        return bubbles.length;
+      })()`);
+      assert(marked >= 6, `expected the seeded thread to be on screen, saw ${marked} bubbles`);
+      const selectionBefore = await b.pageExec(`getSelection().toString()`);
+      assert(selectionBefore && selectionBefore.includes("seeded line"),
+        `could not select text in the thread to begin with (got ${JSON.stringify(selectionBefore)})`);
+
+      await peer.call("/messages", { method: "POST", body: JSON.stringify({ to: me, body: "and one more, arriving while you read" }) });
+      // Wait for the message to actually land rather than for a fixed number of milliseconds: delivery goes
+      // through the live channel with a 45s poll behind it, and a loaded CI runner is slower than a laptop.
+      for (let waited = 0; waited < 30000; waited += 500) {
+        if (await b.pageExec(`document.querySelector("#dm-thread").textContent.includes("arriving while you read")`)) break;
+        await b.wait(500);
+      }
+
+      const after = await b.pageExec(`(() => {
+        const bubbles = [...document.querySelectorAll("#dm-thread .bubble")];
+        return JSON.stringify({ total: bubbles.length, kept: bubbles.filter((el) => el.__kept !== undefined).length,
+          selection: getSelection().toString(), last: bubbles[bubbles.length - 1].textContent });
+      })()`);
+      const state = JSON.parse(after);
+      assert(state.last.includes("arriving while you read"),
+        `the new message never reached the open thread: last bubble was ${JSON.stringify(state.last.slice(0, 60))}`);
+      assert(state.kept >= marked - 1,
+        `the thread was rebuilt around the new message — only ${state.kept} of ${marked} bubbles survived`);
+      assert(state.selection === selectionBefore,
+        `the reader's selection was destroyed by the arriving message: ${JSON.stringify(selectionBefore)} -> ${JSON.stringify(state.selection)}`);
+
+      // No message state to clean up: both users are this scenario's own throwaway accounts and their
+      // messages are private to them. The live stream it opened is released by the runner, which now does
+      // that for every scenario (see run.mjs) — this one only made the pile-up visible.
+    },
+  },
 ];
