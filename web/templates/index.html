@@ -988,7 +988,11 @@
         </div>
 
         <form id="login-form" onsubmit="return false">
-          <label for="login-username">Username or email</label><input id="login-username" name="username" autocomplete="username" required>
+          <!-- iOS capitalises the first letter of a plain text input, and this field is an IDENTIFIER, not
+               prose: handles are matched exactly (auth.py `_users().get(identifier)`), so an inserted capital
+               turns a correct handle into "invalid username or password". Autocorrect and spellcheck are off
+               for the same reason — an identifier must arrive exactly as typed. -->
+          <label for="login-username">Username or email</label><input id="login-username" name="username" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" required>
           <label for="login-password">Password</label><input id="login-password" name="password" type="password" autocomplete="current-password" required>
           <div style="margin-top:16px"><button type="submit">Log in</button></div>
           <div id="login-flash" class="flash" aria-live="polite"></div>
@@ -1172,7 +1176,11 @@
               <form id="dm-new-form">
                 <label for="dm-to">To</label>
                 <div class="dm-search">
-                  <input id="dm-to" name="to" placeholder="Search people…" autocomplete="off" maxlength="64" required
+                  <!-- Same reason as #login-username: the SEARCH behind this box is case-insensitive, but this
+                       form also submits whatever is typed straight through as the recipient, and the server
+                       resolves that exactly (`_users().get(recipient)` -> 404 "no such user"). An iOS-inserted
+                       capital therefore fails to start a conversation with a real person. -->
+                  <input id="dm-to" name="to" placeholder="Search people…" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" maxlength="64" required
                          role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="dm-suggest">
                   <div id="dm-suggest" class="dm-suggest" role="listbox" aria-label="People" hidden></div>
                 </div>

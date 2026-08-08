@@ -151,3 +151,39 @@ def test_dashboard_prompts_a_checkin_instead_of_faking_an_ai_outage():
     assert "d.needs_checkin" in INDEX, "the dashboard must handle the needs_checkin state"
     assert "Log today's check-in to see your readiness." in INDEX, \
         "the needs_checkin branch must prompt the check-in"
+
+
+# ---- Identifier inputs must not be auto-capitalised by the phone keyboard ----
+# id -> what the typed value is matched against, and what an inserted capital costs.
+IDENTIFIER_INPUTS = {
+    "login-username": "the login identifier — auth.py resolves a handle with an exact _users().get(), "
+                      "so a capital becomes 'invalid username or password'",
+    "dm-to": "the DM recipient — messages.py rejects an unresolved handle with 404 'no such user', "
+             "so a capital fails to start a conversation with a real person",
+}
+
+
+def test_identifier_inputs_suppress_phone_autocapitalisation():
+    """A phone keyboard capitalises the first letter of a plain text input, and these two fields hold values the server matches EXACTLY, so an inserted capital turns a correct identifier into a failed login or a 404.
+
+    The attribute IS the whole mechanism here: the browser reads it, and there is no code path
+    underneath that could make the behaviour true or false independently. That is why this is a
+    contract check rather than one of the "does this string exist" greps this file bans — there is
+    nothing deeper to assert, and no browser in CI capitalises anything to assert it against.
+
+    The server half is proven behaviourally elsewhere: Integration_Tests/test_auth_flow.py
+    test_usernames_are_case_sensitive shows that distinct capitalisation makes distinct accounts,
+    which is precisely why the capital must never be inserted on the client.
+
+    Deliberately NOT in this set: #reg-username. It is labelled "Display name", the form tells the
+    user they will sign in with their email, and it is shown to other people — a name should keep
+    its capital.
+    """
+    for input_id, why in IDENTIFIER_INPUTS.items():
+        tag = re.search(r"<input\b[^>]*\bid=\"" + re.escape(input_id) + r"\"[^>]*>", INDEX)
+        assert tag, f"#{input_id} is missing from the template"
+        markup = tag.group(0)
+        assert 'autocapitalize="none"' in markup, \
+            f'#{input_id} must declare autocapitalize="none" — {why}'
+        assert 'autocorrect="off"' in markup, \
+            f'#{input_id} must declare autocorrect="off" — an identifier has to arrive exactly as typed'
