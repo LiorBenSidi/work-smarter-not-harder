@@ -1,7 +1,22 @@
 """Frontend shell test — GET / serves the single-page app with its API hooks. OWNER: Lior.
 
-JS behaviour itself needs a browser (exercised by the running stack / system tests); this pins that
-the page is served and wired to every endpoint, so a template break is caught in CI.
+WHAT THIS FILE PROVES, EXACTLY: that the served shell CONTAINS the markup, handlers and endpoint
+references the app needs. It never executes a line of the page's JavaScript, so it cannot prove that
+any of that code does what it is named after. What it does catch, cheaply and without a browser, is a
+template break: a renamed id, a dropped handler, an endpoint the SPA calls that no longer exists.
+
+WHAT PROVES THE BEHAVIOUR: the browser suite in tests/E2E_Tests, which drives a real Chrome against a
+running stack at two viewports.
+
+The names here read "…markup_and_handlers_are_served" rather than "…is_wired", because "wired" claimed
+more than a grep can deliver (#447). Two mutations made that concrete: gutting validateCheckin() to
+`return true`, and reducing escapeHtml(s) to `return String(s)` — each left the ENTIRE pytest suite
+green (re-measured 2026-08-08 with escaping gutted: 1074 passed, 43 skipped, 0 failures) while the
+tests named for those very properties kept passing. Both are now killed at the browser layer, by the
+check-in gate scenario and the XSS scenario respectively.
+
+So: if you want to know whether a behaviour is really covered, look for it in tests/E2E_Tests. This
+file tells you the page still ships the parts.
 """
 import re
 
@@ -13,8 +28,16 @@ def test_index_serves_html(client):
     assert "text/html" in resp.content_type
 
 
-def test_template_is_escape_safe_and_fully_rendered(client):
-    """Template safety: every user/AI-provided field is escaped at render time, and no placeholder ships unrendered."""
+def test_user_text_insertions_route_through_escapehtml(client):
+    """Every place the page writes user- or AI-supplied text into innerHTML calls escapeHtml on the way, and no template placeholder ships unrendered.
+
+    This checks the CALL SITES, which is a real invariant: a new field rendered without escapeHtml is
+    a new injection point, and this is what catches it. It does NOT check that escapeHtml works —
+    gutting the function to `return String(s)` leaves every assertion here true, because the call
+    sites are untouched. That half is proven by the browser scenario "security: injected markup from
+    another user never executes" in tests/E2E_Tests/scenarios.mjs, which posts a real payload through
+    the UI and asserts it renders as text.
+    """
     html = client.get("/").get_data(as_text=True)
 
     # -- dashboard escapes ai provided fields
@@ -40,7 +63,7 @@ def test_template_is_escape_safe_and_fully_rendered(client):
     assert "{{" not in html and "}}" not in html
 
 
-def test_todays_checkin_ui_is_wired(client):
+def test_todays_checkin_markup_and_handlers_are_served(client):
     """Today / check-in: the form, its scales and live validation, the saved-flash, the streak badge and the due-capsule."""
     html = client.get("/").get_data(as_text=True)
 
@@ -89,7 +112,7 @@ def test_todays_checkin_ui_is_wired(client):
     assert 'showScreen("today")' in html and "scrollIntoView" in html        # tap -> Today + the check-in form
 
 
-def test_history_ui_is_wired(client):
+def test_history_markup_and_handlers_are_served(client):
     """History: the detail view, real stored scores, the sort toggle, the 7-week heatmap and the filter/sort chips."""
     html = client.get("/").get_data(as_text=True)
 
@@ -200,7 +223,7 @@ def test_history_ui_is_wired(client):
     assert 'id="history-dir" class="chip dir"' in html and 'id="forum-dir" class="chip dir"' in html  # sort chip stays a sibling
 
 
-def test_app_shell_navigation_and_theme_are_wired(client):
+def test_app_shell_navigation_and_theme_markup_is_served(client):
     """Shell: nav pill / FAB / logo-home, screen regions and cross-fade, reset-on-reentry, theme + dark-mode a11y."""
     html = client.get("/").get_data(as_text=True)
 
@@ -319,7 +342,7 @@ def test_app_shell_navigation_and_theme_are_wired(client):
     assert "function doLogout(" in html and "closeUserMenu()" in html   # one logout path, shared with the Profile button
 
 
-def test_messaging_and_forum_ui_is_wired(client):
+def test_messaging_and_forum_markup_and_handlers_are_served(client):
     """Messaging + forum UI: the pinned DM pane, on-demand paging, recipient search, Enter-newline, owner edit/delete."""
     html = client.get("/").get_data(as_text=True)
 
@@ -388,7 +411,7 @@ def test_messaging_and_forum_ui_is_wired(client):
     assert "p.mine" in html  # buttons only on own posts (server-computed per-viewer flag; preserves anonymity)
 
 
-def test_account_and_auth_ui_is_wired(client):
+def test_account_and_auth_markup_and_handlers_are_served(client):
     """Account + auth UI: editing, deletion, privacy/export, the danger zone, register hints/prefill and email verification."""
     html = client.get("/").get_data(as_text=True)
 
@@ -450,7 +473,7 @@ def test_account_and_auth_ui_is_wired(client):
     assert "Verify & create account" in html                               # the register-mode CTA
 
 
-def test_platform_surfaces_and_polish_are_wired(client):
+def test_platform_surfaces_and_polish_markup_is_served(client):
     """Platform surfaces: the API contract the SPA calls, PWA + auto-update, gated debug tooling, and the visual polish pass."""
     html = client.get("/").get_data(as_text=True)
 
@@ -672,10 +695,13 @@ def test_mutations_and_uploads_surface_their_failures(client):
     assert "attachWarn" in dm and 'flash("dm-reply-flash", attachWarn' in dm
 
 
-def test_forum_realtime_sse_is_wired_on_the_client(client):
-    """The client subscribes to the live forum push and refreshes in place, but ONLY on the forum screen and NEVER over a draft — a teammate's change must not wipe a comment someone is mid-way through typing.
+def test_forum_realtime_handler_is_served_with_its_guards(client):
+    """The served shell carries the live-forum subscription and its handler, and that handler declares every guard the feature depends on: scoped to the forum screen, refreshing in place, never over a live draft, and closing a deleted open post with an accurate note.
 
-    An open post that was deleted live closes with an accurate note instead of being re-fetched into a misleading generic error.
+    The negative assertions are the load-bearing ones — `openPost(currentPostId)` being ABSENT is what
+    stops #420 coming back. But this is still a read of the served text: it shows the guards are
+    declared, not that they fire. Unlike escaping and the check-in gate, this feature has no browser
+    scenario behind it yet, so treat this as its only coverage and read it as such.
     """
     html = client.get("/").get_data(as_text=True)
     assert 'addEventListener("forum", onForumEvent)' in html            # subscribed to the forum push

@@ -548,7 +548,7 @@ export const SCENARIOS = [
   },
 
   // Account deletion is the one irreversible action in the app, so the confirmation word is the last
-  // thing standing between a mis-click and a wiped account. `test_account_and_auth_ui_is_wired` greps the
+  // thing standing between a mis-click and a wiped account. `test_account_and_auth_markup_and_handlers_are_served` greps the
   // served shell for `!== "DELETE"` — which passes just as happily if the comparison is inverted, made
   // case-insensitive, or never wired to the button at all. Only a browser can prove the button is
   // genuinely unusable until the exact word is present.
