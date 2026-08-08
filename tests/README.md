@@ -66,7 +66,7 @@ It builds `tests/Dockerfile`, waits for `web` + `db` to report healthy, then run
 ## Env-gated suites (they skip, they are not unwritten)
 | Suite | Un-skip with | What it proves |
 |---|---|---|
-| `Integration_Tests/test_db_mongo.py` | `TEST_MONGO_URI` | the data layer against a real MongoDB |
+| `Integration_Tests/test_db_mongo.py` | `TEST_MONGO_URI` — **must name a `*_test` database**, the fixtures wipe it (`tests/Integration_Tests/real_mongo.py` refuses anything else) | the data layer against a real MongoDB |
 | `System_Tests/test_e2e.py` | `E2E_BASE_URL` | register → profile → check-in → dashboard over real HTTP |
 | `System_Tests/test_fault_isolation.py` | `FAULT_TEST=1` + `E2E_BASE_URL` | **destructive**: stops `ai`/`db` — web survives, `/ready` degrades to 503 |
 | `System_Tests/test_ai_queue_live.py` | `AI_BASE_URL` | the job queue on the live `ai` container: real worker processes, concurrent `/predict`, a burst sheds with 503 |
