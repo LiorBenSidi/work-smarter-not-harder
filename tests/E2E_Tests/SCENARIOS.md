@@ -21,7 +21,7 @@ for the bulk of flows, and flips the flags on for the dedicated OTP / verify-ema
 ### Running it locally — the stack needs five switches, not four
 
 Each scenario registers a fresh user, so a `both` run makes **one registration per scenario per viewport**
-(19 x 2 = 38) from a single IP. `/register` is capped at **5 per minute** (`web/routes/auth.py`), so a run
+(22 x 2 = 44 at the time of writing, and it only grows) from a single IP. `/register` is capped at **5 per minute** (`web/routes/auth.py`), so a run
 against a normally-configured stack burns through the cap and the excess scenarios fail — as a
 `waitFor timeout: #login-form`, which looks like a broken login rather than a rate limit.
 
@@ -31,19 +31,19 @@ against a normally-configured stack burns through the cap and the excess scenari
 ```bash
 printf 'SECRET_KEY=local-e2e\nREGISTER_VERIFY_EMAIL=0\nOTP_ENABLED=0\nSMTP_HOST=\nSESSION_COOKIE_SECURE=0\nRATELIMIT_ENABLED=0\n' > .env
 docker compose up -d --build --force-recreate
-node tests/E2E_Tests/run.mjs both        # 38/38
+node tests/E2E_Tests/run.mjs both        # 44/44
 ```
 
 Two traps worth knowing before diagnosing a red run:
 
 - **Setting only `RATELIMIT_ENABLED=0`** and dropping the others is worse, not better: the stack comes back
-  in OTP + verify-email mode and the run collapses to ~10/38 with the *same* `#login-form` timeout — same
+  in OTP + verify-email mode and the run collapses to roughly a quarter of that with the *same* `#login-form` timeout — same
   symptom, completely different cause.
 - **`docker compose up -d` alone does not re-read a changed `.env`.** Use `--force-recreate`, or the
   container keeps the environment it booted with and the switches appear not to work.
 
 The production rate limits are real and deliberate (§ scenarios 8, 26, 75, 85, 88, 105, 112, 156 below
-exercise them); this switch exists so the *harness* can register 38 users without tripping the anti-spam
+exercise them); this switch exists so the *harness* can register its whole run's users without tripping the anti-spam
 rule it is not testing.
 
 ---
@@ -142,6 +142,7 @@ Cross-screen: corner menu `#user-menu-panel`, Home FAB `#ctx-back`, check-in cap
 ### Today / Check-in
 52. **First-run empty dashboard** — new user, no profile → `needs_profile`, greyed "Example" card + "Fill in your profile…".
 53. **Dashboard AI down** → warn banner "Readiness is temporarily unavailable", no crash.
+53a. **Readiness card names the day it scored** — the score comes from the LATEST check-in, so the sentence under the orb reads "today's check-in" only when that entry is today's (UTC); otherwise "your last check-in (8 Aug)". Calling a weeks-old score today's contradicts the streak badge sitting above it (#450); `/dashboard` reports `scored_at` for exactly this.
 54. **Check-in happy** — 5 metrics, Submit → "Check-in saved", form reset, orb fills, recs cascade (fresh), kcal counts up from 0.
 55. **Check-in out-of-range** — sleep 30 / resting_hr 500 → 400 "must be between …".
 56. **Check-in non-numeric/NaN** → 400 "must be a finite number".

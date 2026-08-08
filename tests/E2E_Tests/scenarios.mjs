@@ -663,4 +663,72 @@ export const SCENARIOS = [
       // which no other scenario reads. Nothing is written to the shared forum.
     },
   },
+
+  // Readiness is scored from the LATEST check-in, whenever that was — so the sentence under the orb may
+  // not call every score "today's check-in". It did (#450), which contradicted the streak badge two lines
+  // above it ("Start a new streak: check in today") and made the front page look like it was serving
+  // stale data when only the wording was wrong.
+  //
+  // The check-in here is real and so is the /dashboard round-trip that scores it; the ONLY thing faked is
+  // the page's idea of "now", moved forward 19 days between the two reads. That is the single variable
+  // under test, and it cannot be reached any other way — the app deliberately stamps a check-in with the
+  // server's clock, so there is no supported route to an entry dated in the past.
+  {
+    name: "readiness: the card names the day it scored, not always today",
+    tags: ["checkin", "dashboard"],
+    async fn(b) {
+      await registerAndLogin(b);
+      await b.waitFor("#checkin-form");
+      await b.type("#sleep_hours", "7");
+      await b.type("#resting_hr", "58");
+      for (const [field, value] of [["fatigue", 4], ["soreness", 3], ["training_load", 5]]) {
+        await b.pageExec(`(() => { const sc = document.querySelector('[data-field="${field}"]');
+          const btn = [...sc.querySelectorAll("button")].find((x) => x.textContent.trim() === "${value}"); btn.click(); return true; })()`);
+      }
+      await b.pageExec(`(() => { document.querySelector("#checkin-form").requestSubmit(); return true; })()`);
+      await b.wait(2800);                                  // the check-in round-trips through the ai container
+
+      const fresh = await b.text("#dashboard");
+      assert(/today's check-in/i.test(fresh),
+        `a check-in logged moments ago is today's, but the card said: ${JSON.stringify(String(fresh).slice(0, 200))}`);
+
+      // the day this check-in was actually stored, read back from the app and parsed by hand (NOT with the
+      // same date API the page formats with, so this is an independent oracle)
+      const ts = await b.pageExec(`(async () => {
+        const r = await fetch("/history", { headers: { "X-CSRF-Token": (document.cookie.match(/csrf_token=([^;]+)/)||[])[1] || "" } });
+        const h = (await r.json()).history || [];
+        return h.length ? h[h.length - 1].timestamp : null;
+      })()`);
+      assert(typeof ts === "string" && ts.length >= 10, `could not read back the stored check-in's timestamp (${ts})`);
+      const loggedDay = String(Number(ts.slice(8, 10)));    // "2026-08-08" -> "8"
+
+      // move the page 19 days on — enough that the stored day-of-month can never coincide with the shifted
+      // one — and re-run the app's own dashboard load against the unchanged server data
+      await b.pageExec(`(() => {
+        const Real = Date; window.__RealDate = Real; const SHIFT = 19 * 86400000;
+        window.Date = class extends Real {
+          constructor(...a) { if (a.length === 0) super(Real.now() + SHIFT); else super(...a); }
+          static now() { return Real.now() + SHIFT; }
+        };
+        return true;
+      })()`);
+      await b.pageExec(`loadDashboard()`);
+      await b.wait(1500);
+      const stale = await b.text("#dashboard");
+      await b.pageExec(`(() => { window.Date = window.__RealDate; return true; })()`);
+
+      assert(!/today's check-in/i.test(stale),
+        `19 days later the same score was still called today's check-in: ${JSON.stringify(String(stale).slice(0, 220))}`);
+      const named = /last check-in \(([^)]+)\)/i.exec(String(stale));
+      assert(named,
+        `the card stopped claiming today's but never named the day it scored: ${JSON.stringify(String(stale).slice(0, 220))}`);
+      // read the day out of the parenthetical ONLY — the rest of the card is full of numbers (the score,
+      // the confidence percentages), so a whole-card search would pass on a wrong date by coincidence
+      assert(new RegExp(`\\b${loggedDay}\\b`).test(named[1]),
+        `the card named "${named[1]}", but the check-in was logged on day ${loggedDay} (${ts})`);
+
+      // No teardown: one check-in on this scenario's own throwaway user, and the clock patch is reverted
+      // above — the page is handed back exactly as found.
+    },
+  },
 ];

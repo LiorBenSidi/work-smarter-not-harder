@@ -286,3 +286,19 @@ def test_dashboard_history_read_is_bounded(dash_client, fake_history, monkeypatc
     monkeypatch.setattr(fake_history, "list", spy)
     assert dash_client.get("/dashboard").status_code == 200
     assert seen["limit"] == HISTORY_VIEW_CAP  # bounded, not None (which would be the unbounded export read)
+
+
+def test_dashboard_reports_which_check_in_it_scored(dash_client, fake_history, monkeypatch):
+    """The dashboard reports the timestamp of the entry it scored, so the readiness card can name that day instead of calling every score today's check-in.
+
+    Readiness comes from the LATEST check-in, which is only today's when the athlete checked in today.
+    Two entries are seeded on different days; the reported timestamp must be the newer one's. Without it
+    the card has nothing to distinguish a fresh score from a weeks-old one (issue #450).
+    """
+    _set_predict(monkeypatch, {"state": "Rest", "proba": {"Rest": 0.7}, "recommendations": []})
+    _login(dash_client)
+    metrics = {"sleep_hours": 8, "resting_hr": 55, "fatigue": 3, "soreness": 2, "training_load": 5}
+    fake_history.add("alice", {"timestamp": "2026-07-19T06:30:00+00:00", "metrics": metrics, "assessment": "Rest"})
+    fake_history.add("alice", {"timestamp": "2026-07-20T06:30:00+00:00", "metrics": metrics, "assessment": "Rest"})
+
+    assert dash_client.get("/dashboard").get_json()["scored_at"] == "2026-07-20T06:30:00+00:00"
