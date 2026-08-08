@@ -1634,6 +1634,18 @@
 
     // ---- app-shell screen navigation (bottom tab bar) ----
     let checkinDue = false, currentScreen = "today";                     // state for the "check-in due" capsule
+    // WebKit does not keep a live backdrop for an element captured into a view transition, so for the
+    // 0.3s of the cross-fade the floating nav, the header and the Home FAB lose their glass: measured on an
+    // iPhone 16e (iOS 26.2), the pill goes opaque and the content behind it disappears, then snaps back.
+    // Peak change in the pill: 21.1 with the transition, 8.8 with the document opted out. Two alternatives
+    // were measured and rejected — a `view-transition-name` on the nav does nothing (22.9, no better than
+    // having no glass at all), and forcing an opaque fill mid-transition only halves it (13.1) while
+    // changing how the material reads. So Safari swaps directly and keeps its glass; every other browser
+    // keeps the cross-fade, and none of them has the bug (measured: no detectable change in Chrome).
+    // Feature-detection is not possible here — this is a rendering behaviour, not a missing API — and
+    // `@supports (-webkit-touch-callout: none)` is NOT Safari-only: Chrome supports that property too, so
+    // using it silently disabled the animation everywhere (caught by the browser suite).
+    const SKIP_VIEW_TRANSITION = /^((?!chrome|android|crios|fxios|edg).)*safari/i.test(navigator.userAgent);
     function showScreen(name, opts) {
       currentScreen = name;
       // #356: cross-fade between screens instead of a hard snap. Prefer the native View Transitions API (a real
@@ -1646,8 +1658,10 @@
       const swap = () => document.querySelectorAll(".screen").forEach((s) => { s.hidden = s.id !== "screen-" + name; });
       if (opts && opts.instant) {
         swap();
-      } else if (!reducedMotion() && typeof document.startViewTransition === "function") {
-        document.startViewTransition(swap);          // native cross-fade
+      } else if (!reducedMotion() && typeof document.startViewTransition === "function" && !SKIP_VIEW_TRANSITION) {
+        // .finished rejects with AbortError whenever a transition is skipped (a second switch interrupts
+        // it, or the document opts out) — unhandled, that surfaces as a page error, so it is absorbed here.
+        document.startViewTransition(swap).finished.catch(() => {});   // native cross-fade
       } else {
         swap();
         const _screen = document.getElementById("screen-" + name);

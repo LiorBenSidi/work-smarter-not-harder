@@ -791,8 +791,16 @@ export const SCENARIOS = [
       assert(opened === true, "the seeded conversation never appeared in the inbox");
       await b.wait(1400);
 
+      // Wait for the seeded thread to actually render before touching it. A slow runner had the bubbles
+      // not yet painted, so the selection ran against bubbles[1] === undefined and threw inside the page
+      // rather than failing the assertion below (seen on CI, mobile pass).
+      for (let waited = 0; waited < 15000; waited += 400) {
+        if (await b.evaluate(`() => document.querySelectorAll("#dm-thread .bubble").length >= 6`)) break;
+        await b.wait(400);
+      }
       const marked = await b.pageExec(`(() => {
         const bubbles = [...document.querySelectorAll("#dm-thread .bubble")];
+        if (bubbles.length < 2) return bubbles.length;                     // let the assertion report it
         bubbles.forEach((el, i) => { el.__kept = i; });
         const r = document.createRange(); r.selectNodeContents(bubbles[1]);
         const s = getSelection(); s.removeAllRanges(); s.addRange(r);
