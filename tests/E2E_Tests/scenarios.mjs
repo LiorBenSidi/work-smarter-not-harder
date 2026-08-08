@@ -803,8 +803,8 @@ export const SCENARIOS = [
         `the reader's selection was destroyed by the arriving message: ${JSON.stringify(selectionBefore)} -> ${JSON.stringify(state.selection)}`);
 
       // No message state to clean up: both users are this scenario's own throwaway accounts and their
-      // messages are private to them. The live stream it opened is released by the runner, which now does
-      // that for every scenario (see run.mjs) — this one only made the pile-up visible.
+      // messages are private to them. The live stream it opened is closed by the runner, which now does
+      // that for every scenario (see run.mjs for what that is and isn't known to fix).
     },
   },
 ];
