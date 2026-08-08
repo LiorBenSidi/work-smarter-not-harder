@@ -837,4 +837,67 @@ export const SCENARIOS = [
       // that for every scenario (see run.mjs for what that is and isn't known to fix).
     },
   },
+
+  // The mirror image of the scenario above: an ARRIVING message must leave a scrolled-up reader alone, but a
+  // message THEY sent must always bring them to it. Both used to run through one "only re-anchor if already
+  // at the bottom" rule, so sending from anywhere else left the new bubble off screen — measured on the
+  // running app with a real mouse press on Send: 728px below the fold, and it stayed there.
+  //
+  // The precondition assertion is what stops this passing vacuously: if the seeded thread doesn't actually
+  // overflow the pane there is no "scrolled up" state to test, and the scenario says so instead of passing.
+  {
+    name: "messages: sending lands you on your own message even if you had scrolled up",
+    tags: ["messages"],
+    async fn(b) {
+      const me = await registerAndLogin(b);
+      const peer = await apiUser(b.base);
+      const filler = "seeded scrollback line, long enough that eight of these overflow the thread pane. ";
+      for (let i = 1; i <= 8; i++) {                    // /messages caps one sender at 20 a minute
+        const r = await peer.call("/messages", { method: "POST", body: JSON.stringify({ to: me, body: `[${i}] ${filler.repeat(2)}` }) });
+        assert(r.status === 201, `seeding message ${i} failed: ${r.status}`);
+      }
+      await gotoScreen(b, "messages");
+      await b.waitFor("#dm-conversations");
+      const opened = await b.pageExec(`(() => { const r = [...document.querySelectorAll("#dm-conversations [data-peer]")]
+        .find((x) => x.dataset.peer === ${JSON.stringify(peer.username)}); if (r) r.click(); return !!r; })()`);
+      assert(opened === true, "the seeded conversation never appeared in the inbox");
+      for (let waited = 0; waited < 15000; waited += 400) {
+        if (await b.evaluate(`() => document.querySelectorAll("#dm-thread .bubble").length >= 8`)) break;
+        await b.wait(400);
+      }
+
+      // How far the newest bubble sits below the visible bottom of the pane — the thing the reader notices.
+      const metrics = `(() => { const x = document.querySelector("#dm-thread"), r = x.getBoundingClientRect();
+        const bs = [...x.querySelectorAll(".bubble")], lb = bs.length ? bs[bs.length - 1].getBoundingClientRect() : null;
+        return JSON.stringify({ fromBottom: Math.round(x.scrollHeight - x.scrollTop - x.clientHeight),
+          lastBelowFold: lb ? Math.round(lb.bottom - r.bottom) : null,
+          bubbles: bs.length, lastText: bs.length ? bs[bs.length - 1].textContent : "" }); })()`;
+
+      await b.pageExec(`(() => { document.querySelector("#dm-thread").scrollTop = 0; return true; })()`);
+      await b.wait(200);
+      const before = JSON.parse(await b.pageExec(metrics));
+      assert(before.bubbles >= 8, `expected the seeded thread on screen, saw ${before.bubbles} bubbles`);
+      assert(before.fromBottom > 100,
+        `the seeded thread does not overflow the pane (${before.fromBottom}px from the bottom), so "scrolled up" cannot be tested`);
+
+      const sent = "my own reply, sent from the top of the thread";
+      await b.type("#dm-reply", sent);
+      await b.submit("#dm-reply-form", 600);
+      for (let waited = 0; waited < 30000; waited += 400) {
+        if (await b.pageExec(`document.querySelector("#dm-thread").textContent.includes(${JSON.stringify(sent)})`)) break;
+        await b.wait(400);
+      }
+      await b.wait(400);                                 // let the post-send scroll settle before reading it
+      const after = JSON.parse(await b.pageExec(metrics));
+      assert(after.lastText.includes(sent),
+        `the sent message never reached the thread: last bubble was ${JSON.stringify(after.lastText.slice(0, 60))}`);
+      assert(after.fromBottom < 40,
+        `sending left the reader ${after.fromBottom}px from the bottom (was ${before.fromBottom}px) — their own message is off screen`);
+      assert(after.lastBelowFold <= 4,
+        `the message just sent sits ${after.lastBelowFold}px below the fold`);
+
+      // Nothing to clean up: both accounts are this scenario's own throwaways and their messages are
+      // private to them, exactly as in the arriving-message scenario above.
+    },
+  },
 ];
