@@ -3571,7 +3571,9 @@
       return true;
     }
 
-    function paintDmThread(box, preserveTop) {
+    // `pinBottom` = "this repaint carries something I just sent" -> land on it unconditionally. A message
+    // ARRIVING is the opposite case: it must not yank a reader who has scrolled up (nearBottom decides that).
+    function paintDmThread(box, preserveTop, pinBottom) {
       const peer = dmPeer;
       const nearBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 40;   // don't yank the reader up
       const prevTop = box.scrollTop, prevHeight = box.scrollHeight;
@@ -3608,11 +3610,13 @@
         parts.push({ html: sep + bubble, n: sep ? 2 : 1 });
       });
       const changed = paintDmParts(box, parts);
-      if (!changed) return;
+      // An unchanged repaint normally has nothing to do — but a send still has to land the reader on their
+      // own message, even in the race where the fetch that follows the POST hasn't picked it up yet.
+      if (!changed && !pinBottom) return;
 
       if (preserveTop) {
         box.scrollTop = prevTop + (box.scrollHeight - prevHeight);   // older msgs added on top -> hold the reader's place
-      } else if (nearBottom) {
+      } else if (nearBottom || pinBottom) {
         box.scrollTop = box.scrollHeight;   // re-anchor to newest only when they were already reading the bottom
         box.querySelectorAll(".bubble.media img").forEach((img) => {   // a late-loading image shifts height -> keep pinned to newest
           if (!img.complete) img.addEventListener("load", () => { if (peer === dmPeer) box.scrollTop = box.scrollHeight; }, { once: true });
@@ -3620,7 +3624,9 @@
       }
     }
 
-    async function renderThread() {
+    // `pinBottom` is passed ONLY by the reply form (see paintDmThread). The 15s backstop timer and the live
+    // stream both call this with no argument, so an arriving message still leaves a scrolled-up reader alone.
+    async function renderThread(pinBottom) {
       if (!dmPeer) return;
       const u = currentUser, peer = dmPeer;                  // snapshot session + which thread
       // Fetch the NEWEST page AND its shared images together, so we can weave them into one ordered timeline.
@@ -3642,7 +3648,7 @@
         dmOldestCursor = dmMsgs[0].created_at;
         dmMoreOlder = page.length >= DM_PAGE;                  // a full newest page => there may be older messages to fetch
       }
-      paintDmThread(box, false);
+      paintDmThread(box, false, pinBottom);
     }
 
     // "Load earlier messages" — fetch ONE page strictly older than the oldest we hold and prepend it (#331).
@@ -3755,7 +3761,7 @@
         picker.value = ""; filesHint(picker, "dm-files-hint");
       }
       f.reset(); autoGrow($("dm-reply"));
-      flash("dm-reply-flash", attachWarn, attachWarn ? "warn" : "ok"); renderThread();
+      flash("dm-reply-flash", attachWarn, attachWarn ? "warn" : "ok"); renderThread(true);   // land on the message I just sent, wherever I was reading
     });
     $("dm-files").addEventListener("change", () => filesHint($("dm-files"), "dm-files-hint"));
     // Growing compose: the reply textarea grows with its content (capped by CSS max-height). Enter inserts a
