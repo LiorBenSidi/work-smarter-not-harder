@@ -3528,6 +3528,35 @@
 
     // Paint the accumulated thread (dmMsgs + dmAtts) into the box. preserveTop holds the reader's scroll spot
     // when older messages prepend on top; otherwise re-anchor to the newest ONLY if they were already at the bottom.
+    // Write the thread by REUSING the bubbles whose markup did not change, and rebuilding only from the
+    // first one that did. Replacing the whole innerHTML — which is what this used to do — destroys every
+    // bubble and builds it again: measured on the live app, 0 of 21 nodes survived a single incoming
+    // message, which silently drops a text selection the reader had made.
+    //
+    // Per-message rather than a plain "did the end grow" check, because appending is rarely a pure
+    // extension: a second message from the same sender moves the run's `tail` onto the new bubble, and a
+    // delivery tick flips ✓ -> ✓✓, both of which rewrite the PREVIOUS bubble. Comparing message by message
+    // keeps everything before that one. `n` is how many top-level elements a part renders (a day separator
+    // rides along with its bubble), so the kept markup and the kept DOM nodes can't drift apart; if they
+    // ever do, this falls back to the full replace rather than splicing into the wrong place.
+    function paintDmParts(box, parts) {
+      const html = parts.map((p) => p.html).join("");
+      if (box.__lastHtml === html) return false;
+      const prev = box.__parts;
+      let k = 0;
+      if (Array.isArray(prev)) { while (k < prev.length && k < parts.length && prev[k].html === parts[k].html) k++; }
+      let keepEls = 0;
+      for (let i = 0; i < k; i++) keepEls += parts[i].n;
+      if (k === 0 || box.children.length < keepEls) {
+        box.innerHTML = html;                                  // nothing reusable (or the DOM drifted) -> rebuild
+      } else {
+        while (box.children.length > keepEls) box.lastElementChild.remove();
+        box.insertAdjacentHTML("beforeend", parts.slice(k).map((p) => p.html).join(""));
+      }
+      box.__lastHtml = html; box.__parts = parts;
+      return true;
+    }
+
     function paintDmThread(box, preserveTop) {
       const peer = dmPeer;
       const nearBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 40;   // don't yank the reader up
@@ -3542,26 +3571,31 @@
         ? '<div class="dm-loadmore"><button type="button" class="ghost mini" onclick="loadEarlierDm()">Load earlier messages</button></div>'
         : "";
       let lastDay = null;
-      const changed = setHtmlIfChanged(box, older + (items.length
-        ? items.map((it, i) => {
-            const dk = dayKey(it.at);
-            const sep = dk !== lastDay ? (lastDay = dk, '<div class="dm-daysep"><span>' + escapeHtml(dayLabel(it.at)) + "</span></div>") : "";
-            const mine = it.sender === currentUser;
-            const prev = items[i - 1], next = items[i + 1];
-            const cont = prev && prev.sender === it.sender && dayKey(prev.at) === dk;
-            const runEnd = !next || next.sender !== it.sender || dayKey(next.at) !== dk;
-            const timeHtml = '<span class="dm-time">' + escapeHtml(clockTime(it.at)) + "</span>";   // time on EVERY message
-            const cls = "bubble " + (it.kind === "media" ? "media " : "") + (mine ? "me" : "them")
-              + (runEnd ? " tail" : "") + (cont ? " cont" : "");
-            if (it.kind === "media") {
-              return sep + '<div class="' + cls + '">' + dmMediaHtml(it.a) + '<span class="dm-meta">' + timeHtml + "</span></div>";
-            }
-            // every bubble shows its own time; my bubbles also carry a delivery tick
-            const inner = mine ? timeHtml + dmTick(it.m) : timeHtml;
-            return sep + '<div class="' + cls + '" dir="auto">' + escapeHtml(it.m.body) + '<span class="dm-meta" dir="ltr">' + inner + "</span></div>";
-          }).join("")
-        : '<p class="muted">No messages yet — say hi.</p>'));
+      // One `part` per rendered thing, so an unchanged message keeps its node (see paintDmParts). `n` counts
+      // the top-level elements the part emits: a day separator is its own element riding with its bubble.
+      const parts = [];
+      if (older) parts.push({ html: older, n: 1 });
+      if (!items.length) parts.push({ html: '<p class="muted">No messages yet — say hi.</p>', n: 1 });
+      else items.forEach((it, i) => {
+        const dk = dayKey(it.at);
+        const sep = dk !== lastDay ? (lastDay = dk, '<div class="dm-daysep"><span>' + escapeHtml(dayLabel(it.at)) + "</span></div>") : "";
+        const mine = it.sender === currentUser;
+        const prev = items[i - 1], next = items[i + 1];
+        const cont = prev && prev.sender === it.sender && dayKey(prev.at) === dk;
+        const runEnd = !next || next.sender !== it.sender || dayKey(next.at) !== dk;
+        const timeHtml = '<span class="dm-time">' + escapeHtml(clockTime(it.at)) + "</span>";   // time on EVERY message
+        const cls = "bubble " + (it.kind === "media" ? "media " : "") + (mine ? "me" : "them")
+          + (runEnd ? " tail" : "") + (cont ? " cont" : "");
+        const bubble = it.kind === "media"
+          ? '<div class="' + cls + '">' + dmMediaHtml(it.a) + '<span class="dm-meta">' + timeHtml + "</span></div>"
+          // every bubble shows its own time; my bubbles also carry a delivery tick
+          : '<div class="' + cls + '" dir="auto">' + escapeHtml(it.m.body) + '<span class="dm-meta" dir="ltr">'
+            + (mine ? timeHtml + dmTick(it.m) : timeHtml) + "</span></div>";
+        parts.push({ html: sep + bubble, n: sep ? 2 : 1 });
+      });
+      const changed = paintDmParts(box, parts);
       if (!changed) return;
+
       if (preserveTop) {
         box.scrollTop = prevTop + (box.scrollHeight - prevHeight);   // older msgs added on top -> hold the reader's place
       } else if (nearBottom) {

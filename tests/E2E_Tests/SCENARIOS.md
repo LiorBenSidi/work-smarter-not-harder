@@ -21,7 +21,7 @@ for the bulk of flows, and flips the flags on for the dedicated OTP / verify-ema
 ### Running it locally — the stack needs five switches, not four
 
 Each scenario registers a fresh user, so a `both` run makes **one registration per scenario per viewport**
-(22 x 2 = 44 at the time of writing, and it only grows) from a single IP. `/register` is capped at **5 per minute** (`web/routes/auth.py`), so a run
+(23 x 2 = 46 at the time of writing, and it only grows) from a single IP. `/register` is capped at **5 per minute** (`web/routes/auth.py`), so a run
 against a normally-configured stack burns through the cap and the excess scenarios fail — as a
 `waitFor timeout: #login-form`, which looks like a broken login rather than a rate limit.
 
@@ -31,7 +31,7 @@ against a normally-configured stack burns through the cap and the excess scenari
 ```bash
 printf 'SECRET_KEY=local-e2e\nREGISTER_VERIFY_EMAIL=0\nOTP_ENABLED=0\nSMTP_HOST=\nSESSION_COOKIE_SECURE=0\nRATELIMIT_ENABLED=0\n' > .env
 docker compose up -d --build --force-recreate
-node tests/E2E_Tests/run.mjs both        # 44/44
+node tests/E2E_Tests/run.mjs both        # 46/46
 ```
 
 Two traps worth knowing before diagnosing a red run:
@@ -194,6 +194,7 @@ Cross-screen: corner menu `#user-menu-panel`, Home FAB `#ctx-back`, check-in cap
 98. **Post 404** — open a deleted id → 404 → failOpen.
 
 ### Chat / DM
+98a. **An arriving message keeps the thread you are reading** — a message landing in an open thread must patch itself in, not re-render the list. A full re-render silently drops the reader's text selection (measured on the live app: 0 of 21 bubbles survived one incoming message). Asserted by node identity — a mark placed on each bubble cannot survive `innerHTML` being replaced. The delivery tick, day separators, run-grouping, inbox preview and scroll-to-newest must all keep working (a same-sender message legitimately rewrites the previous bubble's `tail`, so only that one is rebuilt).
 99. **Open Messages** — Chat tab → conversations load, DM notifications marked read.
 100. **Recipient search** — type ≥2 → debounced autocomplete `#dm-suggest`.
 101. **Search <2 chars** → closed, no request.
