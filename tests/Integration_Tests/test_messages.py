@@ -348,12 +348,12 @@ def test_user_search_caps_results_at_eight(messages_client):
     assert len(c.get("/users/search?q=runner").get_json()["results"]) == 8
 
 
-def test_user_search_regex_metacharacters_are_literal(messages_client):
-    """A query is matched as literal text, so a pattern like ".*" finds nothing rather than returning every user in the system."""
-    c = messages_client
-    _setup(c, "alice", "bob")
-    _login(c, "alice")
-    assert c.get("/users/search?q=.*").get_json()["results"] == []  # ".*" is literal, not a match-everyone wildcard
+# REMOVED: test_user_search_regex_metacharacters_are_literal.
+# It read as a ReDoS / regex-injection guarantee and could not fail for it. This layer runs against the
+# in-memory FakeUsers, whose search is a plain `q in name.lower()` — there is no regex anywhere in the
+# path it exercised. Measured: with `re.escape(q)` removed from db.search_users, the real guard
+# (Unit_Tests/test_db.py::test_search_users_treats_regex_metacharacters_literally) FAILED while this one
+# still PASSED. The escaping is pinned there, against the real query builder; nothing was lost here.
 
 
 def test_user_search_is_rate_limited(messages_client):

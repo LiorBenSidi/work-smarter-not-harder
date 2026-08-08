@@ -128,6 +128,16 @@ def test_a_payload_without_the_preferences_stores_exactly_the_original_six_field
     assert set(validate(_ok())) == {"age", "gender", "height", "weight", "goal", "training_frequency"}
 
 
+def test_gender_is_stored_stripped_of_surrounding_whitespace(validate):
+    """Gender is normalised before it is stored, so a value typed with stray spaces is the same value as one typed without.
+
+    It reaches the AI features and any grouping as a plain string, where `" male "` and `"male"` would
+    be two different categories. Nothing pinned this: removing the `.strip()` left the whole suite green
+    (measured: 1082 passed), because every other case supplies an already-clean value.
+    """
+    assert validate({**_ok(), "gender": "  male  "})["gender"] == "male"
+
+
 def test_accepts_equipment_and_split_preference(validate):
     """The two optional training preferences are stored when supplied, since a recommendation cannot honour equipment the profile never recorded."""
     out = validate({**_ok(), "equipment": ["barbell", "bands"], "split_preference": "upper_lower"})

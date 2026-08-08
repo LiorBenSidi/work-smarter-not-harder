@@ -63,9 +63,15 @@ def test_rejects_overlong_username(validate):
         validate({"username": "a" * 65, "password": "s3cretpw!"})
 
 
-@pytest.mark.parametrize("password", ["", "short"])  # empty / under 8 chars
+@pytest.mark.parametrize("password", ["a" * 7])   # exactly one character under the minimum
 def test_rejects_too_short_password(validate, password):
-    """A password under the minimum length is refused at the point of registration, which is the only moment the rule can be enforced."""
+    """A password one character under the minimum is refused at registration, which is the only moment the rule can be enforced.
+
+    The value is the BOUNDARY (min - 1), not merely a short string. `""` and `"short"` are both far
+    below the floor, so they are refused by any minimum from 1 upwards: with them as the only cases,
+    lowering PASSWORD_MIN from 8 to 7 left the entire suite green (measured: 1082 passed), i.e. the
+    documented minimum was pinned by nothing. Seven characters fails if and only if the floor is 8.
+    """
     with pytest.raises(ValueError):
         validate({"username": "alice", "password": password})
 
