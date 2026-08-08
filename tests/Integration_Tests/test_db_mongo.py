@@ -5,18 +5,18 @@ MongoDB to catch pymongo-specific behaviour the fake can't (upsert results, _id 
 enforcement, illegal field names). They **skip cleanly** when no DB is reachable, so CI stays green
 without one.
 
-Run against a throwaway database (note the trailing ``/dbname``):
+Run against a throwaway database — the name must END IN ``_test``, because the fixture wipes whatever
+it is pointed at and `real_mongo.py` refuses anything else:
     TEST_MONGO_URI="mongodb://localhost:27017/worksmarter_test" \
         python -m pytest tests/Integration_Tests/test_db_mongo.py -v
 """
 import importlib.util
-import os
 from pathlib import Path
 
 import pytest
+from real_mongo import connect_wipeable_db, wipe
 
 WEB = Path(__file__).resolve().parents[2] / "web"
-_COLLECTIONS = ("users", "profiles", "analysis_history", "forum_posts", "forum_comments", "messages", "notifications")
 
 
 @pytest.fixture
@@ -30,25 +30,10 @@ def db_mod():
 
 @pytest.fixture
 def real_db():
-    pytest.importorskip("pymongo")
-    uri = os.environ.get("TEST_MONGO_URI")
-    if not uri:
-        pytest.skip("set TEST_MONGO_URI (with a /dbname) to run real-Mongo integration tests")
-    from pymongo import MongoClient
-    from pymongo.errors import PyMongoError
-    client = MongoClient(uri, serverSelectionTimeoutMS=1500)
-    try:
-        client.admin.command("ping")
-    except PyMongoError:
-        pytest.skip(f"no reachable MongoDB at {uri}")
-    db = client.get_default_database()
-    if db is None:
-        pytest.skip("TEST_MONGO_URI must include a database name, e.g. .../worksmarter_test")
-    for name in _COLLECTIONS:
-        db[name].drop()                       # clean slate
+    client, db = connect_wipeable_db()
+    wipe(db)                                  # clean slate
     yield db
-    for name in _COLLECTIONS:
-        db[name].drop()                       # teardown
+    wipe(db)                                  # teardown
     client.close()
 
 
