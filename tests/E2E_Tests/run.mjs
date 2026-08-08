@@ -64,11 +64,17 @@ for (let vi = 0; vi < viewportNames.length; vi++) {
     } catch (e) {
       ok = false; detail = e && e.message ? e.message : String(e);
     }
-    // Hand back the live stream this scenario opened. Every scenario that logs in starts an EventSource,
-    // and a stream holds a server thread for as long as it is open — nothing closed them, so they piled up
-    // across the run until an unrelated register or login was slow enough to time out (`waitFor timeout:
-    // #login-form`, a different victim each time, which reads like a broken login rather than a starved
-    // server). Cheap, and it fails silently: a page mid-navigation has nothing to close.
+    // Close the EventSource each scenario opened, so no scenario hands the next one a live stream.
+    //
+    // Empirical, and honest about its limits: a full run started failing one scenario at random — always
+    // `waitFor timeout: #login-form`, which reads like a broken login — three runs in a row, on a
+    // different victim each time. Clean `main` was green (44/44) and the mobile pass alone was green
+    // (23/23), so it was cross-pass state; adding this made two consecutive full runs green and CI's e2e
+    // job green. The MECHANISM is NOT established: holding six streams open and timing an ordinary
+    // request showed no slowdown at all (register 199ms -> 90ms, /health 5ms -> 3ms), because the app caps
+    // concurrent streams and recycles each after 90s. So this is closing something a test should close
+    // anyway, not a proven cure — if the flake returns, do not assume this line addresses it.
+    // Fails silently: a page mid-navigation has nothing to close.
     try { await b.pageExec(`(() => { try { if (typeof evtSource !== "undefined" && evtSource) evtSource.close(); } catch (_) {} return true; })()`); } catch { /* page gone */ }
     if (!ok) totalFail++;
     console.log(`  ${ok ? "PASS" : "FAIL"}  [${vname}] ${s.name}${ok ? "" : "\n        -> " + detail}`);
