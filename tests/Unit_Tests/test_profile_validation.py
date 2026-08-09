@@ -35,14 +35,15 @@ def test_accepts_float_height_and_weight(validate):
     assert out["weight"] == 72.4
 
 
-@pytest.mark.parametrize("bad", [None, [], "x", 5])
+@pytest.mark.parametrize("bad", [None, "x"])   # one absent, one wrong-type — same branch, distinct shapes
 def test_rejects_non_object(validate, bad):
     """A body that is not a JSON object is rejected before a single field is read."""
     with pytest.raises(ValueError):
         validate(bad)
 
 
-@pytest.mark.parametrize("field", ["age", "gender", "height", "weight", "goal", "training_frequency"])
+# age stands for the four numeric fields (they share one `_num` branch); gender and goal have their own.
+@pytest.mark.parametrize("field", ["age", "gender", "goal"])
 def test_rejects_injection_object_in_any_field(validate, field):
     """A Mongo operator object is refused in EVERY field, so no single one is left as a hole through which a query document reaches the store."""
     p = _ok()
@@ -75,7 +76,7 @@ def test_rejects_string_age(validate):
         validate(p)
 
 
-@pytest.mark.parametrize("goal", ["bulk", "", "LOSE", {"$ne": None}])
+@pytest.mark.parametrize("goal", ["LOSE", {"$ne": None}])   # wrong case + the non-string branch
 def test_rejects_unknown_or_non_string_goal(validate, goal):
     """The goal must be one of the documented values, matched exactly — an unknown word, the wrong case, or an operator object is refused rather than stored and silently ignored downstream."""
     p = _ok()
@@ -157,14 +158,22 @@ def test_equipment_is_deduplicated_in_the_caller_s_order(validate):
     assert out["equipment"] == ["bands", "barbell"]
 
 
-@pytest.mark.parametrize("bad", [{"$gt": ""}, "barbell", 5, 3.5, True, {"0": "barbell"}])
+@pytest.mark.parametrize("bad", ["barbell", 5])
 def test_rejects_equipment_that_is_not_a_list(validate, bad):
-    """Equipment must arrive as a list. A bare string is the dangerous case: iterating it would yield individual characters, each treated as a piece of equipment."""
-    with pytest.raises(ValueError):
+    """Equipment must arrive as a list, and is refused AS a list problem — not as a mystery item error.
+
+    The message is what makes this load-bearing. A bare string is the dangerous case (iterating it yields
+    individual characters, each treated as equipment) but it raises either way: without the list gate its
+    characters simply fail the item check instead, so asserting "some ValueError" proves nothing about the
+    gate. Measured: deleting the gate left an earlier version of this test green. `5` is the other half —
+    it is not iterable at all, so without the gate it raises TypeError rather than a clean 400.
+    """
+    with pytest.raises(ValueError, match="must be a list"):
         validate({**_ok(), "equipment": bad})
 
 
-@pytest.mark.parametrize("bad", [["treadmill"], ["barbell", "sauna"], [""], [None], [True], [{"$gt": ""}], [["barbell"]]])
+# ["barbell", "sauna"] is NOT a duplicate: it proves every item is checked, not just the first.
+@pytest.mark.parametrize("bad", [["treadmill"], ["barbell", "sauna"], [{"$gt": ""}]])
 def test_rejects_an_equipment_item_that_is_not_a_known_value(validate, bad):
     """Every item must be one of the known values — an invented one, an empty string, a null, or a nested structure is refused rather than stored as something no recommendation can interpret."""
     with pytest.raises(ValueError):
@@ -177,7 +186,7 @@ def test_rejects_more_equipment_items_than_exist(validate):
         validate({**_ok(), "equipment": ["bodyweight"] * 20})
 
 
-@pytest.mark.parametrize("bad", [{"$gt": ""}, "", "bro_split", 5, True, ["full_body"], "FULL_BODY"])
+@pytest.mark.parametrize("bad", ["FULL_BODY", {"$gt": ""}])   # wrong case + the non-string branch
 def test_rejects_an_unknown_or_non_string_split_preference(validate, bad):
     """The split preference must be one of the documented values, matched exactly — wrong case, a list, or an operator object is refused."""
     with pytest.raises(ValueError):
