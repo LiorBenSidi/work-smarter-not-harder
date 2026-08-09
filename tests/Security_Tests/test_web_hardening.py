@@ -12,6 +12,36 @@ def _register_then_login(client):
     return client.post("/login", json={"username": "alice", "password": "s3cretpw!", "email": "alice@example.com"})
 
 
+def test_session_cookie_secure_is_wired_to_its_environment_variable(monkeypatch, web_app_module):
+    """The Secure flag on the session cookie is driven by SESSION_COOKIE_SECURE in the environment, and that wiring is what makes an HTTPS deploy actually set it.
+
+    Its sibling below proves Flask honours the flag once it is True — but that test assigns the value
+    itself, so it can never see the WIRING break. Measured before adding this: replacing the env lookup
+    in web/config.py with a literal `False` left the whole suite green (1082 passed), meaning production
+    could ship session cookies with no Secure attribute and nothing would fail.
+
+    The value is read once at import time, so the module is reloaded under each environment rather than
+    patched after the fact — patching the class attribute would test the patch, not the wiring.
+    """
+    import importlib.util
+
+    def config_under(value):
+        """Load a FRESH copy of web/config.py with the env var set, under a throwaway module name.
+
+        A fresh load (rather than importlib.reload) keeps the real `config` module untouched for every
+        other test in the session, and the app's own module is loaded by path, so it has no spec to
+        reload from anyway.
+        """
+        monkeypatch.setenv("SESSION_COOKIE_SECURE", value)
+        spec = importlib.util.spec_from_file_location("config_env_probe", sys.modules["config"].__file__)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module.Config.SESSION_COOKIE_SECURE
+
+    assert config_under("1") is True, "SESSION_COOKIE_SECURE=1 must switch the session cookie's Secure flag on"
+    assert config_under("0") is False, "the flag must follow the environment, not be hard-coded"
+
+
 def test_session_cookie_is_httponly_and_samesite_lax(client):
     """The session cookie is unreadable from JavaScript (HttpOnly) and is not attached to cross-site requests (SameSite), so an XSS or a forged form cannot lift or ride the session."""
     cookie = _register_then_login(client).headers.get("Set-Cookie", "")
