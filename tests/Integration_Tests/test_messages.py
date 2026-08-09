@@ -179,6 +179,29 @@ def test_non_finite_since_returns_all_not_nothing(messages_client):
     assert len(c.get("/notifications?since=inf").get_json()["notifications"]) == 1
 
 
+def test_the_notification_poll_is_bounded_however_many_have_accrued(messages_client, monkeypatch):
+    """One poll returns at most the feed's cap, so a user who has accrued thousands of notifications does
+    not pull all of them on every poll — the client polls this route continuously.
+
+    Measured: dropping `limit=NOTIF_VIEW_CAP` from the route's store call left the whole suite green
+    (1081 passed). The store's own cap is unit-tested, but nothing checked that this route ASKS for it,
+    and an unbounded read here grows with the user's history on every single poll.
+
+    The cap is lowered for the test rather than accruing a hundred real notifications: what is being
+    proven is that the route passes the cap through, and a smaller one makes that visible cheaply.
+    """
+    c = messages_client
+    _setup(c, "alice", "bob")
+    import sys
+    monkeypatch.setattr(sys.modules["routes.messages"], "NOTIF_VIEW_CAP", 3)
+    _login(c, "alice")
+    for i in range(5):
+        c.post("/messages", json={"to": "bob", "body": f"m{i}"})
+    _login(c, "bob")
+    feed = c.get("/notifications").get_json()["notifications"]
+    assert len(feed) == 3, f"the poll must be capped at NOTIF_VIEW_CAP, got {len(feed)}"
+
+
 # (The 20-then-429 DM flood cap, the send-validation walls, and the self / unknown-recipient cases are
 #  proven in Negative_Tests with the same inputs PLUS a "nothing was delivered" assertion this file
 #  never made — so those tests were strictly weaker copies.)

@@ -35,6 +35,7 @@ class _Cursor:
     def limit(self, n):
         if self._coll is not None:
             self._coll.last_limit = n
+            self._coll.limits.append(n)   # EVERY limit, not just the last — see the inbox bound test
         return _Cursor(self._rows[:n] if n else self._rows, self._coll)
 
     def __iter__(self):
@@ -48,6 +49,7 @@ class _Coll:
     def __init__(self):
         self.docs = []
         self.last_limit = None      # the n from the most recent find(...).limit(n), for read-bound assertions
+        self.limits = []            # every applied limit, in order — a function doing TWO reads needs both
 
     _OPS = ("$lt", "$lte", "$gt", "$gte", "$ne")
 
@@ -259,7 +261,11 @@ def test_inbox_summary_is_a_bounded_read(db_mod, db):
     db_mod.message_send(db, "carol", "bob", "yo")
     rows = db_mod.message_list_conversations(db, "bob")
     assert {r["peer"] for r in rows} == {"alice", "carol"}
-    assert db.messages.last_limit == db_mod.CONVO_SCAN_CAP               # the read was .limit()-bounded, not a full scan
+    # BOTH reads must be bounded. This asserted `last_limit`, which only remembers the most recent one —
+    # so removing the cap from the conversation SCAN left it green, because the unread read that follows
+    # re-set it to the same number (measured: 1077 passed). The scan is the one that grows with history.
+    assert db.messages.limits == [db_mod.CONVO_SCAN_CAP, db_mod.CONVO_SCAN_CAP], \
+        f"both inbox reads must be .limit()-bounded, got {db.messages.limits}"
     assert len(db_mod.message_list_conversations(db, "bob", limit=1)) == 1   # result capped to `limit`
 
 
@@ -273,3 +279,61 @@ def test_notification_feed_is_bounded_and_since_filters_in_query(db_mod, db):
     assert db.notifications.last_limit == 2                              # .limit()-bounded read
     newer = db_mod.notification_list(db, "bob", since=first["created_at"], limit=db_mod.NOTIF_VIEW_CAP)
     assert [n["text"] for n in newer] == ["third", "second"]             # `since` excluded the first, in-query
+
+
+# ---- gaps found by mutating web/services/db.py against the whole suite (#434) ----
+# Each was a one-line change that left ALL 1077 tests green. The routes are exercised against conftest's
+# fakes, so a break in the real message store is invisible there.
+def test_each_conversation_is_keyed_by_the_other_person(db_mod, db):
+    """An inbox row names the person you are talking TO, whichever of you sent the last message — so your
+    own conversations are not filed under your own name.
+
+    Every existing inbox test looks at the RECIPIENT's side, where the peer happens to be the sender.
+    Measured: deriving the peer as `m["sender"]` unconditionally left the whole suite green (1077 passed),
+    and under it alice's inbox shows a conversation with alice.
+    """
+    db_mod.message_send(db, "alice", "bob", "hi")
+    assert db_mod.message_list_conversations(db, "alice")[0]["peer"] == "bob"   # sender's side
+    assert db_mod.message_list_conversations(db, "bob")[0]["peer"] == "alice"   # recipient's side
+
+
+def test_a_freshly_sent_message_is_neither_delivered_nor_read(db_mod, db):
+    """A message starts on one tick: stored, but not yet in the recipient's inbox and certainly not opened.
+
+    The ticks mean nothing if the store reports them optimistically. Measured: hard-coding `delivered`
+    to True in the public shape left the whole suite green (1077 passed) — every existing tick assertion
+    checks the state AFTER a mark call, so none of them could see the starting state being wrong.
+    """
+    sent = db_mod.message_send(db, "alice", "bob", "hi")
+    assert sent["delivered"] is False and sent["read"] is False
+    assert db_mod.message_list_conversation(db, "alice", "bob")[0]["delivered"] is False
+
+
+def test_marking_delivered_touches_only_this_users_inbox(db_mod, db):
+    """Loading your inbox marks YOUR messages delivered and nobody else's.
+
+    Measured: dropping `{"recipient": user}` from the filter left the whole suite green (1077 passed) —
+    one person opening the app would flip the ticks on every unread message in the system, telling
+    strangers their messages had arrived when they had not.
+    """
+    db_mod.message_send(db, "alice", "bob", "for bob")
+    db_mod.message_send(db, "carol", "dave", "for dave")
+    db_mod.message_mark_delivered(db, "bob")
+    assert db_mod.message_list_conversation(db, "alice", "bob")[0]["delivered"] is True
+    assert db_mod.message_list_conversation(db, "carol", "dave")[0]["delivered"] is False, \
+        "another pair's message must not be marked delivered"
+
+
+def test_opening_one_thread_marks_only_that_thread_read(db_mod, db):
+    """Opening a conversation clears that conversation, leaving every other one still unread.
+
+    The existing read test has only ONE peer in play, so a filter that ignores the peer entirely passes
+    it. Measured: dropping `{"sender": peer}` left the whole suite green (1077 passed) — opening one
+    chat would silently clear every unread badge the user had.
+    """
+    db_mod.message_send(db, "alice", "bob", "from alice")
+    db_mod.message_send(db, "carol", "bob", "from carol")
+    db_mod.message_mark_read(db, "bob", "alice")
+    unread = {c["peer"]: c["unread"] for c in db_mod.message_list_conversations(db, "bob")}
+    assert unread["alice"] == 0
+    assert unread["carol"] == 1, "opening alice's thread must leave carol's unread"
