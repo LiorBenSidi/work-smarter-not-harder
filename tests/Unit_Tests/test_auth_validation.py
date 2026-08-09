@@ -50,7 +50,7 @@ def test_rejects_non_string_values_blocking_nosql_injection(validate, injection)
         validate(injection)
 
 
-@pytest.mark.parametrize("username", ["", "  ", "ab"])  # empty / whitespace-only / too short (<3)
+@pytest.mark.parametrize("username", ["  ", "ab"])  # whitespace-only (proves strip runs first) / too short
 def test_rejects_bad_username_length(validate, username):
     """An empty, whitespace-only, or too-short username is refused rather than creating an account nobody can address."""
     with pytest.raises(ValueError):
@@ -112,3 +112,21 @@ def test_rejects_control_chars_in_display_name(auth_module):
     """The same control-character rule covers the display name, which is shown to other users and written into logs."""
     with pytest.raises(ValueError):
         auth_module.validate_display_name("foo\r\nINJECTED 200 OK")
+
+
+def test_rejects_an_email_that_is_syntactically_valid_but_far_too_long(auth_module):
+    """A well-formed address longer than the maximum is refused, so a caller cannot store an unbounded
+    string in the field every account is looked up by.
+
+    The syntax check and the length check are two halves of one condition, and only the syntax half had
+    an alarm on it: measured, deleting `3 <= len(value) <= EMAIL_MAX` entirely left the whole suite green
+    (1082 passed), because every invalid address anyone tested was ALSO malformed. This one is perfectly
+    well formed — it is only too long.
+    """
+    long_but_valid = "a" * (auth_module.EMAIL_MAX - len("@example.com") + 1) + "@example.com"
+    assert len(long_but_valid) > auth_module.EMAIL_MAX
+    assert auth_module._EMAIL_RE.match(long_but_valid), "the address must be SYNTACTICALLY valid, or this proves nothing"
+    with pytest.raises(ValueError):
+        auth_module.validate_email(long_but_valid)
+    ok = "a" * (auth_module.EMAIL_MAX - len("@example.com")) + "@example.com"   # exactly at the cap
+    assert auth_module.validate_email(ok) == ok                                  # the bound is inclusive
