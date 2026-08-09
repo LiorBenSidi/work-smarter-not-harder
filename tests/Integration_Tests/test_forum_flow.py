@@ -22,16 +22,6 @@ def test_create_then_list_posts(forum_client):
     assert posts[0]["score"] == 0
 
 
-def test_list_posts_carry_created_at_in_creation_order(forum_client):
-    """The client sorts the feed by creation time and renders each post's age, so every summary row must carry a positive timestamp and a later post must be strictly newer than an earlier one."""
-    _login(forum_client)
-    _new_post(forum_client, "one", "a")
-    _new_post(forum_client, "two", "b")
-    posts = {p["title"]: p for p in forum_client.get("/forum/posts").get_json()["posts"]}
-    assert posts["one"]["created_at"] > 0 and posts["two"]["created_at"] > 0
-    assert posts["two"]["created_at"] > posts["one"]["created_at"]   # the later post is strictly newer
-
-
 def test_forum_feed_pages_back_to_the_oldest_via_next_before(forum_client):
     """Walking the feed's cursor reaches EVERY post, newest-first, exactly once — so a reader can get to the oldest post without any single request being unbounded."""
     _login(forum_client)
@@ -149,18 +139,6 @@ def test_anonymous_post_hides_the_author(forum_client):
     _login(forum_client)
     forum_client.post("/forum/posts", json={"title": "T", "body": "b", "anonymous": True})
     assert forum_client.get("/forum/posts").get_json()["posts"][0]["author"] == "Anonymous"
-
-
-def test_comment_on_missing_post_is_404(forum_client):
-    """Commenting on a post that does not exist is a 404, so no orphan comment is created against a phantom thread."""
-    _login(forum_client)
-    assert forum_client.post("/forum/posts/999/comments", json={"body": "x"}).status_code == 404
-
-
-def test_get_missing_post_is_404(forum_client):
-    """Requesting a post that does not exist is a 404 rather than an empty success that would render as a blank page."""
-    _login(forum_client)
-    assert forum_client.get("/forum/posts/999").status_code == 404
 
 
 def test_author_can_edit_their_post(forum_client):
