@@ -24,6 +24,33 @@ def db_mod():
     return mod
 
 
+def _dotted_get(doc, key):
+    """Resolve a pymongo dotted path ("entry.timestamp") against a document, or None if any hop is missing.
+
+    db.py addresses history rows by `entry.timestamp` in BOTH its filters and its $set. Without this the
+    fake treated the whole string as a flat key, so those reads matched nothing and those writes created a
+    literal "entry.timestamp" field — which is why two real behaviours were invisible to this file.
+    """
+    cur = doc
+    for part in key.split("."):
+        if not isinstance(cur, dict):
+            return None
+        cur = cur.get(part)
+    return cur
+
+
+def _dotted_set(doc, key, value):
+    """Write a pymongo dotted path, creating the intermediate dicts pymongo would."""
+    parts = key.split(".")
+    for part in parts[:-1]:
+        nxt = doc.get(part)
+        if not isinstance(nxt, dict):
+            nxt = {}
+            doc[part] = nxt
+        doc = nxt
+    doc[parts[-1]] = value
+
+
 class _FakeCursor:
     """Minimal pymongo-cursor stand-in: iterable + supports .limit(n). Records the applied limit on the
     parent collection so a test can assert a read was BOUNDED (not an unlimited scan)."""
@@ -33,7 +60,7 @@ class _FakeCursor:
         self._coll = coll
 
     def sort(self, field, direction=1):
-        rows = sorted(self._rows, key=lambda d: d.get(field, 0), reverse=(direction < 0))
+        rows = sorted(self._rows, key=lambda d: _dotted_get(d, field) or 0, reverse=(direction < 0))
         return _FakeCursor(rows, self._coll)
 
     def limit(self, n):
@@ -64,7 +91,7 @@ class _FakeColl:
                 if not any(self._match(doc, sub) for sub in v):
                     return False
             elif isinstance(v, dict) and ("$exists" in v or "$regex" in v):
-                val = doc.get(k)
+                val = _dotted_get(doc, k)
                 if "$exists" in v and (val is not None) != bool(v["$exists"]):
                     return False
                 if "$regex" in v:
@@ -73,7 +100,7 @@ class _FakeColl:
                         return False
             elif isinstance(v, dict) and any(op in v for op in ("$lt", "$lte", "$gt", "$gte")):
                 # range operators — the forum feed's created_at pagination cursor (`{"$lt": before}`)
-                val = doc.get(k)
+                val = _dotted_get(doc, k)
                 if val is None:
                     return False
                 if "$lt" in v and not val < v["$lt"]:
@@ -84,7 +111,7 @@ class _FakeColl:
                     return False
                 if "$gte" in v and not val >= v["$gte"]:
                     return False
-            elif doc.get(k) != v:
+            elif _dotted_get(doc, k) != v:
                 return False
         return True
 
@@ -117,7 +144,8 @@ class _FakeColl:
     def update_one(self, filt, update, upsert=False):
         for d in self.docs:
             if self._match(d, filt):
-                d.update(update.get("$set", {}))
+                for key, val in update.get("$set", {}).items():
+                    _dotted_set(d, key, val)
                 for key, val in update.get("$push", {}).items():
                     d.setdefault(key, []).append(val)
                 for key, val in update.get("$inc", {}).items():   # forum_bump_rev + comment_count counter
@@ -139,7 +167,8 @@ class _FakeColl:
         n = 0
         for d in self.docs:
             if self._match(d, filt):
-                d.update(update.get("$set", {}))
+                for key, val in update.get("$set", {}).items():
+                    _dotted_set(d, key, val)
                 n += 1
         return SimpleNamespace(matched_count=n)
 
@@ -903,13 +932,14 @@ def test_list_history_bounds_the_read_when_a_limit_is_given(db_mod, db):
     that grows without bound while `limit=None` still returns everything for the data export.
 
     Measured: ignoring the limit entirely left the whole suite green (1066 passed) — no test passed a
-    limit at all. This asserts the BOUND (row count + the limit reaching the cursor); the newest-N
-    ORDERING is proven against a real Mongo in Integration_Tests/test_db_mongo.py, because the in-memory
-    fake cannot sort on the dotted `entry.timestamp` key.
+    limit at all. The window is the NEWEST entries, returned oldest-first within that window, so a
+    History view showing the last N days shows the last N and not the first N.
     """
     for i in range(5):
         db_mod.add_history(db, "alice", {"timestamp": f"2026-01-0{i + 1}T00:00:00Z", "assessment": "Ready"})
-    assert len(db_mod.list_history(db, "alice", limit=2)) == 2
+    window = db_mod.list_history(db, "alice", limit=2)
+    assert [e["timestamp"][:10] for e in window] == ["2026-01-04", "2026-01-05"], \
+        f"the newest two, oldest-first within the window, got {window}"
     assert db.analysis_history.last_limit == 2, "the limit must reach the cursor, not be applied after the read"
     assert len(db_mod.list_history(db, "alice")) == 5, "limit=None must still return every entry"
 
@@ -943,3 +973,37 @@ def test_deleting_history_touches_only_that_user(db_mod, db):
     db_mod.delete_history(db, "alice")
     assert db_mod.list_history(db, "alice") == []
     assert db_mod.list_history(db, "bob") == [{"timestamp": "2026-01-01T00:00:00Z", "assessment": "Rest"}]
+
+
+def test_a_second_checkin_the_same_day_replaces_the_first(db_mod, db):
+    """A second check-in on the same calendar day REPLACES that day's entry, so history stays one reading
+    per day — which is what the heatmap, the streak and the trend all assume when they treat a day as a
+    single square.
+
+    Measured: deleting the same-day replace entirely left the whole suite green (1066 passed). Nothing
+    reached it: this file's history tests use timestamps shorter than ten characters, so the day key came
+    out None and the branch never ran, and the route-level test runs against conftest's fake store.
+    """
+    db_mod.add_history(db, "alice", {"timestamp": "2026-03-04T07:00:00Z", "assessment": "Rest"})
+    db_mod.add_history(db, "alice", {"timestamp": "2026-03-04T19:30:00Z", "assessment": "Ready"})
+    db_mod.add_history(db, "alice", {"timestamp": "2026-03-05T07:00:00Z", "assessment": "Rest"})
+    entries = db_mod.list_history(db, "alice")
+    assert [e["assessment"] for e in entries] == ["Ready", "Rest"], \
+        f"the day's second check-in must replace its first, not append, got {entries}"
+
+
+def test_history_recommendations_are_bounded_and_coerced_to_strings(db_mod, db):
+    """Recommendations written back onto a past check-in are capped and stored as plain strings, because
+    they come from the ai container — a semi-trusted producer that must not be able to grow a stored
+    document without limit or push a non-string into it.
+
+    Measured: raising the cap from 10 to 1000 left the whole suite green (1066 passed); this function had
+    no test at all.
+    """
+    db_mod.add_history(db, "alice", {"timestamp": "2026-03-04T07:00:00Z", "assessment": "Ready"})
+    assert db_mod.history_set_recommendations(db, "alice", "2026-03-04T07:00:00Z", [f"r{i}" for i in range(25)])
+    stored = db_mod.list_history(db, "alice")[0]["recommendations"]
+    assert len(stored) == 10, f"the ai must not be able to grow the row without bound, stored {len(stored)}"
+    db_mod.history_set_recommendations(db, "alice", "2026-03-04T07:00:00Z", [1, {"a": 2}, None])
+    assert all(isinstance(x, str) for x in db_mod.list_history(db, "alice")[0]["recommendations"])
+    assert db_mod.history_set_recommendations(db, "alice", "no-such-timestamp", ["x"]) is False
