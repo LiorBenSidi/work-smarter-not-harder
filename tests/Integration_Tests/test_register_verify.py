@@ -45,6 +45,29 @@ def test_register_verify_rejects_a_wrong_code(verify_client):
     assert verify_client.get("/me").status_code == 401           # no account, not signed in
 
 
+def test_register_verify_rejects_an_expired_code(verify_client):
+    """A registration code past its lifetime creates no account, so one read off an old screen or an
+    unattended inbox cannot be redeemed later.
+
+    Nothing tested this at all: deleting the TTL gate in /register/verify outright left the whole suite
+    green (measured, 1071 passed). The login OTP had an expiry test; its registration twin did not, and
+    the two gates are separate code with separate stores — the login challenge lives in the user record,
+    the pending signup lives in the session. The CORRECT code is submitted, because a wrong one is
+    refused by the next branch anyway and would prove nothing about expiry.
+    """
+    code = _start(verify_client).get_json()["dev_code"]
+    with verify_client.raw.session_transaction() as sess:
+        pending = sess["pending_reg"]
+        pending["expires"] = 0                                   # force the pending signup past its TTL
+        sess["pending_reg"] = pending                            # re-assign: the session tracks whole values
+    r = verify_client.post("/register/verify", json={"code": code})
+    assert r.status_code == 400 and "expired" in r.get_json()["error"]
+    assert r.get_json().get("restart") is True                   # terminal -> back to the register tab
+    assert verify_client.get("/me").status_code == 401           # no account, no session
+    assert verify_client.post("/login", json={"username": "alice@example.com", "password": PW}
+                              ).status_code == 401
+
+
 def test_register_verify_without_a_pending_registration_is_rejected(verify_client):
     """A code submitted with no registration in progress is refused, so the endpoint cannot be used on its own to conjure an account."""
     assert verify_client.post("/register/verify", json={"code": "123456"}).status_code == 400

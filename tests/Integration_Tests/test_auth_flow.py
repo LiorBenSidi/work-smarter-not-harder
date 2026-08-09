@@ -74,13 +74,24 @@ def test_logout_clears_session(client):
     assert client.get("/me").status_code == 401
 
 
-def test_relogin_as_different_user_replaces_session(client):
-    """Signing in as somebody else REPLACES the session rather than layering on it, so no fragment of the previous user survives into the new one."""
+def test_login_replaces_the_whole_session_rather_than_adding_to_it(client):
+    """Logging in WIPES the session it inherits, so nothing planted in the browser beforehand — and no
+    fragment of whoever was signed in before — survives into the new login.
+
+    That wipe is the defence against session fixation: without it, an attacker who can seed a value in
+    the victim's session keeps it there across the victim's login. Checking the username alone could
+    never see the difference, because the username is overwritten either way — measured: deleting
+    `session.clear()` from the login route left the whole suite green (1071 passed).
+    """
     _register(client, "alice", "s3cretpw!")
     _register(client, "bob", "s3cretpw!")
     _login(client, "alice", "s3cretpw!")
+    with client.raw.session_transaction() as sess:
+        sess["planted"] = "attacker-controlled"        # anything already in the session before login
     _login(client, "bob", "s3cretpw!")
     assert client.get("/me").get_json()["username"] == "bob"
+    with client.raw.session_transaction() as sess:
+        assert "planted" not in sess, "login must clear the session it inherits, not add to it"
 
 
 def test_logout_without_login_is_idempotent(client):
@@ -157,15 +168,45 @@ def test_me_returns_only_the_three_public_session_fields(client):
 
     Every other test of this route reads a single key, which means none of them can notice an EXTRA
     key appearing. Measured before adding this: appending the caller's own `password_hash` to the /me
-    payload left the whole suite green (1082 passed). The sibling routes were already guarded —
+    payload left the whole suite green (1082 passed). Two neighbours outside auth were already guarded —
     /users/search by test_messages.py::test_user_search_returns_no_pii, and the post detail by the
-    like/dislike tallies test — so this was a hole specific to /me.
+    like/dislike tallies test — but the auth routes were NOT, which the test below now covers.
     """
     _register(client, "alex", email="alex@example.com")
     _login(client, "alex")
     body = client.get("/me").get_json()
     assert set(body) == {"username", "display_name", "email_consent"}, \
         f"/me must return exactly the three public fields, got {sorted(body)}"
+
+
+def test_no_auth_route_answers_with_an_unexpected_field(client, make_otp_client, fake_users):
+    """Every auth route answers with EXACTLY the fields it documents, so a value added to a user record —
+    or read out of the app config — can never ride along to the browser.
+
+    /me got this guard first, one route at a time; the rest of auth had none. Measured: appending
+    `leaked=str(current_app.config["SECRET_KEY"])` to the five success payloads in routes/auth.py at once
+    (/auth/config, /register, /register/verify, /login, /verify-otp) left the whole suite green — 1071
+    passed. Each of those routes is read by tests that pull ONE key out of the body, and reading one key
+    can never notice an extra one. /auth/config is the sharpest of the five: it is unauthenticated.
+    """
+    account = {"status", "username", "display_name"}     # what the four account routes answer with
+
+    assert set(client.get("/auth/config").get_json()) == {
+        "username_min", "username_max", "password_min", "password_max",
+        "email_mode", "email_debug_toggle", "otp_login", "verify_email"}
+
+    assert set(_register(client).get_json()) == account
+    assert set(_login(client).get_json()) == account
+
+    # the two-step routes need their features ON, so each gets a client configured for it
+    verify = make_otp_client(fake_users, REGISTER_VERIFY_EMAIL=True)
+    code = verify.post("/register", json={"username": "bob", "password": "s3cretpw!",
+                                          "email": "bob@example.com"}).get_json()["dev_code"]
+    assert set(verify.post("/register/verify", json={"code": code}).get_json()) == account
+
+    otp = make_otp_client(fake_users)                    # same store -> bob already exists
+    otp_code = otp.post("/login", json={"username": "bob", "password": "s3cretpw!"}).get_json()["dev_otp"]
+    assert set(otp.post("/verify-otp", json={"code": otp_code}).get_json()) == account
 
 
 def test_collided_name_account_signs_in_by_email_to_the_right_account(client):
