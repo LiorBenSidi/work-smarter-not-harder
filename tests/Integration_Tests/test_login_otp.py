@@ -78,12 +78,39 @@ def test_wrong_code_rejected_then_locks_out(otp_client):
 
 
 def test_expired_code_is_rejected(otp_client, fake_users):
-    """A code past its lifetime is refused, so one intercepted long ago is worthless."""
+    """A code past its lifetime is refused EVEN WHEN IT IS THE RIGHT CODE, so one intercepted long ago is worthless.
+
+    The right code is the whole point: an expired challenge rejects a wrong guess anyway, on the
+    incorrect-code path, so submitting "000000" here proved only that a wrong code fails. Measured with
+    the wrong code: making the TTL gate honour any CORRECT code — `if expired and not
+    check_password_hash(...)` — left the whole suite green (1071 passed), i.e. an intercepted code would
+    still have worked a week later and nothing would have said so.
+    """
     _register(otp_client)
-    _login(otp_client)
+    code = _login(otp_client).get_json()["dev_otp"]           # the REAL code for this challenge
     fake_users._by_name["alice"]["otp_expires_at"] = 0        # force the stored challenge past its TTL
-    r = otp_client.post("/verify-otp", json={"code": "000000"})
+    r = otp_client.post("/verify-otp", json={"code": code})
     assert r.status_code == 400 and "expired" in r.get_json()["error"]
+    assert otp_client.get("/me").status_code == 401           # and it granted no session on the way out
+
+
+def test_a_challenge_already_at_max_attempts_is_locked_out(otp_client, fake_users):
+    """A challenge whose counter is already at the limit is refused before the code is even checked, so a
+    concurrent burst of guesses cannot slip a late arrival past the lockout.
+
+    The attempt counter is bumped ATOMICALLY in the store, so two requests in flight together can both
+    read "not locked yet", and the second one lands with the counter already at the cap — the state this
+    reproduces by setting it directly. The wrong-code path has its own lockout (covered by
+    test_wrong_code_rejected_then_locks_out); this is the entry gate, and deleting it left the whole
+    suite green (measured, 1071 passed) because every existing test arrives with a counter below the cap.
+    """
+    _register(otp_client)
+    code = _login(otp_client).get_json()["dev_otp"]
+    max_attempts = otp_client.raw.application.config["OTP_MAX_ATTEMPTS"]
+    fake_users._by_name["alice"]["otp_attempts"] = max_attempts   # a concurrent burst got there first
+    r = otp_client.post("/verify-otp", json={"code": code})       # even the CORRECT code is now refused
+    assert r.status_code == 429 and r.get_json().get("restart") is True
+    assert otp_client.get("/me").status_code == 401
 
 
 def test_remember_this_browser_skips_otp_next_login(otp_client):
@@ -142,12 +169,22 @@ def test_logout_clears_remember_cookie(otp_client):
 
 
 def test_verify_otp_is_bound_to_the_session_user(make_otp_client, fake_users):
-    """A code issued to one browser cannot be redeemed from another that never started that sign-in — so an intercepted code is useless without the session it belongs to."""
+    """A code issued to one browser cannot be redeemed from another that never started that sign-in — so an intercepted code is useless without the session it belongs to.
+
+    The attacker NAMES the victim in the request body, which is the only version of this attack worth
+    testing: an empty body is refused by the "no verification in progress" branch no matter where the
+    route reads its user from, so the earlier version passed against a route that would happily have
+    taken the username from the body. Measured: `session.get("pending_otp_user")` changed to read the
+    body first left the whole suite green (1071 passed) — an intercepted code would then have completed
+    SOMEBODY ELSE'S login from a browser that never started it.
+    """
     _register(make_otp_client(fake_users), "alice")
     victim = make_otp_client(fake_users)
     code = victim.post("/login", json={"username": "alice", "password": PW}).get_json()["dev_otp"]
     attacker = make_otp_client(fake_users)                    # fresh browser, no pending_otp_user
-    assert attacker.post("/verify-otp", json={"code": code}).status_code == 400
+    r = attacker.post("/verify-otp", json={"code": code, "username": "alice"})   # names the victim
+    assert r.status_code == 400
+    assert attacker.get("/me").status_code == 401             # and got no session out of it
 
 
 def test_otp_is_off_under_testing(client):
