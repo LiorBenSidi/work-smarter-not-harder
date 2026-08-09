@@ -16,10 +16,25 @@ test (docs/MOBILE_SMOKE_TEST.md).
 import re
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[2]
 INDEX = (ROOT / "web" / "templates" / "index.html").read_text(encoding="utf-8")
 MANIFEST = (ROOT / "web" / "static" / "manifest.webmanifest").read_text(encoding="utf-8")
 SW = (ROOT / "web" / "static" / "sw.js").read_text(encoding="utf-8")
+
+
+@pytest.fixture
+def checkin_fields():
+    """The server's accepted ranges, read from CHECKIN_FIELDS itself so the comparison below has two
+    independent sources rather than one literal repeated in two places."""
+    src = (ROOT / "web" / "routes" / "checkin.py").read_text(encoding="utf-8")
+    block = re.search(r"CHECKIN_FIELDS = \[(.*?)\]", src, re.S)
+    assert block, "CHECKIN_FIELDS not found in web/routes/checkin.py"
+    fields = {name: [int(lo), int(hi)] for name, lo, hi in
+              re.findall(r'\(\s*"(\w+)"\s*,\s*(-?\d+)\s*,\s*(-?\d+)\s*,', block.group(1))}
+    assert fields, "CHECKIN_FIELDS parsed empty — every comparison against it would be vacuous"
+    return fields
 
 
 # ---- PWA home-screen name stays short (iOS reads the manifest name, not apple-mobile-web-app-title) ----
@@ -103,15 +118,33 @@ def test_statcard_escapes_its_value():
 
 
 # ---- The check-in sleep input matches the AI model's contract (min sleep_hours) ----
-def test_sleep_input_min_matches_the_model_contract():
-    """The client's accepted floor must match what the model accepts, or a user can submit a value the app stores happily and the model then refuses to score.
+def test_the_forms_accepted_ranges_match_the_servers(checkin_fields):
+    """Every range the form accepts is the range the server accepts, so a value the form calls valid is
+    never rejected with a 400 the moment it is submitted.
 
-    The fields are typed rather than native number inputs — so the caret can sit mid-value and the numeric keypad still shows — which puts the floor in the JavaScript range, not an attribute.
+    Read from BOTH sources and compared, rather than asserting a literal. That distinction is the whole
+    test: pinning the string `CI_RANGE = { sleep_hours: [1, 24]` — which is what this did — only proves
+    the client has not changed. Measured: moving the SERVER's sleep floor from 1 to 2 and updating the
+    server's own boundary test alongside it, which is exactly how drift happens in practice, left the
+    whole suite green (1060 passed) with the form still offering a value the server would refuse.
+
+    The fields are typed rather than native number inputs — so the caret can sit mid-value and the
+    numeric keypad still shows — which puts the client's floor in the JavaScript range, not an attribute.
     """
     m = re.search(r'<input id="sleep_hours"[^>]*>', INDEX)
     assert m, "the sleep_hours input is missing"
     assert 'inputmode="decimal"' in m.group(0), "the sleep input keeps the numeric keypad via inputmode"
-    assert "CI_RANGE = { sleep_hours: [1, 24]" in INDEX, "the JS validation floor for sleep must be 1 (the model rejects < 1), not 0"
+
+    js = re.search(r"const CI_RANGE = \{([^}]*)\}", INDEX)
+    assert js, "the client's CI_RANGE table is missing"
+    client = {name: [int(lo), int(hi)] for name, lo, hi
+              in re.findall(r"(\w+):\s*\[\s*(-?\d+)\s*,\s*(-?\d+)\s*\]", js.group(1))}
+    assert client, "CI_RANGE parsed empty — the assertion below would be vacuous"
+    for name, (lo, hi) in client.items():
+        assert name in checkin_fields, f"the form validates {name}, which the server does not accept at all"
+        assert [lo, hi] == checkin_fields[name], (
+            f"{name}: the form accepts {[lo, hi]} but the server accepts {checkin_fields[name]} — "
+            "a value the form calls valid would come back 400")
 
 
 def test_api_fetch_has_an_abort_timeout():
