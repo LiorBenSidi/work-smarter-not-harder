@@ -805,3 +805,141 @@ def test_forum_update_post_returns_none_if_deleted_during_write(db_mod, db):
     pid = db_mod.forum_create_post(db, "alice", "T", "b", False)["id"]
     db.forum_posts.update_one = lambda *a, **k: SimpleNamespace(matched_count=0)  # post gone before write
     assert db_mod.forum_update_post(db, pid, "alice", "X", "y") is None
+
+
+# ---- gaps found by mutating web/services/db.py against the whole suite (#434) ----
+# Each test below was added because a one-line change to db.py left ALL 1066 tests green. The web routes
+# are exercised in Integration_Tests against conftest's in-memory fakes, so a break in the REAL data layer
+# is invisible there — these are the only alarm on the behaviours they name.
+def test_ensure_schema_validators_actually_constrain_their_collections(db_mod, db):
+    """Each collection's validator names the fields that document must carry, so a write missing one is
+    rejected by the database itself and not only by the route that happened to be used.
+
+    Its sibling above only checks that a `$jsonSchema` key is PRESENT, which stays true of an empty schema:
+    measured, replacing every validator body with `{"$jsonSchema": {}}` left the whole suite green (1066
+    passed) — the database would have accepted anything.
+    """
+    db_mod.ensure_schema(db)
+    validators = {name: kw["validator"]["$jsonSchema"] for cmd, name, kw in db.commands if cmd == "collMod"}
+    assert validators, "ensure_schema issued no collMod at all"
+    for name, schema in validators.items():
+        assert schema.get("required"), f"{name}'s validator requires no field, so it constrains nothing"
+        assert schema.get("properties"), f"{name}'s validator types no field"
+    # spot-check the two that matter most: an account without credentials, a post without a body
+    assert set(validators["users"]["required"]) >= {"username", "password_hash"}
+    assert set(validators["forum_posts"]["required"]) >= {"id", "author", "title", "body"}
+
+
+def test_create_user_defaults_the_display_name_to_the_handle(db_mod, db):
+    """Someone who registers without choosing a shown name is displayed under their handle rather than
+    under nothing, which is what every list that renders a name relies on.
+
+    Measured: storing `display_name: None` instead left the whole suite green (1066 passed), because both
+    readers (`get_user`, `search_users`) fall back to the handle and no test looked at what was STORED.
+    """
+    assert db_mod.create_user(db, "quinn", "hash") is True     # no display_name given
+    assert db.users.docs[0]["display_name"] == "quinn", "the stored record must carry a usable shown name"
+
+
+def test_update_password_persists_the_new_hash(db_mod, db):
+    """A password change is actually written, so someone who resets their password can sign in with the new
+    one — and can no longer sign in with the old.
+
+    Measured: making the write a no-op (`{"$set": {}}`) left the whole suite green (1066 passed). The
+    route-level password tests run against conftest's fake user store, which does its own updating, so
+    nothing exercised this function's write at all.
+    """
+    db_mod.create_user(db, "amy", "old-hash", email="amy@x.io")
+    assert db_mod.update_password(db, "amy", "new-hash") is True
+    assert db_mod.get_user(db, "amy")["password_hash"] == "new-hash"
+    assert db_mod.update_password(db, "nobody", "x") is False   # unknown handle reports failure, writes nothing
+
+
+def test_search_users_puts_a_prefix_match_ahead_of_a_mid_word_match(db_mod, db):
+    """Someone typing the start of a name gets that person first, rather than whoever happens to sort
+    earliest among everyone containing those letters.
+
+    Its sibling ranking test compares "ana" with "xander", which the A-Z tiebreak alone already orders
+    correctly — measured, deleting the prefix rule entirely left the whole suite green (1066 passed).
+    The names here are chosen so alphabetical order and prefix order DISAGREE: "zoe" must beat "alex"
+    purely because the query starts her name.
+    """
+    db_mod.create_user(db, "alex", "h", email="a@x.io", display_name="Alex Zoephile")   # contains "zoe"
+    db_mod.create_user(db, "zoe", "h", email="z@x.io", display_name="Zoe")              # STARTS with "zoe"
+    names = [u["username"] for u in db_mod.search_users(db, "zoe")]
+    assert names[0] == "zoe", f"a prefix match must rank first, got {names}"
+
+
+def test_forum_update_post_persists_the_new_body(db_mod, db):
+    """An edited body is stored, so the next reader gets the edit rather than the original text.
+
+    The sibling edit test reads the body back off the dict this function patches in memory before
+    returning it, so it holds even when nothing reached the database. Measured: writing only the title
+    (`{"$set": {"title": title}}`) left the whole suite green (1066 passed) — the route-level edit test
+    re-reads the body, but through conftest's fake forum, not this code.
+    """
+    pid = db_mod.forum_create_post(db, "alice", "Old", "old body", False)["id"]
+    db_mod.forum_update_post(db, pid, "alice", "New", "new body")
+    assert db_mod.forum_get_post(db, pid)["body"] == "new body", "the edit must survive a fresh read"
+
+
+def test_forum_post_publishes_whether_it_was_posted_anonymously(db_mod, db):
+    """A post carries the anonymity its author chose, which is the flag every reader-facing view uses to
+    decide whether to show a name — the entire promise made to whoever ticked that box.
+
+    Measured: hard-coding the flag to False left the whole suite green (1066 passed). Every test in this
+    file creates posts with `anonymous=False`, and the route-level anonymity test runs against conftest's
+    fake forum, so nothing here ever read a True back out.
+    """
+    pid = db_mod.forum_create_post(db, "alice", "T", "b", True)["id"]
+    assert db_mod.forum_create_post(db, "alice", "T2", "b", True)["anonymous"] is True   # on the write's reply
+    assert db_mod.forum_get_post(db, pid)["anonymous"] is True                           # and on a fresh read
+    feed = {p["id"]: p for p in db_mod.forum_list_posts(db)}
+    assert feed[pid]["anonymous"] is True                                                # and in the feed
+
+
+def test_list_history_bounds_the_read_when_a_limit_is_given(db_mod, db):
+    """Asking for the newest N check-ins reads N rows, so the History view cannot pull an append-only log
+    that grows without bound while `limit=None` still returns everything for the data export.
+
+    Measured: ignoring the limit entirely left the whole suite green (1066 passed) — no test passed a
+    limit at all. This asserts the BOUND (row count + the limit reaching the cursor); the newest-N
+    ORDERING is proven against a real Mongo in Integration_Tests/test_db_mongo.py, because the in-memory
+    fake cannot sort on the dotted `entry.timestamp` key.
+    """
+    for i in range(5):
+        db_mod.add_history(db, "alice", {"timestamp": f"2026-01-0{i + 1}T00:00:00Z", "assessment": "Ready"})
+    assert len(db_mod.list_history(db, "alice", limit=2)) == 2
+    assert db.analysis_history.last_limit == 2, "the limit must reach the cursor, not be applied after the read"
+    assert len(db_mod.list_history(db, "alice")) == 5, "limit=None must still return every entry"
+
+
+def test_deleting_a_profile_touches_only_that_user(db_mod, db):
+    """Erasing one account's profile leaves everybody else's in place.
+
+    Measured: dropping the `{"username": username}` filter — a one-word slip that turns account deletion
+    into deleting a stranger's data — left the whole suite green (1066 passed), because only one user
+    existed wherever this was called.
+
+    The bystander is stored FIRST on purpose. `delete_one` removes the first row that MATCHES, so with
+    the target stored first an unfiltered delete still happens to remove the right one and this passes
+    anyway — measured, that ordering did not fail the mutation.
+    """
+    db_mod.save_profile(db, "bob", {"age": 41})               # bystander stored FIRST — see the docstring
+    db_mod.save_profile(db, "alice", {"age": 30})
+    db_mod.delete_profile(db, "alice")
+    assert db_mod.get_profile(db, "alice") is None
+    assert db_mod.get_profile(db, "bob") == {"age": 41}, "deleting one profile must not touch another's"
+
+
+def test_deleting_history_touches_only_that_user(db_mod, db):
+    """Erasing one account's check-in history leaves everybody else's in place — the same unscoped-delete
+    slip as the profile case above, on the collection that holds the most data.
+
+    Measured: dropping the `{"username": username}` filter left the whole suite green (1066 passed).
+    """
+    db_mod.add_history(db, "alice", {"timestamp": "2026-01-01T00:00:00Z", "assessment": "Ready"})
+    db_mod.add_history(db, "bob", {"timestamp": "2026-01-01T00:00:00Z", "assessment": "Rest"})
+    db_mod.delete_history(db, "alice")
+    assert db_mod.list_history(db, "alice") == []
+    assert db_mod.list_history(db, "bob") == [{"timestamp": "2026-01-01T00:00:00Z", "assessment": "Rest"}]
