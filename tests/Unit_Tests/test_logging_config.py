@@ -204,3 +204,40 @@ def test_access_log_marks_a_truncated_long_path(make_client, fake_users, caplog)
     assert line, "expected an access-log line"
     assert "…" in line                                      # truncation is marked, not silent
     assert line.count("a") < 300                            # the path body was actually capped
+
+
+def test_configuring_twice_without_force_does_not_stack_handlers(logmod, isolated_root_logger):
+    """A second call is a no-op, so a module imported twice — or a worker that re-initialises — does not
+    end up writing every log line two or three times.
+
+    Measured: deleting the idempotence guard left the whole suite green (1054 passed). Every existing
+    test either calls configure_logging once or passes force=True, so none of them could observe it.
+
+    The assertion is on handler IDENTITY, not on the count. Without the guard the call falls through to
+    the teardown loop, which closes the existing managed handlers and builds replacements — so the count
+    comes out the same and only the objects differ. A counting assertion passes either way; measured, it
+    did not fail the mutation.
+    """
+    def managed(root):
+        return [h for h in root.handlers if getattr(h, logmod._MANAGED, False)]
+
+    root = logmod.configure_logging(enable=True, log_file="")
+    before = managed(root)
+    assert before, "the first call must install at least one handler"
+    logmod.configure_logging(enable=True, log_file="")
+    after = managed(root)
+    assert [id(h) for h in after] == [id(h) for h in before], \
+        "a second call must leave the existing handlers untouched, not tear them down and rebuild"
+
+
+def test_every_documented_truthy_spelling_switches_logging_on(logmod):
+    """All the spellings the deployment docs use mean the same thing, so ENABLE_LOGGING=on behaves
+    exactly like ENABLE_LOGGING=1 rather than silently disabling logging in production.
+
+    Measured: dropping "on" from the accepted set left the whole suite green (1054 passed) — a deployment
+    written that way would have run with logging off and nobody would have been told.
+    """
+    for spelling in ("1", "true", "TRUE", "yes", "on", " On "):
+        assert logmod._truthy(spelling) is True, f"{spelling!r} must read as enabled"
+    for spelling in ("0", "false", "no", "off", ""):
+        assert logmod._truthy(spelling) is False, f"{spelling!r} must read as disabled"

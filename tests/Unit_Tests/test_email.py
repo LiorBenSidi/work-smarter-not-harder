@@ -235,3 +235,71 @@ def test_send_email_async_offloads_the_live_send_to_a_thread(monkeypatch):
     assert ok is True                                  # returned without blocking on the (backgrounded) send
     assert done.wait(2.0), "the live send must complete on the background thread"
     assert seen["to"] == "to@z.co"
+
+
+# ---- gaps found by mutating web/services/email.py against the whole suite (#434) ----
+def test_starttls_is_on_by_default_when_the_relay_config_does_not_mention_it(monkeypatch):
+    """A relay configured without an explicit TLS setting is still contacted over TLS, so a deployment
+    that simply does not set SMTP_STARTTLS never ships one-time codes and reset links in cleartext.
+
+    The sibling relay test passes `SMTP_STARTTLS: True` itself, so it asserts the value it just set and
+    can never see the DEFAULT change. Measured: flipping the default to False left the whole suite green
+    (1054 passed) — every OTP and reset link would have crossed the network unencrypted.
+    """
+    seen = {}
+    monkeypatch.setattr(email_mod.smtplib, "SMTP", _fake_smtp(seen))
+    ok = email_mod.send_email({"SMTP_HOST": "relay.test", "MAIL_FROM": "C <x@y.co>"},   # no SMTP_STARTTLS key
+                              "to@z.co", "Your code", "482913")
+    assert ok is True
+    assert seen.get("tls") is True, "TLS must be the default, not something a deployment has to remember"
+
+
+def test_the_debug_mock_never_reaches_the_relay(monkeypatch):
+    """The gated dev override logs the message instead of sending it, EVEN where a live relay is
+    configured — otherwise turning the debug tool on would mail real people from a real account.
+
+    Measured: ignoring `force_mock` left the whole suite green (1054 passed). Every existing mock-backend
+    test runs with no SMTP_HOST at all, where the log backend is taken anyway — so none of them could
+    tell whether the override does anything.
+    """
+    seen = {}
+    monkeypatch.setattr(email_mod.smtplib, "SMTP", _fake_smtp(seen))
+    ok = email_mod.send_email({"SMTP_HOST": "relay.test", "MAIL_FROM": "C <x@y.co>"},
+                              "to@z.co", "Your code", "482913", force_mock=True)
+    assert ok is True
+    assert seen == {}, f"force_mock must not open a connection to the relay, but reached it: {seen}"
+
+
+def test_a_live_send_does_not_block_the_caller(monkeypatch):
+    """A live send runs off the request thread, so the response time of a forgot-password request does
+    not reveal whether the address was registered.
+
+    That is the whole reason send_email_async exists. Measured: making it synchronous for the live-SMTP
+    path left the whole suite green (1054 passed) — the timing side channel would have been back, and
+    the existing async tests all run the log backend, which is synchronous BY DESIGN.
+    """
+    import threading
+    ran_on = {}
+    done = threading.Event()
+
+    def record(*a, **k):
+        ran_on["thread"] = threading.current_thread().name
+        done.set()
+        return True
+
+    monkeypatch.setattr(email_mod, "send_email", record)
+    assert email_mod.send_email_async({"SMTP_HOST": "relay.test"}, "to@z.co", "s", "b") is True
+    assert done.wait(5), "the queued send never ran"
+    assert ran_on["thread"] != threading.current_thread().name, "a live send must not run on the caller's thread"
+
+
+def test_a_sender_with_no_usable_bracket_pair_is_treated_as_a_bare_address(monkeypatch):
+    """A malformed sender with its brackets the wrong way round yields NO display name, so a fragment of
+    the raw configuration string can never end up presented as the sender's name.
+
+    The address half is already covered (it falls back to a safe one). The NAME half was not: measured,
+    dropping the `lt < gt` ordering check left the whole suite green (1054 passed), and under it this
+    input produces the name "a> b" out of what is simply a broken config value.
+    """
+    assert email_mod._split_sender("a> b <c") == ("", "a> b <c")
+    assert email_mod._split_sender("Coach <x@y.co>") == ("Coach", "x@y.co")   # the well-formed case still works
