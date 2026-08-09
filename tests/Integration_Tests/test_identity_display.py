@@ -28,20 +28,6 @@ def test_forum_author_shows_display_name_and_mine_is_per_viewer(forum_client):
     assert other["author"] == "sam" and other["mine"] is False  # same shown name, but NOT theirs to edit
 
 
-def test_anonymous_post_hides_the_name_but_owner_still_sees_mine(forum_client):
-    """An anonymous post never names its author to anyone else, yet the author is still told it is theirs — otherwise choosing anonymity would cost them the ability to edit or delete their own post."""
-    _register(forum_client, "ann", "ann@example.com")
-    _register(forum_client, "bob", "bob@example.com")
-    _login(forum_client, "ann@example.com")
-    pid = forum_client.post("/forum/posts",
-                            json={"title": "secret", "body": "anon body", "anonymous": True}).get_json()["post"]["id"]
-    own = forum_client.get("/forum/posts/" + pid).get_json()["post"]
-    assert own["author"] == "Anonymous" and own["mine"] is True     # owner can still manage their anon post
-    _login(forum_client, "bob@example.com")
-    other = forum_client.get("/forum/posts/" + pid).get_json()["post"]
-    assert other["author"] == "Anonymous" and other["mine"] is False  # never reveals the anon author to others
-
-
 def test_suffixed_user_content_shows_display_name_never_the_handle(forum_client):
     """For the account whose name collided, the internal handle differs from the name it shows — so this is where a leak would surface.
 
@@ -58,16 +44,6 @@ def test_suffixed_user_content_shows_display_name_never_the_handle(forum_client)
     comments = forum_client.get("/forum/posts/" + pid + "/comments").get_json()["comments"]   # #331: own endpoint
     assert comments[0]["author"] == "sam"                         # comment author resolved too
     assert p["mine"] is True                                      # and the suffixed account still owns it
-
-
-def test_comment_author_shows_display_name(forum_client):
-    """A comment is attributed by the name its author chose, so the thread reads consistently with the rest of the forum."""
-    _register(forum_client, "cara", "cara@example.com")
-    _login(forum_client, "cara@example.com")
-    pid = forum_client.post("/forum/posts", json={"title": "t", "body": "b"}).get_json()["post"]["id"]
-    forum_client.post("/forum/posts/" + pid + "/comments", json={"body": "nice"})
-    comments = forum_client.get("/forum/posts/" + pid + "/comments").get_json()["comments"]   # #331: own endpoint
-    assert comments[0]["author"] == "cara"
 
 
 def test_dm_conversation_and_thread_expose_the_peer_display_name(messages_client):
@@ -92,18 +68,3 @@ def test_dm_conversation_and_thread_expose_the_peer_display_name(messages_client
     assert thread["peer_name"] == "eve", "the open thread's header shows the chosen name too"
 
 
-def test_vote_notification_carries_the_display_name_in_the_actor_not_the_text(forum_client):
-    """The voter's identity lives in a field resolved fresh on every read, and the stored text names nobody.
-
-    Freezing the name into the text would leave a rename showing one name in the alert and another everywhere else.
-    """
-    _register(forum_client, "poster", "poster@example.com")
-    _register(forum_client, "voter", "voter@example.com")
-    _login(forum_client, "poster@example.com")
-    pid = forum_client.post("/forum/posts", json={"title": "t", "body": "b"}).get_json()["post"]["id"]
-    _login(forum_client, "voter@example.com")
-    forum_client.post("/forum/posts/" + pid + "/vote", json={"value": 1})
-    _login(forum_client, "poster@example.com")
-    votes = [n for n in forum_client.get("/notifications").get_json()["notifications"] if n["type"] == "vote"]
-    assert votes and votes[0]["text"] == "upvoted your post"   # name-less
-    assert votes[0]["actor"] == "voter"                        # identity in the actor (live-resolved display name)

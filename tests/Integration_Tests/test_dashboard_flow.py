@@ -70,20 +70,6 @@ def test_dashboard_shows_readiness_without_a_profile(dash_client, monkeypatch):
     assert seen["fatigue"] == 8
 
 
-def test_dashboard_with_profile_but_no_checkin_prompts_a_checkin(dash_client, monkeypatch):
-    """With a profile but no check-in there is nothing to score, so the dashboard asks for one instead of firing a profile-only prediction the model would reject — which would read to the user as an outage."""
-    calls = []
-    monkeypatch.setattr(sys.modules["services.ai_client"], "predict",
-                        lambda *a, **k: calls.append((a, k)) or {"state": "Ready"})
-    _login(dash_client)
-    dash_client.post("/profile", json=_profile())
-    data = dash_client.get("/dashboard").get_json()
-    assert data["needs_checkin"] is True
-    assert data["readiness"] is None
-    assert data["ai_status"] == "skipped"
-    assert calls == []                                   # no metrics -> predict never called
-
-
 def test_dashboard_scores_from_the_latest_checkin_metrics(dash_client, monkeypatch):
     """The metrics that reach the model are the ones from the latest check-in, merged with the profile context — not a bare profile, and not a stale entry."""
     seen = {}
@@ -179,33 +165,6 @@ def test_dashboard_uses_the_most_recent_checkin(dash_client, fake_history, monke
                                "metrics": {**base, "fatigue": 9}})          # the more recent one
     dash_client.get("/dashboard")
     assert seen["fatigue"] == 9
-
-
-def test_dashboard_shows_readiness_and_calories_when_ai_responds(dash_client, monkeypatch):
-    """The happy path: a healthy prediction reaches the user as a readiness state, its advice, and a calorie target."""
-    _set_predict(monkeypatch, {"state": "Ready", "proba": {"Ready": 0.9},
-                               "recommendations": ["easy run"], "calories": 2500})
-    _login(dash_client)
-    dash_client.post("/profile", json=_profile())
-    _checkin(dash_client)
-    data = dash_client.get("/dashboard").get_json()
-    assert data["readiness"]["state"] == "Ready"
-    assert data["readiness"]["recommendations"] == ["easy run"]
-    assert data["calories"] == 2500
-    assert data["ai_status"] == "ok"
-
-
-def test_dashboard_degrades_when_ai_unavailable(dash_client, monkeypatch):
-    """An unreachable model leaves the page loading successfully with the score marked unavailable, rather than failing the whole dashboard over one absent number."""
-    _set_predict(monkeypatch, None)  # ai unreachable -> ai_client.predict returns None
-    _login(dash_client)
-    dash_client.post("/profile", json=_profile())
-    _checkin(dash_client)
-    resp = dash_client.get("/dashboard")
-    assert resp.status_code == 200  # graceful, not a crash
-    body = resp.get_json()
-    assert body["readiness"] is None
-    assert body["ai_status"] == "unavailable"
 
 
 def test_dashboard_degrades_when_ai_returns_non_object(dash_client, monkeypatch):

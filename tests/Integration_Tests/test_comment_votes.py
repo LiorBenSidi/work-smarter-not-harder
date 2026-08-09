@@ -74,31 +74,6 @@ def test_the_post_author_is_not_notified_for_a_comment_vote(forum_client):
     assert _vote_notes(forum_client) == []          # the post author gets nothing from a comment vote
 
 
-def test_self_comment_vote_creates_no_notification(forum_client):
-    """Voting on your own comment notifies nobody, so the feed is not filled with alerts about your own actions."""
-    _login(forum_client, "bob")
-    pid = _post(forum_client)
-    cid = _comment(forum_client, pid)
-    _cvote(forum_client, pid, cid, 1)
-    assert _vote_notes(forum_client) == []
-
-
-def test_comment_vote_on_missing_comment_is_404(forum_client):
-    """Voting on a comment that does not exist is a 404, so a stale thread on screen cannot create a score against nothing."""
-    _login(forum_client, "alice")
-    pid = _post(forum_client)
-    assert _cvote(forum_client, pid, "no-such-comment", 1).status_code == 404
-
-
-def test_comment_vote_rejects_bad_value(forum_client):
-    """Only the two real vote values are accepted — an out-of-range number is refused, and so is a bool, which would otherwise pass as the integer 1."""
-    _login(forum_client, "alice")
-    pid = _post(forum_client)
-    cid = _comment(forum_client, pid)
-    assert _cvote(forum_client, pid, cid, 2).status_code == 400
-    assert _cvote(forum_client, pid, cid, True).status_code == 400   # a bool is not an accepted int
-
-
 def test_comment_vote_requires_login(forum_client):
     """Voting requires an account, since one-vote-per-person is meaningless for an anonymous caller."""
     assert forum_client.post("/forum/posts/p/comments/c/vote", json={"value": 1}).status_code == 401

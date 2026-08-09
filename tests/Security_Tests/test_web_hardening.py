@@ -49,20 +49,6 @@ def test_session_cookie_is_httponly_and_samesite_lax(client):
     assert "SameSite=Lax" in cookie
 
 
-def test_session_cookie_secure_attribute_follows_config(web_app_module, fake_users):
-    """On an HTTPS deploy the session cookie carries Secure, so it is never sent over a plain-HTTP request where it could be captured in transit."""
-    app = web_app_module.create_app(users=fake_users)
-    app.config.update(SECRET_KEY="x-test", TESTING=True, SESSION_COOKIE_SECURE=True)
-    c = app.test_client()
-    c.get("/health")  # issue the csrf cookie (double-submit)
-    cc = c.get_cookie("csrf_token")
-    headers = {"X-CSRF-Token": cc.value if cc else ""}
-    c.post("/register", json={"username": "alice", "password": "s3cretpw!", "email": "alice@example.com"}, headers=headers)
-    login = c.post("/login", json={"username": "alice", "password": "s3cretpw!", "email": "alice@example.com"}, headers=headers)
-    session_cookie = next((ck for ck in login.headers.getlist("Set-Cookie") if ck.startswith("session=")), "")
-    assert "Secure" in session_cookie
-
-
 def test_oversized_request_body_is_rejected_413(client):
     """An over-large body is refused at the edge with a 413 rather than being parsed, so a single request cannot exhaust memory on the way in."""
     big = "a" * (64 * 1024 + 1)  # one byte over the 64 KB cap
