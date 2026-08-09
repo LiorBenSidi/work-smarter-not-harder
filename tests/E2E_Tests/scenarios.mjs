@@ -265,9 +265,15 @@ export const SCENARIOS = [
       // make the next /dashboard fetch reject (a dropped request on the flaky prod host)
       await b.pageExec(`(() => { const real = window.fetch; window.__realFetch = real;
         window.fetch = (u, o) => (typeof u === "string" && u.indexOf("/dashboard") !== -1) ? Promise.reject(new Error("dropped")) : real(u, o); return true; })()`);
-      // trigger a dashboard reload (Refresh) and let it settle
+      // trigger a dashboard reload (Refresh) and wait for it to SETTLE, rather than for a fixed duration —
+      // same defect class as #475. The assertion below is "no spinner is left", so on a slow runner a fixed
+      // sleep would read a spinner that was still legitimately spinning and report a stuck UI that isn't.
       await b.pageExec(`(() => { const btn = document.getElementById("dashboard-refresh"); if (btn) btn.click(); return true; })()`);
-      await b.wait(1200);
+      for (let waited = 0; waited < 15000; waited += 300) {
+        const t = await b.text("#dashboard");
+        if (t && !/loading/i.test(t)) break;
+        await b.wait(300);
+      }
       await b.pageExec(`(() => { if (window.__realFetch) window.fetch = window.__realFetch; return true; })()`);
       const dash = await b.text("#dashboard");
       assert(dash && !/loading/i.test(dash), `dashboard stuck on a spinner after a dropped request: "${dash}"`);
@@ -647,11 +653,21 @@ export const SCENARIOS = [
       await pick("training_load", 8);
 
       await b.pageExec(`(() => { document.querySelector("#checkin-form").requestSubmit(); return true; })()`);
-      await b.wait(2500);                                          // the check-in round-trips through the ai container
-      const saved = await b.pageExec(`(async () => {
+      // The check-in round-trips web -> ai -> web -> db, so the thing to wait on is "it is stored", not a
+      // duration. A fixed 2500ms sleep here went red on a loaded CI runner (#475): history was still empty, and
+      // the scenario reported "got 0" for a check-in that was fine, only slower than the guess. Polling costs
+      // nothing on a fast runner — it exits the moment the entry lands — and the assertion stays `=== 1`, so a
+      // duplicate entry still fails exactly as before.
+      const readHistoryCount = `(async () => {
         const r = await fetch("/history", { headers: { "X-CSRF-Token": (document.cookie.match(/csrf_token=([^;]+)/)||[])[1] || "" } });
         return ((await r.json()).history || []).length;
-      })()`);
+      })()`;
+      let saved = 0;
+      for (let waited = 0; waited < 30000; waited += 400) {
+        saved = await b.pageExec(readHistoryCount);
+        if (saved >= 1) break;
+        await b.wait(400);
+      }
       assert(saved === 1, `expected exactly one stored check-in before opening it, got ${saved}`);
 
       await gotoScreen(b, "history");
