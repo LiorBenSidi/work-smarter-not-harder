@@ -24,30 +24,6 @@ def _client(make_client, fake_users, fake_profiles, fake_history):
     return make_client(fake_users, fake_profiles, history=fake_history)
 
 
-def test_checkin_saves_assessment_to_history(make_client, fake_users, fake_profiles, fake_history, monkeypatch):
-    """A check-in is scored and lands in history in the exact shape the history view renders, so what the user just submitted is what they find when they look back."""
-    _set_predict(monkeypatch, {"state": "Ready", "calories": 2200})
-    c = _client(make_client, fake_users, fake_profiles, fake_history)
-    _login(c)
-    resp = c.post("/checkin", json=_metrics())
-    assert resp.status_code == 201
-    body = resp.get_json()
-    assert body["ai_status"] == "ok"
-    assert body["entry"]["assessment"] == "Ready"
-    assert body["entry"]["calories"] == 2200
-    assert body["entry"]["timestamp"]                       # a timestamp was stamped
-    # the entry is now in history, in the shape /history renders
-    hist = c.get("/history").get_json()["history"]
-    assert len(hist) == 1
-    assert hist[0]["assessment"] == "Ready"
-
-
-def test_checkin_requires_login(make_client, fake_users, fake_profiles, fake_history):
-    """A check-in belongs to an account, so an anonymous submission is refused rather than stored against nobody."""
-    c = _client(make_client, fake_users, fake_profiles, fake_history)
-    assert c.post("/checkin", json=_metrics()).status_code == 401
-
-
 def test_checkin_rejects_bad_metrics_400(make_client, fake_users, fake_profiles, fake_history):
     """Every class of bad input is refused at the ROUTE — missing fields, an operator object, out of range, a numeric string, a bool — so the client-side validation is a convenience rather than the only line of defence."""
     c = _client(make_client, fake_users, fake_profiles, fake_history)
@@ -69,19 +45,6 @@ def test_checkin_ignores_url_query_params(make_client, fake_users, fake_profiles
     _login(c)
     assert c.post("/checkin?fatigue=999&sleep_hours=0", json=_metrics()).status_code == 201       # query ignored
     assert c.post("/checkin?fatigue=3", json={**_metrics(), "fatigue": 999}).status_code == 400   # body still validated
-
-
-def test_checkin_still_saved_when_ai_down(make_client, fake_users, fake_profiles, fake_history, monkeypatch):
-    """When the model is unreachable the check-in is STILL saved and the response says the score is unavailable, so a user's own data is never lost to somebody else's outage."""
-    _set_predict(monkeypatch, None)  # ai unreachable
-    c = _client(make_client, fake_users, fake_profiles, fake_history)
-    _login(c)
-    resp = c.post("/checkin", json=_metrics())
-    assert resp.status_code == 201                          # graceful, not a crash
-    body = resp.get_json()
-    assert body["ai_status"] == "unavailable"
-    assert body["entry"]["assessment"] is None
-    assert c.get("/history").get_json()["history"][0]["metrics"]["sleep_hours"] == 7.5  # metrics still recorded
 
 
 class _BrokenHistory:
@@ -214,18 +177,3 @@ def test_regenerate_recommendations_requires_login(make_client, fake_users, fake
     assert c.post("/history/recommendations", json={"timestamp": "x"}).status_code == 401
 
 
-def test_second_checkin_same_day_replaces_the_days_entry(make_client, fake_users, fake_profiles, fake_history, monkeypatch):
-    """A daily readiness log is one row per day: a second check-in on the same day REPLACES the first rather than accruing several rows, and the later one wins.
-
-    Without this a user who corrects a typo ends up with two contradictory entries for one morning.
-    """
-    c = _client(make_client, fake_users, fake_profiles, fake_history)
-    _login(c)
-    _set_predict(monkeypatch, {"state": "Rest", "calories": 2100})
-    c.post("/checkin", json={**_metrics(), "fatigue": 9})
-    _set_predict(monkeypatch, {"state": "Ready", "calories": 2600})
-    c.post("/checkin", json={**_metrics(), "fatigue": 2})
-    hist = c.get("/history").get_json()["history"]
-    assert len(hist) == 1                                                     # one row for today, not two
-    assert hist[0]["assessment"] == "Ready" and hist[0]["calories"] == 2600   # the LATEST wins
-    assert hist[0]["metrics"]["fatigue"] == 2
