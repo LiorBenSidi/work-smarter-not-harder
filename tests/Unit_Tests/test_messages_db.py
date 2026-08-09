@@ -161,7 +161,13 @@ def test_mark_read_clears_only_the_recipients_side(db_mod, db):
     db_mod.message_send(db, "alice", "bob", "yo")
     db_mod.message_mark_read(db, "bob", "alice")
     assert db_mod.message_list_conversations(db, "bob")[0]["unread"] == 0
-    assert db_mod.message_list_conversation(db, "alice", "bob")[0]["read"] is True
+    msg = db_mod.message_list_conversation(db, "alice", "bob")[0]
+    assert msg["read"] is True
+    # Read implies delivered, at the REAL store. A message opened straight from a notification never
+    # passes through the inbox load that sets `delivered`, so if this store stopped setting it here the
+    # sender would watch a read message show a single tick forever. Nothing else pinned it: dropping
+    # `"delivered": True` from message_mark_read left the whole suite green (measured: 1082 passed).
+    assert msg["delivered"] is True
 
 
 def test_count_since_counts_only_the_sender_after_the_cutoff(db_mod, db):
@@ -181,6 +187,22 @@ def test_notification_add_list_newest_first_and_mark_read(db_mod, db):
     assert [n["text"] for n in items] == ["from carol", "from alice"]     # newest first
     db_mod.notification_mark_read(db, "bob")
     assert all(n["read"] for n in db_mod.notification_list(db, "bob"))
+
+
+def test_notification_mark_read_with_an_empty_id_list_clears_nothing(db_mod, db):
+    """Asking to clear an EMPTY set of notifications must clear none of them — "these zero" is not "all of them".
+
+    The distinction is `ids is not None` rather than a truthiness test: `[]` is falsy, so a plain `if ids`
+    treats "clear these zero notifications" as "clear everything" and silently wipes the user's unread
+    badge. The route already refuses a non-list, so `[]` is a value that genuinely reaches this store.
+    Measured before adding this: making that exact substitution left the whole suite green (1082 passed),
+    because the only test of the empty-list rule pinned the in-memory fake in conftest, not the store.
+    """
+    db_mod.notification_add(db, "bob", "dm", "alice", "alice", "from alice")
+    db_mod.notification_add(db, "bob", "dm", "carol", "carol", "from carol")
+    db_mod.notification_mark_read(db, "bob", [])
+    assert not any(n["read"] for n in db_mod.notification_list(db, "bob")), \
+        "an empty id list must be a no-op, not a clear-everything"
 
 
 def test_notification_since_returns_only_newer(db_mod, db):
