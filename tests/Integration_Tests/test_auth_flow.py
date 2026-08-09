@@ -36,42 +36,15 @@ def test_auth_config_follows_a_bound_change(client, auth_module, monkeypatch):
     assert client.get("/auth/config").get_json()["password_max"] == 999
 
 
-def test_register_returns_201(client):
-    """Registration succeeds and answers with the account that was created, so the client knows which identity it now holds."""
-    resp = _register(client)
-    assert resp.status_code == 201
-    assert resp.get_json()["username"] == "alice"
-
-
-def test_login_with_valid_credentials_returns_200(client):
-    """Correct credentials sign the user in and name the account they landed on."""
-    _register(client)
-    resp = _login(client)
-    assert resp.status_code == 200
-    assert resp.get_json()["username"] == "alice"
-
-
-def test_login_before_register_returns_401(client):
-    """Signing in as an account that does not exist is refused rather than creating one on the fly."""
-    assert _login(client).status_code == 401
-
-
-def test_full_flow_register_login_me(client):
-    """The three steps compose: an account registered and signed in can then read its own session-gated identity."""
-    _register(client)
-    _login(client)
-    resp = client.get("/me")
-    assert resp.status_code == 200
-    assert resp.get_json()["username"] == "alice"
-
-
-def test_logout_clears_session(client):
-    """Logging out genuinely ends the session — the gated route that answered a moment ago now refuses, so a shared machine does not leak the account."""
-    _register(client)
-    _login(client)
-    assert client.get("/me").status_code == 200
-    assert client.post("/logout").status_code == 200
-    assert client.get("/me").status_code == 401
+# (The happy-path round trips that used to open this file — register 201, login 200, register->login->/me,
+#  logout ends the session, and "login before register is 401" — were each removed after measuring that
+#  the behaviour they pinned is caught by NAMED tests elsewhere. Returning 200 from /register fails 15
+#  tests across five files; renaming the account in the /login body fails
+#  test_collided_name_account_signs_in_by_email_to_the_right_account; a /logout that does not clear the
+#  session fails test_parts_in_isolation.py::test_auth_works_with_only_the_user_store and
+#  test_elad_lane_journey.py::test_the_lane_is_fully_auth_gated_when_the_session_ends; and answering 200
+#  to an unknown user fails test_auth.py::test_unknown_user_and_wrong_password_are_indistinguishable.
+#  What remains here is what only this file proves.)
 
 
 def test_login_replaces_the_whole_session_rather_than_adding_to_it(client):
@@ -99,15 +72,25 @@ def test_logout_without_login_is_idempotent(client):
     assert client.post("/logout").status_code == 200
 
 
-def test_get_on_post_only_route_is_405(client):
-    """A write-only route refuses a plain GET, so credentials can never be submitted as a URL that lands in history and logs."""
-    assert client.get("/login").status_code == 405
+# (GET /login -> 405 is proven by test_error_handlers.py::test_wrong_method_returns_json_405, which
+#  makes the same request against the same route and additionally pins the JSON shape of the reply.
+#  Measured: opening /login to GET fails both, so this file's copy added nothing.)
 
 
-def test_usernames_are_case_sensitive(client):
-    """Distinct capitalisation makes distinct accounts — the documented behaviour — and each needs its own email, since email is unique per account and case-variant addresses would collide."""
-    assert _register(client, "alice", "s3cretpw!", email="alice@example.com").status_code == 201
-    assert _register(client, "Alice", "s3cretpw!", email="alice2@example.com").status_code == 201
+def test_the_handle_keeps_the_capitalisation_the_user_typed(client):
+    """Two people who type the same name with different capitalisation each keep the case they chose, so
+    a handle is never quietly folded into somebody else's.
+
+    Asserting only that both registrations return 201 — which is what this test used to do — proves
+    nothing about capitalisation: the two accounts have different emails, so they both succeed either
+    way. Measured: lower-casing the display name before allocating the handle left the whole suite green
+    (1074 passed), and under it the second account's handle comes back "alice-2" instead of "Alice".
+    The exact handles are what has to be pinned.
+    """
+    first = _register(client, "alice", "s3cretpw!", email="alice@example.com")
+    second = _register(client, "Alice", "s3cretpw!", email="alice2@example.com")
+    assert first.get_json()["username"] == "alice"
+    assert second.get_json()["username"] == "Alice", "the handle must keep the case the user typed"
 
 
 def test_register_rejects_a_duplicate_email(client):
@@ -156,11 +139,11 @@ def test_handle_gets_a_suffix_on_display_name_collision(client):
     assert _register(client, "sam", email="s3@example.com").get_json()["username"] == "sam-3"
 
 
-def test_me_exposes_the_display_name(client):
-    """The session endpoint returns the name the user chose, which is what the interface greets them with — not the internal handle they never picked."""
-    _register(client, "alex", email="alex@example.com")
-    _login(client, "alex")
-    assert client.get("/me").get_json()["display_name"] == "alex"
+# (test_me_exposes_the_display_name was removed: its account was registered as "alex", so its handle and
+#  its display name were the SAME string and the assertion held even when /me returned the raw handle —
+#  measured, it did not fail its own mutation. The property is proven by
+#  test_account_editing.py::test_change_display_name_updates_shown_name_but_not_the_handle, where the two
+#  deliberately differ.)
 
 
 def test_me_returns_only_the_three_public_session_fields(client):

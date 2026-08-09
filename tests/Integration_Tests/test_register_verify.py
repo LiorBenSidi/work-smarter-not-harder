@@ -110,14 +110,11 @@ def test_register_equalizes_kdf_work_on_duplicate_email(make_otp_client, fake_us
     assert dup_kdf == fresh_kdf >= 2, f"duplicate branch does unequal KDF work: dup={dup_kdf} fresh={fresh_kdf}"
 
 
-def test_register_duplicate_still_409_when_verification_is_off(client, fake_users):
-    """With verification off there is no cover story to hide behind, so a duplicate is reported plainly.
-
-    That path is for development and tests; production runs with verification on, where the enumeration-safe behaviour above applies.
-    """
-    fake_users.add("existing", "hash", email="taken@example.com")
-    assert client.post("/register", json={"username": "Bob", "password": PW, "email": "taken@example.com"}
-                       ).status_code == 409
+# (The verification-OFF duplicate -> 409 path was proven here a third time. Measured: deleting that gate
+#  also fails test_auth_flow.py::test_register_rejects_a_duplicate_email — which additionally pins the
+#  case/whitespace-insensitive match — and test_auth_negative.py::test_register_refuses_a_duplicate_email.
+#  What this file uniquely proves is the verification-ON behaviour above, where a duplicate must be
+#  INDISTINGUISHABLE from a fresh address.)
 
 
 def test_register_verify_locks_out_after_max_attempts(verify_client):
