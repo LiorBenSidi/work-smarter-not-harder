@@ -152,6 +152,22 @@ def test_me_exposes_the_display_name(client):
     assert client.get("/me").get_json()["display_name"] == "alex"
 
 
+def test_me_returns_only_the_three_public_session_fields(client):
+    """/me answers with exactly username, display_name and email_consent — an allowlist, so a field added to the user record can never ride along to the browser.
+
+    Every other test of this route reads a single key, which means none of them can notice an EXTRA
+    key appearing. Measured before adding this: appending the caller's own `password_hash` to the /me
+    payload left the whole suite green (1082 passed). The sibling routes were already guarded —
+    /users/search by test_messages.py::test_user_search_returns_no_pii, and the post detail by the
+    like/dislike tallies test — so this was a hole specific to /me.
+    """
+    _register(client, "alex", email="alex@example.com")
+    _login(client, "alex")
+    body = client.get("/me").get_json()
+    assert set(body) == {"username", "display_name", "email_consent"}, \
+        f"/me must return exactly the three public fields, got {sorted(body)}"
+
+
 def test_collided_name_account_signs_in_by_email_to_the_right_account(client):
     """A user whose name collided has an internal handle they never see, so they sign in by EMAIL — and must land on THEIR account, not on the first person who took the name."""
     _register(client, "sam", email="sam1@example.com")

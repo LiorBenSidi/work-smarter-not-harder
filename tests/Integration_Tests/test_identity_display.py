@@ -71,15 +71,25 @@ def test_comment_author_shows_display_name(forum_client):
 
 
 def test_dm_conversation_and_thread_expose_the_peer_display_name(messages_client):
-    """A conversation carries both the stable handle it is keyed by and the name to show, so the interface can label the thread without guessing at an identifier the user never chose."""
+    """A conversation carries both the stable handle it is keyed by and the name to show, so the interface can label the thread without guessing at an identifier the user never chose.
+
+    The peer is a COLLIDED account, whose handle ("eve-2") differs from the name it shows ("eve").
+    That distinction is the whole point: the earlier version of this test used a peer whose handle and
+    display name were the identical string, so dropping the display-name resolution changed nothing and
+    it passed either way. Measured with the peer un-suffixed: returning the raw handle as `peer_name`
+    on the thread left the whole suite green (1084 passed).
+    """
     _register(messages_client, "dan", "dan@example.com")
-    _register(messages_client, "eve", "eve@example.com")
+    _register(messages_client, "eve", "eve1@example.com")                                  # handle "eve"
+    handle = _register(messages_client, "eve", "eve2@example.com").get_json()["username"]   # handle "eve-2"
+    assert handle == "eve-2", "the collided account must get a suffixed handle for this test to mean anything"
     _login(messages_client, "dan@example.com")
-    messages_client.post("/messages", json={"to": "eve", "body": "hey eve"})
+    messages_client.post("/messages", json={"to": handle, "body": "hey eve"})
     convo = messages_client.get("/conversations").get_json()["conversations"][0]
-    assert convo["peer"] == "eve" and convo["peer_name"] == "eve"   # peer stays the handle; peer_name is shown
-    thread = messages_client.get("/conversations/eve").get_json()
-    assert thread["peer_name"] == "eve"
+    assert convo["peer"] == handle, "the conversation stays keyed by the stable handle"
+    assert convo["peer_name"] == "eve", "the inbox shows the chosen name, never the internal handle"
+    thread = messages_client.get("/conversations/" + handle).get_json()
+    assert thread["peer_name"] == "eve", "the open thread's header shows the chosen name too"
 
 
 def test_vote_notification_carries_the_display_name_in_the_actor_not_the_text(forum_client):

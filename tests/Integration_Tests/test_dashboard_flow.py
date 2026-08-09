@@ -89,6 +89,12 @@ def test_dashboard_scores_from_the_latest_checkin_metrics(dash_client, monkeypat
     seen = {}
 
     def capture(url, features, **kw):
+        # clear() FIRST: this test POSTs a check-in before reading the dashboard, and the check-in
+        # calls predict too. Without the reset, `seen` still held the CHECK-IN's payload, so every
+        # assertion below passed no matter what the dashboard sent. Measured: dropping the profile
+        # from the dashboard's payload entirely left the whole suite green (1084 passed) while this
+        # test still asserted seen["goal"] == "maintain". Now it holds only the LAST call's features.
+        seen.clear()
         seen.update(features)
         return {"state": "Ready", "proba": {"Ready": 0.9}, "recommendations": ["easy run"], "calories": 2500}
 

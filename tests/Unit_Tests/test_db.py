@@ -623,10 +623,20 @@ def test_forum_update_missing_post_is_none(db_mod, db):
 
 
 def test_forum_delete_post_by_author(db_mod, db):
-    """An author can delete their own post, and it is genuinely gone afterwards rather than merely hidden."""
+    """An author can delete their own post, and both the post and its comments are genuinely gone afterwards rather than merely hidden.
+
+    The comment cascade is asserted here because nothing else in the repo covered it: removing
+    `db.forum_comments.delete_many({"post_id": post_id})` from forum_delete_post left the whole suite
+    green (measured, 1082 passed). The HTTP-layer tests cannot catch it either — conftest's in-memory
+    FakeForum.delete_post performs its own cascade, so the fake is more correct than the code under
+    test. Orphaned comments would persist forever, still feeding the engagement metric and appearing
+    in a user's export with no post title.
+    """
     pid = db_mod.forum_create_post(db, "alice", "T", "b", False)["id"]
+    db_mod.forum_add_comment(db, pid, "bob", "a comment that must not outlive its post")
     assert db_mod.forum_delete_post(db, pid, "alice") is True
     assert db_mod.forum_get_post(db, pid) is None  # gone
+    assert db_mod.forum_list_comments(db, pid) == [], "deleting a post must delete its comments too"
 
 
 def test_forum_delete_post_by_non_author_is_forbidden(db_mod, db):

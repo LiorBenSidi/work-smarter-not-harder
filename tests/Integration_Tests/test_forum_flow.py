@@ -1,4 +1,5 @@
 """Integration tests for the Forum CRUD (posts / comments / votes). OWNER: Lior."""
+import pytest
 
 
 def _login(c, username="alice"):
@@ -56,13 +57,37 @@ def test_forum_feed_last_page_has_no_next_cursor(forum_client):
     assert data["next_before"] is None
 
 
-def test_forum_feed_ignores_a_garbage_before_cursor(forum_client):
-    """A non-numeric cursor falls back to the newest page — never a 500, and never an unbounded scan someone could trigger by hand."""
+@pytest.mark.parametrize("cursor", ["not-a-number", "nan", "inf", "-inf"])
+def test_forum_feed_ignores_a_garbage_before_cursor(forum_client, cursor):
+    """A garbage cursor falls back to the newest page — never a 500, and never an unbounded scan someone could trigger by hand.
+
+    The two kinds of garbage take DIFFERENT paths, and only one of them reaches the route's guard.
+    `not-a-number` never gets there: Flask's `type=float` swallows the parse error and hands the route
+    `None`. `nan` / `inf` DO parse — `float("nan")` is a perfectly valid float — so they are the only
+    inputs that exercise the `math.isfinite` check, and a nan cursor reaching the store is exactly what
+    would turn a paged read into a scan. Measured before adding them: deleting that guard entirely left
+    the whole suite green (1084 passed), because `not-a-number` was the only case anyone ever sent.
+    """
     _login(forum_client)
     _new_post(forum_client, "hi", "b")
-    resp = forum_client.get("/forum/posts?before=not-a-number")
+    resp = forum_client.get("/forum/posts?before=" + cursor)
     assert resp.status_code == 200
     assert [p["title"] for p in resp.get_json()["posts"]] == ["hi"]
+
+
+def test_forum_feed_reports_each_posts_comment_count(forum_client):
+    """Every row in the feed carries how many comments its post has, which is what the list shows under each title.
+
+    Nothing asserted it: hard-coding the feed's `comments` field to 0 left the whole suite green
+    (measured, 1084 passed). The detail view's comment LIST is well covered, but the feed's COUNT is a
+    different field with its own fallback, and no test read it.
+    """
+    _login(forum_client)
+    pid = _new_post(forum_client, "counted", "b").get_json()["post"]["id"]
+    for body in ("one", "two", "three"):
+        forum_client.post("/forum/posts/" + pid + "/comments", json={"body": body})
+    row = next(p for p in forum_client.get("/forum/posts").get_json()["posts"] if p["id"] == pid)
+    assert row["comments"] == 3, f"the feed must report the post's comment count, got {row['comments']}"
 
 
 def test_get_post_with_its_comments(forum_client):
