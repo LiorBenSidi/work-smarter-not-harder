@@ -127,3 +127,28 @@ def test_compose_forwards_every_auth_email_knob():
              "OTP_MAX_ATTEMPTS", "REGISTER_VERIFY_EMAIL", "REMEMBER_COOKIE_MAX_AGE")
     missing = [k for k in knobs if "${" + k not in compose]
     assert not missing, f"config.py reads these but docker-compose.yml doesn't pass them through: {missing}"
+
+
+# The three below are the DEFAULTS, not the values any given test runs with. Every functional test of
+# the OTP flow builds its client with `make_otp_client(..., OTP_TTL_SECONDS=600, OTP_MAX_ATTEMPTS=5)` —
+# it sets the number it then relies on, so it can never notice the default changing underneath it. That
+# is why each of these mutations left the whole suite green (measured, 1062 passed), and it is the same
+# shape as the SMTP_STARTTLS default that shipped one-time codes in cleartext.
+@pytest.mark.parametrize("name,expected,why", [
+    ("OTP_TTL_SECONDS", 600,
+     "a login code valid for a day instead of ten minutes is an intercepted code that still works tomorrow"),
+    ("OTP_MAX_ATTEMPTS", 5,
+     "a six-digit code with no practical attempt cap is a code that can simply be guessed"),
+    ("REMEMBER_COOKIE_MAX_AGE", 30 * 24 * 3600,
+     "a trusted-browser cookie that effectively never expires keeps skipping verification forever"),
+])
+def test_the_security_relevant_defaults_are_the_documented_ones(cfg, name, expected, why):
+    """Each of these is the value the app ships with when the deployment says nothing — and each is the
+    only thing standing between a configured environment and a much weaker one.
+
+    Pinning a constant is usually a weak test. It earns its place here for the same reason
+    test_reset_token_window_is_ten_minutes does: nothing else reads the DEFAULT. Its sibling
+    RESET_TOKEN_MAX_AGE is documented as "matches the OTP window" and IS pinned; the OTP window itself
+    was not — the same rule enforced in two places with an alarm on only one.
+    """
+    assert getattr(cfg.Config, name) == expected, why
