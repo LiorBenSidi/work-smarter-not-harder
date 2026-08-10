@@ -111,9 +111,19 @@ def test_delete_requires_authentication(full_client):
     assert r.status_code == 401
 
 
-def test_delete_ends_the_session(full_client):
-    """Deletion ends the session immediately, so the browser is not left holding a session for an account that no longer exists."""
+def test_delete_ends_the_session_and_drops_the_remember_cookie(full_client):
+    """Deletion clears BOTH pieces of state the browser is holding — the session and the "remember this
+    browser" cookie — so nothing about the deleted account is left behind on the machine.
+
+    The session half was already covered. The cookie half was not: measured, removing the
+    delete_cookie call left the whole suite green (1060 passed). Its twin on the password-change route
+    IS covered (test_change_password_clears_this_browsers_remember_cookie), so this was an asymmetry
+    rather than a deliberate omission.
+    """
     _register_login(full_client, "alice")
     assert full_client.get("/me").status_code == 200
-    full_client.delete("/account", json={"password": "password123"})
+    resp = full_client.delete("/account", json={"password": "password123"})
     assert full_client.get("/me").status_code == 401                # session cleared
+    assert "remember_token=;" in resp.headers.get("Set-Cookie", "") or \
+           "remember_token=\"\"" in resp.headers.get("Set-Cookie", ""), \
+        f"deletion must expire the remember cookie, got {resp.headers.get('Set-Cookie')!r}"
