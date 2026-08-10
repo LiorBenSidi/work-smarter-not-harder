@@ -395,6 +395,20 @@ Naming these is part of the assessment; an unlisted risk is an unnoticed one.
   The residual risk is stated rather than hidden: **a front-end regression only the browser job can see would
   reach prod.** Evidence and reasoning: [`CICD_REPORT.md`](CICD_REPORT.md) § Evidence.
 
+* **A deploy drops the requests in flight.** `docker compose up -d` stops the old `web` container and starts
+  the new one with no draining and no rolling restart, so for the moment of the swap Caddy has no upstream and
+  answers **502**. Measured server-side rather than assumed: **every one of the 25 502s in three weeks of Caddy
+  logs** is `connection refused` (or a Docker DNS miss) on `web:5000`, and the four from one day land 4m56s–5m25s
+  after their deploy started — exactly the build → push → swap time. Worth recording the wrong guess too: the
+  long-lived `/events` SSE stream is *not* the victim; its log lines are `aborting with incomplete response`
+  **warnings**, which is just a stream ending. The 502s are on `/notifications`, the short poll, simply because it
+  is the request most likely to be in flight. Zero downtime here would need a second `web` replica plus a
+  health-gated Caddy upstream — real changes to a single-VM topology, for a fault that is self-healing: the
+  post-deploy `curl --fail --retry 15 /ready` has passed on its **first** attempt every time, and the client
+  retries on its next tick. The residual risk, stated plainly: **anyone using the app during a merge to `main`
+  may see one failed request — including a reviewer.** The mitigation is procedural and already in
+  [`DEMO_DAY_CHECKLIST.md`](../presentation/DEMO_DAY_CHECKLIST.md) — freeze deploys while demoing. Detail: #462.
+
 ### 5.6 How the mitigations are kept honest
 
 Two habits, both visible in the test suite:
@@ -459,6 +473,15 @@ branch-protected and merges only on green CI.
   same bundle; the `/predict` contract shapes were pinned all along)*.
 - **Deploy ordering** and the **forum real-time transport** *(both SETTLED — live on Azure over HTTPS since
   8 Jul with redeploy-on-merge, and the real-time layer shipped as SSE (`/events`, `event: forum`) — ✅ in §2)*.
+- **No screen-switch cross-fade on iOS Safari** — a deliberate platform difference, not an oversight, and it
+  stays. WebKit does not keep a live backdrop for an element captured into a view transition, so the floating
+  nav's `backdrop-filter` had nothing to sample and the pill went opaque for the length of the animation.
+  Measured on an iPhone 16e (iOS 26.2) from a 30 fps recording of the real 0.3 s switch, peak change in the
+  pill (lower is better): **21.1** with the bug · **22.7** with the glass removed entirely · **22.9** with a
+  `view-transition-name` on the nav — i.e. no better than having no glass at all · **8.8** opting the document
+  out of the transition, which is what shipped (#469), and **11.6** on a real tap afterwards, the residue being
+  the tab highlight moving. Every other browser keeps the cross-fade. Restoring it on iOS means giving up the
+  nav material there, which is the more visible of the two.
 
 ---
 
