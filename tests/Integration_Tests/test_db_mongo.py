@@ -176,6 +176,30 @@ def test_forum_crud_and_problematic_username_vote(db_mod, real_db):
     assert db_mod.forum_vote_comment(real_db, pid, cid, "bob.smith", -1) == 0  # same user replaces
 
 
+def test_a_dollar_prefixed_handle_is_stored_as_data_not_an_aggregation_field_path(db_mod, real_db):
+    """A handle beginning with "$" votes like anybody else: the vote is stored against THAT user, and
+    voting again replaces it rather than stacking a second one.
+
+    Inside the server-side pipeline a bare string starting with "$" is a FIELD PATH, not a value — which
+    is why both the stored user and the filter comparison wrap it in $literal. The sibling test already
+    votes once as "$admin", but it only reads the resulting SCORE, and the score comes out right either
+    way: two vote entries total two points whether or not the second one remembers whose it is.
+
+    Measured, each of these left the whole suite green (1085 passed with a real Mongo):
+      - dropping $literal on the STORED user: "$admin" resolves to a missing field, so the key is omitted
+        entirely and the vote is filed against nobody;
+      - dropping $literal on the FILTER comparison: the prior vote is never matched, so re-voting ADDS a
+        second vote from the same person instead of replacing the first.
+    """
+    pid = db_mod.forum_create_post(real_db, "alice", "T", "B", False)["id"]
+    assert db_mod.forum_vote(real_db, pid, "$admin", 1) == 1
+    stored = real_db.forum_posts.find_one({"id": pid})["votes"]
+    assert [v.get("user") for v in stored] == ["$admin"], \
+        f"the vote must be filed against the handle that cast it, got {stored}"
+    assert db_mod.forum_vote(real_db, pid, "$admin", -1) == -1, "re-voting must REPLACE, not add a second vote"
+    assert len(real_db.forum_posts.find_one({"id": pid})["votes"]) == 1
+
+
 def test_forum_vote_behaviour_against_mongo(db_mod, real_db):
     """All of vote behaviour lives in a server-side pipeline the in-memory fake cannot execute, so it is pinned here: one vote per person, re-voting replaces, different people aggregate, and an unknown post or comment changes nothing."""
     pid = db_mod.forum_create_post(real_db, "alice", "T", "B", False)["id"]
