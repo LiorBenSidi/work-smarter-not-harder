@@ -14,12 +14,14 @@ def ai_client(web_app_module):
 
 
 class _Resp:
-    def __init__(self, payload, raise_json=False):
+    def __init__(self, payload, raise_json=False, status_error=None):
         self._payload = payload
         self._raise_json = raise_json
+        self._status_error = status_error      # set to simulate a 4xx/5xx from the ai container
 
     def raise_for_status(self):
-        pass
+        if self._status_error is not None:
+            raise self._status_error
 
     def json(self):
         if self._raise_json:
@@ -76,4 +78,19 @@ def test_predict_returns_none_on_network_error(ai_client, monkeypatch):
 def test_predict_returns_none_on_bad_json(ai_client, monkeypatch):
     """A 200 carrying an unparseable body is treated as a failure like any other — a malformed reply must not be mistaken for a real prediction."""
     monkeypatch.setattr(ai_client.requests, "post", lambda *a, **k: _Resp(None, raise_json=True))
+    assert ai_client.predict("http://ai:5000", {"x": 1}) is None
+
+
+def test_predict_returns_none_when_the_ai_answers_with_an_error_status(ai_client, monkeypatch):
+    """A 5xx from the ai container is a failure, not a prediction — so the caller degrades instead of
+    handing an error body to the dashboard as if it were a readiness score.
+
+    Every other failure test here raises BEFORE a response exists (a network error) or breaks the body
+    (unparseable JSON). None of them produced a real response carrying a bad STATUS, because the fake's
+    raise_for_status was a no-op — so deleting the raise_for_status call from predict() left the whole
+    suite green (measured, 1061 passed) and an error page would have been parsed as a result.
+    """
+    err = ai_client.requests.HTTPError("500 Server Error")
+    monkeypatch.setattr(ai_client.requests, "post",
+                        lambda *a, **k: _Resp({"detail": "model failed to load"}, status_error=err))
     assert ai_client.predict("http://ai:5000", {"x": 1}) is None

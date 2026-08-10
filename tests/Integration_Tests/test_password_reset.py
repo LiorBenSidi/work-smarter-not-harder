@@ -124,11 +124,25 @@ def test_forgot_password_fails_closed_in_production_posture(client):
 
 
 def test_deeply_nested_json_is_400_not_500(client):
-    """A deeply nested body overflows the JSON parser, and that is malformed input from the caller — a 400 — not a server fault that should surface as a 500 and page whoever is on call."""
+    """A deeply nested body overflows the JSON parser, and that is malformed input from the caller — a
+    400 — not a server fault that should surface as a 500 and page whoever is on call.
+
+    The DEPTH and the MESSAGE are both load-bearing, and neither used to be. At the old depth of 6000
+    the parser did not overflow at all: the body parsed into a list, the register route rejected it as
+    "expected a JSON object with username and password", and the test got its 400 from ordinary
+    validation while claiming to prove the recursion handler. Measured: changing that handler to return
+    500 left the whole suite green.
+
+    The working window is narrow — deep enough to overflow the parser, small enough to stay under the
+    64 KB body cap, which answers 413 instead. 20000 sits inside it, and the message assertion is what
+    ties this test to the handler it names.
+    """
     client.raw.application.config["PROPAGATE_EXCEPTIONS"] = False   # let the app error handler run, as in prod
-    depth = 6000
+    depth = 20000                                                   # ~40 KB: overflows the parser, under the cap
     resp = client.post("/register", data="[" * depth + "]" * depth, content_type="application/json")
     assert resp.status_code == 400
+    assert "too deeply nested" in resp.get_json()["error"], \
+        f"the 400 must come from the recursion handler, got {resp.get_json()!r}"
 
 
 def test_reset_token_window_is_ten_minutes():
