@@ -725,6 +725,20 @@ export const SCENARIOS = [
       }
       await b.pageExec(`(() => { document.querySelector("#checkin-form").requestSubmit(); return true; })()`);
 
+      // Wait for the SERVER-side fact before looking at the card. The submit round-trips through the ai
+      // container and a loaded CI runner has taken past 45s at it — at which point the run failed while
+      // reporting `scoredOrb: true` and a perfectly correct card, i.e. the card was right and the test
+      // was simply racing it. Racing a remote round trip from the UI is the #475/#476 mistake; poll the
+      // stored entry instead, then give the paint a short bound of its own.
+      for (let waited = 0; waited < 90000; waited += 500) {
+        const stored = await b.pageExec(`(async () => {
+          const r = await fetch("/history", { headers: { "X-CSRF-Token": (document.cookie.match(/csrf_token=([^;]+)/)||[])[1] || "" } });
+          return ((await r.json()).history || []).length;
+        })()`);
+        if (Number(stored) >= 1) break;
+        await b.wait(500);
+      }
+
       // The check-in round-trips through the ai container, and a shared CI runner takes several times
       // longer at it than a local machine — so wait for the card to actually paint rather than for a
       // fixed number of milliseconds. Until it does, `#dashboard` holds the skeleton, whose textContent
@@ -737,7 +751,7 @@ export const SCENARIOS = [
       // what it was still waiting for, so the next occurrence is diagnosable instead of a bare empty
       // string: whether the card painted at all, whether the placeholder orb is showing, and whether the
       // page is displaying an error. That distinguishes "slow" from "the check-in actually failed".
-      const cardText = async (timeout = 45000) => {
+      const cardText = async (timeout = 20000) => {   // server work already finished above; this is paint only
         for (let waited = 0; waited < timeout; waited += 400) {
           if (await b.exists('#dashboard .readiness .orb[role="img"]')) return await b.text("#dashboard");
           await b.wait(400);
