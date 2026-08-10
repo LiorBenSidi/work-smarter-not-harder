@@ -148,7 +148,7 @@ not a per-line credit — see §6.
 | F5 — Workout generator | ⬜ **required, not yet built** — the engine advises on an existing program but does not *generate* a plan (goal + days + equipment + split → plan from the program catalog). No swap (TA-confirmed); Shiri to build. | ai |
 | F6 — Program-balance analysis (push/pull volume, merged into F7) | 🟡 built in `_program_recommendations` (the F6→F7 merge is settled in the v2 proposal — not pending); one gap: no `program` input feeds it yet (#276 P7), which F5 supplies | ai |
 | F7 — Action plan / recommendations — **web surfaces the list**; **engine** | ✅ | web ✅ · ai ✅ (`generate_recommendations`) |
-| F8 — Dashboard | ✅ | web |
+| F8 — Dashboard | 🟡 current state ✅ · calories ✅ · progress history ✅ — but **not the active workout plan**, which the v2 proposal §7 also lists. Blocked on F5: there is no plan to display yet. Tracked in #410; the response contract is the piece that can be agreed before F5 lands. | web |
 | F9 — History tracking | ✅ | web |
 | Online Forum — CRUD/UI (posts, comments, votes, anonymity, edit/delete-own) | ✅ | web |
 | Online Forum — real-time layer (SSE push, DM, vote + DM notifications, media attachments) | ✅ | web (DM/SSE/notifications) · deploy (media, size caps) |
