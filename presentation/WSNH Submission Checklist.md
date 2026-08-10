@@ -31,7 +31,7 @@
 - [x] **Report** — `docs/REPORT.md` (app overview · features×tests matrix · risk assessment). ✅ current
       (1111 tests). Submitted as the in-repo `.md` — the guidelines take a repo link, not a PDF.
 - [ ] **Demo video** — record from `WSNH Demo Video Script.md`; name `VID_<id1>_<id2>_<id3>.mp4`.
-- [ ] **Presentation** — **`WSNH Presentation (Canva).pptx/.pdf`** (8-slide light/projector deck, design `DAHO6FXsV5o`) + **`WSNH Speaker Script (8-slide Canva).md`** (word-for-word, 2 handoffs); rehearse to 5:00. *(`WSNH Presentation.pptx` + `WSNH Speaker Notes and QA.md` are the retired 11/12-slide versions — Q&A bank in the latter is still useful.)*
+- [x] **Presentation** — *its slot was **Thu 16 Jul** and has passed; this is no longer pre-23-Aug work.* Deck: **`WSNH Presentation (Canva).pptx/.pdf`** (8-slide light/projector deck, design `DAHO6FXsV5o`) + **`WSNH Speaker Script (8-slide Canva).md`** (word-for-word, 2 handoffs); rehearse to 5:00. *(`WSNH Presentation.pptx` + `WSNH Speaker Notes and QA.md` are the retired 11/12-slide versions — Q&A bank in the latter is still useful.)*
 
 ## Pre-submission checklist (do these before you submit)
 **Must-fix (the visible gaps):**
@@ -43,7 +43,7 @@
       + likes over a back-dated timeline. It's a **deliberate demo/review tool**, run by hand — a fresh
       database stays **empty by design**. **Before the review: run it once against the live prod DB** so the
       TA sees a populated app at `app.worksmarternotharder.dev` (see `db/README.md` for the exact command).
-- [ ] **Add the "See It Live" demo slide** to the Canva deck (as slide 5, after Architecture) — pre-recorded 30–45s clip recommended over live for the 5-min cap. Optionally add app screenshots to slides 2–6.
+- [x] **Add the "See It Live" demo slide** to the Canva deck — *moot: the 16 Jul presentation has passed. Kept for the record.*
 - [x] **Lior + Elad: final timeout tune** — **done, no retune needed.** Measured against the real model,
       `AI_PREDICT_TIMEOUT_SECONDS`=30 / `AI_CLIENT_TIMEOUT`=33 already sit well clear of observed latency
       (`docs/SCALING_REPORT.md`).
@@ -66,7 +66,8 @@
       start it from the Azure portal beforehand; `DEPLOY_ENABLED=true`).
 - [ ] Do one **fresh-clone run** (`cp .env.example .env && docker compose up --build`) to confirm it works from
       scratch, exactly as a TA would try it.
-- [ ] Re-run the demo end-to-end once the model is in, so shot 3 shows a real prediction.
+- [x] ~~Re-run the demo end-to-end once the model is in~~ — the model landed 11–12 Jul, so shot 3 is filmed in
+      full. The only thing left here is the recording itself, tracked above.
 
 ## The one-line status
 Engineering is submission-ready and TA-reviewed clean; the AI model has landed and the forum cold-seed tool
