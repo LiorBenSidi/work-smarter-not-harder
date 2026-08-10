@@ -732,12 +732,28 @@ export const SCENARIOS = [
       // `[role="img"]` is what makes this a REAL score: the pre-check-in card also draws an orb with a
       // number in it, but that one is the greyed "Example" and is aria-hidden. Matching on the score
       // alone returns that placeholder instantly and the wait does nothing at all.
-      const cardText = async (timeout = 25000) => {
+      // On a busy shared runner the ai round trip has taken past 25s, and when it did the assertion
+      // reported `""` — the skeleton's textContent — which says nothing about WHY. A timeout now reports
+      // what it was still waiting for, so the next occurrence is diagnosable instead of a bare empty
+      // string: whether the card painted at all, whether the placeholder orb is showing, and whether the
+      // page is displaying an error. That distinguishes "slow" from "the check-in actually failed".
+      const cardText = async (timeout = 45000) => {
         for (let waited = 0; waited < timeout; waited += 400) {
           if (await b.exists('#dashboard .readiness .orb[role="img"]')) return await b.text("#dashboard");
           await b.wait(400);
         }
-        return await b.text("#dashboard");                 // timed out: report whatever is there
+        const why = await b.pageExec(`(() => {
+          const d = document.querySelector("#dashboard");
+          const err = [...document.querySelectorAll(".flash, [role=alert]")].map((e) => e.textContent.trim()).filter(Boolean);
+          return JSON.stringify({
+            anyOrb: !!d?.querySelector(".readiness .orb"),
+            scoredOrb: !!d?.querySelector('.readiness .orb[role="img"]'),
+            skeleton: !!d?.querySelector(".skeleton"),
+            errors: err.slice(0, 3),
+            text: (d?.textContent || "").trim().slice(0, 120),
+          });
+        })()`);
+        throw new Error(`the readiness card never painted a scored orb within ${timeout}ms — state: ${why}`);
       };
 
       const fresh = await cardText();
