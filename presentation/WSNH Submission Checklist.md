@@ -64,8 +64,19 @@
 **Belt-and-suspenders:**
 - [ ] Make sure the **Azure VM is running** at demo/submission time (instructor auto-shutdown at 23:50 UTC —
       start it from the Azure portal beforehand; `DEPLOY_ENABLED=true`).
-- [ ] Do one **fresh-clone run** (`cp .env.example .env && docker compose up --build`) to confirm it works from
-      scratch, exactly as a TA would try it.
+- [x] Do one **fresh-clone run** — **done 10 Aug, and it passes.** Cloned from GitHub into a new directory,
+      `cp .env.example .env && docker compose up -d --build`, nothing else. All three containers came up
+      **healthy**; only `web` published a host port (`8000→5000`) — `ai` and `db` bind nothing, so the
+      isolation requirement holds on the reviewer's own machine. End to end: register → the verification
+      code appears **on screen** (no SMTP configured → `email_mode: mock`) → verify 201 → login → the
+      2-step code appears → 200 → check-in **201 with a real Random-Forest prediction** (`Ready`, live
+      probabilities) → `/dashboard` 200 with recommendations. `./seed.sh` then filled the forum:
+      **5 posts · 6 comments · 5 users**, and `coach_maya` / `demo-seed-pw` signs in.
+      Two things to know rather than fix: the calorie target reads `null` until a **profile** is saved
+      (readiness needs only the check-in — by design, #266), and a fresh forum is **empty until
+      `./seed.sh` runs**, which README:109 already tells the reviewer. One environment note: the seed
+      script cannot bind-mount a project kept under `/tmp` — it **detects that and prints the fix**;
+      cloned under `$HOME`, as anyone would, it just works.
 - [x] ~~Re-run the demo end-to-end once the model is in~~ — the model landed 11–12 Jul, so shot 3 is filmed in
       full. The only thing left here is the recording itself, tracked above.
 
