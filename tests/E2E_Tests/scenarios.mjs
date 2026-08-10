@@ -946,4 +946,84 @@ export const SCENARIOS = [
       // private to them, exactly as in the arriving-message scenario above.
     },
   },
+
+  // Marking the activity feed read changes no notification's CONTENT — only its styling — so the rows the
+  // reader is looking at have to survive it. Asserted by node identity plus a live text selection, because
+  // the finished screen looks identical whether the rows were patched or thrown away and rebuilt.
+  //
+  // Measured on the running app before the fix, at both viewports: 0 of 6 rows survived, and a selection
+  // the reader had made went from "…upvoted your post just now" to empty. #activity-list is aria-live, so
+  // the rebuild also re-announced every row to a screen reader for a change that added no information.
+  {
+    name: "messages: marking the activity feed read keeps the rows you were reading",
+    tags: ["messages"],
+    async fn(b) {
+      await registerAndLogin(b);
+      const peer = await apiUser(b.base);
+      const marker = uniq("actread-");
+      // Each post gets ONE vote from ONE voter, so the four notifications have four different refs and the
+      // per-(voter, ref) coalescing window cannot collapse them into fewer than four rows.
+      const ids = JSON.parse(await b.pageExec(`(async () => {
+        const csrf = (document.cookie.match(/csrf_token=([^;]+)/) || [])[1] || "";
+        const out = [];
+        for (let i = 1; i <= 4; i++) {
+          const r = await fetch("/forum/posts", { method: "POST",
+            headers: { "content-type": "application/json", "X-CSRF-Token": csrf },
+            body: JSON.stringify({ title: ${JSON.stringify(marker)} + " post " + i, body: "seeded so a vote has something to notify about" }) });
+          const d = await r.json();
+          out.push(d && d.post ? d.post.id : null);
+        }
+        return JSON.stringify(out);
+      })()`));
+      assert(ids.length === 4 && ids.every(Boolean), `seeding posts failed: ${JSON.stringify(ids)}`);
+      for (const id of ids) {
+        const v = await peer.call(`/forum/posts/${id}/vote`, { method: "POST", body: JSON.stringify({ value: 1 }) });
+        assert(v.status === 200, `seeding a vote failed: ${v.status}`);
+      }
+
+      await gotoScreen(b, "messages");
+      await b.waitFor("#activity-list");
+      for (let waited = 0; waited < 20000; waited += 400) {     // wait for the feed, don't sleep a fixed span
+        if (await b.evaluate(`() => document.querySelectorAll("#activity-list .dm-row.act").length >= 4`)) break;
+        await b.wait(400);
+      }
+      const marked = await b.pageExec(`(() => {
+        const rows = [...document.querySelectorAll("#activity-list .dm-row.act")];
+        rows.forEach((el, i) => { el.__kept = i; });
+        if (rows[1]) { const r = document.createRange(); r.selectNodeContents(rows[1]);
+          const s = getSelection(); s.removeAllRanges(); s.addRange(r); }
+        return rows.length;
+      })()`);
+      assert(marked >= 4, `expected the four vote notifications on screen, saw ${marked} rows`);
+      // The preconditions that stop this passing vacuously: if nothing is unread there is no state to
+      // change, and if nothing is selected the selection assertion below proves nothing.
+      const unreadBefore = await b.evaluate(`() => document.querySelectorAll("#activity-list .dm-row.act.unread").length`);
+      assert(unreadBefore === marked, `every seeded notification should start unread, saw ${unreadBefore} of ${marked}`);
+      const selectionBefore = await b.pageExec(`getSelection().toString()`);
+      assert(selectionBefore.includes("upvoted your post"),
+        `could not select text in the activity feed to begin with (got ${JSON.stringify(selectionBefore)})`);
+
+      await b.click("#activity-read", 400);
+      for (let waited = 0; waited < 20000; waited += 400) {
+        if (await b.evaluate(`() => document.querySelectorAll("#activity-list .dm-row.act.unread").length === 0`)) break;
+        await b.wait(400);
+      }
+
+      const after = JSON.parse(await b.pageExec(`(() => {
+        const rows = [...document.querySelectorAll("#activity-list .dm-row.act")];
+        return JSON.stringify({ total: rows.length, kept: rows.filter((e) => e.__kept !== undefined).length,
+          unread: rows.filter((e) => e.classList.contains("unread")).length,
+          selection: getSelection().toString(), buttonHidden: !!document.querySelector("#activity-read").hidden });
+      })()`));
+      assert(after.unread === 0, `${after.unread} row(s) still read as unread after marking the feed read`);
+      assert(after.buttonHidden === true, "'Mark all read' must hide once nothing is unread");
+      assert(after.total === marked, `the feed lost rows while being marked read: ${marked} -> ${after.total}`);
+      assert(after.kept === marked,
+        `the activity feed was rebuilt to mark it read — only ${after.kept} of ${marked} rows survived`);
+      assert(after.selection === selectionBefore,
+        `marking the feed read destroyed the reader's selection: ${JSON.stringify(selectionBefore)} -> ${JSON.stringify(after.selection)}`);
+
+      await cleanupPosts(b, marker, 4);
+    },
+  },
 ];
