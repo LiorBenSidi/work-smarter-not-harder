@@ -219,10 +219,11 @@ functions** (measured with `grep -c "^def test_"` across `tests/`), the remainde
 collected cases, not 11 tests written). The suite is deliberately weighted toward the layers where a
 regression is cheapest to catch — unit and negative input walls — rather than toward volume.
 
-**Pass / skip:** the pre-07-12 snapshot was **747 pass, 36 skip in ~47 s**; the current suite is **1081 pass,
-45 skip in ~85 s** (`python -m pytest tests/ -q`). **43 of the 45** skips are env-gated and *not broken* —
-they run the moment their dependency is present; the other 2 are the unconditional `test_ai` scaffolds
-flagged for removal below (#358):
+**Pass / skip:** the pre-07-12 snapshot was **747 pass, 36 skip in ~47 s**; the current suite is **1065 pass,
+46 skip in ~83 s** (`python -m pytest tests/ -q`); in CI, where the `mongo:7` service is present, the same
+suite is **1091 pass, 20 skip**. **44 of the 46** local skips are env-gated and *not broken* — they run the
+moment their dependency is present; the other 2 are the unconditional `test_ai` scaffolds flagged for
+removal below (#358):
 
 - `test_db_mongo` (21) — the real-Mongo integration suite; skips without `TEST_MONGO_URI`, and **runs in CI**
   against a `mongo:7` service on every PR.
@@ -437,7 +438,7 @@ between planes (§1). Full detail in [`COLLABORATORS.md`](../COLLABORATORS.md) a
 cp .env.example .env
 docker compose up --build          # 3 containers; only web is published
 # → http://localhost:8000/health   → then register, set a profile, check in, see the dashboard
-pytest -q                          # 1081 pass / 45 env-gated skip
+pytest -q                          # 1065 pass / 46 env-gated skip
 ```
 
 CI reproduces the gate on every PR (ruff → bandit → pytest + a `mongo:7` service). `main` is
