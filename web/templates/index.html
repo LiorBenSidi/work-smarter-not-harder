@@ -3851,14 +3851,20 @@
       // sit inside the string handed to setHtmlIfChanged, so every time any notification crossed a minute
       // bucket the key differed and the whole aria-live feed was torn down and re-announced — with zero
       // data change, on every 45s poll. Same trap the forum list documents at forumRowHtml/refreshRowAges.
+      //
+      // The read/unread flag is kept out of the key for the SAME reason (#463): pressing "Mark all read"
+      // changes no notification's content, only its styling, so it must not re-render the list. Measured on
+      // the running app before this: all six rows were replaced (0 of 6 survived by node identity), which
+      // destroyed the reader's text selection and re-announced every row through the aria-live region.
       setHtmlIfChanged(el, items.map((n) =>
-        '<div class="dm-row act' + (n.read ? "" : " unread") + '" data-ts="' + escapeHtml(n.created_at || 0) + '">' + avatarHtml(n.actor || "·", 40)
+        '<div class="dm-row act" data-ts="' + escapeHtml(n.created_at || 0) + '">' + avatarHtml(n.actor || "·", 40)
         // compose "{live actor} {text}" — the actor is re-resolved to the current display name each list,
         // and the stored text is name-less, so a rename never leaves a stale name (F1).
         + '<div class="dm-main"><div class="dm-name" dir="auto">' + escapeHtml(((n.actor ? n.actor + " " : "") + (n.text || "")).trim()) + '</div>'
         + '<div class="dm-last act-age"></div></div></div>'
       ).join(""));
       refreshActivityAges();
+      refreshActivityRead(items);
       btn.hidden = !items.some((n) => !n.read);
     }
     // Keep each activity row's relative age fresh with a value-aware TEXT write — no rebuild, so the
@@ -3869,6 +3875,16 @@
         const span = row.querySelector(".act-age"); if (!span) return;
         const text = timeAgo(Number(row.dataset.ts) || 0);
         if (span.textContent !== text) span.textContent = text;
+      });
+    }
+    // Paint read/unread onto the EXISTING rows — a value-aware class toggle, never a rebuild (#463). Rows
+    // and `items` are the same list in the same order by construction: a change to WHICH notifications are
+    // listed changes the keyed string in renderActivity, which rebuilds the rows before this runs.
+    function refreshActivityRead(items) {
+      const el = $("activity-list"); if (!el) return;
+      el.querySelectorAll(".dm-row.act").forEach((row, i) => {
+        const unread = !!(items[i] && !items[i].read);
+        if (row.classList.contains("unread") !== unread) row.classList.toggle("unread", unread);
       });
     }
     $("activity-read").addEventListener("click", async () => {

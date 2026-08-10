@@ -977,6 +977,17 @@ def test_updates_never_steal_focus_or_reading_position(client):
     assert "if (span.textContent !== text) span.textContent = text" in aa   # value-aware text write
     assert "span.textContent = text;\n" not in aa.replace("if (span.textContent !== text) span.textContent = text;\n", "")
 
+    # 2b. the READ FLAG is kept out of that same change-string, for the same reason (#463). Marking the feed
+    #     read alters no notification's content, so it must toggle a class on the live rows rather than
+    #     re-render them. Measured before this: pressing "Mark all read" replaced all six rows (0 of 6
+    #     survived by node identity), destroying the reader's selection and re-announcing the aria-live feed.
+    assert '<div class="dm-row act" data-ts=' in ra                # the row class carries no read state...
+    assert '(n.read ? "" : " unread")' not in ra                   # ...which is exactly what it used to do
+    assert "refreshActivityRead(items);" in ra                     # ...renderActivity toggles it separately
+    assert "function refreshActivityRead(items)" in html
+    ar = html[html.index("function refreshActivityRead(items)"):html.index("function refreshActivityRead(items)") + 500]
+    assert 'if (row.classList.contains("unread") !== unread) row.classList.toggle("unread", unread)' in ar
+
     # 3. a real forum rebuild puts the row the reader was looking at back under the same pixel
     rl = html[html.index("function renderForumList()"):html.index("function togglePost(")]
     assert "const anchorRow = [...el.querySelectorAll(\".post\")].find((d) => d.getBoundingClientRect().bottom > 0)" in rl
