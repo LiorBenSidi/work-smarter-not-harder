@@ -31,7 +31,7 @@ against a normally-configured stack burns through the cap and the excess scenari
 ```bash
 printf 'SECRET_KEY=local-e2e\nREGISTER_VERIFY_EMAIL=0\nOTP_ENABLED=0\nSMTP_HOST=\nSESSION_COOKIE_SECURE=0\nRATELIMIT_ENABLED=0\n' > .env
 docker compose up -d --build --force-recreate
-node tests/E2E_Tests/run.mjs both        # 50/50
+node tests/E2E_Tests/run.mjs both        # 52/52
 ```
 
 ### Every scenario cleans up what it creates

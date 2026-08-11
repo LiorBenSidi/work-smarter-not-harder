@@ -3362,18 +3362,45 @@
     // ---- Media attachments (Elad's backend: POST /media -> id -> bind to a post/DM -> GET serves it) ----
     // Uploads are multipart, so they use their own fetch (api() is JSON-only). Rendering loads /media/<id>
     // via <img>/<video>, which carry the session cookie, so the server's per-target access control applies.
+    // Returns {id, url} on success, or {error} carrying the SERVER's stated reason. The server already
+    // distinguishes "unsupported media type" (400), "that file is too large" (413) and "media storage is
+    // full" (507) — and app.py's JSON error handlers exist precisely so the SPA can read them. Discarding
+    // the body on `!res.ok` threw that away and left every rejection looking identical to a dropped
+    // connection, so a user could not tell a wrong file type from an oversized one.
     async function uploadMedia(file) {
       const fd = new FormData(); fd.append("file", file);
       let res;
       try { res = await fetch("/media", { method: "POST", credentials: "same-origin", headers: { "X-CSRF-Token": getCookie("csrf_token") }, body: fd }); }
-      catch (_) { return null; }
-      if (!res.ok) return null;
-      try { const d = await res.json(); return d && d.id ? d : null; } catch (_) { return null; }
+      catch (_) { return { error: "the connection dropped" }; }
+      if (!res.ok) {
+        let reason = "";
+        try { const d = await res.json(); reason = (d && d.error) || ""; } catch (_) { /* non-JSON body (e.g. a proxy page) -> fall back */ }
+        return { error: reason || "the server refused it" };
+      }
+      try { const d = await res.json(); return d && d.id ? d : { error: "the server refused it" }; }
+      catch (_) { return { error: "the server refused it" }; }
     }
-    async function uploadAll(files) {          // upload each picked file; return the ids that stored OK
-      const ids = [];
-      for (const f of Array.from(files || [])) { const m = await uploadMedia(f); if (m) ids.push(m.id); }
-      return ids;
+    // Upload each picked file; report BOTH the ids that stored and what happened to the ones that didn't,
+    // so the message can name a reason and call a video a video.
+    async function uploadAll(files) {
+      const ids = [], failures = [];
+      for (const f of Array.from(files || [])) {
+        const m = await uploadMedia(f);
+        if (m && m.id) ids.push(m.id);
+        else failures.push({ kind: f.type || "", reason: (m && m.error) || "the server refused it" });
+      }
+      return { ids, failures };
+    }
+    // Compose the "that didn't all make it" line. Two things it has to get right: the NOUN follows what was
+    // actually picked (a rejected clip is a video, not a photo), and the server's reason is carried through
+    // when every failure shares one — that is the difference between a user who can fix it and one who just
+    // tries the same file again.
+    function attachWarning(lead, picked, failures) {
+      const kinds = new Set(failures.map((f) => (String(f.kind || "").indexOf("video/") === 0 ? "video" : "photo")));
+      const noun = (kinds.size === 1 ? [...kinds][0] : "file") + (failures.length === 1 ? "" : "s");
+      const what = failures.length < picked ? failures.length + " of " + picked + " " + noun : "your " + noun;
+      const reasons = [...new Set(failures.map((f) => f.reason).filter(Boolean))];
+      return lead + what + " couldn't be attached" + (reasons.length === 1 ? " — " + reasons[0] : "") + ".";
     }
     function mediaEmbedHtml(att) {              // att = {id, url, mime, owner?}; render an image inline or an mp4 player
       const url = "/media/" + encodeURIComponent(att.id);
@@ -3408,15 +3435,16 @@
       if (post && post.id && picker && picker.files && picker.files.length) {
         const picked = picker.files.length;
         flash("forum-flash", "Uploading…", "ok");
-        const ids = await uploadAll(picker.files);          // uploadMedia() -> null on any upload failure, so ids can come back short
-        let bound = ids.length;
+        const { ids, failures } = await uploadAll(picker.files);
         if (ids.length) {
           const ar = await api("/forum/posts/" + post.id + "/attachments", { method: "POST", body: { attachment_ids: ids } });
-          if (!ar.ok) bound = 0;                             // stored but the bind failed -> nothing is actually on the post
+          // A failed BIND is its own outcome: the files uploaded fine, they just didn't reach the post.
+          // Reporting it as "your photos couldn't be attached" was simply untrue about what happened.
+          if (!ar.ok) attachWarn = "Posted — but the attachment" + (picked === 1 ? "" : "s")
+            + " couldn't be added to it" + ((ar.data && ar.data.error) ? " — " + ar.data.error : "") + ".";
         }
-        if (bound < picked) attachWarn = bound              // the post itself is up; only the photos fell short -> don't claim a clean success
-          ? "Posted — but " + (picked - bound) + " of " + picked + " photos couldn't be attached."
-          : "Posted — but your photo" + (picked === 1 ? "" : "s") + " couldn't be attached.";
+        if (!attachWarn && failures.length)                 // the post itself is up; say what fell short and why
+          attachWarn = attachWarning("Posted — but ", picked, failures);
         picker.value = "";
       }
       f.reset(); filesHint($("forum-files"), "forum-files-hint");
@@ -3758,14 +3786,17 @@
       if (hasFiles) {
         const picked = picker.files.length;
         flash("dm-reply-flash", "Uploading…", "ok");
-        const ids = await uploadAll(picker.files);            // attachments bind to the conversation, not a single message
-        let bound = ids.length;
+        const { ids, failures } = await uploadAll(picker.files);   // attachments bind to the conversation, not a single message
+        const lead = "Sent" + (text ? " your message" : "") + ", but ";
         if (ids.length) {
           const ar = await api("/messages/" + encodeURIComponent(dmPeer) + "/attachments", { method: "POST", body: { attachment_ids: ids } });
-          if (!ar.ok) bound = 0;                              // stored but the bind failed -> nothing reached the conversation
+          // Same distinction as the forum composer: uploaded-but-not-bound is not the same failure as
+          // rejected-on-upload, and saying the file couldn't be attached would misdescribe it.
+          if (!ar.ok) attachWarn = lead + "the attachment" + (picked === 1 ? "" : "s")
+            + " couldn't be added to the conversation" + ((ar.data && ar.data.error) ? " — " + ar.data.error : "") + ".";
         }
-        if (bound < picked) attachWarn = "Sent" + (text ? " your message" : "") + ", but "   // never claim a silent success when a photo dropped
-          + (bound ? (picked - bound) + " of " + picked + " photos couldn't be attached." : "your photo" + (picked === 1 ? "" : "s") + " couldn't be attached.");
+        if (!attachWarn && failures.length)                 // never claim a silent success when something dropped
+          attachWarn = attachWarning(lead, picked, failures);
         picker.value = ""; filesHint(picker, "dm-files-hint");
       }
       f.reset(); autoGrow($("dm-reply"));

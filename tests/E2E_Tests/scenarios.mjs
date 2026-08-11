@@ -1026,4 +1026,53 @@ export const SCENARIOS = [
       await cleanupPosts(b, marker, 4);
     },
   },
+
+  // A refused attachment has to say WHICH file kind failed and WHY. The server already distinguishes
+  // "unsupported media type" from "that file is too large"; if the client drops that, two unrelated
+  // problems become one sentence the user cannot act on — and a rejected clip gets called a photo.
+  //
+  // Measured on the running app before this was fixed, both cases produced the byte-identical string
+  // "Sent your message, but your photo couldn't be attached." A `.mov` is what an iPhone actually hands
+  // over, so it is the file this uses rather than a synthetic unsupported type.
+  {
+    name: "messages: a refused attachment says which kind of file failed and why",
+    tags: ["messages", "media"],
+    async fn(b) {
+      await registerAndLogin(b);
+      const peer = await apiUser(b.base);
+      await gotoScreen(b, "messages");
+      await b.waitFor("#dm-to");
+      await b.type("#dm-to", peer.username);
+      await b.type("#dm-body", "opening the thread so the reply composer is live");
+      await b.submit("#dm-new-form", 2000);
+      if (!(await b.exists("#dm-reply-form"))) {
+        const opened = await b.pageExec(`(() => { const r = [...document.querySelectorAll("#dm-conversations [data-peer]")]
+          .find((x) => x.dataset.peer === ${JSON.stringify(peer.username)}); if (r) r.click(); return !!r; })()`);
+        assert(opened === true, "could not open the conversation just started");
+        await b.wait(1500);
+      }
+      await b.waitFor("#dm-reply-form");
+
+      // A QuickTime clip: an allowed EXTENSION-adjacent media kind that is not on the server's MIME
+      // allowlist, so it fails on type rather than on size.
+      await b.setFileInput("#dm-files", new URL("./fixtures/clip.mov", import.meta.url).pathname);
+      await b.wait(300);
+      await b.type("#dm-reply", "a clip that the server will refuse");
+      await b.submit("#dm-reply-form", 1200);
+      let seen = "";
+      for (let waited = 0; waited < 30000; waited += 500) {
+        seen = (await b.text("#dm-reply-flash")) || "";
+        if (seen && !/^Uploading/.test(seen)) break;
+        await b.wait(500);
+      }
+      assert(seen, "no outcome was reported at all after the attachment was refused");
+      assert(/video/.test(seen),
+        `a refused video must not be described as a photo — the user was told: ${JSON.stringify(seen)}`);
+      assert(/unsupported media type/.test(seen),
+        `the server's reason must reach the user — the user was told: ${JSON.stringify(seen)}`);
+
+      // Nothing to clean up: both accounts are this scenario's own throwaways, and the refused file was
+      // never stored — that is precisely what the message is reporting.
+    },
+  },
 ];
