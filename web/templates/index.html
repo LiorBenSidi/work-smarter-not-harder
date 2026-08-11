@@ -1919,7 +1919,11 @@
       closeUserMenu();
       const r = await api("/logout", { method: "POST" });
       if (!r.ok && r.status !== 401) {
-        flash("logout-flash", (r.data && r.data.error) || "Couldn't sign you out — you are still signed in. Please try again.");
+        // Lead with the fact that matters and never let the server's wording replace it: a bare
+        // "service unavailable" is true but leaves the one thing the user needs to know unsaid, and on a
+        // shared machine that is the difference between walking away and signing out properly.
+        const why = (r.data && r.data.error) ? " (" + r.data.error + ")" : "";
+        flash("logout-flash", "Couldn't sign you out — you are still signed in. Please try again." + why);
         return;
       }
       resetAuthState(); showView("auth");

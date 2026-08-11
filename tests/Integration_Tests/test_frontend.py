@@ -714,8 +714,12 @@ def test_mutations_and_uploads_surface_their_failures(client):
         # landed leaves the session and the remember-cookie alive, so tearing the client down regardless
         # tells the user they are signed out while the next person to reload is inside the account. 401 is
         # excluded deliberately — it means the session is already gone, which is the outcome we wanted.
+        # The absent needle is doing real work: preferring the server's `error` string drops "you are
+        # still signed in", the only part of the sentence the reader has to act on. Driving the deployed
+        # build with /logout forced to 503 showed exactly that — the message read "service unavailable".
         ("logout", "async function doLogout(", '$("logout-btn").addEventListener',
-         ["if (!r.ok", "r.status !== 401", 'flash("logout-flash"'], []),
+         ["if (!r.ok", "r.status !== 401", 'flash("logout-flash"', "you are still signed in"],
+         ['flash("logout-flash", (r.data && r.data.error) ||']),
         # The dashboard paints a stored reading first so the orb is never blank. If the live read then
         # fails, dropping the error meant that stored reading was presented as today's result and Refresh
         # looked inert. The paint stays (it is real data); a notice says it is not fresh, and clears on the
