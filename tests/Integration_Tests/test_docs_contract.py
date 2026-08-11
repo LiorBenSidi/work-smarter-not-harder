@@ -81,3 +81,23 @@ def test_every_pass_skip_split_in_the_docs_adds_up_to_the_suite():
         if passed + skipped != actual:
             wrong.append(f"{rel}: {passed} pass + {skipped} skip = {passed + skipped}, but the suite collects {actual}")
     assert not wrong, "a stated split cannot be produced by this suite:\n  " + "\n  ".join(wrong)
+
+
+def test_the_report_states_the_number_of_test_functions_it_can_count():
+    """The report separates collected cases from hand-written test functions — the gap between them is how it explains parametrization — and that second number drifts on exactly the same edits as the first.
+
+    It is counted the way the report itself says it is counted, so the sentence and the measurement can
+    never mean two different things. This one is worth its own case because it is the figure a reader
+    uses to judge whether the suite is broad or merely parametrized wide.
+    """
+    written = sum(
+        1
+        for path in (ROOT / "tests").rglob("*.py")
+        for line in path.read_text(encoding="utf-8", errors="replace").splitlines()
+        if line.startswith("def test_")
+    )
+    text = (ROOT / "docs/REPORT.md").read_text(encoding="utf-8")
+    found = re.search(r"come from \*\*(\d+) test\nfunctions\*\*", text)
+    assert found, "REPORT.md no longer states a test-function count — update this guard with it"
+    claimed = int(found.group(1))
+    assert claimed == written, f"docs/REPORT.md says {claimed} test functions; tests/ defines {written}"
