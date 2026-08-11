@@ -282,7 +282,7 @@ def test_notification_feed_is_bounded_and_since_filters_in_query(db_mod, db):
 
 
 # ---- gaps found by mutating web/services/db.py against the whole suite (#434) ----
-# Each was a one-line change that left ALL 1077 tests green. The routes are exercised against conftest's
+# Each was a one-line change that left the ENTIRE suite green. The routes are exercised against conftest's
 # fakes, so a break in the real message store is invisible there.
 def test_each_conversation_is_keyed_by_the_other_person(db_mod, db):
     """An inbox row names the person you are talking TO, whichever of you sent the last message — so your

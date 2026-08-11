@@ -67,8 +67,8 @@ SPLITS = [
 def test_every_pass_skip_split_in_the_docs_adds_up_to_the_suite():
     """The report states two different pass/skip splits — one local, one for CI where the mongo service unskips the DB-backed suites — and a split that does not sum to the collected total is wrong no matter which environment produced it.
 
-    This is the half the headline count cannot catch: someone updating "1118 collected" and leaving
-    "1065 pass / 46 skip" underneath it produces a document that contradicts itself in one sentence.
+    This is the half the headline count cannot catch: a total refreshed while the pass/skip line beneath
+    it is left behind produces a document that contradicts itself in a single sentence.
     Arithmetic only — it says nothing about whether those tests pass, just that the figures are possible.
     """
     actual = _collected_now()
