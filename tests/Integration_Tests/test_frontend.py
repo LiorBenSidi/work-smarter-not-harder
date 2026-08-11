@@ -20,6 +20,8 @@ file tells you the page still ships the parts.
 """
 import re
 
+import pytest
+
 
 def test_index_serves_html(client):
     """The single-page app is actually served as HTML — the one check that has to pass before any other frontend guard means anything."""
@@ -703,6 +705,67 @@ def test_mutations_and_uploads_surface_their_failures(client):
     # DM reply: a dropped attachment must not clear the flash to a silent success.
     dm = html[html.index('onSubmit("dm-reply-form"'):html.index('$("dm-files").addEventListener')]
     assert "attachWarn" in dm and 'flash("dm-reply-flash", attachWarn' in dm
+
+
+@pytest.mark.parametrize(
+    "surface, start, end, present, absent",
+    [
+        # Signing out is the one where being wrong is a security problem, not a UX one: a POST that never
+        # landed leaves the session and the remember-cookie alive, so tearing the client down regardless
+        # tells the user they are signed out while the next person to reload is inside the account. 401 is
+        # excluded deliberately — it means the session is already gone, which is the outcome we wanted.
+        ("logout", "async function doLogout(", '$("logout-btn").addEventListener',
+         ["if (!r.ok", "r.status !== 401", 'flash("logout-flash"'], []),
+        # The dashboard paints a stored reading first so the orb is never blank. If the live read then
+        # fails, dropping the error meant that stored reading was presented as today's result and Refresh
+        # looked inert. The paint stays (it is real data); a notice says it is not fresh, and clears on the
+        # next good read so a recovered panel does not keep an obsolete warning.
+        ("dashboard", "async function loadDashboard(", "const sameAsOptimistic",
+         ["staleNotice(", "clearStaleNotice("], []),
+        # A deleted post and an unreachable server are different facts. "Please try again" is actionable
+        # for one and false for the other, because a removed post never comes back.
+        ("open a post", "function failOpen(", "async function openPost(",
+         ["status === 404", "This post was removed."], []),
+        # A search that failed is not a search that found nobody. Hiding the list is indistinguishable from
+        # "no such person", so a blip reads as "that handle doesn't exist" and the sender gives up.
+        # (the copy is inside a single-quoted JS string, so its apostrophe is served backslash-escaped —
+        # match on the distinctive words instead of reproducing the escaping here)
+        ("dm search", "async function runDmSearch(", '$("dm-to").addEventListener("input"',
+         ["search just now", "dm-suggest-empty"], ["if (!r.ok) { closeDmSuggest(); return; }"]),
+        # An unticked consent box is itself a claim — "you are opted out". After a failed read we do not
+        # know that, and someone who opted IN would be shown the opposite of their own choice.
+        ("email consent", "async function syncEmailConsent(", '$("email-consent").addEventListener',
+         ["indeterminate = true", "disabled = true"], []),
+    ],
+)
+def test_each_failure_surface_declares_a_branch_for_the_failure(client, surface, start, end, present, absent):
+    """A request that fails has to leave the panel saying so — these five swallowed it in five different ways, each with its own wrong outcome: a live session shown as signed out, a stale reading shown as current, an impossible retry, a real person reported as nonexistent, and a consent state asserted without reading it.
+
+    Read this for exactly what it is: proof that each failure BRANCH is present in the served page, not
+    that it fires. The five are parametrized rather than merged because they fail independently — one
+    regression should name its own surface instead of hiding behind the other four. What was actually
+    driven end to end was the deployed build: each of the five was reproduced by forcing its response to
+    fail in a real browser against the running app before the branch was written, and the wrong outcome
+    listed above is what the app did.
+    """
+    html = client.get("/").get_data(as_text=True)
+    block = html[html.index(start):html.index(end)]
+    for needle in present:
+        assert needle in block, f"{surface}: missing {needle!r}"
+    for needle in absent:
+        assert needle not in block, f"{surface}: still carries the swallowing path {needle!r}"
+
+
+def test_the_new_post_body_is_capped_like_every_other_text_field(client):
+    """The quick composer's body was the only text field in the app with no length cap, so a long paste sailed past the client and hit Flask's 64 KB request ceiling — which answers "that file is too large" for a post that has no file in it.
+
+    5000 matches BODY_MAX in web/routes/forum.py and the edit form's own textarea, so the limit the user
+    feels while typing is the limit the server actually enforces.
+    """
+    html = client.get("/").get_data(as_text=True)
+    composer = re.search(r'<textarea name="body" placeholder="Share something[^>]*>', html)
+    assert composer, "the quick-composer body textarea is no longer served"
+    assert 'maxlength="5000"' in composer.group(0)
 
 
 def test_forum_realtime_handler_is_served_with_its_guards(client):

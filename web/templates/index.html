@@ -1140,7 +1140,7 @@
               <button id="forum-refresh" class="ghost mini">Refresh</button></h2>
             <form id="forum-form">
               <input name="title" placeholder="Post title" aria-label="Post title" maxlength="140" required>
-              <textarea name="body" placeholder="Share something…" aria-label="Post body" rows="2" required style="margin-top:8px;resize:vertical"></textarea>
+              <textarea name="body" placeholder="Share something…" aria-label="Post body" rows="2" maxlength="5000" required style="margin-top:8px;resize:vertical"></textarea>
               <label style="display:flex;align-items:center;gap:8px;margin-top:8px;font-weight:600"><input type="checkbox" name="anonymous" style="width:auto"> Post anonymously</label>
               <div style="display:flex;align-items:center;gap:10px;margin-top:10px;flex-wrap:wrap">
                 <label class="ghost" style="cursor:pointer;display:inline-flex;align-items:center;gap:7px;padding:8px 12px;border-radius:10px;font-weight:600;font-size:14px" title="Attach photos or a clip — PNG, JPEG, WebP, GIF or MP4, up to 10 MB">
@@ -1305,6 +1305,7 @@
             <h2><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10.3 4l-8 14a2 2 0 0 0 1.7 3h16a2 2 0 0 0 1.7-3l-8-14a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/></svg><span class="grow">Danger zone</span></h2>
             <p id="profile-user" class="muted" style="margin:-2px 0 12px"></p>
             <button id="logout-btn" class="ghost danger block">Log out</button>
+            <div id="logout-flash" class="flash" aria-live="polite"></div>
             <hr class="sep">
             <p class="muted" style="margin:0 0 12px">Permanently deletes your account and everything tied to it — profile, check-in history, forum posts and comments, messages, and notifications. This can't be undone.</p>
             <button id="delete-reveal" class="ghost danger block" type="button">Delete my account</button>
@@ -1775,6 +1776,17 @@
 
     function flash(id, msg, kind = "error") { const el = $(id); el.textContent = msg || ""; el.className = "flash " + kind; }
 
+    // A panel that already holds real (but possibly stale) content, whose refresh just failed. Replacing the
+    // content with an error would throw away data the user can still use; showing nothing would pass the old
+    // reading off as current. So append one line, in place, and drop it again the moment a read succeeds.
+    function staleNotice(el, msg) {
+      if (!el) return;
+      let n = el.querySelector(".stale-note");
+      if (!n) { n = document.createElement("p"); n.className = "flash error stale-note"; el.appendChild(n); }
+      if (n.textContent !== msg) n.textContent = msg;    // same text -> no DOM write, no re-announce
+    }
+    function clearStaleNotice(el) { const n = el && el.querySelector(".stale-note"); if (n) n.remove(); }
+
     // Disable the submit button while the request is in flight -> no double-submit (e.g. double posts).
     function onSubmit(formId, handler) {
       $(formId).addEventListener("submit", async (e) => {
@@ -1899,7 +1911,19 @@
       } else { flash("register-flash", (r.data && r.data.error) || "Registration failed"); }
     });
 
-    async function doLogout() { closeUserMenu(); await api("/logout", { method: "POST" }); resetAuthState(); showView("auth"); }
+    // A logout whose request never landed leaves the session AND the remember-cookie alive on the server.
+    // Showing the login card regardless tells the user they are signed out when they are not — on a shared
+    // machine the next person reloads straight into the account. Only tear down the client once the server
+    // has actually confirmed. (A 401 here means the session is already gone, which is the outcome we want.)
+    async function doLogout() {
+      closeUserMenu();
+      const r = await api("/logout", { method: "POST" });
+      if (!r.ok && r.status !== 401) {
+        flash("logout-flash", (r.data && r.data.error) || "Couldn't sign you out — you are still signed in. Please try again.");
+        return;
+      }
+      resetAuthState(); showView("auth");
+    }
     $("logout-btn").addEventListener("click", doLogout);
 
     // ---- Forgot / reset password ----
@@ -1973,10 +1997,19 @@
 
     // ---- Privacy & data (GDPR: non-essential-email opt-in + a full data export) ----
     async function syncEmailConsent() {
-      const u = currentUser;
+      const u = currentUser, cb = $("email-consent");
       const r = await api("/me");
-      if (sessionChanged(u, "syncEmailConsent") || !r.ok || !r.data) return;   // stale session / failed fetch -> don't paint
-      $("email-consent").checked = !!r.data.email_consent;
+      if (sessionChanged(u, "syncEmailConsent")) return;                       // a newer session owns the control
+      if (!r.ok || !r.data) {
+        // An unticked box is itself a claim — "you are opted out of non-essential email". After a failed read
+        // we do not know that, and someone who opted IN would be shown the opposite of their own choice. Show
+        // the control as indeterminate and inert instead of asserting a preference we could not load.
+        cb.indeterminate = true; cb.disabled = true;
+        flash("privacy-flash", "Couldn't load your email preference just now — reopen this page to try again.");
+        return;
+      }
+      cb.indeterminate = false; cb.disabled = false;
+      cb.checked = !!r.data.email_consent;
     }
     $("email-consent").addEventListener("change", async (e) => {
       const on = e.target.checked;
@@ -2480,7 +2513,15 @@
       else el.innerHTML = sk("card");
       const r = await api("/dashboard");
       if (sessionChanged(u, "loadDashboard") || seq !== dashLoadSeq) return;   // stale session OR superseded -> don't paint
-      if (!r.ok) { if (!opt) el.innerHTML = '<p class="flash error">Could not load the dashboard.</p>'; return; }   // a transient error keeps the optimistic paint
+      if (!r.ok) {
+        // With no optimistic paint there is nothing on screen, so the error IS the card. With one, the card
+        // is still up and would otherwise pass a stored reading off as today's live result — silently, so
+        // Refresh looks like it did nothing. Keep the paint (it is real data) and say it is not fresh.
+        if (!opt) el.innerHTML = '<p class="flash error">Could not load the dashboard.</p>';
+        else staleNotice(el, "Couldn't refresh just now — this is your last saved reading.");
+        return;
+      }
+      clearStaleNotice(el);   // a good read supersedes any earlier "couldn't refresh"
       const d = r.data || {};   // a 200 with a null/unparseable body must not throw on d.readiness (mirrors the other loaders)
       // keep the glanceable stats in sync with the AI's latest read (the stat strip shows the SAME 0-100 score as the orb)
       statState = d.readiness ? String(readinessScore(d.readiness)) : "—";
@@ -3043,10 +3084,13 @@
     // set makes the post keep its .open border on every re-render with no detail — and nav-away-and-back can't
     // clear it (the iOS #forum wedge). This resets the half-open state + surfaces a retry hint. Guard on seq so
     // a stale call (superseded by a newer open/vote) never clobbers the newer one's state.
-    function failOpen(seq) {
+    function failOpen(seq, status) {
       if (seq !== openPostSeq) return;                        // a newer open owns the state now — leave it alone
       closePost();                                            // clears currentPostId + the .open border + hides the box
-      flash("forum-flash", "Couldn't open that post — please try again.");
+      // 404 means the post is gone — deleted by its author while this list was on screen. Telling the reader
+      // to try again sends them back at something that cannot come back; the feed's own wording for a post
+      // that no longer exists is "This post was removed."
+      flash("forum-flash", status === 404 ? "This post was removed." : "Couldn't open that post — please try again.");
     }
     async function openPost(id) {
       const u = currentUser, seq = ++openPostSeq;
@@ -3059,7 +3103,7 @@
       const box = $("forum-detail");
       // non-ok / malformed / a missing detail element -> recover, never throw-and-wedge (belt-and-suspenders
       // for the box: stashDetail keeps it alive, but a null box must degrade to a retry, not a TypeError).
-      if (!box || !r.ok || !r.data || !r.data.post) { failOpen(seq); return; }
+      if (!box || !r.ok || !r.data || !r.data.post) { failOpen(seq, r.status); return; }
       const p = r.data.post;
       currentPost = p;
       box.hidden = false;
@@ -3739,7 +3783,15 @@
       try { r = await api("/users/search?q=" + encodeURIComponent(q)); }
       catch (_) { return; }
       if (seq !== dmSearchSeq) return;              // a newer keystroke already superseded this response — don't paint stale
-      if (!r.ok) { closeDmSuggest(); return; }
+      // A search that FAILED is not a search that found nobody. Closing the list quietly is indistinguishable
+      // from "no such person" — so a server blip reads as "that handle doesn't exist" and the sender gives up
+      // on a real recipient. Say which one it was.
+      if (!r.ok) {
+        box.innerHTML = '<div class="dm-suggest-empty">Couldn\'t search just now — check your connection and try again.</div>';
+        box.hidden = false;
+        $("dm-to").setAttribute("aria-expanded", "true");
+        return;
+      }
       const results = (r.data && r.data.results) || [];
       box.innerHTML = results.length
         ? results.map((u) =>                        // every field escaped — usernames/display names are user-controlled
