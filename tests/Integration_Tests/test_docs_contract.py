@@ -1,0 +1,83 @@
+"""The graded documents have to describe the suite that actually exists. OWNER: Lior.
+
+Every suite size in REPORT.md, README.md and SUBMISSION.md is hand-written, so any change to the tests
+silently invalidates them — and nothing in the repo noticed. The numbers are what a reviewer checks
+first, and a report that claims a count the repo cannot produce undermines every other claim in it.
+
+This does not police prose. It reads the one number each document states as the suite's size and
+compares it to a real collection.
+"""
+import re
+import subprocess
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[2]
+
+# Each entry: the file, and a regex whose first group is the collected-case count it claims. Anchored on
+# the surrounding words so a different number in the same file (a percentage, a year, a section count)
+# can never be picked up by accident.
+CLAIMS = [
+    ("docs/REPORT.md", r"\*\*Suite at this snapshot:\*\* \*\*(\d+) checks"),
+    ("docs/REPORT.md", r"\*\*(\d+) automated checks across the seven"),
+    ("docs/REPORT.md", r"(\d+) collected cases come from"),
+    ("README.md", r"Suite: \*\*(\d+) collected\*\*"),
+    ("docs/SUBMISSION.md", r"`REPORT\.md`, (\d+) tests"),
+]
+
+
+def _collected_now():
+    """Collect the whole suite in a separate process, so this is the real number and not this run's selection."""
+    proc = subprocess.run(
+        [sys.executable, "-m", "pytest", "tests/", "--collect-only", "-q", "-p", "no:cacheprovider"],
+        cwd=ROOT, capture_output=True, text=True,
+    )
+    assert proc.returncode == 0, f"collection failed:\n{proc.stdout[-2000:]}\n{proc.stderr[-2000:]}"
+    return sum(1 for line in proc.stdout.splitlines() if "::" in line)
+
+
+def test_the_graded_documents_state_the_suite_size_the_repo_actually_has():
+    """A reviewer checks the headline number before anything else, and each of these is typed by hand — so a single added or removed test leaves three graded documents asserting a suite that cannot be produced, with nothing to catch it.
+
+    The failure names the file and both numbers, because the fix is always the same edit.
+    """
+    actual = _collected_now()
+    wrong = []
+    for rel, pattern in CLAIMS:
+        text = (ROOT / rel).read_text(encoding="utf-8")
+        found = re.search(pattern, text)
+        assert found, f"{rel}: the suite-size sentence matching {pattern!r} is gone — update this guard with it"
+        claimed = int(found.group(1))
+        if claimed != actual:
+            wrong.append(f"{rel} says {claimed}, the suite collects {actual}")
+    assert not wrong, "the graded docs are behind the suite:\n  " + "\n  ".join(wrong)
+
+
+# Each entry: where the split is written, and a regex giving (passed, skipped). Both environments are
+# stated in the report — locally some suites are env-gated, in CI the `mongo:7` service unskips them —
+# and a split that does not add up to the total is the same drift showing in a place the total does not.
+SPLITS = [
+    ("docs/REPORT.md", r"the current suite is \*\*(\d+) pass,\n(\d+) skip"),
+    ("docs/REPORT.md", r"suite is \*\*(\d+) pass, (\d+) skip\*\*"),
+    ("README.md", r"Suite: \*\*\d+ collected\*\* \((\d+) pass / (\d+) environment-gated\)"),
+    ("docs/SUBMISSION.md", r"\((\d+) pass / (\d+) env-gated in CI\)"),
+]
+
+
+def test_every_pass_skip_split_in_the_docs_adds_up_to_the_suite():
+    """The report states two different pass/skip splits — one local, one for CI where the mongo service unskips the DB-backed suites — and a split that does not sum to the collected total is wrong no matter which environment produced it.
+
+    This is the half the headline count cannot catch: someone updating "1118 collected" and leaving
+    "1065 pass / 46 skip" underneath it produces a document that contradicts itself in one sentence.
+    Arithmetic only — it says nothing about whether those tests pass, just that the figures are possible.
+    """
+    actual = _collected_now()
+    wrong = []
+    for rel, pattern in SPLITS:
+        text = (ROOT / rel).read_text(encoding="utf-8")
+        found = re.search(pattern, text)
+        assert found, f"{rel}: the pass/skip sentence matching {pattern!r} is gone — update this guard with it"
+        passed, skipped = int(found.group(1)), int(found.group(2))
+        if passed + skipped != actual:
+            wrong.append(f"{rel}: {passed} pass + {skipped} skip = {passed + skipped}, but the suite collects {actual}")
+    assert not wrong, "a stated split cannot be produced by this suite:\n  " + "\n  ".join(wrong)

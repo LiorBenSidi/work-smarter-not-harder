@@ -11,7 +11,7 @@ running stack at two viewports.
 The names here read "…markup_and_handlers_are_served" rather than "…is_wired", because "wired" claimed
 more than a grep can deliver (#447). Two mutations made that concrete: gutting validateCheckin() to
 `return true`, and reducing escapeHtml(s) to `return String(s)` — each left the ENTIRE pytest suite
-green (re-measured 2026-08-08 with escaping gutted: 1074 passed, 43 skipped, 0 failures) while the
+green — re-measured with escaping gutted, not one failure — while the
 tests named for those very properties kept passing. Both are now killed at the browser layer, by the
 check-in gate scenario and the XSS scenario respectively.
 

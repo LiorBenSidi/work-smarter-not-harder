@@ -168,8 +168,8 @@ def test_no_auth_route_answers_with_an_unexpected_field(client, make_otp_client,
 
     /me got this guard first, one route at a time; the rest of auth had none. Measured: appending
     `leaked=str(current_app.config["SECRET_KEY"])` to the five success payloads in routes/auth.py at once
-    (/auth/config, /register, /register/verify, /login, /verify-otp) left the whole suite green — 1071
-    passed. Each of those routes is read by tests that pull ONE key out of the body, and reading one key
+    (/auth/config, /register, /register/verify, /login, /verify-otp) left the whole suite green, with not one
+    test failing. Each of those routes is read by tests that pull ONE key out of the body, and reading one key
     can never notice an extra one. /auth/config is the sharpest of the five: it is unauthenticated.
     """
     account = {"status", "username", "display_name"}     # what the four account routes answer with
