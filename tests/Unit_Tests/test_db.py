@@ -837,7 +837,7 @@ def test_forum_update_post_returns_none_if_deleted_during_write(db_mod, db):
 
 
 # ---- gaps found by mutating web/services/db.py against the whole suite (#434) ----
-# Each test below was added because a one-line change to db.py left ALL 1066 tests green. The web routes
+# Each test below was added because a one-line change to db.py left the ENTIRE suite green. The web routes
 # are exercised in Integration_Tests against conftest's in-memory fakes, so a break in the REAL data layer
 # is invisible there — these are the only alarm on the behaviours they name.
 def test_ensure_schema_validators_actually_constrain_their_collections(db_mod, db):
