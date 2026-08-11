@@ -240,7 +240,7 @@ auto-deploying every green `main` to Azure over HTTPS. The **Random Forest** beh
 too (`ai/model/model.pkl`, baked into the image). The **forum cold-seed** is built too — a deliberate
 demo/review tool (`db/seed.py`: fake clients + posts + comments + likes); a fresh database is left
 **empty by design** (a real deployment starts empty), so run the seed when you want a populated app to
-show. Suite: **1120 collected** (1074 pass / 46 environment-gated), green in CI (real-Mongo IT runs on the `mongo:7` service).
+show. Suite: **1121 collected** (1075 pass / 46 environment-gated), green in CI (real-Mongo IT runs on the `mongo:7` service).
 
 **Remaining:** tracked live in the [Issues tab](https://github.com/LiorBenSidi/work-smarter-not-harder/issues) —
 the **F5 workout-generator** (#276, the critical path) plus the per-owner graded-gap list in #400 (comment media

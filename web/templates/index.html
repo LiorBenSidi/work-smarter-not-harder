@@ -1631,7 +1631,10 @@
     function resetAuthState() {
       dbg("resetAuthState: scrubbing session (was", JSON.stringify(currentUser) + ")");
       ["login-form", "register-form", "forgot-form", "reset-form", "otp-form"].forEach((id) => $(id).reset());
-      ["login-flash", "register-flash", "forgot-flash", "reset-flash", "otp-flash"].forEach((id) => flash(id, "", "ok"));
+      // logout-flash belongs here too: it is the only one written while SIGNED IN, so a "you are still
+      // signed in" left over from a failed attempt would otherwise survive the successful retry and be
+      // sitting on the account screen — saying the opposite of the truth — the next time you sign in.
+      ["login-flash", "register-flash", "forgot-flash", "reset-flash", "otp-flash", "logout-flash"].forEach((id) => flash(id, "", "ok"));
       const hint = $("otp-devhint"); hint.textContent = ""; hint.hidden = true;
       $("who-name").textContent = ""; $("profile-user").textContent = "";  // no username residue either
       $("user-menu-av").innerHTML = ""; $("user-menu-av-lg").innerHTML = "";     // clear the corner-menu identity too
@@ -1917,6 +1920,7 @@
     // has actually confirmed. (A 401 here means the session is already gone, which is the outcome we want.)
     async function doLogout() {
       closeUserMenu();
+      flash("logout-flash", "", "ok");            // a retry starts clean, not next to the last attempt's error
       const r = await api("/logout", { method: "POST" });
       if (!r.ok && r.status !== 401) {
         // Lead with the fact that matters and never let the server's wording replace it: a bare
