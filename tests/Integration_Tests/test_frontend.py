@@ -687,9 +687,19 @@ def test_mutations_and_uploads_surface_their_failures(client):
     # editPost save: a failure flash on a bad PATCH.
     ep = html[html.index("function editPost("):html.index("function cancelEdit(")]
     assert "Couldn't save your changes" in ep and 'flash("forum-flash"' in ep
-    # forum-post upload: a dropped attachment downgrades the clean "Posted." to a warning.
-    assert "couldn't be attached." in html                                         # the attachment-failure copy exists
+    # forum-post upload: a dropped attachment downgrades the clean "Posted." to a warning...
+    assert "couldn't be attached" in html                                          # the attachment-failure copy exists
     assert 'attachWarn ? "warn" : "ok"' in html                                    # forum + DM both branch the flash kind on the warn
+    # ...and that warning has to be ACTIONABLE. The server distinguishes "unsupported media type" (400)
+    # from "that file is too large" (413), but the upload discarded the body on `!res.ok`, so both — and a
+    # dropped connection — produced one identical sentence. Two assertions only, both about the response
+    # being READ: what the user is finally told is proven where it belongs, in the browser scenario
+    # "messages: a refused attachment says which kind of file failed and why", which fails on the old
+    # renderer with the exact wrong sentence. Restating that here in string-shape would pin the wording
+    # rather than the behaviour, and break on a rewrite that is perfectly correct.
+    um = html[html.index("async function uploadMedia("):html.index("async function uploadAll(")]
+    assert "await res.json()" in um and "d.error" in um                            # the reason is read off the response...
+    assert "if (!res.ok) return null;" not in um                                   # ...not thrown away before parsing
     # DM reply: a dropped attachment must not clear the flash to a silent success.
     dm = html[html.index('onSubmit("dm-reply-form"'):html.index('$("dm-files").addEventListener')]
     assert "attachWarn" in dm and 'flash("dm-reply-flash", attachWarn' in dm
