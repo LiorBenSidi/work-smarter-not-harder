@@ -262,7 +262,7 @@ Cross-screen: corner menu `#user-menu-panel`, Home FAB `#ctx-back`, check-in cap
 150. **Logout (corner menu)** → same.
 151. **Delete reveal** → password + typed-DELETE form.
 152. **Delete gate** — "Delete forever" disabled until `#delete-confirm` == "DELETE" exactly.
-153. **Delete happy** — correct pw + "DELETE" → purged, back to login "account and all your data were deleted".
+153. **Delete happy** — correct pw + "DELETE" → purged, back to login "Your account was deleted, along with your profile, check-ins, forum posts and comments, messages and notifications." (copy narrowed in #506 — uploaded media are not cleared, #507).
 154. **Delete wrong password** → 403; pw cleared, typed DELETE retained, refocus.
 155. **Delete cancel** → collapses, resets.
 156. **Delete rate-limit** (>5/min) → 429.
