@@ -53,7 +53,7 @@ def test_dm_conversation_and_thread_expose_the_peer_display_name(messages_client
     That distinction is the whole point: the earlier version of this test used a peer whose handle and
     display name were the identical string, so dropping the display-name resolution changed nothing and
     it passed either way. Measured with the peer un-suffixed: returning the raw handle as `peer_name`
-    on the thread left the whole suite green (1084 passed).
+    on the thread left the whole suite green (measured).
     """
     _register(messages_client, "dan", "dan@example.com")
     _register(messages_client, "eve", "eve1@example.com")                                  # handle "eve"

@@ -56,7 +56,7 @@ def test_forum_feed_ignores_a_garbage_before_cursor(forum_client, cursor):
     `None`. `nan` / `inf` DO parse — `float("nan")` is a perfectly valid float — so they are the only
     inputs that exercise the `math.isfinite` check, and a nan cursor reaching the store is exactly what
     would turn a paged read into a scan. Measured before adding them: deleting that guard entirely left
-    the whole suite green (1084 passed), because `not-a-number` was the only case anyone ever sent.
+    the whole suite green (measured), because `not-a-number` was the only case anyone ever sent.
     """
     _login(forum_client)
     _new_post(forum_client, "hi", "b")
@@ -69,7 +69,7 @@ def test_forum_feed_reports_each_posts_comment_count(forum_client):
     """Every row in the feed carries how many comments its post has, which is what the list shows under each title.
 
     Nothing asserted it: hard-coding the feed's `comments` field to 0 left the whole suite green
-    (measured, 1084 passed). The detail view's comment LIST is well covered, but the feed's COUNT is a
+    (measured). The detail view's comment LIST is well covered, but the feed's COUNT is a
     different field with its own fallback, and no test read it.
     """
     _login(forum_client)

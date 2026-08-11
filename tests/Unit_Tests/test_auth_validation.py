@@ -69,7 +69,7 @@ def test_rejects_too_short_password(validate, password):
 
     The value is the BOUNDARY (min - 1), not merely a short string. `""` and `"short"` are both far
     below the floor, so they are refused by any minimum from 1 upwards: with them as the only cases,
-    lowering PASSWORD_MIN from 8 to 7 left the entire suite green (measured: 1082 passed), i.e. the
+    lowering PASSWORD_MIN from 8 to 7 left the entire suite green (measured), i.e. the
     documented minimum was pinned by nothing. Seven characters fails if and only if the floor is 8.
     """
     with pytest.raises(ValueError):
@@ -120,7 +120,7 @@ def test_rejects_an_email_that_is_syntactically_valid_but_far_too_long(auth_modu
 
     The syntax check and the length check are two halves of one condition, and only the syntax half had
     an alarm on it: measured, deleting `3 <= len(value) <= EMAIL_MAX` entirely left the whole suite green
-    (1082 passed), because every invalid address anyone tested was ALSO malformed. This one is perfectly
+    (measured), because every invalid address anyone tested was ALSO malformed. This one is perfectly
     well formed — it is only too long.
     """
     long_but_valid = "a" * (auth_module.EMAIL_MAX - len("@example.com") + 1) + "@example.com"

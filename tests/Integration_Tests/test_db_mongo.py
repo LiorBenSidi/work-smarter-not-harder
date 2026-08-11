@@ -185,7 +185,7 @@ def test_a_dollar_prefixed_handle_is_stored_as_data_not_an_aggregation_field_pat
     votes once as "$admin", but it only reads the resulting SCORE, and the score comes out right either
     way: two vote entries total two points whether or not the second one remembers whose it is.
 
-    Measured, each of these left the whole suite green (1085 passed with a real Mongo):
+    Measured, each of these left the whole suite green (measured against a real Mongo):
       - dropping $literal on the STORED user: "$admin" resolves to a missing field, so the key is omitted
         entirely and the vote is filed against nobody;
       - dropping $literal on the FILTER comparison: the prior vote is never matched, so re-voting ADDS a
