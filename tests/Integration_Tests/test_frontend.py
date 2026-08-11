@@ -760,6 +760,19 @@ def test_each_failure_surface_declares_a_branch_for_the_failure(client, surface,
         assert needle not in block, f"{surface}: still carries the swallowing path {needle!r}"
 
 
+def test_the_signed_in_error_does_not_outlive_the_session_it_describes(client):
+    """"Couldn't sign you out — you are still signed in" is the one message the app writes while signed IN, so unlike every other flash it is not wiped by the login screen it leaves behind: a failed attempt followed by a successful retry logged the user out with that sentence still on the account card, saying the opposite of the truth, and it was still there the next time they signed in.
+
+    Two halves, because they fail for different reasons: the teardown has to scrub it, and a retry has to
+    start clean rather than render underneath the previous attempt's error.
+    """
+    html = client.get("/").get_data(as_text=True)
+    scrub = html[html.index("function resetAuthState()"):html.index("function resetAuthState()") + 900]
+    assert '"logout-flash"' in scrub, "session teardown does not clear the signed-in error"
+    doLogout = html[html.index("async function doLogout("):html.index('$("logout-btn").addEventListener')]
+    assert 'flash("logout-flash", "", "ok")' in doLogout, "a retry renders on top of the last attempt's error"
+
+
 def test_the_new_post_body_is_capped_like_every_other_text_field(client):
     """The quick composer's body was the only text field in the app with no length cap, so a long paste sailed past the client and hit Flask's 64 KB request ceiling — which answers "that file is too large" for a post that has no file in it.
 
