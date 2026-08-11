@@ -17,7 +17,7 @@ def test_session_cookie_secure_is_wired_to_its_environment_variable(monkeypatch,
 
     Its sibling below proves Flask honours the flag once it is True — but that test assigns the value
     itself, so it can never see the WIRING break. Measured before adding this: replacing the env lookup
-    in web/config.py with a literal `False` left the whole suite green (1082 passed), meaning production
+    in web/config.py with a literal `False` left the whole suite green (measured), meaning production
     could ship session cookies with no Secure attribute and nothing would fail.
 
     The value is read once at import time, so the module is reloaded under each environment rather than

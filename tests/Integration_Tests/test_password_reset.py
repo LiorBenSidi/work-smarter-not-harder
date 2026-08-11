@@ -41,7 +41,7 @@ def test_forgot_password_never_enumerates_accounts(client, auth_module, monkeypa
     assert known.get_json() == unknown.get_json()          # identical body -> no account enumeration
     # A MALFORMED address takes a third branch — it never reaches the lookup at all — and it has to give
     # the same answer too, or the shape of the reply becomes a signal in itself. Measured: answering that
-    # branch with a 404 left the whole suite green (1060 passed).
+    # branch with a 404 left the whole suite green (measured).
     for bad in (None, 12345, {"$gt": ""}):
         malformed = client.post("/forgot-password", json={"email": bad})
         assert malformed.status_code == 200, f"a malformed email must answer 200 like the rest, got {bad!r}"
@@ -92,7 +92,7 @@ def test_reset_refuses_a_password_below_the_minimum(client, auth_module, monkeyp
     """A reset cannot set a password the sign-up form would have refused, so the policy cannot be walked
     around by asking for a reset link instead of registering.
 
-    Measured: deleting the length check from /reset-password left the whole suite green (1060 passed) —
+    Measured: deleting the length check from /reset-password left the whole suite green (measured) —
     a valid reset link could set a one-character password. The change-password route has this covered
     (test_change_password_rejects_short_new); the reset route, which is reachable WITHOUT being logged
     in, did not.

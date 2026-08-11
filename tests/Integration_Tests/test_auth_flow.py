@@ -54,7 +54,7 @@ def test_login_replaces_the_whole_session_rather_than_adding_to_it(client):
     That wipe is the defence against session fixation: without it, an attacker who can seed a value in
     the victim's session keeps it there across the victim's login. Checking the username alone could
     never see the difference, because the username is overwritten either way — measured: deleting
-    `session.clear()` from the login route left the whole suite green (1071 passed).
+    `session.clear()` from the login route left the whole suite green (measured).
     """
     _register(client, "alice", "s3cretpw!")
     _register(client, "bob", "s3cretpw!")
@@ -84,7 +84,7 @@ def test_the_handle_keeps_the_capitalisation_the_user_typed(client):
     Asserting only that both registrations return 201 — which is what this test used to do — proves
     nothing about capitalisation: the two accounts have different emails, so they both succeed either
     way. Measured: lower-casing the display name before allocating the handle left the whole suite green
-    (1074 passed), and under it the second account's handle comes back "alice-2" instead of "Alice".
+    (measured), and under it the second account's handle comes back "alice-2" instead of "Alice".
     The exact handles are what has to be pinned.
     """
     first = _register(client, "alice", "s3cretpw!", email="alice@example.com")
@@ -151,7 +151,7 @@ def test_me_returns_only_the_three_public_session_fields(client):
 
     Every other test of this route reads a single key, which means none of them can notice an EXTRA
     key appearing. Measured before adding this: appending the caller's own `password_hash` to the /me
-    payload left the whole suite green (1082 passed). Two neighbours outside auth were already guarded —
+    payload left the whole suite green (measured). Two neighbours outside auth were already guarded —
     /users/search by test_messages.py::test_user_search_returns_no_pii, and the post detail by the
     like/dislike tallies test — but the auth routes were NOT, which the test below now covers.
     """

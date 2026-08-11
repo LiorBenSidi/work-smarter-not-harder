@@ -184,7 +184,7 @@ def test_the_notification_poll_is_bounded_however_many_have_accrued(messages_cli
     not pull all of them on every poll — the client polls this route continuously.
 
     Measured: dropping `limit=NOTIF_VIEW_CAP` from the route's store call left the whole suite green
-    (1081 passed). The store's own cap is unit-tested, but nothing checked that this route ASKS for it,
+    (measured). The store's own cap is unit-tested, but nothing checked that this route ASKS for it,
     and an unbounded read here grows with the user's history on every single poll.
 
     The cap is lowered for the test rather than accruing a hundred real notifications: what is being

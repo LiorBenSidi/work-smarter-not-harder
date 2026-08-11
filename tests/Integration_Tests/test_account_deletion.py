@@ -116,7 +116,7 @@ def test_delete_ends_the_session_and_drops_the_remember_cookie(full_client):
     browser" cookie — so nothing about the deleted account is left behind on the machine.
 
     The session half was already covered. The cookie half was not: measured, removing the
-    delete_cookie call left the whole suite green (1060 passed). Its twin on the password-change route
+    delete_cookie call left the whole suite green (measured). Its twin on the password-change route
     IS covered (test_change_password_clears_this_browsers_remember_cookie), so this was an asymmetry
     rather than a deliberate omission.
     """

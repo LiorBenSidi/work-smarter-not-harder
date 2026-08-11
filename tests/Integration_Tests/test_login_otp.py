@@ -83,7 +83,7 @@ def test_expired_code_is_rejected(otp_client, fake_users):
     The right code is the whole point: an expired challenge rejects a wrong guess anyway, on the
     incorrect-code path, so submitting "000000" here proved only that a wrong code fails. Measured with
     the wrong code: making the TTL gate honour any CORRECT code — `if expired and not
-    check_password_hash(...)` — left the whole suite green (1071 passed), i.e. an intercepted code would
+    check_password_hash(...)` — left the whole suite green (measured), i.e. an intercepted code would
     still have worked a week later and nothing would have said so.
     """
     _register(otp_client)
@@ -102,7 +102,7 @@ def test_a_challenge_already_at_max_attempts_is_locked_out(otp_client, fake_user
     read "not locked yet", and the second one lands with the counter already at the cap — the state this
     reproduces by setting it directly. The wrong-code path has its own lockout (covered by
     test_wrong_code_rejected_then_locks_out); this is the entry gate, and deleting it left the whole
-    suite green (measured, 1071 passed) because every existing test arrives with a counter below the cap.
+    suite green (measured) because every existing test arrives with a counter below the cap.
     """
     _register(otp_client)
     code = _login(otp_client).get_json()["dev_otp"]
@@ -175,7 +175,7 @@ def test_verify_otp_is_bound_to_the_session_user(make_otp_client, fake_users):
     testing: an empty body is refused by the "no verification in progress" branch no matter where the
     route reads its user from, so the earlier version passed against a route that would happily have
     taken the username from the body. Measured: `session.get("pending_otp_user")` changed to read the
-    body first left the whole suite green (1071 passed) — an intercepted code would then have completed
+    body first left the whole suite green (measured) — an intercepted code would then have completed
     SOMEBODY ELSE'S login from a browser that never started it.
     """
     _register(make_otp_client(fake_users), "alice")

@@ -210,7 +210,7 @@ def test_configuring_twice_without_force_does_not_stack_handlers(logmod, isolate
     """A second call is a no-op, so a module imported twice — or a worker that re-initialises — does not
     end up writing every log line two or three times.
 
-    Measured: deleting the idempotence guard left the whole suite green (1054 passed). Every existing
+    Measured: deleting the idempotence guard left the whole suite green (measured). Every existing
     test either calls configure_logging once or passes force=True, so none of them could observe it.
 
     The assertion is on handler IDENTITY, not on the count. Without the guard the call falls through to
@@ -234,7 +234,7 @@ def test_every_documented_truthy_spelling_switches_logging_on(logmod):
     """All the spellings the deployment docs use mean the same thing, so ENABLE_LOGGING=on behaves
     exactly like ENABLE_LOGGING=1 rather than silently disabling logging in production.
 
-    Measured: dropping "on" from the accepted set left the whole suite green (1054 passed) — a deployment
+    Measured: dropping "on" from the accepted set left the whole suite green (measured) — a deployment
     written that way would have run with logging off and nobody would have been told.
     """
     for spelling in ("1", "true", "TRUE", "yes", "on", " On "):

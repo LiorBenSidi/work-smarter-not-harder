@@ -126,7 +126,7 @@ def test_the_forms_accepted_ranges_match_the_servers(checkin_fields):
     test: pinning the string `CI_RANGE = { sleep_hours: [1, 24]` — which is what this did — only proves
     the client has not changed. Measured: moving the SERVER's sleep floor from 1 to 2 and updating the
     server's own boundary test alongside it, which is exactly how drift happens in practice, left the
-    whole suite green (1060 passed) with the form still offering a value the server would refuse.
+    whole suite green (measured) with the form still offering a value the server would refuse.
 
     The fields are typed rather than native number inputs — so the caret can sit mid-value and the
     numeric keypad still shows — which puts the client's floor in the JavaScript range, not an attribute.

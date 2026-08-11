@@ -168,7 +168,7 @@ def test_mark_read_clears_only_the_recipients_side(db_mod, db):
     # Read implies delivered, at the REAL store. A message opened straight from a notification never
     # passes through the inbox load that sets `delivered`, so if this store stopped setting it here the
     # sender would watch a read message show a single tick forever. Nothing else pinned it: dropping
-    # `"delivered": True` from message_mark_read left the whole suite green (measured: 1082 passed).
+    # `"delivered": True` from message_mark_read left the whole suite green (measured).
     assert msg["delivered"] is True
 
 
@@ -197,7 +197,7 @@ def test_notification_mark_read_with_an_empty_id_list_clears_nothing(db_mod, db)
     The distinction is `ids is not None` rather than a truthiness test: `[]` is falsy, so a plain `if ids`
     treats "clear these zero notifications" as "clear everything" and silently wipes the user's unread
     badge. The route already refuses a non-list, so `[]` is a value that genuinely reaches this store.
-    Measured before adding this: making that exact substitution left the whole suite green (1082 passed),
+    Measured before adding this: making that exact substitution left the whole suite green (measured),
     because the only test of the empty-list rule pinned the in-memory fake in conftest, not the store.
     """
     db_mod.notification_add(db, "bob", "dm", "alice", "alice", "from alice")
@@ -263,7 +263,7 @@ def test_inbox_summary_is_a_bounded_read(db_mod, db):
     assert {r["peer"] for r in rows} == {"alice", "carol"}
     # BOTH reads must be bounded. This asserted `last_limit`, which only remembers the most recent one —
     # so removing the cap from the conversation SCAN left it green, because the unread read that follows
-    # re-set it to the same number (measured: 1077 passed). The scan is the one that grows with history.
+    # re-set it to the same number (measured). The scan is the one that grows with history.
     assert db.messages.limits == [db_mod.CONVO_SCAN_CAP, db_mod.CONVO_SCAN_CAP], \
         f"both inbox reads must be .limit()-bounded, got {db.messages.limits}"
     assert len(db_mod.message_list_conversations(db, "bob", limit=1)) == 1   # result capped to `limit`
@@ -289,7 +289,7 @@ def test_each_conversation_is_keyed_by_the_other_person(db_mod, db):
     own conversations are not filed under your own name.
 
     Every existing inbox test looks at the RECIPIENT's side, where the peer happens to be the sender.
-    Measured: deriving the peer as `m["sender"]` unconditionally left the whole suite green (1077 passed),
+    Measured: deriving the peer as `m["sender"]` unconditionally left the whole suite green (measured),
     and under it alice's inbox shows a conversation with alice.
     """
     db_mod.message_send(db, "alice", "bob", "hi")
@@ -301,7 +301,7 @@ def test_a_freshly_sent_message_is_neither_delivered_nor_read(db_mod, db):
     """A message starts on one tick: stored, but not yet in the recipient's inbox and certainly not opened.
 
     The ticks mean nothing if the store reports them optimistically. Measured: hard-coding `delivered`
-    to True in the public shape left the whole suite green (1077 passed) — every existing tick assertion
+    to True in the public shape left the whole suite green (measured) — every existing tick assertion
     checks the state AFTER a mark call, so none of them could see the starting state being wrong.
     """
     sent = db_mod.message_send(db, "alice", "bob", "hi")
@@ -312,7 +312,7 @@ def test_a_freshly_sent_message_is_neither_delivered_nor_read(db_mod, db):
 def test_marking_delivered_touches_only_this_users_inbox(db_mod, db):
     """Loading your inbox marks YOUR messages delivered and nobody else's.
 
-    Measured: dropping `{"recipient": user}` from the filter left the whole suite green (1077 passed) —
+    Measured: dropping `{"recipient": user}` from the filter left the whole suite green (measured) —
     one person opening the app would flip the ticks on every unread message in the system, telling
     strangers their messages had arrived when they had not.
     """
@@ -328,7 +328,7 @@ def test_opening_one_thread_marks_only_that_thread_read(db_mod, db):
     """Opening a conversation clears that conversation, leaving every other one still unread.
 
     The existing read test has only ONE peer in play, so a filter that ignores the peer entirely passes
-    it. Measured: dropping `{"sender": peer}` left the whole suite green (1077 passed) — opening one
+    it. Measured: dropping `{"sender": peer}` left the whole suite green (measured) — opening one
     chat would silently clear every unread badge the user had.
     """
     db_mod.message_send(db, "alice", "bob", "from alice")

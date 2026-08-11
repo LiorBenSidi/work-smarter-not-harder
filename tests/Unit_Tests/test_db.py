@@ -656,7 +656,7 @@ def test_forum_delete_post_by_author(db_mod, db):
 
     The comment cascade is asserted here because nothing else in the repo covered it: removing
     `db.forum_comments.delete_many({"post_id": post_id})` from forum_delete_post left the whole suite
-    green (measured, 1082 passed). The HTTP-layer tests cannot catch it either — conftest's in-memory
+    green (measured). The HTTP-layer tests cannot catch it either — conftest's in-memory
     FakeForum.delete_post performs its own cascade, so the fake is more correct than the code under
     test. Orphaned comments would persist forever, still feeding the engagement metric and appearing
     in a user's export with no post title.
@@ -845,8 +845,7 @@ def test_ensure_schema_validators_actually_constrain_their_collections(db_mod, d
     rejected by the database itself and not only by the route that happened to be used.
 
     Its sibling above only checks that a `$jsonSchema` key is PRESENT, which stays true of an empty schema:
-    measured, replacing every validator body with `{"$jsonSchema": {}}` left the whole suite green (1066
-    passed) — the database would have accepted anything.
+    measured, replacing every validator body with `{"$jsonSchema": {}}` left the whole suite green — the database would have accepted anything.
     """
     db_mod.ensure_schema(db)
     validators = {name: kw["validator"]["$jsonSchema"] for cmd, name, kw in db.commands if cmd == "collMod"}
@@ -863,7 +862,7 @@ def test_create_user_defaults_the_display_name_to_the_handle(db_mod, db):
     """Someone who registers without choosing a shown name is displayed under their handle rather than
     under nothing, which is what every list that renders a name relies on.
 
-    Measured: storing `display_name: None` instead left the whole suite green (1066 passed), because both
+    Measured: storing `display_name: None` instead left the whole suite green (measured), because both
     readers (`get_user`, `search_users`) fall back to the handle and no test looked at what was STORED.
     """
     assert db_mod.create_user(db, "quinn", "hash") is True     # no display_name given
@@ -874,7 +873,7 @@ def test_update_password_persists_the_new_hash(db_mod, db):
     """A password change is actually written, so someone who resets their password can sign in with the new
     one — and can no longer sign in with the old.
 
-    Measured: making the write a no-op (`{"$set": {}}`) left the whole suite green (1066 passed). The
+    Measured: making the write a no-op (`{"$set": {}}`) left the whole suite green (measured). The
     route-level password tests run against conftest's fake user store, which does its own updating, so
     nothing exercised this function's write at all.
     """
@@ -889,7 +888,7 @@ def test_search_users_puts_a_prefix_match_ahead_of_a_mid_word_match(db_mod, db):
     earliest among everyone containing those letters.
 
     Its sibling ranking test compares "ana" with "xander", which the A-Z tiebreak alone already orders
-    correctly — measured, deleting the prefix rule entirely left the whole suite green (1066 passed).
+    correctly — measured, deleting the prefix rule entirely left the whole suite green (measured).
     The names here are chosen so alphabetical order and prefix order DISAGREE: "zoe" must beat "alex"
     purely because the query starts her name.
     """
@@ -904,7 +903,7 @@ def test_forum_update_post_persists_the_new_body(db_mod, db):
 
     The sibling edit test reads the body back off the dict this function patches in memory before
     returning it, so it holds even when nothing reached the database. Measured: writing only the title
-    (`{"$set": {"title": title}}`) left the whole suite green (1066 passed) — the route-level edit test
+    (`{"$set": {"title": title}}`) left the whole suite green (measured) — the route-level edit test
     re-reads the body, but through conftest's fake forum, not this code.
     """
     pid = db_mod.forum_create_post(db, "alice", "Old", "old body", False)["id"]
@@ -916,7 +915,7 @@ def test_forum_post_publishes_whether_it_was_posted_anonymously(db_mod, db):
     """A post carries the anonymity its author chose, which is the flag every reader-facing view uses to
     decide whether to show a name — the entire promise made to whoever ticked that box.
 
-    Measured: hard-coding the flag to False left the whole suite green (1066 passed). Every test in this
+    Measured: hard-coding the flag to False left the whole suite green (measured). Every test in this
     file creates posts with `anonymous=False`, and the route-level anonymity test runs against conftest's
     fake forum, so nothing here ever read a True back out.
     """
@@ -931,7 +930,7 @@ def test_list_history_bounds_the_read_when_a_limit_is_given(db_mod, db):
     """Asking for the newest N check-ins reads N rows, so the History view cannot pull an append-only log
     that grows without bound while `limit=None` still returns everything for the data export.
 
-    Measured: ignoring the limit entirely left the whole suite green (1066 passed) — no test passed a
+    Measured: ignoring the limit entirely left the whole suite green (measured) — no test passed a
     limit at all. The window is the NEWEST entries, returned oldest-first within that window, so a
     History view showing the last N days shows the last N and not the first N.
     """
@@ -948,7 +947,7 @@ def test_deleting_a_profile_touches_only_that_user(db_mod, db):
     """Erasing one account's profile leaves everybody else's in place.
 
     Measured: dropping the `{"username": username}` filter — a one-word slip that turns account deletion
-    into deleting a stranger's data — left the whole suite green (1066 passed), because only one user
+    into deleting a stranger's data — left the whole suite green (measured), because only one user
     existed wherever this was called.
 
     The bystander is stored FIRST on purpose. `delete_one` removes the first row that MATCHES, so with
@@ -966,7 +965,7 @@ def test_deleting_history_touches_only_that_user(db_mod, db):
     """Erasing one account's check-in history leaves everybody else's in place — the same unscoped-delete
     slip as the profile case above, on the collection that holds the most data.
 
-    Measured: dropping the `{"username": username}` filter left the whole suite green (1066 passed).
+    Measured: dropping the `{"username": username}` filter left the whole suite green (measured).
     """
     db_mod.add_history(db, "alice", {"timestamp": "2026-01-01T00:00:00Z", "assessment": "Ready"})
     db_mod.add_history(db, "bob", {"timestamp": "2026-01-01T00:00:00Z", "assessment": "Rest"})
@@ -980,7 +979,7 @@ def test_a_second_checkin_the_same_day_replaces_the_first(db_mod, db):
     per day — which is what the heatmap, the streak and the trend all assume when they treat a day as a
     single square.
 
-    Measured: deleting the same-day replace entirely left the whole suite green (1066 passed). Nothing
+    Measured: deleting the same-day replace entirely left the whole suite green (measured). Nothing
     reached it: this file's history tests use timestamps shorter than ten characters, so the day key came
     out None and the branch never ran, and the route-level test runs against conftest's fake store.
     """
@@ -997,7 +996,7 @@ def test_history_recommendations_are_bounded_and_coerced_to_strings(db_mod, db):
     they come from the ai container — a semi-trusted producer that must not be able to grow a stored
     document without limit or push a non-string into it.
 
-    Measured: raising the cap from 10 to 1000 left the whole suite green (1066 passed); this function had
+    Measured: raising the cap from 10 to 1000 left the whole suite green (measured); this function had
     no test at all.
     """
     db_mod.add_history(db, "alice", {"timestamp": "2026-03-04T07:00:00Z", "assessment": "Ready"})

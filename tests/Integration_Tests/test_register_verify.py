@@ -50,7 +50,7 @@ def test_register_verify_rejects_an_expired_code(verify_client):
     unattended inbox cannot be redeemed later.
 
     Nothing tested this at all: deleting the TTL gate in /register/verify outright left the whole suite
-    green (measured, 1071 passed). The login OTP had an expiry test; its registration twin did not, and
+    green (measured). The login OTP had an expiry test; its registration twin did not, and
     the two gates are separate code with separate stores — the login challenge lives in the user record,
     the pending signup lives in the session. The CORRECT code is submitted, because a wrong one is
     refused by the next branch anyway and would prove nothing about expiry.
