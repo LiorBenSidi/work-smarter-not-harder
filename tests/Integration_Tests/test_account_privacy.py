@@ -61,7 +61,7 @@ def test_security_email_is_sent_regardless_of_consent(make_otp_client, fake_user
 # ---- data export ----
 def test_export_returns_all_user_data_as_a_download(full_client, fake_profiles, fake_history, fake_forum,
                                                     fake_messages, fake_notifications):
-    """The export returns everything the app holds about the user, as a real download, scoped to them alone — their own posts and comments, their votes, their messages, their notifications, and nobody else's."""
+    """The export returns the seven stores it covers, as a real download, scoped to the caller alone — their own posts and comments, their votes, their messages, their notifications, and nobody else's. It does NOT cover uploaded media (#507), so this asserts what the payload contains, never that it is complete."""
     _register_login(full_client, "alice")
     fake_profiles.save("alice", {"age": 30, "goal": "maintain"})
     fake_history.add("alice", {"assessment": "Ready", "calories": 2000})

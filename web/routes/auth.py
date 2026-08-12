@@ -464,8 +464,11 @@ def change_email_consent():
 @limiter.limit("10 per minute")
 @login_required
 def export_data():
-    """GDPR data portability: return ALL of the caller's data as a JSON download — everything the app
-    holds about them, minus the password hash. Served as an attachment so the browser saves a file."""
+    """GDPR data portability: return the caller's data as a JSON download — account, profile, check-in
+    history, forum footprint (their posts, their comments, and every vote they cast), direct messages
+    and notifications. Two things are deliberately absent: the password hash, and uploaded media — the
+    media store exposes no owner-scoped read, so media can be neither exported here nor erased on
+    account deletion (#507). Served as an attachment so the browser saves a file."""
     username = session["username"]
     cfg = current_app.config
     try:
