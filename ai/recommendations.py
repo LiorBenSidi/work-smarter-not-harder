@@ -145,7 +145,17 @@ def _current_recovery_recommendations(state: str, features: dict[str, Any]) -> l
 
     goal = str(features.get("goal", "")).strip().lower()
     if goal == "gain":
-        items.append((28, "For a gain goal, prioritize consistent training quality and adequate energy intake."))
+        calories = calculate_calories(features)
+        if calories is not None:
+            items.append((
+                28,
+                f"For a gain goal, eat more: target roughly {calories} kcal/day to support training and recovery.",
+            ))
+        else:
+            items.append((
+                28,
+                "For a gain goal, eat more and prioritize consistent training quality to support growth.",
+            ))
     elif goal == "lose":
         items.append((28, "For a loss goal, keep the calorie deficit moderate and preserve strength work."))
     elif goal == "maintain":
