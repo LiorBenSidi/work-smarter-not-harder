@@ -76,6 +76,48 @@ def test_history_trend_is_used_only_when_present():
     assert any("Sleep has declined" in item for item in result)
 
 
+def test_gain_goal_recommends_eating_more_with_a_calorie_target():
+    profile = {
+        "age": 25,
+        "gender": "male",
+        "height": 180,
+        "weight": 75,
+        "goal": "gain",
+        "training_frequency": 4,
+    }
+    expected_calories = calculate_calories(profile)
+    assert expected_calories is not None
+
+    result = generate_recommendations(
+        "Moderate",
+        {
+            "sleep_hours": 8,
+            "fatigue": 2,
+            "soreness": 1,
+            "training_load": 3,
+            **profile,
+        },
+    )
+
+    joined = " ".join(result).lower()
+    assert "eat more" in joined
+    assert str(expected_calories) in " ".join(result)
+
+
+def test_gain_goal_recommends_eating_more_without_a_profile():
+    result = generate_recommendations("Moderate", {"goal": "gain"})
+
+    joined = " ".join(result).lower()
+    assert "eat more" in joined
+
+
+def test_lose_and_maintain_goals_do_not_recommend_eating_more():
+    for goal in ("lose", "maintain"):
+        result = generate_recommendations("Moderate", {"goal": goal})
+        joined = " ".join(result).lower()
+        assert "eat more" not in joined
+
+
 def test_program_balance_supports_weekly_sets_mapping():
     result = generate_recommendations(
         "Ready",
