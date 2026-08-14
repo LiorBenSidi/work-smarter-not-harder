@@ -9,7 +9,8 @@ app/request state. Load the baked model once at import time (module scope) so ea
 pays for it exactly once, not per request.
 
 CONTRACT (the `web -> ai` response shape — see docs/DESIGN.md):
-    predict_one({...features...}) -> {"state": str, "proba": {str: float}, "recommendations": [...]}
+    predict_one({...features...}) -> {"state": str, "proba": {str: float}, "recommendations": [...],
+                                       "plan": {"split": str, "days": None} | {"split_options": [str, str]}}
 """
 
 import logging
@@ -22,6 +23,11 @@ try:
     from recommendations import calculate_calories, generate_recommendations
 except ImportError:
     from ai.recommendations import calculate_calories, generate_recommendations
+
+try:
+    from workout_plan import resolve_split_preference
+except ImportError:
+    from ai.workout_plan import resolve_split_preference
 
 logger = logging.getLogger(__name__)
 
@@ -132,10 +138,17 @@ def predict_one(features):
     recommendations = generate_recommendations(state, features)
     calories = calculate_calories(features)
 
+    safe_features = features if isinstance(features, dict) else {}
+    plan = resolve_split_preference(
+        safe_features.get("split_preference"),
+        safe_features.get("training_frequency"),
+    )
+
     result = {
         "state": state,
         "proba": probability_by_class,
         "recommendations": recommendations,
+        "plan": plan,
     }
     if calories is not None:
         result["calories"] = calories

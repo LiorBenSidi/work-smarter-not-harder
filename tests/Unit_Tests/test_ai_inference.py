@@ -26,10 +26,11 @@ def test_predict_one_returns_required_contract(inference_module):
     result = inference_module.predict_one(FULL_FEATURES)
 
     assert isinstance(result, dict)
-    assert {"state", "proba", "recommendations"}.issubset(result.keys())
+    assert {"state", "proba", "recommendations", "plan"}.issubset(result.keys())
     assert isinstance(result["state"], str)
     assert isinstance(result["proba"], dict)
     assert isinstance(result["recommendations"], list)
+    assert isinstance(result["plan"], dict)
 
 
 def test_predict_one_returns_valid_readiness_state(inference_module):
@@ -145,6 +146,32 @@ def test_non_dictionary_input_degrades_safely(inference_module):
 
     assert result["state"] in VALID_STATES
     assert set(result["proba"].keys()) == VALID_STATES
+    assert result["plan"] == {"split": "full_body", "days": None}
+
+
+def test_plan_reflects_an_explicit_split_preference(inference_module):
+    """An athlete's explicit split choice passes straight through into plan."""
+    result = inference_module.predict_one(
+        {**FULL_FEATURES, "split_preference": "push_pull_legs", "training_frequency": 4}
+    )
+
+    assert result["plan"] == {"split": "push_pull_legs", "days": None}
+
+
+def test_plan_offers_options_at_an_ambiguous_training_frequency(inference_module):
+    """4 or 5 days/week with no_preference must ask, not guess (agreed on #410)."""
+    result = inference_module.predict_one(
+        {**FULL_FEATURES, "split_preference": "no_preference", "training_frequency": 4}
+    )
+
+    assert result["plan"] == {"split_options": ["full_body", "upper_lower"]}
+
+
+def test_plan_defaults_safely_when_split_inputs_are_absent(inference_module):
+    """No profile fields at all must not crash predict_one -- plan still resolves."""
+    result = inference_module.predict_one(FULL_FEATURES)
+
+    assert result["plan"] == {"split": "full_body", "days": None}
 
 
 def test_result_is_pickle_and_json_serializable(inference_module):
