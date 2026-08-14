@@ -39,7 +39,7 @@ These are the **universal guardrails** every owner's work must pass before it ca
 |---|:-:|:-:|:-:|:-:|:-:|---|---|
 | Auth (F1) | ✓ | ✓ | ✓ | – | ✓ | Lior | `Security_Tests/test_auth.py` |
 | Profile (F2) | ✓ | ✓ | ✓ | – | ✓ inj. | Lior | (add) |
-| Readiness (F3) | ✓ | ✓ | ✓ | ✓ | – | Shiri | `Unit_Tests/test_ai.py`, `Integration_Tests/test_web_ai.py` |
+| Readiness (F3) | ✓ | ✓ | ✓ | ✓ | – | Shiri | `Unit_Tests/test_ai_inference.py`, `test_ai_recommendations.py`, `test_ai_binning.py`, `Integration_Tests/test_web_ai.py` |
 | Calorie (F4) | ✓ | ✓ | ✓ | – | – | Shiri | `Unit_Tests/test_calories.py` (unit ✓) |
 | Workout (F5) | ✓ | ✓ | ✓ | – | – | Shiri | (add) |
 | Dashboard / History (F7/F8) | ✓ | ✓ | ✓ | – | – | Lior | `System_Tests/test_e2e.py` |
