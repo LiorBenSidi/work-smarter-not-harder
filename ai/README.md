@@ -37,6 +37,13 @@ Several Random Forest configurations were compared during training. The selected
 
 Class imbalance is handled using `class_weight="balanced"`, which gives more importance during training to classes with fewer examples.
 
+No synthetic augmentation (bootstrapping whole rows, SMOTE, or similar) was used. This is a
+deliberate choice, not an oversight: `class_weight="balanced"` is applied during the same
+cross-validation sweep that selects the model configuration (`ai/model/train.py`), and every
+candidate is compared under that setting before one is picked. `Ready` is the minority class at
+7.7% of the data (133 of 1729 rows) — reweighting the existing rows was judged sufficient
+against a dataset this size, rather than synthesizing new ones.
+
 The model uses sleep hours, fatigue, soreness, and training load as input features. User inputs are converted when needed to match the scales used during model training.
 
 The trained model is stored in `ai/model/model.pkl`, and the training results are stored in `ai/model/training_report.json`.
