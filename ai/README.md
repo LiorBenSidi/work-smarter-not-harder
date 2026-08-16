@@ -33,16 +33,17 @@ The raw dataset is not committed to the repository.
 
 The final model is a Random Forest classifier. It was chosen because the dataset is relatively small and tabular, and because the relationships between recovery metrics and readiness may be nonlinear.
 
-Several Random Forest configurations were compared during training. The selected candidate is `leaf6_depth_none__balanced`, and the current `Ready` probability threshold is `0.58`.
+Several Random Forest configurations were compared during training. The selected candidate is `leaf6_depth_none__balanced`, and the current `Ready` probability threshold is `0.60`.
 
 Class imbalance is handled using `class_weight="balanced"`, which gives more importance during training to classes with fewer examples.
 
-No synthetic augmentation (bootstrapping whole rows, SMOTE, or similar) was used. This is a
-deliberate choice, not an oversight: `class_weight="balanced"` is applied during the same
-cross-validation sweep that selects the model configuration (`ai/model/train.py`), and every
-candidate is compared under that setting before one is picked. `Ready` is the minority class at
-7.7% of the data (133 of 1729 rows) — reweighting the existing rows was judged sufficient
-against a dataset this size, rather than synthesizing new ones.
+No synthetic augmentation (bootstrapping whole rows, SMOTE, or similar) is used in the shipped
+model. This is a deliberate, evidence-based choice, not an oversight: bootstrap augmentation was
+evaluated against `class_weight="balanced"` under the same participant-grouped cross-validation
+used to select the model, bootstrapping only each training fold so no synthesized row could leak
+into a validation fold. It performed worse — overall Macro-F1 dropped from `0.4646` to `0.4427`,
+and Ready-class F1 dropped from `0.2802` to `0.2222` — so the final model keeps
+`class_weight="balanced"` instead.
 
 The model uses sleep hours, fatigue, soreness, and training load as input features. User inputs are converted when needed to match the scales used during model training.
 
