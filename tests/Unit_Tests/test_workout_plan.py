@@ -1,15 +1,25 @@
-"""Unit tests for the F5 split-day resolution (ai/workout_plan.py). OWNER: Shiri.
+"""Unit tests for the F5 workout generator (ai/workout_plan.py). OWNER: Shiri.
 
-resolve_split_preference is the first stage of the workout generator: it decides which split
-doctrine governs the week, before any exercise gets picked. These tests pin the exact threshold
-rule and the plan-contract output shape (both agreed with Lior on #410) and guard against drift
-from the profile's SPLITS contract.
+resolve_split_preference decides which split doctrine governs the week; day_focus_sequence turns
+that into an ordered list of day-by-day focuses; generate_workout_days fills each day with
+exercises from EXERCISE_CATALOG. All three stages are pure and deterministic -- no I/O, no
+network calls, nothing to mock -- same as the rest of ai/ (see the module's own docstring). A
+test that seemed to need mocking an external service would mean the design was wrong, not the
+test, so none of these do.
 """
 import sys
 
 import pytest
 
-from ai.workout_plan import SPLITS, resolve_split_preference
+from ai.workout_plan import (
+    GOAL_ISOMETRIC_SETS_DURATION,
+    GOAL_SETS_REPS,
+    MIN_DAYS_FOR_SPLIT,
+    SPLITS,
+    day_focus_sequence,
+    generate_workout_days,
+    resolve_split_preference,
+)
 
 
 @pytest.mark.parametrize("split", ["full_body", "upper_lower", "push_pull_legs"])
@@ -98,3 +108,262 @@ def test_splits_vocabulary_matches_the_profile_contract(web_app_module):
     """ai/ and web/ are separate containers with no shared import -- this guards against drift."""
     profile_splits = sys.modules["routes.profile"].SPLITS
     assert SPLITS == profile_splits
+
+
+# --- day_focus_sequence ------------------------------------------------------------------
+# resolve_split_preference passes an explicit split_preference through unchanged at ANY
+# training_frequency -- it never validates that the frequency is high enough for that split to
+# complete a full cycle. day_focus_sequence is what has to catch that pairing.
+
+def test_ppl_with_insufficient_days_falls_back_to_full_body_at_one_day():
+    """Regression: split_preference="push_pull_legs" + training_frequency=1 used to produce
+    ["Push"] with Legs never appearing anywhere in the week."""
+    assert day_focus_sequence("push_pull_legs", 1) == ["Full Body"]
+
+
+def test_ppl_with_insufficient_days_falls_back_to_full_body_at_two_days():
+    """Same bug at two days: the truncated cycle used to be ["Push", "Pull"] -- still no Legs."""
+    assert day_focus_sequence("push_pull_legs", 2) == ["Full Body", "Full Body"]
+
+
+def test_ppl_completes_a_full_cycle_at_its_minimum_day_count():
+    assert day_focus_sequence("push_pull_legs", 3) == ["Push", "Pull", "Legs"]
+
+
+def test_upper_lower_with_insufficient_days_falls_back_to_full_body():
+    """Same class of bug, one day short for a 2-day cycle: ["Upper"] alone used to be possible."""
+    assert day_focus_sequence("upper_lower", 1) == ["Full Body"]
+
+
+def test_upper_lower_completes_a_full_cycle_at_its_minimum_day_count():
+    assert day_focus_sequence("upper_lower", 2) == ["Upper", "Lower"]
+
+
+@pytest.mark.parametrize("frequency", [3, 4, 5, 6, 7, 8, 14])
+def test_push_pull_legs_focuses_never_appear_without_each_other(frequency):
+    """The property the two regression tests above exist to protect, generalized: Push, Pull
+    and Legs must appear together or not at all -- never a partial set -- across the whole
+    legal training_frequency range (including the 8-14 tail, profile-legal but unrealistic)."""
+    sequence = day_focus_sequence("push_pull_legs", frequency)
+    focuses_present = {"Push", "Pull", "Legs"} & set(sequence)
+    if focuses_present:
+        assert focuses_present == {"Push", "Pull", "Legs"}
+
+
+def test_full_body_repeats_the_same_focus_for_every_day():
+    assert day_focus_sequence("full_body", 5) == ["Full Body"] * 5
+
+
+def test_day_count_is_capped_at_seven_even_for_a_profile_legal_higher_frequency():
+    assert len(day_focus_sequence("push_pull_legs", 14)) == 7
+
+
+def test_zero_training_frequency_produces_an_empty_sequence():
+    assert day_focus_sequence("push_pull_legs", 0) == []
+
+
+@pytest.mark.parametrize(
+    "bad_frequency", [None, "garbage", float("nan"), float("inf"), -1, True, {"$gt": ""}]
+)
+def test_unusable_training_frequency_produces_an_empty_sequence(bad_frequency):
+    """Never guess a day count -- an unusable frequency means no days, not an invented one."""
+    assert day_focus_sequence("push_pull_legs", bad_frequency) == []
+
+
+def test_an_unrecognized_split_falls_back_to_the_full_body_cycle():
+    """Defensive: must never crash on a split it doesn't recognize, even though its only real
+    caller passes an already-resolved value from resolve_split_preference."""
+    assert day_focus_sequence("cardio", 5) == ["Full Body"] * 5
+
+
+def test_min_days_for_split_has_no_entry_for_full_body():
+    """full_body can't truncate mid-cycle (every day is the same focus), so an entry for it
+    here would be meaningless -- this catches a future refactor accidentally adding one."""
+    assert "full_body" not in MIN_DAYS_FOR_SPLIT
+
+
+# --- generate_workout_days ----------------------------------------------------------------
+
+FULL_EQUIPMENT = ["barbell", "dumbbell", "bodyweight", "machine", "bands", "kettlebell", "pullup_bar"]
+NO_MACHINE_EQUIPMENT = ["barbell", "dumbbell", "bodyweight"]
+
+
+def test_every_day_has_the_contract_shape():
+    days = generate_workout_days("full_body", 3, FULL_EQUIPMENT, "gain")
+    assert len(days) == 3
+    for expected_day_number, day in enumerate(days, start=1):
+        assert set(day.keys()) == {"day", "focus", "exercises"}
+        assert day["day"] == expected_day_number
+        assert day["focus"] == "Full Body"
+        assert isinstance(day["exercises"], list)
+        for exercise in day["exercises"]:
+            assert set(exercise.keys()) == {"name", "sets", "reps", "muscle_group"}
+            assert isinstance(exercise["name"], str) and exercise["name"]
+            assert isinstance(exercise["sets"], int)
+            assert isinstance(exercise["reps"], str)
+            assert isinstance(exercise["muscle_group"], str)
+
+
+def test_focus_sequence_matches_day_focus_sequence_exactly():
+    """generate_workout_days must walk the exact same sequence day_focus_sequence produces --
+    the two are not allowed to drift apart."""
+    for split, frequency in [("full_body", 3), ("upper_lower", 4), ("push_pull_legs", 7)]:
+        days = generate_workout_days(split, frequency, FULL_EQUIPMENT, "maintain")
+        assert [day["focus"] for day in days] == day_focus_sequence(split, frequency)
+
+
+def test_full_body_covers_ten_muscle_groups_with_full_equipment():
+    day = generate_workout_days("full_body", 1, FULL_EQUIPMENT, "gain")[0]
+    groups = [exercise["muscle_group"] for exercise in day["exercises"]]
+    assert len(groups) == 10
+    assert groups.count("quads") == 2  # Squat + supplementary Leg Extension
+    for group in ("hamstrings", "calves", "chest", "shoulders", "back", "biceps", "triceps", "core"):
+        assert groups.count(group) == 1
+
+
+def test_full_body_drops_only_the_supplementary_quads_slot_without_machine_equipment():
+    """Regression: the supplementary isolation quads slot (Leg Extension) used to fall back to
+    a second COMPOUND quads exercise when no isolation option was equipment-eligible, producing
+    a literal duplicate exercise under a different label. It must skip instead."""
+    day = generate_workout_days("full_body", 1, NO_MACHINE_EQUIPMENT, "gain")[0]
+    assert len(day["exercises"]) == 9
+    groups = [exercise["muscle_group"] for exercise in day["exercises"]]
+    assert groups.count("quads") == 1
+    assert groups.count("hamstrings") == 1  # hamstrings' only slot still falls back, unaffected
+
+
+def test_no_exercise_is_ever_repeated_within_a_single_day():
+    for split, frequency in [("full_body", 2), ("upper_lower", 2), ("push_pull_legs", 3)]:
+        for day in generate_workout_days(split, frequency, FULL_EQUIPMENT, "gain"):
+            names = [exercise["name"] for exercise in day["exercises"]]
+            assert len(names) == len(set(names)), f"{split} {day['focus']}: {names}"
+
+
+def test_upper_covers_exactly_six_muscle_groups():
+    day = generate_workout_days("upper_lower", 2, FULL_EQUIPMENT, "maintain")[0]
+    assert day["focus"] == "Upper"
+    groups = {exercise["muscle_group"] for exercise in day["exercises"]}
+    assert groups == {"chest", "shoulders", "back", "biceps", "triceps", "core"}
+
+
+def test_lower_and_legs_cover_the_same_five_groups_with_full_equipment():
+    lower_day = generate_workout_days("upper_lower", 2, FULL_EQUIPMENT, "maintain")[1]
+    legs_day = generate_workout_days("push_pull_legs", 3, FULL_EQUIPMENT, "maintain")[2]
+    assert lower_day["focus"] == "Lower"
+    assert legs_day["focus"] == "Legs"
+    for day in (lower_day, legs_day):
+        assert len(day["exercises"]) == 5
+        groups = [exercise["muscle_group"] for exercise in day["exercises"]]
+        assert groups.count("quads") == 1
+        assert groups.count("hamstrings") == 1
+        assert groups.count("glutes") == 2  # general glutes slot + dedicated adductor/abductor slot
+        assert groups.count("calves") == 1
+        assert "core" not in groups
+
+
+def test_lower_drops_only_the_adductor_abductor_slot_without_machine_equipment():
+    day = generate_workout_days("upper_lower", 2, NO_MACHINE_EQUIPMENT, "maintain")[1]
+    assert len(day["exercises"]) == 4
+    groups = [exercise["muscle_group"] for exercise in day["exercises"]]
+    assert groups.count("glutes") == 1  # only the general-glutes slot remains
+    assert "Machine hip adductor" not in [e["name"] for e in day["exercises"]]
+    assert "Machine hip abductor" not in [e["name"] for e in day["exercises"]]
+
+
+def test_push_always_includes_a_core_exercise():
+    for frequency in (3, 4, 5, 6, 7):
+        for day in generate_workout_days("push_pull_legs", frequency, FULL_EQUIPMENT, "gain"):
+            if day["focus"] == "Push":
+                groups = [exercise["muscle_group"] for exercise in day["exercises"]]
+                assert groups.count("core") == 1
+                assert set(groups) == {"chest", "shoulders", "triceps", "core"}
+
+
+def test_pull_never_includes_a_core_exercise():
+    for frequency in (3, 4, 5, 6, 7):
+        for day in generate_workout_days("push_pull_legs", frequency, FULL_EQUIPMENT, "gain"):
+            if day["focus"] == "Pull":
+                groups = [exercise["muscle_group"] for exercise in day["exercises"]]
+                assert "core" not in groups
+                assert set(groups) == {"back", "biceps", "shoulders"}
+
+
+def test_core_appears_on_every_push_day_across_a_seven_day_ppl_week():
+    """Regression: core placement was briefly first-occurrence-only, which clustered it on two
+    consecutive days and capped it at 1x/week. The agreed rule is a fixed slot on Push, every
+    time -- natural spacing across the PPL cycle, frequency that scales with training_frequency."""
+    days = generate_workout_days("push_pull_legs", 7, FULL_EQUIPMENT, "gain")
+    push_days = [day for day in days if day["focus"] == "Push"]
+    pull_and_legs_days = [day for day in days if day["focus"] in ("Pull", "Legs")]
+    assert len(push_days) == 3  # days 1, 4, 7
+    for day in push_days:
+        assert any(exercise["muscle_group"] == "core" for exercise in day["exercises"])
+    for day in pull_and_legs_days:
+        assert not any(exercise["muscle_group"] == "core" for exercise in day["exercises"])
+
+
+def test_bodyweight_only_pull_skips_biceps_and_shoulders_gracefully():
+    """Both documented catalog gaps (no bodyweight biceps, no bodyweight pull-pattern
+    shoulders) apply to Pull at once -- must degrade to just the back exercise, never crash."""
+    day = generate_workout_days("push_pull_legs", 3, [], "lose")[1]
+    assert day["focus"] == "Pull"
+    groups = [exercise["muscle_group"] for exercise in day["exercises"]]
+    assert groups == ["back"]
+
+
+@pytest.mark.parametrize(("goal", "sets", "reps"), [
+    ("gain", 4, "6-8"),
+    ("maintain", 3, "8-12"),
+    ("lose", 3, "12-15"),
+])
+def test_rep_based_exercises_use_the_goal_sets_reps_table(goal, sets, reps):
+    """Lower (not Upper) -- Upper includes a core slot that always resolves to Plank
+    (is_isometric=True), whose "reps" is a duration string, not a rep range. Lower never
+    includes core, so every exercise here is rep-based, no filtering needed."""
+    day = generate_workout_days("upper_lower", 2, FULL_EQUIPMENT, goal)[1]
+    for exercise in day["exercises"]:
+        assert exercise["sets"] == sets
+        assert exercise["reps"] == reps
+
+
+@pytest.mark.parametrize("goal", ["gain", "maintain", "lose"])
+def test_isometric_exercises_get_a_duration_not_a_rep_range(goal):
+    """Plank must use GOAL_ISOMETRIC_SETS_DURATION, never GOAL_SETS_REPS -- a rep range like
+    "6-8" is meaningless for a held position. Asserted against the actual table, not a
+    hardcoded copy of its values, so a future change to the table can't silently drift from
+    what this test expects."""
+    day = generate_workout_days("push_pull_legs", 3, FULL_EQUIPMENT, goal)[0]
+    assert day["focus"] == "Push"
+    plank = next(e for e in day["exercises"] if e["name"] == "Plank")
+    expected_sets, expected_duration = GOAL_ISOMETRIC_SETS_DURATION[goal]
+    assert plank["sets"] == expected_sets
+    assert plank["reps"] == expected_duration
+    assert plank["reps"] not in {reps for _, reps in GOAL_SETS_REPS.values()}
+
+
+def test_an_unusable_training_frequency_produces_no_days():
+    assert generate_workout_days("push_pull_legs", None, FULL_EQUIPMENT, "gain") == []
+
+
+def test_zero_training_frequency_produces_no_days():
+    assert generate_workout_days("push_pull_legs", 0, FULL_EQUIPMENT, "gain") == []
+
+
+def test_an_unrecognized_split_falls_back_to_full_body_and_never_crashes():
+    days = generate_workout_days("cardio", 3, FULL_EQUIPMENT, "gain")
+    assert [day["focus"] for day in days] == ["Full Body", "Full Body", "Full Body"]
+
+
+@pytest.mark.parametrize("bad_goal", ["bulk", "", None, 123, {"$gt": ""}, ["gain"]])
+def test_an_unrecognized_goal_falls_back_to_maintain(bad_goal):
+    day = generate_workout_days("full_body", 1, FULL_EQUIPMENT, bad_goal)[0]
+    non_isometric = [e for e in day["exercises"] if e["reps"] in ("6-8", "8-12", "12-15")]
+    assert all(e["sets"] == 3 and e["reps"] == "8-12" for e in non_isometric)
+
+
+@pytest.mark.parametrize("bad_equipment", [None, "barbell", 123, {"$gt": ""}, [{"$gt": ""}], [123, None]])
+def test_an_unusable_equipment_argument_degrades_to_bodyweight_only_never_crashes(bad_equipment):
+    days = generate_workout_days("push_pull_legs", 3, bad_equipment, "gain")
+    assert len(days) == 3
+    pull_day = days[1]
+    assert [e["muscle_group"] for e in pull_day["exercises"]] == ["back"]

@@ -7,12 +7,12 @@ against a single source of truth and fix what they think is missing. Two indepen
 
 **✅ Implemented & verified**
 - **Graded build:** 3-container Docker app · **Job Queue (+5)** · **Online Forum (+10)** · **Azure deploy + CI/CD (+10)** · live HTTPS URL
-- **Report** (`REPORT.md`, 1184 tests) · **README** (run + test instructions) · risk assessment
+- **Report** (`REPORT.md`, 1244 tests) · **README** (run + test instructions) · risk assessment
 - **Per-member commits** present (Lior 308 · Elad 43 · Shiri 11 — the per-member grading requirement is met)
 - **Show Off gallery (Track B): ✅ SUBMITTED 29 Jul** (`207490913.zip` — team-approved, uploaded to Moodle)
 
 **⬜ Still open**
-- **F5 workout generator** — the one open *graded* feature (Shiri · [#276](https://github.com/LiorBenSidi/work-smarter-not-harder/issues/276))
+- **F5 workout generator — dashboard display** — AI side built + wired into `/predict` (Shiri); the dashboard doesn't relay or render `plan` yet — the one open *graded* gap (web tier · [#410](https://github.com/LiorBenSidi/work-smarter-not-harder/issues/410))
 - **Demo video** of the app — not recorded yet (team; script at `presentation/WSNH Demo Video Script.md`)
 - **Paste the repo link** into the Moodle final-project box (when it opens) — Lior _(Show Off zip ✅ uploaded 29 Jul)_
 - **Seed prod · VM up · joint sign-off** before the TA review
@@ -31,7 +31,7 @@ Rubric (`docs/GUIDELINES.md`, the TA's `WSNH_Guidelines`, 8 Jul): **75** proposa
 |---|---|---|---|
 | The application | this repo @ `main` | all | ✅ `docker compose up --build` (3 containers, only `web` published) |
 | Live URL over HTTPS | app.worksmarternotharder.dev | Elad (deploy) | ✅ live, auto-deploy + rollback |
-| **Report** | [`docs/REPORT.md`](REPORT.md) | all (Lior drafted) | ✅ current — **1184 tests** (1166 pass / 18 env-gated in CI). The single source is the live `.md`; the stale 2026-07-11 `REPORT.pdf` was removed — regenerate a fresh PDF from this only if the TA wants a file. |
+| **Report** | [`docs/REPORT.md`](REPORT.md) | all (Lior drafted) | ✅ current — **1244 tests** (1226 pass / 18 env-gated in CI). The single source is the live `.md`; the stale 2026-07-11 `REPORT.pdf` was removed — regenerate a fresh PDF from this only if the TA wants a file. |
 | Rubric / guidelines | [`docs/GUIDELINES.md`](GUIDELINES.md) | — | ✅ |
 | Roadmap | [`docs/ROADMAP.md`](ROADMAP.md) | — | ✅ |
 | Presentation + demo video | `presentation/` (see the checklist) | all | 🟡 deck ✅ (presented 16 Jul); **demo video ⬜ to record** → `VID_<ids>.mp4` |
@@ -44,13 +44,14 @@ Rubric (`docs/GUIDELINES.md`, the TA's `WSNH_Guidelines`, 8 Jul): **75** proposa
   the 3-container build · the CI gate · the CI/CD pipeline · web/data integration/system/security tests. ✅ shipped.
 - **Elad** — live Azure deploy · media/attachments (+ size caps) · rate-limiting · stress · cross-container
   test-runner · the AI job queue (+5). ✅ shipped (his own lane-validation, #388).
-- **Shiri** — the AI model (`ai/`): real `/predict` ✅ landed; **F5 workout generator ⬜ not built** (+ F6's
-  `program` input, #276 P7). ← the one open **graded** feature.
+- **Shiri** — the AI model (`ai/`): real `/predict` ✅ landed; **F5 workout generator's AI side ✅ built and
+  wired into `/predict`** (catalog, split resolution, exercise selection). F6's `program` input (#276 P7)
+  still unresolved — the generated plan isn't fed into `_program_recommendations` yet.
 
 ### Open before hand-in (human steps / not built)
 - [ ] **Submit the GitHub repo link** in the Moodle final-project box when it opens (format is settled above:
       repo link + video + report, **no zip**). Only residual: confirm *which* Moodle box — not a build task.
-- [ ] **F5 workout generator** (Shiri) — #276.
+- [ ] **F5 workout generator — dashboard display** (web tier) — AI side done; #410.
 - [ ] **Seed prod once** before the TA review (`db/README.md` command) and confirm the **Azure VM is up**
       (instructor auto-shutdown ~23:50 UTC).
 - [ ] **Record the demo video** end-to-end on the real model.

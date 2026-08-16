@@ -13,7 +13,7 @@
 > +10 Azure deploy + CI/CD; supersedes [`FEEDBACK.md`](FEEDBACK.md)). Architecture detail lives in [`DESIGN.md`](DESIGN.md); the phased plan in
 > [`ROADMAP.md`](ROADMAP.md).
 >
-> **Last updated:** 2026-08-14 · **Suite at this snapshot:** **1184 checks, 1140 passing / 44 environment-gated**
+> **Last updated:** 2026-08-16 · **Suite at this snapshot:** **1244 checks, 1200 passing / 44 environment-gated**
 > (+ 26 browser e2e scenarios)
 > (`python -m pytest tests/ -q`; the env-gated ones run in CI's `compose-e2e` job against the live containers).
 > Since the 07-12 snapshot (783 tests): **Shiri's Random Forest landed** — a real `ai/model/model.pkl` +
@@ -37,7 +37,11 @@
 > the agreed plan-contract shape) and its tests (#276, #410), then to **1183** with the "eat more"
 > recommendation trigger for a gain goal and its tests (#411), then fell to **1181** after the
 > redundant `test_ai` TDD scaffold was removed (#358), then to **1184** with `plan` wired into
-> `/predict` and its tests (#276, #410). A pre-submission review took every file in the web/data lane and asked, per
+> `/predict` and its tests (#276, #410), then to **1243** with `generate_workout_days` (the
+> exercise-selection stage of F5) and its tests (#276, #410), then to **1244** wiring
+> `generate_workout_days` into `predict_one` itself, so a resolved `plan["days"]` is populated
+> end to end on a live `/predict` call, not just available as a standalone function (#276, #410).
+> A pre-submission review took every file in the web/data lane and asked, per
 > test, whether it earns its place — by mutating the code it guards and checking that the test actually
 > goes red (#479–#492). That removed 8 tests whose behaviour a *named* other test already caught and
 > collapsed 28 parametrised cases that shared a branch, while ADDING 45 tests for behaviours no test
@@ -53,9 +57,12 @@
 > current as of this date. §1's API surface + data model now list the DM / SSE / notification / comment-vote
 > endpoints and the `messages` / `notifications` collections (**Lior**), plus the media endpoints and the
 > `media` collection (**Elad**, #160). §2's core AI rows (F3 model, F4 live value, F7 engine) are **now built**
-> (Shiri's Random Forest merged). **F5 (workout generator)** is a required proposal feature, **not yet built**
-> and **not being swapped** (confirmed against the TA's guidelines — it is a core feature in the v2 proposal
-> the TA responded to, not a stretch goal); **Shiri** builds it. **F6 (program-balance)** is merged into F7 as a
+> (Shiri's Random Forest merged). **F5 (workout generator)**'s AI side is **now built and wired into `/predict`**
+> (catalog-backed exercise selection, goal-scaled sets/reps, on every live prediction) — the dashboard side
+> (relaying `plan` from the AI response and rendering it, including the `split_options` picker) is **not yet
+> built**, tracked in #410 (web tier, Lior). Confirmed against the TA's guidelines this feature is **not being
+> swapped** — it is a core feature in the v2 proposal the TA responded to, not a stretch goal. **F6
+> (program-balance)** is merged into F7 as a
 > single pipeline — that merge is in the approved v2 proposal (the TA's guidelines supersede Noam's feedback), so
 > it is **settled, not pending** — and its balance rule is already built (`_program_recommendations`). The rubric is
 > [`GUIDELINES.md`](GUIDELINES.md) (which superseded `FEEDBACK.md` on 8 Jul and added the **+5 Job Queue**).
@@ -151,10 +158,10 @@ not a per-line credit — see §6.
 | F3 — Readiness analysis — **web path** (check-in → `ai /predict` → persist → surface) | ✅ | web |
 | F3 — Readiness analysis — **the model** (Random Forest, real `/predict`) | ✅ merged (`ai/model/model.pkl` + `inference.py`; `test_ai_queue_api` loads the real RF) | ai |
 | F4 — Calorie recommendation (Mifflin–St Jeor, `ai/calories.py`) | ✅ engine + unit tests; live value now wired into `/predict` (`calculate_calories` in `predict_one`) | ai |
-| F5 — Workout generator | ⬜ **required, not yet built** — the engine advises on an existing program but does not *generate* a plan (goal + days + equipment + split → plan from the program catalog). No swap (TA-confirmed); Shiri to build. | ai |
+| F5 — Workout generator | 🟡 **AI generation built and wired into `/predict`** — `resolve_split_preference` + `generate_workout_days` produce a real day-by-day plan (goal + days + equipment + split → plan from the program catalog) on every live prediction. **Not yet user-visible**: the dashboard doesn't relay or render `plan` yet (#410, web tier). No swap (TA-confirmed). | ai |
 | F6 — Program-balance analysis (push/pull volume, merged into F7) | 🟡 built in `_program_recommendations` (the F6→F7 merge is settled in the v2 proposal — not pending); one gap: no `program` input feeds it yet (#276 P7), which F5 supplies | ai |
 | F7 — Action plan / recommendations — **web surfaces the list**; **engine** | ✅ | web ✅ · ai ✅ (`generate_recommendations`) |
-| F8 — Dashboard | 🟡 current state ✅ · calories ✅ · progress history ✅ — but **not the active workout plan**, which the v2 proposal §7 also lists. Blocked on F5: there is no plan to display yet. Tracked in #410; the response contract is the piece that can be agreed before F5 lands. | web |
+| F8 — Dashboard | 🟡 current state ✅ · calories ✅ · progress history ✅ — but **not the active workout plan**, which the v2 proposal §7 also lists. **No longer blocked on the AI side** — `/predict` returns a real `plan` on every call — the gap is now purely web-side: `web/routes/dashboard.py` doesn't read or forward `plan`, and no frontend card or `split_options` picker exists yet. Tracked in #410. | web |
 | F9 — History tracking | ✅ | web |
 | Online Forum — CRUD/UI (posts, comments, votes, anonymity, edit/delete-own) | ✅ | web |
 | Online Forum — real-time layer (SSE push, DM, vote + DM notifications, media attachments) | ✅ | web (DM/SSE/notifications) · deploy (media, size caps) |
@@ -215,19 +222,19 @@ Columns are the test-type dirs under `tests/`. Cells name representative file(s)
 | **Fault tolerance / isolation** | — | — | — | `test_fault_isolation` (2) · Full-System `test_parts_in_isolation` (12) | — | — |
 | **Whole-system journey** | — | — | — | `test_e2e` (1) · Full-System `test_everything_together_sync` (15) | — | — |
 
-**Totals by type (full suite, `pytest --collect-only`):** Unit **481** · Integration **405** · Negative **157** ·
-System **14** · Full-System **27** · Security **88** · Stress **12** → **1184 automated checks across the seven
+**Totals by type (full suite, `pytest --collect-only`):** Unit **541** · Integration **405** · Negative **157** ·
+System **14** · Full-System **27** · Security **88** · Stress **12** → **1244 automated checks across the seven
 pytest suites**, plus **26 browser end-to-end scenarios** driven separately (`tests/E2E_Tests/`, run in CI as
 the *e2e (browser · desktop + mobile)* job — not counted in the pytest total). This matches the header count.
 
-Read the total as *checks*, not as hand-written test functions: 1184 collected cases come from **881 test
+Read the total as *checks*, not as hand-written test functions: 1244 collected cases come from **915 test
 functions** (measured with `grep -c "^def test_"` across `tests/`), the remainder being parametrised cases (one `@parametrize` over 11 malformed payloads is 11
 collected cases, not 11 tests written). The suite is deliberately weighted toward the layers where a
 regression is cheapest to catch — unit and negative input walls — rather than toward volume.
 
-**Pass / skip:** the pre-07-12 snapshot was **747 pass, 36 skip in ~47 s**; the current suite is **1140 pass,
+**Pass / skip:** the pre-07-12 snapshot was **747 pass, 36 skip in ~47 s**; the current suite is **1200 pass,
 44 skip in ~86 s** (`python -m pytest tests/ -q`); in CI, where the `mongo:7` service is present, the same
-suite is **1166 pass, 18 skip**. All **44** local skips are env-gated and *not broken* — they run the
+suite is **1226 pass, 18 skip**. All **44** local skips are env-gated and *not broken* — they run the
 moment their dependency is present:
 
 - `test_db_mongo` (21) — the real-Mongo integration suite; skips without `TEST_MONGO_URI`, and **runs in CI**
@@ -277,7 +284,7 @@ machine (env vars, no local paths), and are exercised by CI on every PR. A run t
   (`test_csrf`), NoSQL-injection-safe queries (`test_profile`, `test_forum`), ownership enforcement on
   forum edit/delete (403), auth-gating of dashboard/history, and response-hardening (`test_web_hardening`).
 
-The two supporting directories complete the 1184: **Negative (157)** — adversarial and malformed input across
+The two supporting directories complete the 1244: **Negative (157)** — adversarial and malformed input across
 auth, profile, check-in, forum and media — and **Full-System (27)** — whole-stack journeys in-process, plus the
 parts-in-isolation suite. The per-type figures here are the same ones tabulated in §3; both are
 `pytest --collect-only` counts, not estimates.
@@ -455,7 +462,7 @@ between planes (§1). Full detail in [`COLLABORATORS.md`](../COLLABORATORS.md) a
 cp .env.example .env
 docker compose up --build          # 3 containers; only web is published
 # → http://localhost:8000/health   → then register, set a profile, check in, see the dashboard
-pytest -q                          # 1140 pass / 44 env-gated skip
+pytest -q                          # 1200 pass / 44 env-gated skip
 ```
 
 CI reproduces the gate on every PR (ruff → bandit → pytest + a `mongo:7` service). `main` is
@@ -465,9 +472,13 @@ branch-protected and merges only on green CI.
 
 ## 8. Open items (tracked; not blockers for the built planes)
 
-- **F5 — workout generator (Shiri)** — required by the v2 proposal, **not yet built**: the engine advises on
-  an existing program but does not *generate* a plan (goal + days + equipment + split → plan from the program
-  catalog). No swap (TA-confirmed). Tracked in #276; F6's `program` input (#276 P7) depends on it.
+- **F5 — workout generator (Shiri)** — required by the v2 proposal. **AI generation built and wired into
+  `/predict`**: `resolve_split_preference` + `generate_workout_days` produce a real plan (goal + days +
+  equipment + split → plan from the program catalog) on every live prediction. **Still open**: the dashboard
+  doesn't relay or render `plan` yet — tracked in #410 (web tier). No swap (TA-confirmed). Tracked in #276.
+  F6's `program` input (#276 P7) is still unresolved — `generate_workout_days`'s output is not yet fed into
+  `_program_recommendations`'s `program` argument; `predict_one` computes `recommendations` from the raw
+  request features before `plan` exists, and nothing currently connects the two.
 - **F6 + F7 merge** — in scope, not pending: the merge is in the v2 proposal the team sent the TA (28 Jun),
   and the TA's guidelines explicitly permit notified feature changes; the balance rule is built
   (`_program_recommendations`). See `ROADMAP.md` → "Scope decision".
