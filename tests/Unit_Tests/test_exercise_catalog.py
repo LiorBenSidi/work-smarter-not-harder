@@ -24,6 +24,15 @@ def test_every_entry_has_the_required_fields_with_correct_types():
         assert entry["pattern"] in PATTERNS
         assert entry["equipment"] in EQUIPMENT
         assert isinstance(entry["is_compound"], bool)
+        assert isinstance(entry["is_isometric"], bool)
+
+
+def test_plank_is_the_only_isometric_entry():
+    """is_isometric is True only for an unambiguous static hold. Dual-mode movements commonly
+    done for reps in practice (glute bridges, Pallof press) are deliberately False, not "fixed"
+    to True -- if that changes, update this test alongside the catalog, not silently."""
+    isometric_names = {entry["name"] for entry in EXERCISE_CATALOG if entry["is_isometric"]}
+    assert isometric_names == {"Plank"}
 
 
 def test_no_duplicate_exercise_names():
@@ -51,6 +60,24 @@ def test_every_muscle_group_has_a_bodyweight_option_except_the_known_biceps_gap(
     }
     missing = set(MUSCLE_GROUPS) - groups_with_bodyweight
     assert missing == {"biceps"}
+
+
+def test_pull_pattern_shoulders_have_no_bodyweight_option_documented_gap():
+    """No standard bodyweight-only rear-delt/pull-pattern shoulder movement exists in the
+    catalog -- discovered while designing generate_workout_days' Pull day (a bodyweight-only
+    Pull day skips its shoulders slot entirely). Shoulders as a whole DOES have a bodyweight
+    option (Pike push-up, pattern="push"), so the broader per-muscle-group bodyweight check
+    above doesn't catch this -- it's specific to the (shoulders, pull) combination. Second
+    documented equipment gap alongside biceps -- if this ever changes, update this test
+    alongside the catalog rather than letting it drift silently.
+    """
+    pull_shoulder_entries = [
+        entry
+        for entry in EXERCISE_CATALOG
+        if entry["muscle_group"] == "shoulders" and entry["pattern"] == "pull"
+    ]
+    assert pull_shoulder_entries  # sanity: the group itself isn't empty
+    assert not any(entry["equipment"] == "bodyweight" for entry in pull_shoulder_entries)
 
 
 def test_equipment_vocabulary_matches_the_profile_contract(web_app_module):

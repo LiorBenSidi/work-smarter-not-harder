@@ -10,7 +10,7 @@ pays for it exactly once, not per request.
 
 CONTRACT (the `web -> ai` response shape — see docs/DESIGN.md):
     predict_one({...features...}) -> {"state": str, "proba": {str: float}, "recommendations": [...],
-                                       "plan": {"split": str, "days": None} | {"split_options": [str, str]}}
+                                       "plan": {"split": str, "days": [...]} | {"split_options": [str, str]}}
 """
 
 import logging
@@ -25,9 +25,9 @@ except ImportError:
     from ai.recommendations import calculate_calories, generate_recommendations
 
 try:
-    from workout_plan import resolve_split_preference
+    from workout_plan import generate_workout_days, resolve_split_preference
 except ImportError:
-    from ai.workout_plan import resolve_split_preference
+    from ai.workout_plan import generate_workout_days, resolve_split_preference
 
 logger = logging.getLogger(__name__)
 
@@ -143,6 +143,18 @@ def predict_one(features):
         safe_features.get("split_preference"),
         safe_features.get("training_frequency"),
     )
+    if "split" in plan:
+        # Resolved -- fill in the days placeholder. equipment/goal are already in features:
+        # web/routes/dashboard.py spreads the whole profile into the /predict request body, the
+        # same dict split_preference/training_frequency above already read from.
+        plan["days"] = generate_workout_days(
+            plan["split"],
+            safe_features.get("training_frequency"),
+            safe_features.get("equipment"),
+            safe_features.get("goal"),
+        )
+    # else: {"split_options": [...]} -- ambiguous, nothing resolved yet to generate days for.
+    # The dashboard renders a picker; plan is returned exactly as resolve_split_preference made it.
 
     result = {
         "state": state,

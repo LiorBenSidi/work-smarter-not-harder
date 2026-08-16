@@ -10,6 +10,8 @@ import pickle
 
 import pytest
 
+from ai.workout_plan import generate_workout_days
+
 
 VALID_STATES = {"Rest", "Moderate", "Ready"}
 
@@ -146,32 +148,62 @@ def test_non_dictionary_input_degrades_safely(inference_module):
 
     assert result["state"] in VALID_STATES
     assert set(result["proba"].keys()) == VALID_STATES
-    assert result["plan"] == {"split": "full_body", "days": None}
+    assert result["plan"] == {"split": "full_body", "days": []}
 
 
 def test_plan_reflects_an_explicit_split_preference(inference_module):
-    """An athlete's explicit split choice passes straight through into plan."""
+    """An athlete's explicit split choice passes straight through into plan, and days is now
+    populated (no equipment/goal supplied here -> bodyweight-only, maintain, same as calling
+    generate_workout_days directly with those same defaults)."""
     result = inference_module.predict_one(
         {**FULL_FEATURES, "split_preference": "push_pull_legs", "training_frequency": 4}
     )
 
-    assert result["plan"] == {"split": "push_pull_legs", "days": None}
+    assert result["plan"]["split"] == "push_pull_legs"
+    assert result["plan"]["days"] == generate_workout_days("push_pull_legs", 4, None, None)
+
+
+def test_resolved_plan_is_populated_via_generate_workout_days(inference_module):
+    """The wiring itself: plan["days"] must be exactly what generate_workout_days produces for
+    the same split/training_frequency/equipment/goal -- not reimplemented, not approximated.
+    equipment/goal here are real values (not the defaults the test above uses), confirming both
+    are actually read from features and threaded through, not silently dropped."""
+    features = {
+        **FULL_FEATURES,
+        "split_preference": "upper_lower",
+        "training_frequency": 4,
+        "equipment": ["barbell", "dumbbell", "bodyweight"],
+        "goal": "gain",
+    }
+    result = inference_module.predict_one(features)
+
+    expected_days = generate_workout_days(
+        "upper_lower", 4, ["barbell", "dumbbell", "bodyweight"], "gain"
+    )
+    assert result["plan"] == {"split": "upper_lower", "days": expected_days}
+    assert len(expected_days) == 4
+    assert expected_days[0]["exercises"]  # sanity: actually populated, not an empty plan
 
 
 def test_plan_offers_options_at_an_ambiguous_training_frequency(inference_module):
-    """4 or 5 days/week with no_preference must ask, not guess (agreed on #410)."""
+    """4 or 5 days/week with no_preference must ask, not guess (agreed on #410) -- and
+    generate_workout_days must NOT run at all for this case: plan is exactly what
+    resolve_split_preference returned, untouched, with no "days" or "split" key added."""
     result = inference_module.predict_one(
         {**FULL_FEATURES, "split_preference": "no_preference", "training_frequency": 4}
     )
 
     assert result["plan"] == {"split_options": ["full_body", "upper_lower"]}
+    assert "days" not in result["plan"]
+    assert "split" not in result["plan"]
 
 
 def test_plan_defaults_safely_when_split_inputs_are_absent(inference_module):
-    """No profile fields at all must not crash predict_one -- plan still resolves."""
+    """No profile fields at all must not crash predict_one -- plan still resolves, with an
+    empty (not invented) days list since training_frequency is unknown."""
     result = inference_module.predict_one(FULL_FEATURES)
 
-    assert result["plan"] == {"split": "full_body", "days": None}
+    assert result["plan"] == {"split": "full_body", "days": []}
 
 
 def test_result_is_pickle_and_json_serializable(inference_module):
