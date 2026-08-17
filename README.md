@@ -243,9 +243,9 @@ demo/review tool (`db/seed.py`: fake clients + posts + comments + likes); a fres
 show. Suite: **1257 collected** (1213 pass / 44 environment-gated), green in CI (real-Mongo IT runs on the `mongo:7` service).
 
 **Remaining:** tracked live in the [Issues tab](https://github.com/LiorBenSidi/work-smarter-not-harder/issues) —
-**F5's dashboard display** (#410, the critical path — the AI side is built and wired into `/predict`; the
-dashboard doesn't relay or render `plan` yet) plus the per-owner graded-gap list in #400 (comment media #407 ·
-DM attachment notify #408). Risk assessment and the honest
+F5 is complete on both planes (#522 relays the plan, #523 renders the card and split picker; #410 closed),
+so what is left is the per-owner graded-gap list in #400 (comment media #407 ·
+DM attachment notify #408) plus the four unbuilt proposal features in #528. Risk assessment and the honest
 "what we did *not* mitigate" list: [`docs/REPORT.md`](docs/REPORT.md) §5.
 
 **Reviewing / grading this?** Start with [`docs/REVIEWER_NOTES.md`](docs/REVIEWER_NOTES.md) — how to run + log in

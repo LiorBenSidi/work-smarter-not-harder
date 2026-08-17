@@ -9,8 +9,9 @@ Full guidance:
 ## Current status (2026-07-02)
 Backend built + CI-gated (all Lior): the `web` tier (incl. **direct messages + live DM notifications** — the Chat
 tab), the whole data layer, Week-9 logging, the 3-container build, the CI gate, and the **CI/CD deploy pipeline**
-(GHCR → Azure VM → Caddy HTTPS, auto-rollback). `main` green. **Open lanes:** *Shiri* — F5 (workout generator) + the Forum cold-seed content
-(the real Random Forest is now live behind `POST /predict`); *Elad* — the graded Azure demo run (deploy + Forum
+(GHCR → Azure VM → Caddy HTTPS, auto-rollback). `main` green. **Open lanes:** *Shiri* — the AI model backlog (#276)
+and the two ai-plane items in #528 (F5 is complete on both planes; the Random Forest is live behind `POST /predict`);
+*Elad* — the graded Azure demo run (deploy + Forum
 media/attachments + stress + test-runner are shipped). Full breakdown:
 [`CLAUDE.md`](CLAUDE.md) → Current status. Build **within** an open lane; don't redo the built parts.
 

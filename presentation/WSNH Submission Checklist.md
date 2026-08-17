@@ -22,10 +22,10 @@
 ## Deliverables (map to the rubric: 75 + 5 + 10 + 10)
 - [ ] **The working app (75)** — the repo + the **live URL** (app.worksmarternotharder.dev). Runs on Docker.
       *(Shiri's Random Forest has landed — `ai/model/model.pkl` is baked into the image and `/predict` serves
-      real inference. F5's AI generation is now built and wired into `/predict` too (catalog, split
-      resolution, exercise selection). Remaining against "every proposal feature present": the dashboard
-      doesn't relay or render the generated `plan` yet (web tier, #410; F6 program-balance already ships as
-      the merged F7 pipeline).)*
+      real inference. F5 is now complete on both planes — generation wired into `/predict` (catalog, split
+      resolution, exercise selection) and the dashboard card + split picker shipped in #522/#523, closing
+      #410; F6 program-balance ships as the merged F7 pipeline. Remaining against "every proposal feature
+      present": the four features recorded in #528.)*
 - [x] **AI Job Queue (+5)** — `ai/jobqueue.py` (bounded queue + process pool). ✅ built.
 - [x] **Online Forum (+10)** — all 7 sub-features + real-time + anonymity bonus + **cold-seeding** ✅
       (`db/seed.py`: fake clients + posts + comments + likes — a deliberate demo/review tool; see below).
@@ -39,10 +39,11 @@
 **Must-fix (the visible gaps):**
 - [x] **Shiri: land the trained Random Forest** → real `/predict` (F3), recommendation engine (F7), calories
       (F4) — **landed.** `ai/model/model.pkl` + `inference.py` are baked in and predictions are real (the old
-      "every prediction reads Moderate" placeholder behaviour is gone). **F5's AI side is also landed and
-      wired into `/predict`** (catalog, split resolution, exercise selection). Still open: F6's `program`
-      input (#276 P7, the generated plan isn't fed into `_program_recommendations` yet) and the dashboard
-      relaying/rendering `plan` (#410, web tier).
+      "every prediction reads Moderate" placeholder behaviour is gone). **F5 is landed on both planes** —
+      generation wired into `/predict` (catalog, split resolution, exercise selection), card + split picker
+      in #522/#523. Still open: F6's `program` input (#276 P7, the generated plan isn't fed into
+      `_program_recommendations` yet — and per REPORT §5.5 it would return nothing even if wired), plus the
+      two ai-plane items in #528.
 - [x] **Forum cold-seed content** — ✅ **built** (Lior): `db/seed.py` seeds fake clients + posts + comments
       + likes over a back-dated timeline. It's a **deliberate demo/review tool**, run by hand — a fresh
       database stays **empty by design**. **Before the review: run it once against the live prod DB** so the
@@ -86,7 +87,8 @@
 
 ## The one-line status
 Engineering is submission-ready and TA-reviewed clean; the AI model has landed and the forum cold-seed tool
-is built (run it against prod before the review). F5's AI generation has also landed, wired into `/predict`.
-The remaining items are **F5's dashboard display** (web tier, #410 — relaying and rendering the generated
-`plan`) and the **team deliverables** — the demo **video**, the rehearsal, and pasting the **repo link** into
+is built (run it against prod before the review). **F5 is complete on both planes** — generation wired into
+`/predict`, and the dashboard card + split picker shipped in #522/#523, closing #410.
+The remaining items are the four unbuilt proposal features (#528) and the **team deliverables** — the demo
+**video**, the rehearsal, and pasting the **repo link** into
 the Moodle final-project box when it opens (format is settled: repo link + video + report, **no zip**).

@@ -147,7 +147,7 @@ documents keyed by `post_id`, so a hot thread can't grow a post toward Mongo's 1
 `$jsonSchema` validators cover `users`, `profiles`, `analysis_history`, `forum_posts`, `messages` and
 `notifications`; `forum_comments`, `meta` and `media` carry none. **Not built:** the proposal's `programs`
 collection (v2 §9), which v2 §9 lists as holding the catalog the workout generator draws on. F5 shipped
-**without** it: the 88-exercise catalog lives in `ai/exercise_catalog.py` as code, not as a collection.
+**without** it: the 87-exercise catalog lives in `ai/exercise_catalog.py` as code, not as a collection.
 Static seed data is arguably better as code, but §9 is a stated design the TA received, so the deviation is
 recorded here rather than left implicit (#276).
 
@@ -205,13 +205,15 @@ Columns are the test-type dirs under `tests/`. Cells name representative file(s)
 
 | Feature / component | Unit | Integration | Negative | System / Full-System | Security | Stress |
 |---|---|---|---|---|---|---|
-| **F1 Accounts / Auth** | `test_auth_validation` (25) · `test_email` (18) | `test_auth_flow` (13) · `test_login_otp` (16) · `test_password_reset` (12) · `test_register_verify` (11) · `test_account_*` (25) | `test_auth_negative` (33) | `test_e2e` leg | `test_auth` (10) · `test_csrf` (6) · `test_debug_email_override` (7) | — |
+| **F1 Accounts / Auth** | `test_auth_validation` (25) · `test_email` (18) | `test_auth_flow` (13) · `test_login_otp` (16) · `test_password_reset` (12) · `test_register_verify` (11) · `test_account_*` (25) · `test_login_otp_reuse` (8) · `test_otp_resend` (4) · `test_email_smtp_delivery` (2) | `test_auth_negative` (33) | `test_e2e` leg | `test_auth` (10) · `test_csrf` (6) · `test_debug_email_override` (7) | — |
 | **F2 Profile** | `test_profile_validation` (45) | `test_profile_flow` (6) · `test_identity_display` (3) | in `test_profile_checkin_negative` (59) | `test_e2e` leg | `test_profile` (1) | — |
 | **F3 Readiness (web path)** | `test_checkin_validation` (23) · `test_ai_client` (5) | `test_checkin_flow` (13) · `test_web_ai` (2) | in `test_profile_checkin_negative` (59) | `test_e2e` leg | — | — |
-| **F3 Readiness (model — Shiri)** | `test_ai_inference` (16) · `test_ai_recommendations` (14) · `test_ai_binning` (21) | `test_ai_queue_api` (27, loads the real `model.pkl`) | — | — | — | — |
+| **F3 Readiness (model — Shiri)** | `test_ai_inference` (20) · `test_ai_recommendations` (17) · `test_ai_binning` (21) | `test_ai_queue_api` (27, loads the real `model.pkl`) | — | — | — | — |
 | **F4 Calorie** | `test_calories` (14) | via `test_checkin_flow` / `test_dashboard_flow` | — | — | — | — |
-| **F7 Action plan / recommendations** | (engine covered by the F3-model unit tests) | `test_web_ai` (2) · `test_dashboard_flow` (13) | — | `test_e2e` leg | — | — |
-| **F8 Dashboard** | — | `test_dashboard_flow` (13) | — | `test_e2e` leg | `test_dashboard` (1) | — |
+| **F5 Workout generator** | `test_workout_plan` (105) · `test_exercise_catalog` (13) | plan relay in `test_dashboard_flow` (4 of its 23) · card + split picker in `test_frontend` (4 of its 49) | — | `test_e2e` leg | — | — |
+| **F6 Program-balance rule (merged into F7)** | the two `_program_recommendations` cases in `test_ai_recommendations` | — | — | — | — | — |
+| **F7 Action plan / recommendations** | (engine covered by the F3-model unit tests) | `test_web_ai` (2) · `test_dashboard_flow` (23) | — | `test_e2e` leg | — | — |
+| **F8 Dashboard** | — | `test_dashboard_flow` (23) | — | `test_e2e` leg | `test_dashboard` (1) | — |
 | **F9 History** | — | `test_history_flow` (4) | — | `test_e2e` leg | `test_history` (1) | — |
 | **Online Forum (CRUD/UI, votes)** | `test_forum_validation` (16) | `test_forum_flow` (19) · `test_comment_votes` (7) | `test_forum_negative` (35) | `test_e2e` leg | `test_forum` (3) | in `test_load` (forum flood) |
 | **Forum real-time (DM · notifications · SSE)** | `test_messages_db` (18) | `test_messages` (28) · `test_forum_notifications` (10) | in `test_messages_media_negative` (30) | — | `test_messages_privacy` (4) | — |
@@ -220,12 +222,12 @@ Columns are the test-type dirs under `tests/`. Cells name representative file(s)
 | **AI job-queue +5 (Elad)** | `test_jobqueue` (40) · `test_bench` (18) | `test_ai_queue_contract` (21) | — | `test_ai_queue_live` (10) | `test_ai_queue` (28) | `test_pool_scaling` (2) · `test_queue_backpressure` (6) |
 | **Deploy / scale (Elad)** | — | `test_deploy_contract` (24) · `test_scale_contract` (9) · `test_pin_contract` (4) | — | — | — | — |
 | **Rate-limiting / anti-spam (Elad)** | — | — | — | — | `test_rate_limit` (9) | in `test_load` |
-| **Data layer (`db.py` + Mongo)** | `test_db` (67) · `test_backup_script` (2) | `test_db_mongo` (22, real Mongo) | — | — | (injection-safe queries) | — |
-| **Frontend (SPA / CSRF / a11y / mobile)** | `test_frontend_mobile_guards` (15) | `test_frontend` (39) | — | `test_e2e` leg | `test_csrf` (6) · `test_web_hardening` (4) · `test_review_hardening` (3) | — |
+| **Data layer (`db.py` + Mongo)** | `test_db` (67) · `test_backup_script` (2) · `test_seed` (8) | `test_db_mongo` (22, real Mongo) · `test_seed_mongo` (4) · `test_real_mongo_guard` (7) | — | — | (injection-safe queries) | — |
+| **Frontend (SPA / CSRF / a11y / mobile)** | `test_frontend_mobile_guards` (15) | `test_frontend` (49) | — | `test_e2e` leg | `test_csrf` (6) · `test_web_hardening` (4) · `test_review_hardening` (3) | — |
 | **Observability (logging)** | `test_logging_config` (21) | — | — | — | (access-log path escaping) | — |
 | **App config / debug flag / secret** | `test_config` (16) · `test_scaffold` (4) | — | — | — | (no `.env` tracked) | — |
 | **Error handling · ready gate · perf** | — | `test_error_handlers` (5) · `test_ready` (3) · `test_perf` (7) | — | — | — | — |
-| **Contract / skeleton / smoke** | — | `test_skeleton_contract` (7) · `test_web_smoke` (1) | — | — | — | — |
+| **Contract / skeleton / smoke** | — | `test_skeleton_contract` (7) · `test_web_smoke` (1) · `test_docs_contract` (3) | — | — | — | — |
 | **Fault tolerance / isolation** | — | — | — | `test_fault_isolation` (2) · Full-System `test_parts_in_isolation` (12) | — | — |
 | **Whole-system journey** | — | — | — | `test_e2e` (1) · Full-System `test_everything_together_sync` (15) | — | — |
 
@@ -270,12 +272,12 @@ The five canonical types live under `tests/{Unit,Integration,System,Stress,Secur
 `Negative_Tests/` for adversarial-input coverage and `Full_System_Tests/` for whole-stack journeys), run on any
 machine (env vars, no local paths), and are exercised by CI on every PR. A run that collects **0 tests fails** the gate.
 
-- **Unit (381)** — pure functions and single components in isolation: input validators (auth / profile /
+- **Unit (541)** — pure functions and single components in isolation: input validators (auth / profile /
   check-in / forum), the calorie formula, the `db.py` CRUD and Mongo-internals logic (against an in-memory
   fake), the logging configuration, and app config. Heavily parametrized on boundary and adversarial inputs
   (e.g. profile validation rejects injection objects, bools-as-numbers, and out-of-range values across every
   field).
-- **Integration (384)** — components wired together through the Flask test client: the auth flow, profile
+- **Integration (418)** — components wired together through the Flask test client: the auth flow, profile
   round-trip, check-in → `ai /predict` → persist, dashboard, history, and the full forum lifecycle. Two
   boundary suites are notable: `test_web_ai` stubs the `web → ai` HTTP seam with a contract-shaped response
   and asserts the dashboard surfaces it (and degrades to `ai_status: unavailable` when `ai` returns
@@ -391,19 +393,40 @@ Naming these is part of the assessment; an unlisted risk is an unnoticed one.
 * **F6's balance analysis has no input.** `_program_recommendations` takes a `program` argument and is never
   given one — `"program"` appears nowhere in `web/`, so it returns `[]` on every call. Three of the four
   example recommendations the proposal names do fire (sleep, calories, training load); *"add volume to an
-  undertrained area"* cannot. `generate_workout_days` now emits exactly the shape the analyser accepts, so a
-  source exists; whether *prescribed* plan volume is the right signal for "undertrained" is an ai-plane
-  judgement, raised on #276. The TA's guidelines permit building it, swapping it for a feature testing the
-  same concept, or dropping it — the last two on notice to him.
+  undertrained area"* cannot. Wiring it is **not** one line. `generate_workout_days` returns day objects
+  (`day` / `focus` / `exercises`), not either shape the analyser accepts (`{"weekly_sets": {…}}` or
+  `[{"muscle_group", "sets"}]`), and nothing flattens them: fed the raw return value the analyser yields
+  `[]` at every training frequency. **Flattening is not enough either.** With the nested exercises
+  flattened, prescribed volume lands at 6–18 sets per muscle group and a chest:back ratio of exactly 1.00
+  across full_body/3, upper_lower/4, upper_lower/5 and push_pull_legs/6, while the analyser only fires
+  below 6 sets, above 20, or outside a 0.67–1.5 ratio — so it would still return nothing. Whether
+  *prescribed* volume is the right signal for "undertrained" at all is an ai-plane judgement, raised on
+  #276. The TA's guidelines permit building it, swapping it for a feature testing the same concept, or
+  dropping it — the last two on notice to him.
 * **Streak badge is icon-only at ≤380px** ([#525](https://github.com/LiorBenSidi/work-smarter-not-harder/issues/525)).
   `@media (max-width: 380px)` hides `.streak-cap`. That is correct with an active streak — `.streak-n`
   ("3-day streak") survives and only the flourish drops — but the zero-streak state renders *only* a caption,
-  so at ≤380px it is a 50px flame with no text. Measured: 320/375/380 icon-only, 381 full text. `role="status"`
-  still announces the full string, so it is visual only.
+  so at ≤380px it is a 50px flame with no text. Measured: 320/375/380 icon-only, 381 full text. **It is not
+  visual-only.** `#streak-badge` carries `role="status"` with no `aria-label`, and in that state its only
+  children are the flame (`aria-hidden="true"`) and the caption set to `display:none` — both removed from
+  the accessibility tree — so the live region has nothing left to announce. A screen-reader user gets
+  silence, not a shortened string. The fix is one selector (`.streak-n ~ .streak-cap`); no test can lock it
+  in, because the E2E harness has no viewport below 380px (mobile is 390×844).
 * **One E2E scenario races a fixed sleep** ([#524](https://github.com/LiorBenSidi/work-smarter-not-harder/issues/524)).
   The XSS scenario waits a fixed 400 ms for the feed rather than polling, so it can fail on a loaded runner
   while both of its security assertions pass. Proven non-deterministic: byte-identical trees passed twice and
   failed once. Listed here because a flaky test is a risk to the build's credibility, not just a red tick.
+* **Four features the v2 proposal names are not built**
+  ([#528](https://github.com/LiorBenSidi/work-smarter-not-harder/issues/528)). §3 promises beginner users a
+  *recommended training frequency* — nothing recommends one; frequency is only ever an input. §3's Advanced
+  tier asks the athlete to *provide* a **workout program**; no such field exists anywhere in `web/`, which
+  is the root cause of the empty balance analysis above. The **beginner / intermediate / advanced tiers**
+  have no representation in the code at all. And §6 describes *"a large catalog of real workout programs and
+  exercises"* drawn from public datasets — the catalog is **87 hand-written entries**. That last one is
+  disclosed in `ai/exercise_catalog.py`'s docstring (PMData is endurance session logging and carries no
+  exercise-level data, so the catalog was curated against general strength-training guidelines) — but only
+  there, and not in any graded document until this one. The guidelines allow building, swapping or dropping
+  a feature; the first three need that call.
 
 * **`/jobs` is not replica-safe.** Fixing it means Redis or Mongo-backed job state — a fourth container, a new
   dependency and a new failure mode, serving an endpoint the app does not call. The synchronous `/predict`
@@ -502,6 +525,11 @@ branch-protected and merges only on green CI.
   F6's `program` input (#276 P7) is still unresolved — `generate_workout_days`'s output is not yet fed into
   `_program_recommendations`'s `program` argument; `predict_one` computes `recommendations` from the raw
   request features before `plan` exists, and nothing currently connects the two.
+- **Four proposal features not built** ([#528](https://github.com/LiorBenSidi/work-smarter-not-harder/issues/528))
+  — recommended training frequency, the Advanced-tier `workout program` input, the
+  beginner/intermediate/advanced tiers, and the "large catalog from public datasets" claim (87 hand-written).
+  Detailed in §5.5. The two ai-plane items — the recommended frequency and the catalog's source — sit with
+  **Shiri** alongside #276; the remaining two need a build / swap / drop call with the TA.
 - **F6 + F7 merge** — in scope, not pending: the merge is in the v2 proposal the team sent the TA (28 Jun),
   and the TA's guidelines explicitly permit notified feature changes; the balance rule is built
   (`_program_recommendations`). See `ROADMAP.md` → "Scope decision".

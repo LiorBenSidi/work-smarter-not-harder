@@ -38,7 +38,9 @@ carry none.*
   `web/services/media_store.py`, deliberately outside the `db.py` seam (no validator)
 
 > **Not built:** the proposal (§9) also specifies a **`programs`** collection to hold the program/exercise
-> catalog the workout generator draws on. It does not exist; it lands with **F5** (#276).
+> catalog the workout generator draws on. It does not exist, and **F5 shipped without it** — the catalog
+> lives in `ai/exercise_catalog.py` as code (87 entries), not as a collection. Recorded as a deviation in
+> REPORT §1.
 
 ## 3. API contracts
 | Endpoint | Method | Container | Notes |
@@ -51,7 +53,7 @@ carry none.*
 
 **As built**, the shipped model consumes **four** features — `sleep_hours`, `fatigue`, `soreness`, `training_load` (`ai/model/model.pkl` `feature_order`) — and returns three categories: `Rest` · `Moderate` · `Ready`. The web sends the full check-in payload; extra keys are ignored by the model. `resting_hr` is collected from the user but is **not** currently a model feature. *(The proposal's candidate list — `hr_change`, `weekly_freq`, `calorie_balance`, `bodyweight_trend` — was explicitly "finalized during data exploration"; those four were not adopted. Enrichment is tracked in #276.)* The web also reads an **optional `calories`** target from the response and surfaces it on the dashboard (it degrades to `null` when absent); the `ai` **does** include it — `ai/inference.py` calls `calculate_calories` and returns it on every prediction.
 
-**`plan`** (F5, #276/#410) is **always present** — unlike `calories`, it never needs a complete profile to produce a safe value. It reads `split_preference`, `training_frequency`, `equipment` and `goal` straight off the request's `features` (the web already merges the athlete's profile into that payload before calling `/predict`, so no extra plumbing was needed on the web side). `ai/workout_plan.py:resolve_split_preference` returns one of two shapes: `{"split": <full_body|upper_lower|push_pull_legs>, "days": null}` when the split is unambiguous, or `{"split_options": [<str>, <str>]}` at 4 or 5 training days/week, where the web is expected to prompt the athlete to choose rather than the engine guessing (agreed with Lior on #410). `predict_one` then fills `days` via `generate_workout_days` when resolved — real exercises drawn from `EXERCISE_CATALOG` (goal shapes sets/reps only, never which exercises are picked); the ambiguous `{"split_options": [...]}` shape is left completely untouched, since there is nothing to generate for a split that hasn't been chosen yet. The dashboard card for `plan` is tracked separately in #410.
+**`plan`** (F5, #276/#410) is **always present** — unlike `calories`, it never needs a complete profile to produce a safe value. It reads `split_preference`, `training_frequency`, `equipment` and `goal` straight off the request's `features` (the web already merges the athlete's profile into that payload before calling `/predict`, so no extra plumbing was needed on the web side). `ai/workout_plan.py:resolve_split_preference` returns one of two shapes: `{"split": <full_body|upper_lower|push_pull_legs>, "days": null}` when the split is unambiguous, or `{"split_options": [<str>, <str>]}` at 4 or 5 training days/week, where the web is expected to prompt the athlete to choose rather than the engine guessing (agreed with Lior on #410). `predict_one` then fills `days` via `generate_workout_days` when resolved — real exercises drawn from `EXERCISE_CATALOG` (goal shapes sets/reps only, never which exercises are picked); the ambiguous `{"split_options": [...]}` shape is left completely untouched, since there is nothing to generate for a split that hasn't been chosen yet. The dashboard card for `plan` shipped in #523 (relay in #522); #410 is closed.
 
 ## 4. AI decision engine (the heart)
 One pipeline, two capabilities:

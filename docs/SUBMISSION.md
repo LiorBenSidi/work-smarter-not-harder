@@ -12,7 +12,7 @@ against a single source of truth and fix what they think is missing. Two indepen
 - **Show Off gallery (Track B): ✅ SUBMITTED 29 Jul** (`207490913.zip` — team-approved, uploaded to Moodle)
 
 **⬜ Still open**
-- **F5 workout generator — dashboard display** — AI side built + wired into `/predict` (Shiri); the dashboard doesn't relay or render `plan` yet — the one open *graded* gap (web tier · [#410](https://github.com/LiorBenSidi/work-smarter-not-harder/issues/410))
+- **Four proposal features not built** — recommended training frequency, the Advanced-tier `workout program` input, the beginner/intermediate/advanced tiers, and the "large catalog from public datasets" claim ([#528](https://github.com/LiorBenSidi/work-smarter-not-harder/issues/528); the two ai-plane ones sit with Shiri)
 - **Demo video** of the app — not recorded yet (team; script at `presentation/WSNH Demo Video Script.md`)
 - **Paste the repo link** into the Moodle final-project box (when it opens) — Lior _(Show Off zip ✅ uploaded 29 Jul)_
 - **Seed prod · VM up · joint sign-off** before the TA review
@@ -44,14 +44,16 @@ Rubric (`docs/GUIDELINES.md`, the TA's `WSNH_Guidelines`, 8 Jul): **75** proposa
   the 3-container build · the CI gate · the CI/CD pipeline · web/data integration/system/security tests. ✅ shipped.
 - **Elad** — live Azure deploy · media/attachments (+ size caps) · rate-limiting · stress · cross-container
   test-runner · the AI job queue (+5). ✅ shipped (his own lane-validation, #388).
-- **Shiri** — the AI model (`ai/`): real `/predict` ✅ landed; **F5 workout generator's AI side ✅ built and
-  wired into `/predict`** (catalog, split resolution, exercise selection). F6's `program` input (#276 P7)
-  still unresolved — the generated plan isn't fed into `_program_recommendations` yet.
+- **Shiri** — the AI model (`ai/`): real `/predict` ✅ landed; **F5 ✅ complete on both planes** — generation
+  in `ai/` (catalog, split resolution, exercise selection), relay + card + split picker in `web/` (#522,
+  #523). F6's `program` input (#276 P7) still unresolved — the generated plan isn't fed into
+  `_program_recommendations` yet, and per REPORT §5.5 it would return nothing even if it were. The two
+  ai-plane items in #528 (recommended training frequency · the catalog's stated source) sit here too.
 
 ### Open before hand-in (human steps / not built)
 - [ ] **Submit the GitHub repo link** in the Moodle final-project box when it opens (format is settled above:
       repo link + video + report, **no zip**). Only residual: confirm *which* Moodle box — not a build task.
-- [ ] **F5 workout generator — dashboard display** (web tier) — AI side done; #410.
+- [ ] **Decide build / swap / drop with the TA** on the four unbuilt proposal features (#528).
 - [ ] **Seed prod once** before the TA review (`db/README.md` command) and confirm the **Azure VM is up**
       (instructor auto-shutdown ~23:50 UTC).
 - [ ] **Record the demo video** end-to-end on the real model.
