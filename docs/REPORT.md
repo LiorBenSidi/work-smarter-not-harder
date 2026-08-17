@@ -108,7 +108,7 @@ is implemented independently.
 | `/register` · `/login` · `/logout` · `/me` · `/auth/config` | POST/GET | F1 accounts, session, credential hints |
 | `/profile` | GET · POST | F2 athlete profile |
 | `/checkin` | POST | F3 readiness check-in → `ai /predict` → persist |
-| `/dashboard` | GET | F8 dashboard (readiness + recommendations + calories) |
+| `/dashboard` | GET | F8 dashboard (readiness + recommendations + calories + the F5 workout `plan`, validated against the two shapes the ai contract defines) |
 | `/history` | GET | F9 analysis history |
 | `/forum/posts` | GET · POST | Forum: list / create |
 | `/forum/posts/<id>` | GET · PATCH · DELETE | Forum: read / **edit-own** / **delete-own** (403 otherwise) |
@@ -146,7 +146,10 @@ documents keyed by `post_id`, so a hot thread can't grow a post toward Mongo's 1
 
 `$jsonSchema` validators cover `users`, `profiles`, `analysis_history`, `forum_posts`, `messages` and
 `notifications`; `forum_comments`, `meta` and `media` carry none. **Not built:** the proposal's `programs`
-collection (v2 §9), which holds the catalog the workout generator draws on — it lands with **F5** (#276).
+collection (v2 §9), which v2 §9 lists as holding the catalog the workout generator draws on. F5 shipped
+**without** it: the 88-exercise catalog lives in `ai/exercise_catalog.py` as code, not as a collection.
+Static seed data is arguably better as code, but §9 is a stated design the TA received, so the deviation is
+recorded here rather than left implicit (#276).
 
 ---
 
@@ -162,10 +165,10 @@ not a per-line credit — see §6.
 | F3 — Readiness analysis — **web path** (check-in → `ai /predict` → persist → surface) | ✅ | web |
 | F3 — Readiness analysis — **the model** (Random Forest, real `/predict`) | ✅ merged (`ai/model/model.pkl` + `inference.py`; `test_ai_queue_api` loads the real RF) | ai |
 | F4 — Calorie recommendation (Mifflin–St Jeor, `ai/calories.py`) | ✅ engine + unit tests; live value now wired into `/predict` (`calculate_calories` in `predict_one`) | ai |
-| F5 — Workout generator | 🟡 **AI generation built and wired into `/predict`** — `resolve_split_preference` + `generate_workout_days` produce a real day-by-day plan (goal + days + equipment + split → plan from the program catalog) on every live prediction. **Not yet user-visible**: the dashboard doesn't relay or render `plan` yet (#410, web tier). No swap (TA-confirmed). | ai |
+| F5 — Workout generator | ✅ **built end to end.** `resolve_split_preference` + `generate_workout_days` produce a day-by-day plan (goal + days + equipment + split → the program catalog) on every live prediction; `GET /dashboard` relays it and the card renders it — collapsible days with sets/reps/muscle group, or a two-way picker at 4 and 5 sessions a week where two splits fit equally well. Live-verified on prod at 375px and desktop. No swap (TA-confirmed). | ai + web |
 | F6 — Program-balance analysis (push/pull volume, merged into F7) | 🟡 built in `_program_recommendations` (the F6→F7 merge is settled in the v2 proposal — not pending); one gap: no `program` input feeds it yet (#276 P7), which F5 supplies | ai |
 | F7 — Action plan / recommendations — **web surfaces the list**; **engine** | ✅ | web ✅ · ai ✅ (`generate_recommendations`) |
-| F8 — Dashboard | 🟡 current state ✅ · calories ✅ · progress history ✅ — but **not the active workout plan**, which the v2 proposal §7 also lists. **No longer blocked on the AI side** — `/predict` returns a real `plan` on every call — the gap is now purely web-side: `web/routes/dashboard.py` doesn't read or forward `plan`, and no frontend card or `split_options` picker exists yet. Tracked in #410. | web |
+| F8 — Dashboard | ✅ **all four items the v2 proposal §7 names**: current state ✅ · **active workout plan** ✅ · calories ✅ · progress history ✅. The plan renders as collapsible days, or as a two-way split picker whose answer is stored as the profile's `split_preference` so the next read resolves and the question is not asked twice. #410 closed by #522 (relay) + #523 (render). | web |
 | F9 — History tracking | ✅ | web |
 | Online Forum — CRUD/UI (posts, comments, votes, anonymity, edit/delete-own) | ✅ | web |
 | Online Forum — real-time layer (SSE push, DM, vote + DM notifications, media attachments) | ✅ | web (DM/SSE/notifications) · deploy (media, size caps) |
@@ -385,6 +388,23 @@ mutation-checked by disabling the fix.)
 
 Naming these is part of the assessment; an unlisted risk is an unnoticed one.
 
+* **F6's balance analysis has no input.** `_program_recommendations` takes a `program` argument and is never
+  given one — `"program"` appears nowhere in `web/`, so it returns `[]` on every call. Three of the four
+  example recommendations the proposal names do fire (sleep, calories, training load); *"add volume to an
+  undertrained area"* cannot. `generate_workout_days` now emits exactly the shape the analyser accepts, so a
+  source exists; whether *prescribed* plan volume is the right signal for "undertrained" is an ai-plane
+  judgement, raised on #276. The TA's guidelines permit building it, swapping it for a feature testing the
+  same concept, or dropping it — the last two on notice to him.
+* **Streak badge is icon-only at ≤380px** ([#525](https://github.com/LiorBenSidi/work-smarter-not-harder/issues/525)).
+  `@media (max-width: 380px)` hides `.streak-cap`. That is correct with an active streak — `.streak-n`
+  ("3-day streak") survives and only the flourish drops — but the zero-streak state renders *only* a caption,
+  so at ≤380px it is a 50px flame with no text. Measured: 320/375/380 icon-only, 381 full text. `role="status"`
+  still announces the full string, so it is visual only.
+* **One E2E scenario races a fixed sleep** ([#524](https://github.com/LiorBenSidi/work-smarter-not-harder/issues/524)).
+  The XSS scenario waits a fixed 400 ms for the feed rather than polling, so it can fail on a loaded runner
+  while both of its security assertions pass. Proven non-deterministic: byte-identical trees passed twice and
+  failed once. Listed here because a flaky test is a risk to the build's credibility, not just a red tick.
+
 * **`/jobs` is not replica-safe.** Fixing it means Redis or Mongo-backed job state — a fourth container, a new
   dependency and a new failure mode, serving an endpoint the app does not call. The synchronous `/predict`
   path needs none of it. This was never a memory decision, so the larger VM does not change it.
@@ -476,10 +496,9 @@ branch-protected and merges only on green CI.
 
 ## 8. Open items (tracked; not blockers for the built planes)
 
-- **F5 — workout generator (Shiri)** — required by the v2 proposal. **AI generation built and wired into
-  `/predict`**: `resolve_split_preference` + `generate_workout_days` produce a real plan (goal + days +
-  equipment + split → plan from the program catalog) on every live prediction. **Still open**: the dashboard
-  doesn't relay or render `plan` yet — tracked in #410 (web tier). No swap (TA-confirmed). Tracked in #276.
+- **F5 — workout generator** — ✅ **closed, both planes.** The ai side generates a plan on every prediction;
+  #522 relays it through `GET /dashboard` and #523 renders the card and the split picker. #410 closed.
+  No swap (TA-confirmed).
   F6's `program` input (#276 P7) is still unresolved — `generate_workout_days`'s output is not yet fed into
   `_program_recommendations`'s `program` argument; `predict_one` computes `recommendations` from the raw
   request features before `plan` exists, and nothing currently connects the two.
