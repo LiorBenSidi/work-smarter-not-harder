@@ -267,3 +267,74 @@ def test_dashboard_reports_which_check_in_it_scored(dash_client, fake_history, m
     fake_history.add("alice", {"timestamp": "2026-07-20T06:30:00+00:00", "metrics": metrics, "assessment": "Rest"})
 
     assert dash_client.get("/dashboard").get_json()["scored_at"] == "2026-07-20T06:30:00+00:00"
+
+
+_RESOLVED_PLAN = {"split": "upper_lower",
+                  "days": [{"day": 1, "focus": "Upper",
+                            "exercises": [{"name": "Bench press", "sets": 4, "reps": "6-8",
+                                           "muscle_group": "chest"}]}]}
+
+
+def test_dashboard_relays_a_resolved_workout_plan(dash_client, monkeypatch):
+    """The proposal's Dashboard shows the athlete's active workout plan, and the generator that builds it lives in the ai container — so the plan has to survive the trip through this route or the card has nothing to draw.
+
+    The days are relayed unchanged: the exercise selection is the ai plane's decision, and re-shaping it
+    here would put a second opinion about the workout in the courier.
+    """
+    _set_predict(monkeypatch, {"state": "Ready", "recommendations": [], "plan": _RESOLVED_PLAN})
+    _login(dash_client)
+    dash_client.post("/profile", json=_profile())
+    _checkin(dash_client)
+    plan = dash_client.get("/dashboard").get_json()["plan"]
+    assert plan["split"] == "upper_lower"
+    assert plan["days"] == _RESOLVED_PLAN["days"]          # relayed verbatim, not rebuilt
+    assert "split_options" not in plan                     # a resolved plan asks the athlete nothing
+
+
+def test_dashboard_relays_an_unresolved_plan_as_the_choice_it_is(dash_client, monkeypatch):
+    """At 4 and 5 sessions a week two splits are equally defensible, so the generator returns both instead of guessing — and the dashboard must carry that choice through, because a guess made here would be indistinguishable to the athlete from a real recommendation."""
+    _set_predict(monkeypatch, {"state": "Ready", "recommendations": [],
+                               "plan": {"split_options": ["full_body", "upper_lower"]}})
+    _login(dash_client)
+    dash_client.post("/profile", json=_profile())
+    _checkin(dash_client)
+    plan = dash_client.get("/dashboard").get_json()["plan"]
+    assert plan == {"split_options": ["full_body", "upper_lower"]}
+    assert "split" not in plan                             # nothing was chosen on the athlete's behalf
+
+
+@pytest.mark.parametrize("broken", [
+    "upper_lower",                                          # a bare string, not the object the contract defines
+    {"split": "upper_lower"},                               # resolved but no days -> a plan with nothing in it
+    {"days": [{"day": 1}]},                                 # days with no split -> unattributable to a doctrine
+    {"split": 4, "days": []},                               # split is not a name
+    {"split_options": []},                                  # a choice with nothing to choose from
+    {"split_options": ["full_body", 7]},                    # an option that cannot be rendered as a label
+    {},                                                     # neither shape
+])
+def test_dashboard_drops_a_plan_that_breaks_the_contract(dash_client, monkeypatch, broken):
+    """A plan that matches neither agreed shape is a contract break between containers, not a state the athlete is in — so it is reported as no plan rather than rendered as a partial one.
+
+    Half a plan is worse than none: a split with no days reads as "your programme is empty", and a choice
+    with no options renders a picker the athlete cannot answer. Readiness is unaffected either way, so the
+    rest of the dashboard keeps working.
+    """
+    _set_predict(monkeypatch, {"state": "Ready", "recommendations": [], "plan": broken})
+    _login(dash_client)
+    dash_client.post("/profile", json=_profile())
+    _checkin(dash_client)
+    data = dash_client.get("/dashboard").get_json()
+    assert data["plan"] is None
+    assert data["ai_status"] == "ok"                        # one bad field does not condemn the prediction
+    assert data["readiness"]["state"] == "Ready"
+
+
+def test_dashboard_reports_no_plan_explicitly_when_the_ai_is_unreachable(dash_client, monkeypatch):
+    """The key is present and null when the ai container is down, so the client tests one thing — is there a plan — instead of having to tell an absent key apart from an empty one."""
+    _set_predict(monkeypatch, None)                        # ai unreachable
+    _login(dash_client)
+    dash_client.post("/profile", json=_profile())
+    _checkin(dash_client)
+    data = dash_client.get("/dashboard").get_json()
+    assert data["ai_status"] == "unavailable"
+    assert "plan" in data and data["plan"] is None          # present-and-null, not missing
