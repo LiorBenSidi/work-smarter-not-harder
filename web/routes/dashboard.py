@@ -36,6 +36,26 @@ def _finite_number(v):
     return isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v)
 
 
+def _workout_plan(v):
+    """The AI's `plan`, or None when it is not one of the two shapes the contract allows.
+
+    F5 returns exactly two shapes (`ai/inference.py`): a resolved plan, ``{"split": str, "days": [...]}``,
+    or an ambiguous one the athlete must settle, ``{"split_options": [str, str]}`` — 4 and 5 sessions a
+    week each map to two defensible splits, so the engine asks instead of guessing. Anything else is a
+    contract break rather than a user-visible state, and the card renders nothing rather than half a plan.
+    Same reasoning as `_finite_number`: this crosses a container boundary, so it is validated here and not
+    trusted to be well-formed.
+    """
+    if not isinstance(v, dict):
+        return None
+    if isinstance(v.get("split"), str) and isinstance(v.get("days"), list):
+        return {"split": v["split"], "days": v["days"]}
+    options = v.get("split_options")
+    if isinstance(options, list) and options and all(isinstance(o, str) for o in options):
+        return {"split_options": list(options)}
+    return None
+
+
 @dashboard_bp.get("/dashboard")
 @login_required
 def dashboard():
@@ -87,8 +107,8 @@ def dashboard():
     )
     if not isinstance(prediction, dict):
         # ai unreachable (None) or a malformed non-object response -> degrade gracefully, never crash
-        return jsonify(profile=profile, readiness=None, calories=None, ai_status="unavailable",
-                       needs_profile=profile is None), 200
+        return jsonify(profile=profile, readiness=None, calories=None, plan=None,
+                       ai_status="unavailable", needs_profile=profile is None), 200
 
     recs = prediction.get("recommendations")
     proba = prediction.get("proba")
@@ -111,5 +131,8 @@ def dashboard():
     scored_at = latest.get("timestamp") if isinstance(latest, dict) else None
     return jsonify(profile=profile, readiness=readiness,
                    calories=calories if _finite_number(calories) else None,
+                   # F5's workout plan, relayed as-is once validated (#410). The card is rendered client-side;
+                   # the dashboard is only the courier, so the shape stays the ai container's contract.
+                   plan=_workout_plan(prediction.get("plan")),
                    scored_at=scored_at if isinstance(scored_at, str) else None,
                    ai_status="ok", needs_profile=profile is None), 200
