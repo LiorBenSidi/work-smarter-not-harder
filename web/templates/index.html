@@ -478,6 +478,32 @@
        global prefers-reduced-motion rule disables this; the JS also skips adding it under reduced motion. */
     @keyframes recIn { from { opacity:0; transform: translateY(6px); } to { opacity:1; transform: translateY(0); } }
 
+    /* F5 workout plan (#410). Borrows .recs' card idiom so the plan reads as part of the same
+       instrument rather than a bolted-on panel. One <details> per day: native disclosure, so it is
+       keyboard- and screen-reader-operable with no JS, and a 7-day plan stays glanceable on a phone. */
+    .plan { margin:22px 0 0; text-align:left; }
+    .plan-cap { display:flex; align-items:center; justify-content:space-between; gap:10px; margin:0 0 10px; }
+    .plan-cap h3 { font-size:11px; letter-spacing:.06em; text-transform:uppercase; color:var(--muted);
+      font-weight:800; margin:0; }
+    .plan-day { background:var(--field); border:1px solid var(--line); border-radius:14px; margin:8px 0; overflow:hidden; }
+    .plan-day > summary { padding:11px 13px; font-size:14px; font-weight:700; cursor:pointer; list-style:none;
+      display:flex; align-items:center; justify-content:space-between; gap:8px; }
+    .plan-day > summary::-webkit-details-marker { display:none; }        /* Safari's default triangle */
+    .plan-day > summary::after { content:"+"; color:var(--muted); font-family:var(--font-mono); font-size:15px; }
+    .plan-day[open] > summary::after { content:"–"; }
+    .plan-day > summary:focus-visible { outline:2px solid var(--accent); outline-offset:-2px; }
+    .plan-ex { list-style:none; margin:0; padding:0 13px 11px; }
+    .plan-ex li { display:grid; grid-template-columns:1fr auto; align-items:baseline; gap:4px 10px;
+      padding:7px 0; border-top:1px solid var(--line); font-size:13.5px; }
+    .plan-ex .mg { grid-column:1/-1; color:var(--muted); font-size:11.5px; text-transform:uppercase; letter-spacing:.04em; }
+    .plan-ex .dose { color:var(--muted); font-family:var(--font-mono); font-size:12.5px; white-space:nowrap; }
+    /* the ambiguous case: the engine returns two equally defensible splits rather than guessing */
+    .plan-pick { display:flex; flex-wrap:wrap; gap:8px; margin:10px 0 0; }
+    .plan-pick button { flex:1 1 auto; min-width:132px; padding:11px 13px; font-size:14px; font-weight:700;
+      background:var(--field); border:1px solid var(--line); border-radius:14px; color:inherit; cursor:pointer; }
+    .plan-pick button:hover:not(:disabled) { border-color:var(--accent); }
+    .plan-pick button:disabled { opacity:.55; cursor:progress; }
+
     /* readiness confidence breakdown (per-state proba) */
     .conf { margin:18px 0 0; text-align:left; }
     .conf-cap { font-size:11px; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); font-weight:800; margin:0 0 8px; }
@@ -2450,6 +2476,78 @@
 
     // Render the readiness card (orb + recs + confidence + calorie pill) from a /dashboard-shaped object into el.
     // Shared by the live /dashboard read AND the optimistic instant-paint from the latest stored check-in below.
+    // The profile behind the plan currently on screen. The picker has to re-save the WHOLE profile
+    // (POST /profile validates every required field — there is no partial update), so it needs the
+    // fields the dashboard already returned rather than a second read.
+    let planProfile = null;
+
+    // Delegated so it survives every repaint of the card. Clicking a split stores it as the profile's
+    // split_preference; the next /dashboard read then comes back resolved and the picker is gone.
+    $("dashboard").addEventListener("click", async (e) => {
+      const btn = e.target.closest(".plan-pick button[data-split]");
+      if (!btn) return;
+      const chosen = btn.dataset.split;
+      if (!planProfile) {                                   // no profile to extend -> say so, do not POST a partial one
+        flash("checkin-flash", "Save your profile first, then pick a split.");
+        return;
+      }
+      const group = btn.parentElement;
+      group.querySelectorAll("button").forEach((b) => { b.disabled = true; });   // no double-submit while in flight
+      btn.textContent = "Saving…";
+      const r = await api("/profile", { method: "POST", body: { ...planProfile, split_preference: chosen } });
+      if (!r.ok) {
+        group.querySelectorAll("button").forEach((b) => { b.disabled = false; });
+        btn.textContent = splitLabel(chosen);
+        flash("checkin-flash", (r.data && r.data.error) || "Could not save your split — try again.");
+        return;
+      }
+      loadProfile();          // keep the profile form's select in step with the choice made here
+      loadDashboard();        // re-read: the plan comes back resolved, replacing the picker with the days
+    });
+
+    // The names the profile's own <select> uses, so the plan calls a split exactly what the athlete
+    // chose it by. An unknown key falls back to itself rather than rendering blank.
+    const SPLIT_LABEL = { full_body: "Full body", upper_lower: "Upper / lower", push_pull_legs: "Push / pull / legs" };
+    const splitLabel = (s) => SPLIT_LABEL[s] || String(s || "");
+
+    // F5's plan, in the two shapes /dashboard relays (#410): a resolved {split, days} or the
+    // {split_options} the engine returns instead of guessing at 4 and 5 sessions a week.
+    function planHtml(plan) {
+      if (!plan || typeof plan !== "object") return "";
+      const cap = (extra) => '<div class="plan-cap"><h3>Workout plan</h3>' + (extra || "") + "</div>";
+
+      if (Array.isArray(plan.split_options)) {
+        // Deliberately unresolved: both splits fit, so the athlete decides. Their answer is stored as
+        // the profile's split_preference — the same field the profile form writes — so the next read
+        // comes back resolved and this picker does not reappear.
+        return '<div class="plan">' + cap()
+          + '<p class="muted" style="margin:0">Two splits suit your week equally well. Pick the one you would rather run — you can change it any time in your profile.</p>'
+          + '<div class="plan-pick">'
+          + plan.split_options.map((s) =>
+              '<button type="button" data-split="' + escapeHtml(s) + '">' + escapeHtml(splitLabel(s)) + "</button>").join("")
+          + "</div></div>";
+      }
+
+      const days = Array.isArray(plan.days) ? plan.days : [];
+      if (!plan.split || !days.length) return "";        // nothing to show beats an empty programme
+      return '<div class="plan">'
+        + cap('<span class="pill">' + escapeHtml(splitLabel(plan.split)) + "</span>")
+        + days.map((day, i) => {
+            const ex = Array.isArray(day.exercises) ? day.exercises : [];
+            const title = "Day " + escapeHtml(day.day != null ? day.day : i + 1)
+              + (day.focus ? " · " + escapeHtml(day.focus) : "");
+            return '<details class="plan-day"' + (i === 0 ? " open" : "") + ">"      // first day open: the next session
+              + "<summary>" + title + "</summary>"
+              + '<ul class="plan-ex">' + ex.map((x) =>
+                  "<li><span dir=\"auto\">" + escapeHtml(x.name || "") + "</span>"
+                  + '<span class="dose">' + escapeHtml(x.sets != null ? x.sets : "?") + " × " + escapeHtml(x.reps || "?") + "</span>"
+                  + (x.muscle_group ? '<span class="mg">' + escapeHtml(x.muscle_group) + "</span>" : "")
+                  + "</li>").join("")
+              + "</ul></details>";
+          }).join("")
+        + "</div>";
+    }
+
     function paintReadiness(el, d, freshReveal) {
       if (d.needs_checkin) {
         // No check-in yet -> there are no daily metrics to score, so this is NOT an AI outage. Prompt the
@@ -2486,7 +2584,11 @@
       }
       if (d.calories != null) html += '<p style="margin-top:16px;text-align:center"><span class="pill">Daily target · ' + escapeHtml(d.calories) + ' kcal</span></p>';
       else if (d.readiness && d.needs_profile) html += '<p class="muted" style="margin-top:14px;text-align:center;font-size:12px">Set up your profile to get a daily calorie target.</p>';
+      // The plan sits BELOW readiness and calories: today's verdict is the reason to open the app, the
+      // week's programme is what you act on once you have it (proposal v2 §7 Feature 7).
+      html += planHtml(d.plan);
       el.innerHTML = html || '<p class="muted">No readiness yet.</p>';
+      planProfile = d.profile || null;   // the picker re-saves the whole profile; POST /profile has no partial form
       // animate the orb fill and confidence bars from 0 (reduced-motion snaps to final)
       requestAnimationFrame(() => {
         const orb = el.querySelector(".orb");
@@ -2537,7 +2639,11 @@
       renderStats();
       // Replace the optimistic paint with the fresh AI result — unless it's identical, so an unchanged orb doesn't
       // re-run its count-up animation for no reason.
-      const sameAsOptimistic = opt && d.readiness && d.readiness.state === opt.assessment && d.calories === opt.calories
+      // `d.plan` is deliberately part of this: the optimistic paint is built from a stored history entry,
+      // which has readiness and calories but never a workout plan. Without this clause a returning athlete
+      // whose live score matches today's stored one would keep the optimistic card — and never see the
+      // plan at all, because the only paint that could draw it was skipped as "unchanged" (#410).
+      const sameAsOptimistic = opt && !d.plan && d.readiness && d.readiness.state === opt.assessment && d.calories === opt.calories
         && readinessScore(d.readiness) === readinessScore({ state: opt.assessment, proba: opt.proba });
       if (!sameAsOptimistic) paintReadiness(el, d, freshReveal);
     }

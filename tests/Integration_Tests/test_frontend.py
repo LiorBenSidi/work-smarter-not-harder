@@ -1265,3 +1265,62 @@ def test_forgot_password_does_not_promise_an_email_it_never_requested(client):
         "the failure branch must short-circuit before the success message"
     assert "r.status === 0" in handler, "a dropped request should read as a connection problem"
     assert 'reset link is on its way.", "ok")' in handler, "the hedged success wording must stay as-is"
+
+
+def test_the_optimistic_paint_can_never_suppress_the_workout_plan(client):
+    """A returning athlete whose live score matches the one already stored for today would never see
+    their plan at all, because the paint that draws it was skipped as "nothing changed".
+
+    loadDashboard paints twice: first optimistically, from the newest history entry, so the orb is not
+    blank while /dashboard is in flight; then again with the AI's answer — unless the two agree, which
+    avoids re-running the orb's count-up for an unchanged number. That entry is a stored check-in: it
+    carries readiness and calories and can never carry a plan. So "they agree" was false whenever a plan
+    arrived, and the second paint — the only one that renders the plan — never ran.
+
+    Found in a real browser, not in review: the API returned the plan and the DOM had no trace of it.
+    """
+    html = client.get("/").get_data(as_text=True)
+    guard = html[html.index("const sameAsOptimistic ="):html.index("if (!sameAsOptimistic)")]
+    assert "!d.plan" in guard, \
+        "a plan in the response must force the real paint — the optimistic one cannot contain a plan"
+
+
+def test_the_plan_renders_both_shapes_the_contract_defines(client):
+    """The dashboard has to draw a resolved plan AND the two-way choice the engine returns instead of
+    guessing at 4 and 5 sessions a week — the second is not an error state, it is a question being asked.
+
+    A split that arrives with no days renders nothing rather than an empty programme, which would read
+    to the athlete as "your week is blank" rather than "this did not load".
+    """
+    html = client.get("/").get_data(as_text=True)
+    fn = html[html.index("function planHtml("):html.index("function paintReadiness(")]
+
+    assert "split_options" in fn and "plan-pick" in fn, "the ambiguous shape must render as a picker"
+    assert "plan-day" in fn and "details" in fn, "a resolved plan must render its days"
+    assert "if (!plan.split || !days.length) return \"\";" in fn, \
+        "a split with no days must render nothing, not an empty plan"
+    # every value written into the card comes from the ai container, so none of it may be interpolated raw
+    for field in ("x.name", "x.reps", "day.focus", "plan.split"):
+        assert "escapeHtml(" + field in fn or "escapeHtml(splitLabel(" + field in fn, \
+            f"{field} must be escaped before it reaches innerHTML"
+    assert "planHtml(d.plan)" in html, "the card must actually be appended to the dashboard"
+
+
+def test_choosing_a_split_saves_a_whole_profile_and_re_reads(client):
+    """The picker's answer is stored as the profile's split_preference — the same field the profile form
+    writes — so the next read comes back resolved and the question is not asked twice.
+
+    POST /profile validates every required field and has no partial form, so sending only the split
+    would 400. The handler therefore re-sends the profile the dashboard already returned, with the new
+    split on top; it refuses rather than posting a half-profile when there is none to extend.
+    """
+    html = client.get("/").get_data(as_text=True)
+    handler = html[html.index('$("dashboard").addEventListener("click"'):html.index("const SPLIT_LABEL")]
+
+    assert "...planProfile, split_preference: chosen" in handler, \
+        "the whole profile must be re-sent — POST /profile rejects a partial one"
+    assert "if (!planProfile)" in handler, "with no profile to extend it must refuse, not post a partial"
+    assert "b.disabled = true" in handler, "both options disable while the save is in flight"
+    assert "loadDashboard()" in handler, "the plan must be re-read so the picker is replaced by the days"
+    assert handler.index("if (!r.ok)") < handler.index("loadDashboard()"), \
+        "a failed save must not be followed by a re-read that hides the failure"

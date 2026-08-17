@@ -13,7 +13,7 @@
 > +10 Azure deploy + CI/CD; supersedes [`FEEDBACK.md`](FEEDBACK.md)). Architecture detail lives in [`DESIGN.md`](DESIGN.md); the phased plan in
 > [`ROADMAP.md`](ROADMAP.md).
 >
-> **Last updated:** 2026-08-16 · **Suite at this snapshot:** **1254 checks, 1210 passing / 44 environment-gated**
+> **Last updated:** 2026-08-16 · **Suite at this snapshot:** **1257 checks, 1213 passing / 44 environment-gated**
 > (+ 26 browser e2e scenarios)
 > (`python -m pytest tests/ -q`; the env-gated ones run in CI's `compose-e2e` job against the live containers).
 > Since the 07-12 snapshot (783 tests): **Shiri's Random Forest landed** — a real `ai/model/model.pkl` +
@@ -41,7 +41,9 @@
 > exercise-selection stage of F5) and its tests (#276, #410), then to **1244** wiring
 > `generate_workout_days` into `predict_one` itself, so a resolved `plan["days"]` is populated
 > end to end on a live `/predict` call, not just available as a standalone function (#276, #410), and to **1254** as the dashboard
-> began relaying that plan to the client, validated against the two shapes the contract allows (#410).
+> began relaying that plan to the client, validated against the two shapes the contract allows (#410),
+> and to **1257** with the plan card and its split picker — including the guard that stops the
+> optimistic paint from suppressing the plan entirely (#410).
 > A pre-submission review took every file in the web/data lane and asked, per
 > test, whether it earns its place — by mutating the code it guards and checking that the test actually
 > goes red (#479–#492). That removed 8 tests whose behaviour a *named* other test already caught and
@@ -59,10 +61,10 @@
 > endpoints and the `messages` / `notifications` collections (**Lior**), plus the media endpoints and the
 > `media` collection (**Elad**, #160). §2's core AI rows (F3 model, F4 live value, F7 engine) are **now built**
 > (Shiri's Random Forest merged). **F5 (workout generator)**'s AI side is **now built and wired into `/predict`**
-> (catalog-backed exercise selection, goal-scaled sets/reps, on every live prediction). On the dashboard side
-> `GET /dashboard` now **relays** that plan to the client, validated against the two shapes the contract
-> allows (#410); what remains is **rendering** it — the plan card and the `split_options` picker — still
-> tracked in #410 (web tier, Lior). Confirmed against the TA's guidelines this feature is **not being
+> (catalog-backed exercise selection, goal-scaled sets/reps, on every live prediction). The dashboard side is **now built too**: `GET /dashboard`
+> relays the plan (validated against the two shapes the contract allows) and the card renders it — a
+> collapsible day-by-day programme, or, at 4 and 5 sessions a week where two splits fit equally well, a
+> picker whose answer is stored as the profile's `split_preference` so the next read resolves (#410). Confirmed against the TA's guidelines this feature is **not being
 > swapped** — it is a core feature in the v2 proposal the TA responded to, not a stretch goal. **F6
 > (program-balance)** is merged into F7 as a
 > single pipeline — that merge is in the approved v2 proposal (the TA's guidelines supersede Noam's feedback), so
@@ -224,19 +226,19 @@ Columns are the test-type dirs under `tests/`. Cells name representative file(s)
 | **Fault tolerance / isolation** | — | — | — | `test_fault_isolation` (2) · Full-System `test_parts_in_isolation` (12) | — | — |
 | **Whole-system journey** | — | — | — | `test_e2e` (1) · Full-System `test_everything_together_sync` (15) | — | — |
 
-**Totals by type (full suite, `pytest --collect-only`):** Unit **541** · Integration **415** · Negative **157** ·
-System **14** · Full-System **27** · Security **88** · Stress **12** → **1254 automated checks across the seven
+**Totals by type (full suite, `pytest --collect-only`):** Unit **541** · Integration **418** · Negative **157** ·
+System **14** · Full-System **27** · Security **88** · Stress **12** → **1257 automated checks across the seven
 pytest suites**, plus **26 browser end-to-end scenarios** driven separately (`tests/E2E_Tests/`, run in CI as
 the *e2e (browser · desktop + mobile)* job — not counted in the pytest total). This matches the header count.
 
-Read the total as *checks*, not as hand-written test functions: 1254 collected cases come from **919 test
+Read the total as *checks*, not as hand-written test functions: 1257 collected cases come from **922 test
 functions** (measured with `grep -c "^def test_"` across `tests/`), the remainder being parametrised cases (one `@parametrize` over 11 malformed payloads is 11
 collected cases, not 11 tests written). The suite is deliberately weighted toward the layers where a
 regression is cheapest to catch — unit and negative input walls — rather than toward volume.
 
-**Pass / skip:** the pre-07-12 snapshot was **747 pass, 36 skip in ~47 s**; the current suite is **1210 pass,
+**Pass / skip:** the pre-07-12 snapshot was **747 pass, 36 skip in ~47 s**; the current suite is **1213 pass,
 44 skip in ~86 s** (`python -m pytest tests/ -q`); in CI, where the `mongo:7` service is present, the same
-suite is **1236 pass, 18 skip**. All **44** local skips are env-gated and *not broken* — they run the
+suite is **1239 pass, 18 skip**. All **44** local skips are env-gated and *not broken* — they run the
 moment their dependency is present:
 
 - `test_db_mongo` (21) — the real-Mongo integration suite; skips without `TEST_MONGO_URI`, and **runs in CI**
@@ -286,7 +288,7 @@ machine (env vars, no local paths), and are exercised by CI on every PR. A run t
   (`test_csrf`), NoSQL-injection-safe queries (`test_profile`, `test_forum`), ownership enforcement on
   forum edit/delete (403), auth-gating of dashboard/history, and response-hardening (`test_web_hardening`).
 
-The two supporting directories complete the 1254: **Negative (157)** — adversarial and malformed input across
+The two supporting directories complete the 1257: **Negative (157)** — adversarial and malformed input across
 auth, profile, check-in, forum and media — and **Full-System (27)** — whole-stack journeys in-process, plus the
 parts-in-isolation suite. The per-type figures here are the same ones tabulated in §3; both are
 `pytest --collect-only` counts, not estimates.
@@ -464,7 +466,7 @@ between planes (§1). Full detail in [`COLLABORATORS.md`](../COLLABORATORS.md) a
 cp .env.example .env
 docker compose up --build          # 3 containers; only web is published
 # → http://localhost:8000/health   → then register, set a profile, check in, see the dashboard
-pytest -q                          # 1210 pass / 44 env-gated skip
+pytest -q                          # 1213 pass / 44 env-gated skip
 ```
 
 CI reproduces the gate on every PR (ruff → bandit → pytest + a `mongo:7` service). `main` is
