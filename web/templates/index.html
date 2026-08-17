@@ -2510,6 +2510,25 @@
     const SPLIT_LABEL = { full_body: "Full body", upper_lower: "Upper / lower", push_pull_legs: "Push / pull / legs" };
     const splitLabel = (s) => SPLIT_LABEL[s] || String(s || "");
 
+    // What the plan region was last drawn from. Compared as JSON rather than against the DOM, because a
+    // browser re-serialises markup its own way — an HTML diff would therefore report a change on every
+    // read and rewrite the region for nothing.
+    let lastPlanSig = null;
+
+    // Update ONLY the plan, leaving the readiness card untouched. Used when the live reading matches the
+    // optimistic one: repainting the whole card would restart the orb's count-up for a number that has
+    // not moved, but the plan still has to appear — and can still change, e.g. right after the picker.
+    function syncPlan(el, d) {
+      const sig = JSON.stringify(d.plan == null ? null : d.plan);
+      planProfile = d.profile || null;
+      const cur = el.querySelector(".plan");
+      if (sig === lastPlanSig && !!cur === !!d.plan) return;   // nothing moved -> no DOM write at all
+      lastPlanSig = sig;
+      const next = planHtml(d.plan);
+      if (cur) cur.outerHTML = next;                            // "" removes it when the plan is gone
+      else if (next) el.insertAdjacentHTML("beforeend", next);
+    }
+
     // F5's plan, in the two shapes /dashboard relays (#410): a resolved {split, days} or the
     // {split_options} the engine returns instead of guessing at 4 and 5 sessions a week.
     function planHtml(plan) {
@@ -2589,6 +2608,7 @@
       html += planHtml(d.plan);
       el.innerHTML = html || '<p class="muted">No readiness yet.</p>';
       planProfile = d.profile || null;   // the picker re-saves the whole profile; POST /profile has no partial form
+      lastPlanSig = JSON.stringify(d.plan == null ? null : d.plan);   // keep syncPlan's baseline in step with a full repaint
       // animate the orb fill and confidence bars from 0 (reduced-motion snaps to final)
       requestAnimationFrame(() => {
         const orb = el.querySelector(".orb");
@@ -2639,13 +2659,16 @@
       renderStats();
       // Replace the optimistic paint with the fresh AI result — unless it's identical, so an unchanged orb doesn't
       // re-run its count-up animation for no reason.
-      // `d.plan` is deliberately part of this: the optimistic paint is built from a stored history entry,
-      // which has readiness and calories but never a workout plan. Without this clause a returning athlete
-      // whose live score matches today's stored one would keep the optimistic card — and never see the
-      // plan at all, because the only paint that could draw it was skipped as "unchanged" (#410).
-      const sameAsOptimistic = opt && !d.plan && d.readiness && d.readiness.state === opt.assessment && d.calories === opt.calories
+      const sameAsOptimistic = opt && d.readiness && d.readiness.state === opt.assessment && d.calories === opt.calories
         && readinessScore(d.readiness) === readinessScore({ state: opt.assessment, proba: opt.proba });
       if (!sameAsOptimistic) paintReadiness(el, d, freshReveal);
+      // Readiness is unchanged, so the orb keeps its number and must NOT re-run its count-up. But the
+      // optimistic paint came from a stored check-in, which never carries a plan — so without this the
+      // plan would never appear for a returning athlete whose live score matches today's stored one.
+      // Reconcile that one region in place, and only when it actually differs, so an unchanged plan costs
+      // no DOM write. An explicit refresh still repaints the card optimistically first, so the plan comes
+      // back with Day 1 open — the next session, which is the right default to land on.
+      else syncPlan(el, d);
     }
 
     // The hero readiness number rises 0->N over the orb-ring sweep (1.1s) — the instrument "computing"

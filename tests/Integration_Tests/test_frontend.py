@@ -1267,22 +1267,42 @@ def test_forgot_password_does_not_promise_an_email_it_never_requested(client):
     assert 'reset link is on its way.", "ok")' in handler, "the hedged success wording must stay as-is"
 
 
-def test_the_optimistic_paint_can_never_suppress_the_workout_plan(client):
-    """A returning athlete whose live score matches the one already stored for today would never see
-    their plan at all, because the paint that draws it was skipped as "nothing changed".
+def test_the_plan_appears_without_repainting_an_unchanged_readiness_orb(client):
+    """Two things have to hold at once here, and the obvious fix for one breaks the other.
 
-    loadDashboard paints twice: first optimistically, from the newest history entry, so the orb is not
-    blank while /dashboard is in flight; then again with the AI's answer — unless the two agree, which
-    avoids re-running the orb's count-up for an unchanged number. That entry is a stored check-in: it
-    carries readiness and calories and can never carry a plan. So "they agree" was false whenever a plan
-    arrived, and the second paint — the only one that renders the plan — never ran.
+    loadDashboard paints twice: optimistically from the newest history entry, so the orb is not blank
+    while /dashboard is in flight, then again with the AI's answer — unless the two agree, which exists
+    so an unchanged score does not re-run the orb's 1.1s count-up.
 
-    Found in a real browser, not in review: the API returned the plan and the DOM had no trace of it.
+    That stored entry carries readiness and calories and can never carry a plan. So a returning athlete
+    whose live score matched today's stored one saw no plan at all: the only paint that could draw it was
+    skipped as "unchanged". Measured in a real browser — the API returned a plan, the DOM had none.
+
+    Widening the equality test with `!d.plan` fixes that and breaks the orb: a plan is present on nearly
+    every read, so the card repaints every time and the hero number re-counts from zero on every load.
+    Also measured, by sampling the score through a re-load: 3, 28, 46, 61, 70, 77, 84 for a score that
+    never moved.
+
+    So the equality test stays exactly as it was — this pins that it is not widened again — and the plan
+    is reconciled on its own in the else branch, touching no part of the readiness card.
     """
     html = client.get("/").get_data(as_text=True)
     guard = html[html.index("const sameAsOptimistic ="):html.index("if (!sameAsOptimistic)")]
-    assert "!d.plan" in guard, \
-        "a plan in the response must force the real paint — the optimistic one cannot contain a plan"
+    assert "!d.plan" not in guard, \
+        "the plan must not widen this test — it makes an unchanged orb re-run its count-up on every load"
+    after = html[html.index("if (!sameAsOptimistic)"):html.index("// The hero readiness number rises")]
+    assert "else syncPlan(el, d);" in after, \
+        "an unchanged readiness must still reconcile the plan, or it never appears for a returning athlete"
+
+    sync = html[html.index("function syncPlan("):html.index("// F5's plan, in the two shapes")]
+    # pin the CONDITION, not just the names: gutting it to `if (false) return;` leaves both words in
+    # place while rewriting the region on every read — which also collapses whichever day was open
+    assert "if (sig === lastPlanSig" in sync, "an unchanged plan must short-circuit before any DOM write"
+    assert "lastPlanSig = sig;" in sync, \
+        "the memo has to advance after a write, or the short-circuit above can never match again"
+    assert ".plan" in sync, "the reconcile must be scoped to the plan region"
+    for untouched in (".orb", ".readiness", "countUpScore", "conf-fill"):
+        assert untouched not in sync, f"syncPlan must not touch {untouched} — that is the readiness card"
 
 
 def test_the_plan_renders_both_shapes_the_contract_defines(client):
