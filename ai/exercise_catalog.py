@@ -91,12 +91,19 @@ EXERCISE_CATALOG = [
     {"name": "Dumbbell curl", "muscle_group": "biceps", "pattern": "pull", "equipment": "dumbbell", "is_compound": False, "is_isometric": False},
     {"name": "Band curl", "muscle_group": "biceps", "pattern": "pull", "equipment": "bands", "is_compound": False, "is_isometric": False},
     {"name": "Machine curl", "muscle_group": "biceps", "pattern": "pull", "equipment": "machine", "is_compound": False, "is_isometric": False},
+    {"name": "Cable curl (Cable)", "muscle_group": "biceps", "pattern": "pull", "equipment": "machine", "is_compound": False, "is_isometric": False},
+    {"name": "Cable hammer curl (Cable)", "muscle_group": "biceps", "pattern": "pull", "equipment": "machine", "is_compound": False, "is_isometric": False},
+    {"name": "Reverse grip cable curl (Cable)", "muscle_group": "biceps", "pattern": "pull", "equipment": "machine", "is_compound": False, "is_isometric": False},
+    {"name": "Dumbbell hammer curl", "muscle_group": "biceps", "pattern": "pull", "equipment": "dumbbell", "is_compound": False, "is_isometric": False},
+    {"name": "Seated dumbbell curl", "muscle_group": "biceps", "pattern": "pull", "equipment": "dumbbell", "is_compound": False, "is_isometric": False},
+    {"name": "Barbell curl (EZ Bar)", "muscle_group": "biceps", "pattern": "pull", "equipment": "barbell", "is_compound": False, "is_isometric": False},
 
     # --- triceps (push) ---
     {"name": "Barbell close-grip bench press", "muscle_group": "triceps", "pattern": "push", "equipment": "barbell", "is_compound": True, "is_isometric": False},
     {"name": "Dumbbell overhead extension", "muscle_group": "triceps", "pattern": "push", "equipment": "dumbbell", "is_compound": False, "is_isometric": False},
     {"name": "Band pushdown", "muscle_group": "triceps", "pattern": "push", "equipment": "bands", "is_compound": False, "is_isometric": False},
-    {"name": "Machine triceps pushdown", "muscle_group": "triceps", "pattern": "push", "equipment": "machine", "is_compound": False, "is_isometric": False},
+    {"name": "Triceps pushdown (Cable, Bar)", "muscle_group": "triceps", "pattern": "push", "equipment": "machine", "is_compound": False, "is_isometric": False},
+    {"name": "Triceps rope pushdown (Cable)", "muscle_group": "triceps", "pattern": "push", "equipment": "machine", "is_compound": False, "is_isometric": False},
     {"name": "Bench dip", "muscle_group": "triceps", "pattern": "push", "equipment": "bodyweight", "is_compound": True, "is_isometric": False},
     {"name": "Barbell lying triceps extension", "muscle_group": "triceps", "pattern": "push", "equipment": "barbell", "is_compound": False, "is_isometric": False},
     {"name": "Triceps dip", "muscle_group": "triceps", "pattern": "push", "equipment": "bodyweight", "is_compound": True, "is_isometric": False},
@@ -137,9 +144,12 @@ EXERCISE_CATALOG = [
     {"name": "Dumbbell back extension", "muscle_group": "glutes", "pattern": "legs", "equipment": "dumbbell", "is_compound": False, "is_isometric": False},
 
     # --- calves (legs) ---
-    {"name": "Machine calf raise", "muscle_group": "calves", "pattern": "legs", "equipment": "machine", "is_compound": False, "is_isometric": False},
+    {"name": "Standing machine calf raise", "muscle_group": "calves", "pattern": "legs", "equipment": "machine", "is_compound": False, "is_isometric": False},
     {"name": "Dumbbell calf raise", "muscle_group": "calves", "pattern": "legs", "equipment": "dumbbell", "is_compound": False, "is_isometric": False},
     {"name": "Bodyweight calf raise", "muscle_group": "calves", "pattern": "legs", "equipment": "bodyweight", "is_compound": False, "is_isometric": False},
+    {"name": "Standing calf raise", "muscle_group": "calves", "pattern": "legs", "equipment": "barbell", "is_compound": False, "is_isometric": False},
+    {"name": "Seated calf raise", "muscle_group": "calves", "pattern": "legs", "equipment": "machine", "is_compound": False, "is_isometric": False},
+    {"name": "Calf raise on step", "muscle_group": "calves", "pattern": "legs", "equipment": "bodyweight", "is_compound": False, "is_isometric": False},
 
     # --- core ---
     {"name": "Plank", "muscle_group": "core", "pattern": "core", "equipment": "bodyweight", "is_compound": False, "is_isometric": True},
@@ -148,4 +158,5 @@ EXERCISE_CATALOG = [
     {"name": "Dumbbell weighted sit-up", "muscle_group": "core", "pattern": "core", "equipment": "dumbbell", "is_compound": False, "is_isometric": False},
     {"name": "Bodyweight oblique crunch", "muscle_group": "core", "pattern": "core", "equipment": "bodyweight", "is_compound": False, "is_isometric": False},
     {"name": "Stability ball crunch", "muscle_group": "core", "pattern": "core", "equipment": "bodyweight", "is_compound": False, "is_isometric": False},
+    {"name": "Stability ball oblique crunch", "muscle_group": "core", "pattern": "core", "equipment": "bodyweight", "is_compound": False, "is_isometric": False},
 ]
