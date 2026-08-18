@@ -531,7 +531,21 @@ export const SCENARIOS = [
       await createPost(b, `${marker} ${payload}`, `body ${payload}`);
       await gotoScreen(b, "forum");
       await b.waitFor("#forum-list");
-      await b.wait(400);
+      // Poll for the post to reach the feed instead of sleeping a fixed 400ms (#524). `waitFor` resolves
+      // when the CONTAINER exists, not when the feed has loaded this post, and `createPost` ends at a
+      // submit that never confirms the row landed — so a fixed sleep was the only thing standing between
+      // this scenario and a red `main`. It failed exactly that way on an unchanged tree: same commit,
+      // byte-identical trees, passed twice and failed once, at mobile only. Both SECURITY assertions
+      // passed in that run; what raced was the freshness of the feed read below.
+      //
+      // The assertion is unweakened: if the post genuinely vanished, the marker never appears and the
+      // loop simply spends its budget before failing on the same condition as before.
+      for (let waited = 0; waited < 20000; waited += 400) {
+        const there = await b.evaluate(
+          `() => ((document.querySelector("#forum-list") || {}).textContent || "").includes(${JSON.stringify(marker)})`);
+        if (there) break;
+        await b.wait(400);
+      }
 
       // The requirement: attacker-supplied content must not run.
       const fired = await b.evaluate(`() => window.__xssFired === true`);
