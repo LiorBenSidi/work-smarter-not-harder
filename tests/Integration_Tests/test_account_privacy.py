@@ -4,6 +4,7 @@ Consent defaults False (opt-in); toggling it persists and surfaces in /me + the 
 (login OTP, password reset) is transactional and always sent regardless. The export returns everything
 the app holds about the user as downloadable JSON — minus the password hash. Runs on the in-memory fakes.
 """
+import io
 import json as _json
 
 import pytest
@@ -11,9 +12,13 @@ import pytest
 
 @pytest.fixture
 def full_client(make_client, fake_users, fake_profiles, fake_history, fake_forum, fake_messages,
-                fake_notifications):
-    return make_client(fake_users, profiles=fake_profiles, history=fake_history, forum=fake_forum,
-                       messages=fake_messages, notifications=fake_notifications)
+                fake_notifications, fake_media, tmp_path):
+    # Media injected (#507): the export now carries a media section, so without a fake the read would
+    # try to resolve Mongo. Throwaway MEDIA_ROOT, same as the media fixtures in conftest.
+    c = make_client(fake_users, profiles=fake_profiles, history=fake_history, forum=fake_forum,
+                    messages=fake_messages, notifications=fake_notifications, media=fake_media)
+    c.raw.application.config["MEDIA_ROOT"] = str(tmp_path / "media")
+    return c
 
 
 def _register_login(client, name="alice", pw="password123"):
@@ -97,3 +102,37 @@ def test_export_never_includes_the_password_hash(full_client):
 def test_export_requires_auth(full_client):
     """The export is gated, so a user's complete personal record cannot be fetched by an anonymous caller."""
     assert full_client.get("/account/export").status_code == 401
+
+
+def test_export_includes_the_users_uploaded_media(full_client, tmp_path):
+    """#507: media was the one store missing from the export, so a user who asked for their data got
+    no record that their uploads existed at all. The bytes are deliberately NOT inlined — a JSON export
+    can't carry a 10 MB video — but every entry carries a fetchable URL and enough metadata (type, size,
+    what it's attached to) for the record to be meaningful."""
+    _register_login(full_client, "alice")
+    up = full_client.post("/media", data={"file": (io.BytesIO(b"\x89PNG\r\n\x1a\n"), "shot.png", "image/png")},
+                          content_type="multipart/form-data")
+    assert up.status_code == 201
+    media_id = up.get_json()["id"]
+
+    data = full_client.get("/account/export").get_json()
+
+    assert [m["id"] for m in data["media"]] == [media_id]
+    entry = data["media"][0]
+    assert entry["url"] == f"/media/{media_id}"
+    assert entry["mime"] == "image/png" and entry["size"] > 0
+    assert "attached_to" in entry                       # None while unbound, "post"/"comment"/"dm" once bound
+
+
+def test_export_does_not_leak_another_users_media(full_client, make_client, fake_users, fake_media, tmp_path):
+    """The media section is owner-scoped like every other section of the export."""
+    bob = make_client(fake_users, media=fake_media)
+    bob.raw.application.config["MEDIA_ROOT"] = str(tmp_path / "media")
+    _register_login(bob, "bob")
+    bob.post("/media", data={"file": (io.BytesIO(b"\x89PNG\r\n\x1a\n"), "bob.png", "image/png")},
+             content_type="multipart/form-data")
+
+    _register_login(full_client, "alice")
+    data = full_client.get("/account/export").get_json()
+
+    assert data["media"] == []                          # alice uploaded nothing; bob's blob is not hers

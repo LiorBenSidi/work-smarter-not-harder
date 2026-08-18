@@ -1303,7 +1303,7 @@
               <span>Send me occasional tips and product updates.<span class="hint" style="margin-top:3px">We don't send these yet — this saves your preference for when we do. Your login codes and password-reset emails are always sent.</span></span>
             </label>
             <hr class="sep">
-            <p class="muted" style="margin:0 0 10px">Download your profile, check-ins, forum activity, messages and notifications as a JSON file. Uploaded photos and videos aren't included.</p>
+            <p class="muted" style="margin:0 0 10px">Download your profile, check-ins, forum activity, messages, notifications and a record of your uploaded photos and videos as a JSON file.</p>
             <button id="export-btn" class="ghost block" type="button">Download my data</button>
             <div id="privacy-flash" class="flash" aria-live="polite"></div>
           </div>
@@ -2088,7 +2088,7 @@
       const r = await api("/account", { method: "DELETE", body: { password: e.target.password.value } });
       if (r.ok) {
         resetDeleteUI(); resetAuthState(); showView("auth");            // scrub session + close the SSE stream (as on logout)
-        flash("login-flash", "Your account was deleted, along with your profile, check-ins, forum posts and comments, messages and notifications.", "ok");
+        flash("login-flash", "Your account was deleted, along with your profile, check-ins, forum posts and comments, messages, notifications and your uploaded photos and videos.", "ok");
       } else {
         e.target.password.value = ""; syncDeleteBtn();                  // clear the password; keep the typed DELETE so a retry only re-enters the password
         flash("delete-flash", (r.data && r.data.error) || "Could not delete your account");
