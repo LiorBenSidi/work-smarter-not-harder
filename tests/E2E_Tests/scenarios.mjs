@@ -1114,4 +1114,58 @@ export const SCENARIOS = [
       assert(!hint, `the composer still claimed files were attached after removal: ${JSON.stringify(hint)}`);
     },
   },
+
+  // #407 — the TA's Online-Forum sub-requirement #2: "Each comment should have a body, AND the option to
+  // add images and videos to the comment as well." Posts and DMs supported media; comments did not, while
+  // four documents said they did. The store already accepted a "comment" target and the serve-time
+  // permission check already handled it — but nothing ever WROTE one, so the branch was dead code and the
+  // feature only looked wired.
+  //
+  // This uploads a real file through the real comment composer and proves the image comes back attached to
+  // THAT comment, which is the only thing the requirement actually asks for.
+  {
+    name: "forum: a comment can carry an image, end to end",
+    tags: ["forum", "media"],
+    async fn(b) {
+      await registerAndLogin(b);
+      const marker = "comment-media-" + Math.floor(performance.now());
+      await createPost(b, `${marker} post`, "a post whose comment carries a photo");
+
+      // Open the post so the comment composer exists.
+      await gotoScreen(b, "forum");
+      await b.waitFor("#forum-list");
+      const opened = await b.pageExec(`(() => {
+        const row = [...document.querySelectorAll("#forum-list .post")]
+          .find((d) => d.textContent.includes(${JSON.stringify(marker)}));
+        if (!row) return false; row.click(); return true; })()`);
+      assert(opened === true, "could not open the post just created");
+      await b.waitFor("#comment-form");
+
+      await b.setFileInput("#comment-files", new URL("./fixtures/pixel.png", import.meta.url).pathname);
+      await b.wait(400);
+      const chips = await b.pageExec(`document.querySelectorAll("#comment-tray .att-chip").length`);
+      assert(chips === 1, `the comment composer did not show the picked file — chips: ${chips}`);
+
+      await b.type("#comment-form [name=body]", "here is the photo");
+      await b.submit("#comment-form", 1200);
+
+      // Poll for the image to appear under the comment — an upload plus two round-trips, so never a
+      // fixed sleep (#524).
+      let imgs = 0;
+      for (let waited = 0; waited < 30000; waited += 400) {
+        imgs = await b.pageExec(`document.querySelectorAll("#comments-box .c-atts img").length`);
+        if (imgs > 0) break;
+        await b.wait(400);
+      }
+      assert(imgs > 0, "the comment was posted but its image never rendered under it");
+
+      // And it is really served, not a broken <img>: naturalWidth is 0 for an image that failed to load.
+      const loaded = await b.pageExec(`(() => {
+        const img = document.querySelector("#comments-box .c-atts img");
+        return img && img.complete && img.naturalWidth > 0; })()`);
+      assert(loaded === true, "the comment's image element rendered but the file never loaded");
+
+      await cleanupPosts(b, marker);
+    },
+  },
 ];

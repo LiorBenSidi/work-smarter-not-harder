@@ -127,3 +127,102 @@ def test_attachments_are_capped_per_target(media_client):
 # Negative_Tests/test_messages_media_negative.py, where the shared alice/bob fixtures express the same
 # assertions in a third of the setup — and the foreign-blob case additionally proves the blob stays
 # private afterwards.
+
+
+# --------------------------------------------------------------- comment attachments (#407)
+# TA Online-Forum sub-requirement #2: "Each comment should have a body, and the option to add images and
+# videos to the comment as well." Posts and DMs supported media; comments did not. The store already
+# accepted a "comment" target and `_can_view` already handled it — but nothing ever WROTE one, so the
+# branch was dead code and the feature only LOOKED wired, while four documents claimed it worked.
+
+
+def _post_and_comment(c, body="nice one"):
+    """Create a post and a comment on it, returning both ids."""
+    pid = c.post("/forum/posts", json={"title": "a post", "body": "body"}).get_json()["post"]["id"]
+    cid = c.post(f"/forum/posts/{pid}/comments", json={"body": body}).get_json()["comment"]["id"]
+    return pid, cid
+
+
+def test_attach_to_comment_then_list(media_client):
+    """The requirement itself: a comment can carry an image, and that image comes back on the comment."""
+    c = media_client
+    _login(c)
+    mid = _upload_png(c).get_json()["id"]
+    pid, cid = _post_and_comment(c)
+    bound = c.post(f"/forum/posts/{pid}/comments/{cid}/attachments",
+                   json={"attachment_ids": [mid]}).get_json()["bound"]
+    assert bound == [mid]
+    listing = c.get(f"/forum/posts/{pid}/comments/{cid}/attachments").get_json()["attachments"]
+    assert [a["id"] for a in listing] == [mid]
+    assert listing[0]["url"] == f"/media/{mid}"
+
+
+def test_a_comment_attachment_is_served_to_any_logged_in_reader(media_client):
+    """The forum is public to signed-in users, so a comment's image must render for readers who are not
+    its author — otherwise attaching one is pointless. (A DM attachment stays restricted; that is
+    asserted separately.)"""
+    c = media_client
+    _login(c, "author")
+    mid = _upload_png(c).get_json()["id"]
+    pid, cid = _post_and_comment(c)
+    c.post(f"/forum/posts/{pid}/comments/{cid}/attachments", json={"attachment_ids": [mid]})
+    c.post("/logout")
+    _login(c, "reader")
+    assert c.get(f"/media/{mid}").status_code == 200
+    assert [a["id"] for a in
+            c.get(f"/forum/posts/{pid}/comments/{cid}/attachments").get_json()["attachments"]] == [mid]
+
+
+def test_only_the_comments_author_can_attach_to_it(media_client):
+    """Without the gate, any logged-in user could bolt their blob onto anyone's comment."""
+    c = media_client
+    _login(c, "author")
+    pid, cid = _post_and_comment(c)
+    c.post("/logout")
+    _login(c, "intruder")
+    mid = _upload_png(c).get_json()["id"]
+    r = c.post(f"/forum/posts/{pid}/comments/{cid}/attachments", json={"attachment_ids": [mid]})
+    assert r.status_code == 403
+    assert c.get(f"/forum/posts/{pid}/comments/{cid}/attachments").get_json()["attachments"] == []
+
+
+def test_attaching_to_a_missing_comment_is_404(media_client):
+    c = media_client
+    _login(c)
+    mid = _upload_png(c).get_json()["id"]
+    pid, _ = _post_and_comment(c)
+    r = c.post(f"/forum/posts/{pid}/comments/nope/attachments", json={"attachment_ids": [mid]})
+    assert r.status_code == 404
+
+
+def test_a_comments_attachments_are_scoped_to_that_comment(media_client):
+    """Two comments on the same post must not share a bucket — the target id carries both ids."""
+    c = media_client
+    _login(c)
+    pid, first = _post_and_comment(c, "first")
+    second = c.post(f"/forum/posts/{pid}/comments", json={"body": "second"}).get_json()["comment"]["id"]
+    mid = _upload_png(c).get_json()["id"]
+    c.post(f"/forum/posts/{pid}/comments/{first}/attachments", json={"attachment_ids": [mid]})
+    assert [a["id"] for a in
+            c.get(f"/forum/posts/{pid}/comments/{first}/attachments").get_json()["attachments"]] == [mid]
+    assert c.get(f"/forum/posts/{pid}/comments/{second}/attachments").get_json()["attachments"] == []
+
+
+def test_a_comment_attachment_does_not_leak_onto_its_post(media_client):
+    """The post and its comments are different targets; a comment's image must not appear on the post."""
+    c = media_client
+    _login(c)
+    pid, cid = _post_and_comment(c)
+    mid = _upload_png(c).get_json()["id"]
+    c.post(f"/forum/posts/{pid}/comments/{cid}/attachments", json={"attachment_ids": [mid]})
+    assert c.get(f"/forum/posts/{pid}/attachments").get_json()["attachments"] == []
+
+
+def test_comment_attachments_require_auth(media_client):
+    c = media_client
+    _login(c)
+    pid, cid = _post_and_comment(c)
+    c.post("/logout")
+    assert c.get(f"/forum/posts/{pid}/comments/{cid}/attachments").status_code == 401
+    assert c.post(f"/forum/posts/{pid}/comments/{cid}/attachments",
+                  json={"attachment_ids": []}).status_code == 401

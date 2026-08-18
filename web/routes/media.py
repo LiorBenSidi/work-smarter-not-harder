@@ -188,6 +188,43 @@ def list_post_attachments(post_id):
     return _list("post", post_id)
 
 
+def _comment_key(post_id, comment_id):
+    """Canonical target id for a comment's attachments.
+
+    Scoped by BOTH ids, so a comment's blobs can never be reached through a different post — the same
+    reason ``forum_get_comment`` matches on both. Comment ids are globally unique, so the post id is
+    belt-and-braces rather than load-bearing, but it keeps the stored target self-describing.
+    """
+    return f"{post_id}:{comment_id}"
+
+
+@media_bp.post("/forum/posts/<post_id>/comments/<comment_id>/attachments")
+@login_required
+def attach_to_comment(post_id, comment_id):
+    # TA Online-Forum sub-requirement #2: "Each comment should have a body, and the option to add images
+    # and videos to the comment as well." The store and `_can_view` already understood a "comment" target
+    # (#338) — but nothing ever WROTE one, so that branch was dead code and the feature only LOOKED wired
+    # while four documents claimed it worked (#407).
+    #
+    # Author-gated exactly like attach_to_post: without it any logged-in user could bolt their blob onto
+    # anyone's comment. `get_comment` matches on both ids and returns the real author (anonymity is a
+    # display projection), so it is the right gate even on an anonymous post.
+    comment = _forum().get_comment(post_id, comment_id)
+    if comment is None:
+        return jsonify(error="no such comment"), 404
+    if comment.get("author") != session["username"]:
+        return jsonify(error="only the author can attach media to this comment"), 403
+    return _attach("comment", _comment_key(post_id, comment_id))
+
+
+@media_bp.get("/forum/posts/<post_id>/comments/<comment_id>/attachments")
+@login_required
+def list_comment_attachments(post_id, comment_id):
+    # Readable by any logged-in user, mirroring the post route: the forum is public, and `_can_view`
+    # already treats a "comment" target as forum content.
+    return _list("comment", _comment_key(post_id, comment_id))
+
+
 @media_bp.post("/messages/<peer>/attachments")
 @login_required
 def attach_to_dm(peer):

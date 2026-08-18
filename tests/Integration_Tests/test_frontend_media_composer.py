@@ -127,3 +127,51 @@ def test_a_wholly_failed_upload_publishes_nothing(html):
     handler = _forum_handler(html)
     assert "Nothing was posted" in handler
     assert "Upload cancelled" in handler
+
+
+# ---- comment attachments (#407, TA Online-Forum sub-requirement #2) ----
+
+def test_the_comment_composer_ships_an_attach_control_and_tray(html):
+    """Posts and DMs took media; comments did not, while four documents said they did. The live composer
+    was `<textarea> + <button>Comment</button>` with no attach control at all."""
+    assert 'id="comment-files"' in html
+    assert 'id="comment-tray"' in html
+    assert 'makeTray("comment-files", "comment-tray"' in html
+
+
+def test_the_comment_composer_reuses_the_shared_tray(html):
+    """Not a second implementation: the same makeTray/uploadAll the other two composers use, so the three
+    behave identically and a fix to one is a fix to all."""
+    handler = html[html.index('onSubmit("comment-form"'):html.index("function renderComments(")]
+    assert "commentTray.sendable()" in handler
+    assert "uploadAll(picked" in handler
+    assert "hasBlocked()" in handler
+
+
+def test_the_comment_composer_uploads_before_it_creates_the_comment(html):
+    """Same ordering as #439: a comment must not be published without the media it was written around,
+    and a failed upload must not leave a stray comment behind."""
+    handler = html[html.index('onSubmit("comment-form"'):html.index("function renderComments(")]
+    assert handler.index("uploadAll(picked") < handler.index('/comments", { method: "POST"')
+
+
+def test_a_comment_binds_its_media_to_the_comment_endpoint(html):
+    """The blobs must reach the COMMENT's own target, not the post's — otherwise a comment's photo shows
+    up on the post and every comment on that post shares one bucket."""
+    handler = html[html.index('onSubmit("comment-form"'):html.index("function renderComments(")]
+    assert '"/forum/posts/" + id + "/comments/" + cid + "/attachments"' in handler
+
+
+def test_each_comment_renders_its_own_attachments(html):
+    assert 'class="c-atts"' in html
+    assert "function loadCommentAtts(" in html
+
+
+def test_comment_attachments_are_fetched_once_per_open_not_per_render(html):
+    """renderComments() re-runs on every vote, every new comment and every in-place refresh, and a page
+    holds up to 50 comments — so fetching per render would fire 50 requests each time anyone voted. Each
+    comment is fetched once and later renders paint from the cache."""
+    fn = html[html.index("function loadCommentAtts("):html.index("// Load a post's FIRST")]
+    assert "commentAtts[c.id]" in fn
+    assert "if (cached !== undefined)" in fn                  # a known comment repaints without a request
+    assert "commentAtts = {}" in html                         # ...and the cache resets with the accumulators
