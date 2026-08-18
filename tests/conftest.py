@@ -545,6 +545,14 @@ class FakeMedia:
         return [dict(r) for r in self._by_id.values()
                 if r["target_type"] == target_type and r["target_id"] == target_id]
 
+    def list_for_targets(self, target_type, target_ids):
+        wanted = set(target_ids)
+        grouped = {}
+        for r in sorted(self._by_id.values(), key=lambda r: r["created_at"]):
+            if r["target_type"] == target_type and r["target_id"] in wanted:
+                grouped.setdefault(r["target_id"], []).append(dict(r))
+        return grouped
+
     def list_for_owner(self, owner):
         return [dict(r) for r in sorted(self._by_id.values(), key=lambda r: r["created_at"])
                 if r["owner"] == owner]

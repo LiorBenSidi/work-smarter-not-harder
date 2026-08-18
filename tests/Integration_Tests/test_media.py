@@ -129,6 +129,179 @@ def test_attachments_are_capped_per_target(media_client):
 # private afterwards.
 
 
+# --------------------------------------------------------------- comment attachments (#407)
+# TA Online-Forum sub-requirement #2: "Each comment should have a body, and the option to add images and
+# videos to the comment as well." Posts and DMs supported media; comments did not. The store already
+# accepted a "comment" target and `_can_view` already handled it — but nothing ever WROTE one, so the
+# branch was dead code and the feature only LOOKED wired, while four documents claimed it worked.
+
+
+def _post_and_comment(c, body="nice one"):
+    """Create a post and a comment on it, returning both ids."""
+    pid = c.post("/forum/posts", json={"title": "a post", "body": "body"}).get_json()["post"]["id"]
+    cid = c.post(f"/forum/posts/{pid}/comments", json={"body": body}).get_json()["comment"]["id"]
+    return pid, cid
+
+
+def test_attach_to_comment_then_list(media_client):
+    """The requirement itself: a comment can carry an image, and that image comes back on the comment."""
+    c = media_client
+    _login(c)
+    mid = _upload_png(c).get_json()["id"]
+    pid, cid = _post_and_comment(c)
+    bound = c.post(f"/forum/posts/{pid}/comments/{cid}/attachments",
+                   json={"attachment_ids": [mid]}).get_json()["bound"]
+    assert bound == [mid]
+    listing = c.get(f"/forum/posts/{pid}/comments/{cid}/attachments").get_json()["attachments"]
+    assert [a["id"] for a in listing] == [mid]
+    assert listing[0]["url"] == f"/media/{mid}"
+
+
+def test_a_comment_attachment_is_served_to_any_logged_in_reader(media_client):
+    """The forum is public to signed-in users, so a comment's image must render for readers who are not
+    its author — otherwise attaching one is pointless. (A DM attachment stays restricted; that is
+    asserted separately.)"""
+    c = media_client
+    _login(c, "author")
+    mid = _upload_png(c).get_json()["id"]
+    pid, cid = _post_and_comment(c)
+    c.post(f"/forum/posts/{pid}/comments/{cid}/attachments", json={"attachment_ids": [mid]})
+    c.post("/logout")
+    _login(c, "reader")
+    assert c.get(f"/media/{mid}").status_code == 200
+    assert [a["id"] for a in
+            c.get(f"/forum/posts/{pid}/comments/{cid}/attachments").get_json()["attachments"]] == [mid]
+
+
+def test_only_the_comments_author_can_attach_to_it(media_client):
+    """Without the gate, any logged-in user could bolt their blob onto anyone's comment."""
+    c = media_client
+    _login(c, "author")
+    pid, cid = _post_and_comment(c)
+    c.post("/logout")
+    _login(c, "intruder")
+    mid = _upload_png(c).get_json()["id"]
+    r = c.post(f"/forum/posts/{pid}/comments/{cid}/attachments", json={"attachment_ids": [mid]})
+    assert r.status_code == 403
+    assert c.get(f"/forum/posts/{pid}/comments/{cid}/attachments").get_json()["attachments"] == []
+
+
+def test_attaching_to_a_missing_comment_is_404(media_client):
+    c = media_client
+    _login(c)
+    mid = _upload_png(c).get_json()["id"]
+    pid, _ = _post_and_comment(c)
+    r = c.post(f"/forum/posts/{pid}/comments/nope/attachments", json={"attachment_ids": [mid]})
+    assert r.status_code == 404
+
+
+def test_a_comments_attachments_are_scoped_to_that_comment(media_client):
+    """Two comments on the same post must not share a bucket — the target id carries both ids."""
+    c = media_client
+    _login(c)
+    pid, first = _post_and_comment(c, "first")
+    second = c.post(f"/forum/posts/{pid}/comments", json={"body": "second"}).get_json()["comment"]["id"]
+    mid = _upload_png(c).get_json()["id"]
+    c.post(f"/forum/posts/{pid}/comments/{first}/attachments", json={"attachment_ids": [mid]})
+    assert [a["id"] for a in
+            c.get(f"/forum/posts/{pid}/comments/{first}/attachments").get_json()["attachments"]] == [mid]
+    assert c.get(f"/forum/posts/{pid}/comments/{second}/attachments").get_json()["attachments"] == []
+
+
+def test_a_comment_attachment_does_not_leak_onto_its_post(media_client):
+    """The post and its comments are different targets; a comment's image must not appear on the post."""
+    c = media_client
+    _login(c)
+    pid, cid = _post_and_comment(c)
+    mid = _upload_png(c).get_json()["id"]
+    c.post(f"/forum/posts/{pid}/comments/{cid}/attachments", json={"attachment_ids": [mid]})
+    assert c.get(f"/forum/posts/{pid}/attachments").get_json()["attachments"] == []
+
+
+def test_comment_attachments_require_auth(media_client):
+    c = media_client
+    _login(c)
+    pid, cid = _post_and_comment(c)
+    c.post("/logout")
+    assert c.get(f"/forum/posts/{pid}/comments/{cid}/attachments").status_code == 401
+    assert c.post(f"/forum/posts/{pid}/comments/{cid}/attachments",
+                  json={"attachment_ids": []}).status_code == 401
+
+
+def test_many_comments_attachments_come_back_in_one_request(media_client):
+    """#407 follow-up: asking per comment was an N+1 at the BROWSER layer. A page holds up to 50
+    comments, and 50 parallel requests against a ~6-connection-per-origin limit made every other
+    request — the forum feed included — queue behind the burst. Measured on the running app before the
+    fix: opening a post with 20 comments issued 20 requests; after, one."""
+    c = media_client
+    _login(c)
+    pid = c.post("/forum/posts", json={"title": "batch", "body": "b"}).get_json()["post"]["id"]
+    cids, mids = [], []
+    for i in range(3):
+        cid = c.post(f"/forum/posts/{pid}/comments", json={"body": f"c{i}"}).get_json()["comment"]["id"]
+        mid = _upload_png(c).get_json()["id"]
+        c.post(f"/forum/posts/{pid}/comments/{cid}/attachments", json={"attachment_ids": [mid]})
+        cids.append(cid)
+        mids.append(mid)
+
+    r = c.post(f"/forum/posts/{pid}/comments/attachments", json={"comment_ids": cids})
+    assert r.status_code == 200
+    grouped = r.get_json()["attachments"]
+    assert set(grouped) == set(cids)                                  # every comment keyed by ITS id
+    for cid, mid in zip(cids, mids):
+        assert [a["id"] for a in grouped[cid]] == [mid]
+        assert grouped[cid][0]["url"] == f"/media/{mid}"
+
+
+def test_the_batch_read_omits_comments_with_no_media(media_client):
+    """A comment with nothing attached must not come back as an empty key — the client treats presence
+    as 'this comment has media', and an empty list would render an empty attachment strip."""
+    c = media_client
+    _login(c)
+    pid, cid = _post_and_comment(c)
+    bare = c.post(f"/forum/posts/{pid}/comments", json={"body": "no media"}).get_json()["comment"]["id"]
+    mid = _upload_png(c).get_json()["id"]
+    c.post(f"/forum/posts/{pid}/comments/{cid}/attachments", json={"attachment_ids": [mid]})
+
+    grouped = c.post(f"/forum/posts/{pid}/comments/attachments",
+                     json={"comment_ids": [cid, bare]}).get_json()["attachments"]
+    assert list(grouped) == [cid]
+
+
+def test_the_batch_read_is_scoped_to_the_post_in_the_url(media_client):
+    """The target id carries both ids, so asking post A for post B's comment must return nothing —
+    otherwise the batch route would be a way to read attachments across posts."""
+    c = media_client
+    _login(c)
+    pid_a, cid_a = _post_and_comment(c)
+    pid_b = c.post("/forum/posts", json={"title": "other", "body": "b"}).get_json()["post"]["id"]
+    mid = _upload_png(c).get_json()["id"]
+    c.post(f"/forum/posts/{pid_a}/comments/{cid_a}/attachments", json={"attachment_ids": [mid]})
+
+    grouped = c.post(f"/forum/posts/{pid_b}/comments/attachments",
+                     json={"comment_ids": [cid_a]}).get_json()["attachments"]
+    assert grouped == {}
+
+
+def test_the_batch_read_rejects_a_non_list_of_strings(media_client):
+    """Same NoSQL-injection gate as the attach routes: these ids reach a query."""
+    c = media_client
+    _login(c)
+    pid, _ = _post_and_comment(c)
+    assert c.post(f"/forum/posts/{pid}/comments/attachments",
+                  json={"comment_ids": {"$ne": ""}}).status_code == 400
+    assert c.post(f"/forum/posts/{pid}/comments/attachments",
+                  json={"comment_ids": [1, 2]}).status_code == 400
+
+
+def test_the_batch_read_requires_auth(media_client):
+    c = media_client
+    _login(c)
+    pid, cid = _post_and_comment(c)
+    c.post("/logout")
+    assert c.post(f"/forum/posts/{pid}/comments/attachments",
+                  json={"comment_ids": [cid]}).status_code == 401
+
 # ------------------------------------------------- media-only DMs notify the recipient (#408)
 # TA Online-Forum sub-requirement #5: "The clients will get a notification on the webapp when they
 # receive a new direct message." A DM sent as media with NO text produced nothing for the recipient —

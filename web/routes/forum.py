@@ -2,7 +2,8 @@
 
 Lior's slice of the Online Forum (+10). A vote now pushes a live notification to the post's author
 (§2.6) through the shared notification feed (the same feed DMs use, delivered in real time by the
-SSE stream); media/attachments on posts+comments remain open, and the cold-seed content is Shiri's.
+SSE stream); media/attachments on posts AND comments are built (Elad, #160/#407 — additive routes in
+routes/media.py, so this module is unmodified), and the cold-seed content is Shiri's.
 Input is validated + injection-safe before any query; the forum + notification stores are injected
 (the web->db seam). Anonymous posts hide the author in responses (but the owner is still notified).
 """

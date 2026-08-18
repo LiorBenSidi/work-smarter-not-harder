@@ -126,6 +126,26 @@ class DbMedia:
         removed by ``purge_owner``, which calls this — see that function for why the order matters."""
         return self._collection().delete_many({"owner": owner}).deleted_count
 
+    def list_for_targets(self, target_type, target_ids):
+        """Attachments for MANY targets in ONE query, grouped by target id (#407).
+
+        Exists because the per-comment read was an N+1 at the *browser* layer, not the database one:
+        a post page holds up to COMMENT_PAGE_DEFAULT (50) comments, and asking per comment meant 50
+        parallel requests against a browser limit of ~6 connections per origin — so every other request
+        the page needed, the forum feed included, queued behind them.
+        """
+        ids = list(target_ids)[:self._app.config.get("MEDIA_MAX_COMMENT_TARGETS", 200)]
+        if not ids:
+            return {}
+        cap = self._app.config.get("MEDIA_MAX_ATTACHMENTS_PER_TARGET", 50) * len(ids)
+        docs = (self._collection()
+                .find({"target_type": target_type, "target_id": {"$in": ids}})
+                .sort("created_at", 1).limit(cap))
+        grouped = {}
+        for d in docs:
+            grouped.setdefault(d.get("target_id"), []).append(self._public(d))
+        return grouped
+
     def list_for_target(self, target_type, target_id):
         # Bounded read (#331): the attach route caps a target at MEDIA_MAX_ATTACHMENTS_PER_TARGET, so a
         # matching .limit() here never drops a legitimately-bound blob — it's a defensive ceiling against
