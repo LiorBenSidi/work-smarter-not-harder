@@ -101,3 +101,57 @@ def test_the_report_states_the_number_of_test_functions_it_can_count():
     assert found, "REPORT.md no longer states a test-function count — update this guard with it"
     claimed = int(found.group(1))
     assert claimed == written, f"docs/REPORT.md says {claimed} test functions; tests/ defines {written}"
+
+
+# --------------------------------------------------------------------- per-type counts (#527)
+# The headline total above was guarded; the PER-TYPE breakdown was not — and REPORT.md states it TWICE,
+# once as the §3 totals line and again as the §4 bullets, with §4 asserting in prose that the two are
+# "the same ones tabulated in §3 ... not estimates". They had drifted to Unit 381 / Integration 384
+# against a real 546 / 433: two sections of one graded report giving different numbers for the same
+# thing, with one of them denying it. Falsifiable by a grader in under a minute (#527).
+#
+# Guarding both spellings is the point. Guarding only one lets the other rot exactly as it did.
+
+TYPE_DIRS = {
+    "Unit": "Unit_Tests", "Integration": "Integration_Tests", "Negative": "Negative_Tests",
+    "System": "System_Tests", "Full-System": "Full_System_Tests", "Security": "Security_Tests",
+    "Stress": "Stress_Tests",
+}
+
+
+def _collected_in(directory):
+    proc = subprocess.run(
+        [sys.executable, "-m", "pytest", f"tests/{directory}", "--collect-only", "-q",
+         "-p", "no:cacheprovider"],
+        cwd=ROOT, capture_output=True, text=True,
+    )
+    assert proc.returncode == 0, f"collecting tests/{directory} failed:\n{proc.stdout[-2000:]}"
+    return sum(1 for line in proc.stdout.splitlines() if "::" in line)
+
+
+def test_the_reports_per_type_totals_line_matches_the_suite():
+    """§3's "Totals by type" line is the table a grader cross-checks against `--collect-only`."""
+    text = (ROOT / "docs/REPORT.md").read_text(encoding="utf-8")
+    wrong = []
+    for label, directory in TYPE_DIRS.items():
+        found = re.search(rf"{re.escape(label)} \*\*(\d+)\*\*", text)
+        assert found, f"§3's totals line no longer names {label} — update this guard with it"
+        actual = _collected_in(directory)
+        if int(found.group(1)) != actual:
+            wrong.append(f"§3 says {label} {found.group(1)}, tests/{directory} collects {actual}")
+    assert not wrong, "REPORT.md §3's per-type totals are behind the suite:\n  " + "\n  ".join(wrong)
+
+
+def test_the_reports_per_type_prose_agrees_with_its_own_totals_line():
+    """§4 describes each type as "- **Unit (N)** — ..." and claims those figures ARE §3's. This is the
+    guard that would have caught #527: the two spellings must agree with each other AND with the repo."""
+    text = (ROOT / "docs/REPORT.md").read_text(encoding="utf-8")
+    wrong = []
+    for label, directory in TYPE_DIRS.items():
+        found = re.search(rf"^- \*\*{re.escape(label)} \((\d+)\)\*\*", text, re.M)
+        if not found:
+            continue                      # not every type gets its own §4 bullet
+        actual = _collected_in(directory)
+        if int(found.group(1)) != actual:
+            wrong.append(f"§4 says {label} {found.group(1)}, tests/{directory} collects {actual}")
+    assert not wrong, "REPORT.md §4's per-type prose is behind the suite:\n  " + "\n  ".join(wrong)
