@@ -79,20 +79,33 @@ def _forum():
 
 
 def validate_dm(data):
-    """Return ``(recipient, body)`` for a well-formed DM payload, else raise ``ValueError``.
+    """Return ``(recipient, body, attachment_ids)`` for a well-formed DM payload, else ``ValueError``.
 
     The string-type checks are the NoSQL-injection gate — a ``{"to": {"$gt": ""}}`` payload is rejected
     here, before ``to`` is ever used in a lookup.
+
+    An EMPTY body is allowed only when the payload names attachments (#408). A media-only DM used to send
+    no message at all — attachments bind to the conversation, not to a message — so the recipient got no
+    notification, no unread badge, no inbox row and no live push. It surfaced only if they already had
+    that exact thread open. Carrying the ids here gives the send a message to hang all of that on, and
+    the caller's ownership of those ids is verified in ``send_message`` so an empty body can never be
+    used to poke someone with a blank message.
     """
     if not isinstance(data, dict):
         raise ValueError("expected a JSON object")
     recipient = data.get("to")
     body = data.get("body")
+    ids = data.get("attachment_ids", [])
     if not isinstance(recipient, str) or not recipient.strip():
         raise ValueError("a recipient is required")
-    if not isinstance(body, str) or not 1 <= len(body.strip()) <= BODY_MAX:
+    if not isinstance(ids, list) or not all(isinstance(i, str) for i in ids):
+        raise ValueError("attachment_ids must be a list of ids")
+    if not isinstance(body, str) or len(body.strip()) > BODY_MAX:
         raise ValueError(f"message must be 1-{BODY_MAX} characters")
-    return recipient.strip(), body.strip()
+    body = body.strip()
+    if not body and not ids:
+        raise ValueError(f"message must be 1-{BODY_MAX} characters")
+    return recipient.strip(), body, ids
 
 
 @messages_bp.post("/messages")
@@ -100,11 +113,24 @@ def validate_dm(data):
 def send_message():
     me = session["username"]
     try:
-        recipient, body = validate_dm(request.get_json(silent=True))
+        recipient, body, attachment_ids = validate_dm(request.get_json(silent=True))
     except ValueError as exc:
         return jsonify(error=str(exc)), 400
     if recipient == me:
         return jsonify(error="you can't message yourself"), 400
+    if not body:
+        # A media-only send (#408). The empty body is only legitimate if the caller really owns the blobs
+        # it named — otherwise `{"to": x, "body": "", "attachment_ids": ["anything"]}` would be a way to
+        # send someone an endless stream of blank messages, each one a notification and an unread badge.
+        # Ownership is the same rule `bind` enforces, checked here BEFORE a message exists.
+        media = current_app.config.get("MEDIA")
+        try:
+            owned = any((media.get(i) or {}).get("owner") == me for i in attachment_ids)
+        except Exception:
+            logger.warning("media store unavailable while validating a media-only DM", exc_info=True)
+            return jsonify(error="messaging is unavailable right now"), 503
+        if not owned:
+            return jsonify(error="a message needs text or an attachment you uploaded"), 400
     try:
         if _users().get(recipient) is None:
             # 404 tells the sender they mistyped the recipient — a deliberate UX-over-enumeration choice:
@@ -116,7 +142,10 @@ def send_message():
         message = _messages().send(me, recipient, body)
         # notify the recipient (best-effort — a notification hiccup must not fail the send)
         try:
-            _notifications().add(recipient, "dm", me, me, "sent you a message")   # name-less (see forum._notify_vote)
+            # Name the right thing: a media-only DM (#408) is not "a message" to a reader who then opens
+            # the thread and finds a photo. Still name-less (see forum._notify_vote) so a rename re-resolves.
+            what = "sent you a message" if body else "sent you an attachment"
+            _notifications().add(recipient, "dm", me, me, what)
         except Exception:
             logger.warning("could not create DM notification for %s", recipient, exc_info=True)
     except Exception:
