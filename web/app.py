@@ -391,7 +391,13 @@ def create_app(config=Config, *, users=None, profiles=None, history=None, forum=
         # but a deploy ships new SW bytes (ASSET_VERSION hash) → install/activate/controllerchange →
         # auto-reload onto the fresh build. No-store ensures the install-event addAll always fetches
         # the latest shell HTML, not a stale HTTP-cache entry.
-        return render_template("index.html", preview=bool(request.args.get("preview"))), 200, \
+        # media_max_bytes reaches the SPA so the composer can reject an oversized file BEFORE uploading
+        # it (#438), and media_max_label so the visible "up to N MB" copy renders from the same number —
+        # it was hard-coded in four places and would have drifted the moment MEDIA_MAX_BYTES changed.
+        max_bytes = app.config["MEDIA_MAX_BYTES"]
+        return render_template("index.html", preview=bool(request.args.get("preview")),
+                               media_max_bytes=max_bytes,
+                               media_max_label=f"{max_bytes / (1024 * 1024):.0f} MB"), 200, \
             {"Cache-Control": "no-cache, no-store, must-revalidate"}
 
     @app.get("/health")

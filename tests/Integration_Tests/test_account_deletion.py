@@ -4,16 +4,25 @@ The cascade removes the user's identity AND all their personal data across every
 the forum consistent for everyone else (their comments/votes are stripped and scores recomputed).
 Password-gated, auth-gated, CSRF-protected. Runs on the in-memory fakes (no Mongo).
 """
+import io
+
 import pytest
 
 
 @pytest.fixture
 def full_client(make_client, fake_users, fake_profiles, fake_history, fake_forum, fake_messages,
-                fake_notifications):
+                fake_notifications, fake_media, tmp_path):
     """A client wired with EVERY store, so the whole deletion cascade runs end-to-end. The individual
-    fake_* fixtures resolve to the same instances, so a test can inspect them directly after the call."""
-    return make_client(fake_users, profiles=fake_profiles, history=fake_history, forum=fake_forum,
-                       messages=fake_messages, notifications=fake_notifications)
+    fake_* fixtures resolve to the same instances, so a test can inspect them directly after the call.
+
+    Media is injected too (#507): the cascade now erases uploads, so without a fake the purge would try
+    to resolve Mongo — the same reason `forum_client` injects notifications. MEDIA_ROOT points at a
+    throwaway pytest tmp dir so a test can assert on real files without touching the /app/media volume.
+    """
+    c = make_client(fake_users, profiles=fake_profiles, history=fake_history, forum=fake_forum,
+                    messages=fake_messages, notifications=fake_notifications, media=fake_media)
+    c.raw.application.config["MEDIA_ROOT"] = str(tmp_path / "media")
+    return c
 
 
 def _register_login(client, name, pw="password123"):
@@ -127,3 +136,51 @@ def test_delete_ends_the_session_and_drops_the_remember_cookie(full_client):
     assert "remember_token=;" in resp.headers.get("Set-Cookie", "") or \
            "remember_token=\"\"" in resp.headers.get("Set-Cookie", ""), \
         f"deletion must expire the remember cookie, got {resp.headers.get('Set-Cookie')!r}"
+
+
+def _upload(client, name="shot.png", mime="image/png", data=b"\x89PNG\r\n\x1a\n"):
+    """Upload one blob through the real route, so the file lands on MEDIA_ROOT the way production writes it."""
+    r = client.post("/media", data={"file": (io.BytesIO(data), name, mime)},
+                    content_type="multipart/form-data")
+    assert r.status_code == 201, r.get_data(as_text=True)
+    return r.get_json()["id"]
+
+
+def test_delete_account_erases_uploaded_media_documents_and_files(full_client, fake_media, tmp_path):
+    """#507: media was the ONE store that outlived a deleted account.
+
+    Reproduced on production before the fix — every other store went to zero while `media` stayed at
+    25 documents and 25 files on disk, leaving blobs owned by a username that no longer existed. Both
+    halves have to go: a document with no account is an orphan, and a file with no document is
+    unreachable storage nobody can account for.
+    """
+    _register_login(full_client, "alice")
+    media_id = _upload(full_client)
+    blob = tmp_path / "media" / f"{media_id}.png"
+    assert blob.exists()                                   # precondition: the bytes really are on disk
+    assert fake_media.get(media_id) is not None
+
+    r = full_client.delete("/account", json={"password": "password123"})
+    assert r.status_code == 200
+
+    assert fake_media.get(media_id) is None, "the media document survived account deletion"
+    assert not blob.exists(), "the uploaded file survived account deletion"
+
+
+def test_deleting_one_account_leaves_another_users_media_alone(full_client, make_client, fake_users,
+                                                               fake_media, tmp_path):
+    """Erasure is owner-scoped. A cascade that purged by anything broader would delete bystanders'
+    uploads — a far worse failure than the one #507 reported."""
+    bob = make_client(fake_users, media=fake_media)
+    bob.raw.application.config["MEDIA_ROOT"] = str(tmp_path / "media")
+    _register_login(bob, "bob")
+    bob_media = _upload(bob)
+
+    _register_login(full_client, "alice")
+    alice_media = _upload(full_client)
+
+    full_client.delete("/account", json={"password": "password123"})
+
+    assert fake_media.get(alice_media) is None
+    assert fake_media.get(bob_media) is not None, "bob's upload was erased with alice's account"
+    assert (tmp_path / "media" / f"{bob_media}.png").exists()

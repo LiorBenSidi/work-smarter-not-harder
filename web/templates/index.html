@@ -785,6 +785,28 @@
       width:38px; height:38px; border-radius:10px; color:var(--muted); transition:color .15s, background .15s; }
     .dm-attach:hover, .dm-attach:focus-within { color:var(--accent); background:var(--field); }
     .dm-attach-hint { font-size:11px; margin-top:5px; letter-spacing:.02em; }
+
+    /* Attachment tray (#471): what you picked, before you send it. Each chip shows a real thumbnail
+       (an object URL for images, a film glyph for clips), the filename, the size, and a remove control.
+       An over-cap file is chipped in the error tint and can never be uploaded. */
+    .att-tray { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
+    .att-tray:empty { margin-top:0; }
+    .att-chip { position:relative; display:flex; align-items:center; gap:8px; padding:6px 8px; max-width:220px;
+                border:1px solid var(--line); border-radius:12px; background:var(--card); font-size:12px; }
+    .att-chip.bad { border-color:#e5534b; background:color-mix(in srgb, #e5534b 8%, var(--card)); }
+    .att-chip .att-thumb { width:38px; height:38px; border-radius:8px; object-fit:cover; flex:none;
+                           background:var(--line); display:grid; place-items:center; }
+    .att-chip .att-meta { min-width:0; display:flex; flex-direction:column; gap:1px; }
+    .att-chip .att-name { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-weight:600; }
+    .att-chip .att-size { color:var(--muted); font-size:11px; }
+    .att-chip .att-x { flex:none; border:0; background:transparent; cursor:pointer; color:var(--muted);
+                       font-size:16px; line-height:1; padding:2px 4px; border-radius:6px; }
+    .att-chip .att-x:hover { background:var(--line); color:var(--text); }
+    .att-chip .att-x[disabled] { opacity:.4; cursor:default; }
+    /* The progress rail sits under the chips and only exists while bytes are moving. */
+    .att-progress { display:flex; align-items:center; gap:10px; margin-top:8px; font-size:12px; }
+    .att-bar { flex:1 1 auto; height:6px; border-radius:99px; background:var(--line); overflow:hidden; }
+    .att-bar > i { display:block; height:100%; width:0; background:var(--accent); transition:width .15s linear; }
     /* Lightbox: tap an inline image to view it enlarged IN-PAGE (not a new tab). Click anywhere / Esc closes. */
     .lightbox { position:fixed; inset:0; z-index:1000; background:rgba(6,10,20,.86); display:flex;
       align-items:center; justify-content:center; padding:24px; cursor:zoom-out; }
@@ -1169,13 +1191,14 @@
               <textarea name="body" placeholder="Share something…" aria-label="Post body" rows="2" maxlength="5000" required style="margin-top:8px;resize:vertical"></textarea>
               <label style="display:flex;align-items:center;gap:8px;margin-top:8px;font-weight:600"><input type="checkbox" name="anonymous" style="width:auto"> Post anonymously</label>
               <div style="display:flex;align-items:center;gap:10px;margin-top:10px;flex-wrap:wrap">
-                <label class="ghost" style="cursor:pointer;display:inline-flex;align-items:center;gap:7px;padding:8px 12px;border-radius:10px;font-weight:600;font-size:14px" title="Attach photos or a clip — PNG, JPEG, WebP, GIF or MP4, up to 10 MB">
+                <label class="ghost" style="cursor:pointer;display:inline-flex;align-items:center;gap:7px;padding:8px 12px;border-radius:10px;font-weight:600;font-size:14px" title="Attach photos or a clip — PNG, JPEG, WebP, GIF or MP4, up to {{ media_max_label }}">
                   <input type="file" id="forum-files" accept="image/png,image/jpeg,image/webp,image/gif,video/mp4" multiple hidden>
                   <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
                   <span>Add photos</span></label>
                 <span id="forum-files-hint" class="muted" style="font-size:12px"></span>
               </div>
-              <div class="dm-attach-hint muted" style="margin-top:6px">PNG · JPEG · WebP · GIF · MP4 · up to 10 MB</div>
+              <div id="forum-tray" class="att-tray"></div>
+              <div class="dm-attach-hint muted" style="margin-top:6px">PNG · JPEG · WebP · GIF · MP4 · up to {{ media_max_label }}</div>
               <div style="margin-top:10px"><button type="submit" class="block">Post</button></div>
               <div id="forum-flash" class="flash" aria-live="polite"></div>
             </form>
@@ -1234,11 +1257,12 @@
               <div id="dm-thread" class="dm-thread"><div class="sk" style="height:42px;width:62%;border-radius:16px"></div><div class="sk" style="height:42px;width:72%;margin-left:auto;border-radius:16px"></div></div>
               <div id="dm-atts"></div>
               <form id="dm-reply-form">
-                <label class="dm-attach" title="Attach a photo or clip — PNG, JPEG, WebP, GIF or MP4, up to 10 MB"><input type="file" id="dm-files" accept="image/png,image/jpeg,image/webp,image/gif,video/mp4" multiple hidden><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg></label>
+                <label class="dm-attach" title="Attach a photo or clip — PNG, JPEG, WebP, GIF or MP4, up to {{ media_max_label }}"><input type="file" id="dm-files" accept="image/png,image/jpeg,image/webp,image/gif,video/mp4" multiple hidden><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg></label>
                 <textarea id="dm-reply" name="body" placeholder="Message…" rows="1" autocomplete="off" maxlength="2000"></textarea>
                 <button type="submit">Send</button></form>
               <span id="dm-files-hint" class="muted" style="font-size:12px"></span>
-              <div class="dm-attach-hint muted">PNG · JPEG · WebP · GIF · MP4 · up to 10 MB</div>
+              <div id="dm-tray" class="att-tray"></div>
+              <div class="dm-attach-hint muted">PNG · JPEG · WebP · GIF · MP4 · up to {{ media_max_label }}</div>
               <div id="dm-reply-flash" class="flash" aria-live="polite"></div>
             </div>
           </div>
@@ -1303,7 +1327,7 @@
               <span>Send me occasional tips and product updates.<span class="hint" style="margin-top:3px">We don't send these yet — this saves your preference for when we do. Your login codes and password-reset emails are always sent.</span></span>
             </label>
             <hr class="sep">
-            <p class="muted" style="margin:0 0 10px">Download your profile, check-ins, forum activity, messages and notifications as a JSON file. Uploaded photos and videos aren't included.</p>
+            <p class="muted" style="margin:0 0 10px">Download your profile, check-ins, forum activity, messages, notifications and a record of your uploaded photos and videos as a JSON file.</p>
             <button id="export-btn" class="ghost block" type="button">Download my data</button>
             <div id="privacy-flash" class="flash" aria-live="polite"></div>
           </div>
@@ -2088,7 +2112,7 @@
       const r = await api("/account", { method: "DELETE", body: { password: e.target.password.value } });
       if (r.ok) {
         resetDeleteUI(); resetAuthState(); showView("auth");            // scrub session + close the SSE stream (as on logout)
-        flash("login-flash", "Your account was deleted, along with your profile, check-ins, forum posts and comments, messages and notifications.", "ok");
+        flash("login-flash", "Your account was deleted, along with your profile, check-ins, forum posts and comments, messages, notifications and your uploaded photos and videos.", "ok");
       } else {
         e.target.password.value = ""; syncDeleteBtn();                  // clear the password; keep the typed DELETE so a retry only re-enters the password
         flash("delete-flash", (r.data && r.data.error) || "Could not delete your account");
@@ -3548,29 +3572,91 @@
     // full" (507) — and app.py's JSON error handlers exist precisely so the SPA can read them. Discarding
     // the body on `!res.ok` threw that away and left every rejection looking identical to a dropped
     // connection, so a user could not tell a wrong file type from an oversized one.
-    async function uploadMedia(file) {
+    // The per-file cap comes from the server's MEDIA_MAX_BYTES (#438), so the composer rejects an
+    // oversized file BEFORE spending a slow link on it, and the picker label can never drift from config.
+    const MEDIA_MAX_BYTES = {{ media_max_bytes }};
+    // Abort an upload that has genuinely STALLED — no bytes moved for this long. Deliberately NOT a flat
+    // deadline: 10 MB over a weak mobile link (~200 kbps) legitimately takes ~7 minutes, so a fixed
+    // timeout would kill valid uploads. Only a dead connection trips this.
+    const UPLOAD_STALL_MS = 30000;
+    function humanBytes(n) {
+      if (!(n >= 0)) return "";
+      if (n < 1024) return n + " B";
+      if (n < 1024 * 1024) return (n / 1024).toFixed(0) + " KB";
+      // Whole megabytes lose the decimal, so the cap reads "10 MB" here exactly as the picker hint
+      // beneath it does — two spellings of the same limit look like two different limits.
+      const mb = n / (1024 * 1024);
+      return (Math.abs(mb - Math.round(mb)) < 0.05 ? mb.toFixed(0) : mb.toFixed(1)) + " MB";
+    }
+    // XMLHttpRequest, not fetch: `upload.onprogress` is the only way to get byte progress, and byte
+    // progress is what makes a stall timeout and a working Cancel possible. fetch() gave none of the
+    // three, which is why an upload had no timeout at all and a wedged socket left the submit button
+    // disabled until a page reload (#438). `onProgress` reports 0..1 for this file.
+    // Returns {id, url} on success, or {error} carrying the SERVER's stated reason. The server already
+    // distinguishes "unsupported media type" (400), "that file is too large" (413) and "media storage is
+    // full" (507) — and app.py's JSON error handlers exist precisely so the SPA can read them. Discarding
+    // the body on a non-2xx threw that away and left every rejection looking identical to a dropped
+    // connection, so a user could not tell a wrong file type from an oversized one.
+    async function uploadMedia(file, onProgress, register) {
       const fd = new FormData(); fd.append("file", file);
-      let res;
-      try { res = await fetch("/media", { method: "POST", credentials: "same-origin", headers: { "X-CSRF-Token": getCookie("csrf_token") }, body: fd }); }
-      catch (_) { return { error: "the connection dropped" }; }
-      if (!res.ok) {
-        let reason = "";
-        try { const d = await res.json(); reason = (d && d.error) || ""; } catch (_) { /* non-JSON body (e.g. a proxy page) -> fall back */ }
-        return { error: reason || "the server refused it" };
-      }
-      try { const d = await res.json(); return d && d.id ? d : { error: "the server refused it" }; }
-      catch (_) { return { error: "the server refused it" }; }
+      return await new Promise((resolve) => {
+        const xhr = new XMLHttpRequest();
+        let settled = false, stallTimer = null;
+        const done = (out) => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(stallTimer);
+          resolve(out);
+        };
+        // Re-arm on every progress event: the clock measures SILENCE, not total duration.
+        const armStall = () => {
+          clearTimeout(stallTimer);
+          stallTimer = setTimeout(() => { try { xhr.abort(); } catch (_) { /* already gone */ }
+            done({ error: "the connection stalled" }); }, UPLOAD_STALL_MS);
+        };
+        // Hand the caller a way to cancel this in-flight upload (the tray's Cancel control).
+        if (register) register(() => { try { xhr.abort(); } catch (_) { /* already gone */ }
+          done({ error: "cancelled", cancelled: true }); });
+        xhr.open("POST", "/media", true);
+        xhr.withCredentials = true;
+        xhr.setRequestHeader("X-CSRF-Token", getCookie("csrf_token"));
+        xhr.upload.addEventListener("progress", (e) => {
+          armStall();
+          if (onProgress && e.lengthComputable) onProgress(e.loaded / Math.max(e.total, 1));
+        });
+        xhr.addEventListener("load", () => {
+          clearTimeout(stallTimer);
+          let d = null;
+          try { d = JSON.parse(xhr.responseText); } catch (_) { /* non-JSON body (e.g. a proxy page) */ }
+          if (xhr.status >= 200 && xhr.status < 300 && d && d.id) { if (onProgress) onProgress(1); return done(d); }
+          done({ error: (d && d.error) || "the server refused it" });
+        });
+        xhr.addEventListener("error", () => done({ error: "the connection dropped" }));
+        xhr.addEventListener("abort", () => done({ error: "cancelled", cancelled: true }));
+        armStall();
+        xhr.send(fd);
+      });
     }
     // Upload each picked file; report BOTH the ids that stored and what happened to the ones that didn't,
-    // so the message can name a reason and call a video a video.
-    async function uploadAll(files) {
+    // so the message can name a reason and call a video a video. `onStep` reports (index, total, fraction)
+    // so the composer can show "Uploading 2 of 3 · 41%" — the old loop already knew the counts and said
+    // nothing between files (#438).
+    async function uploadAll(files, onStep, register) {
+      const list = Array.from(files || []);
       const ids = [], failures = [];
-      for (const f of Array.from(files || [])) {
-        const m = await uploadMedia(f);
+      let cancelled = false;
+      for (let i = 0; i < list.length; i++) {
+        const f = list[i];
+        if (cancelled) { failures.push({ kind: f.type || "", reason: "cancelled" }); continue; }
+        if (onStep) onStep(i, list.length, 0);
+        const m = await uploadMedia(f, (frac) => { if (onStep) onStep(i, list.length, frac); }, register);
         if (m && m.id) ids.push(m.id);
-        else failures.push({ kind: f.type || "", reason: (m && m.error) || "the server refused it" });
+        else {
+          if (m && m.cancelled) cancelled = true;
+          failures.push({ kind: f.type || "", reason: (m && m.error) || "the server refused it" });
+        }
       }
-      return { ids, failures };
+      return { ids, failures, cancelled };
     }
     // Compose the "that didn't all make it" line. Two things it has to get right: the NOUN follows what was
     // actually picked (a rejected clip is a video, not a photo), and the server's reason is carried through
@@ -3602,36 +3688,153 @@
       return '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px">'
         + atts.map((a) => '<div style="flex:0 1 auto;max-width:220px">' + mediaEmbedHtml(a) + "</div>").join("") + "</div>";
     }
-    function filesHint(input, hintId) {         // show "2 files selected" next to a file picker
-      const el = $(hintId); if (!el) return;
-      const n = input.files ? input.files.length : 0;
-      el.textContent = n ? (n + (n === 1 ? " file" : " files") + " attached") : "";
+    // ---- The attachment tray (#471) --------------------------------------------------------------
+    // Before this, both composers said only "1 file attached": you could not see WHAT you picked, and
+    // you could not take it off again — re-opening the picker and cancelling leaves the previous
+    // selection intact in every major browser, so the only ways out were to send it or reload and lose
+    // the text you had typed. The tray owns its own ARRAY of files rather than reading `input.files`,
+    // because a FileList is immutable: removing one file is impossible without it.
+    function makeTray(pickerId, trayId, hintId) {
+      const tray = {
+        files: [],            // the real selection — the pickers are only an input device
+        urls: [],             // object URLs to revoke, so previewing many files does not leak them
+        cancel: null,         // set while an upload is in flight; the Cancel control calls it
+        busy: false,
+      };
+      const el = () => document.getElementById(trayId);
+
+      function releaseUrls() { tray.urls.forEach((u) => URL.revokeObjectURL(u)); tray.urls = []; }
+
+      tray.tooBig = (f) => f.size > MEDIA_MAX_BYTES;
+      tray.hasBlocked = () => tray.files.some(tray.tooBig);
+      tray.sendable = () => tray.files.filter((f) => !tray.tooBig(f));
+
+      tray.render = () => {
+        const box = el(); if (!box) return;
+        releaseUrls();
+        const hint = document.getElementById(hintId);
+        if (hint) {
+          const n = tray.files.length;
+          hint.textContent = n ? (n + (n === 1 ? " file" : " files") + " attached") : "";
+        }
+        box.innerHTML = tray.files.map((f, i) => {
+          const bad = tray.tooBig(f);
+          let thumb;
+          if (!bad && String(f.type || "").indexOf("image/") === 0) {
+            const u = URL.createObjectURL(f); tray.urls.push(u);
+            thumb = '<img class="att-thumb" src="' + u + '" alt="">';
+          } else {
+            // A clip gets a glyph rather than a decoded frame: pulling a poster frame means loading the
+            // whole file into a <video>, which is exactly the work the user has not agreed to spend yet.
+            thumb = '<span class="att-thumb" aria-hidden="true">' + (bad ? "!" : "▶") + "</span>";
+          }
+          const note = bad ? "too large · max " + humanBytes(MEDIA_MAX_BYTES) : humanBytes(f.size);
+          return '<span class="att-chip' + (bad ? " bad" : "") + '">' + thumb
+            + '<span class="att-meta"><span class="att-name">' + escapeHtml(f.name) + "</span>"
+            + '<span class="att-size">' + escapeHtml(note) + "</span></span>"
+            + '<button type="button" class="att-x" data-i="' + i + '" aria-label="Remove '
+            + escapeHtml(f.name) + '"' + (tray.busy ? " disabled" : "") + ">✕</button></span>";
+        }).join("");
+      };
+
+      // Progress rail: only present while bytes are moving, and it carries the Cancel control.
+      tray.progress = (index, total, frac) => {
+        const box = el(); if (!box) return;
+        let rail = box.querySelector(".att-progress");
+        if (!rail) {
+          rail = document.createElement("div");
+          rail.className = "att-progress";
+          rail.innerHTML = '<span class="att-count"></span><span class="att-bar"><i></i></span>'
+            + '<button type="button" class="ghost mini att-cancel">Cancel</button>';
+          box.appendChild(rail);
+          rail.querySelector(".att-cancel").addEventListener("click", () => { if (tray.cancel) tray.cancel(); });
+        }
+        const pct = Math.round(Math.min(Math.max(frac, 0), 1) * 100);
+        rail.querySelector(".att-count").textContent =
+          "Uploading " + (index + 1) + " of " + total + " · " + pct + "%";
+        rail.querySelector(".att-bar > i").style.width = pct + "%";
+      };
+      tray.clearProgress = () => {
+        const box = el(); if (!box) return;
+        const rail = box.querySelector(".att-progress");
+        if (rail) rail.remove();
+      };
+      tray.setBusy = (on) => { tray.busy = on; if (!on) tray.cancel = null; tray.render(); };
+      tray.clear = () => { tray.files = []; tray.cancel = null; tray.busy = false; tray.render(); tray.clearProgress(); };
+
+      const picker = $(pickerId);
+      if (picker) {
+        picker.addEventListener("change", () => {
+          // Copy OUT of the FileList and reset the input immediately: that is what lets the same file be
+          // picked again after it was removed (a picker holding it would fire no `change` the second time).
+          for (const f of Array.from(picker.files || [])) {
+            if (!tray.files.some((g) => g.name === f.name && g.size === f.size && g.lastModified === f.lastModified)) {
+              tray.files.push(f);
+            }
+          }
+          picker.value = "";
+          tray.render();
+        });
+      }
+      const box = el();
+      if (box) {
+        box.addEventListener("click", (e) => {
+          const btn = e.target.closest(".att-x");
+          if (!btn || tray.busy) return;
+          tray.files.splice(Number(btn.dataset.i), 1);
+          tray.render();
+        });
+      }
+      return tray;
     }
 
+    const forumTray = makeTray("forum-files", "forum-tray", "forum-files-hint");
+    const dmTray = makeTray("dm-files", "dm-tray", "dm-files-hint");
+
     onSubmit("forum-form", async (f) => {
+      // #439: UPLOAD FIRST, then create the post. The old order committed the post and only then spent
+      // the upload, so for the whole duration — minutes on a slow link — the post existed WITHOUT its
+      // photos, and not only for the author: creating a post bumps the forum revision and SSE pushes it
+      // to every connected client immediately. If the upload then failed, the post stayed up
+      // permanently with no media and nothing removed, retried or marked it. Uploading first means a
+      // failed upload leaves NO post behind, and the photo-less window shrinks to one bind round-trip.
+      if (forumTray.hasBlocked()) {
+        flash("forum-flash", "Remove the file that's over " + humanBytes(MEDIA_MAX_BYTES) + " before posting.", "warn");
+        return;
+      }
+      const picked = forumTray.sendable();
+      let ids = [], failures = [], cancelled = false;
+      if (picked.length) {
+        forumTray.setBusy(true);
+        flash("forum-flash", "Uploading…", "ok");
+        ({ ids, failures, cancelled } = await uploadAll(picked, forumTray.progress,
+                                                        (abort) => { forumTray.cancel = abort; }));
+        forumTray.setBusy(false); forumTray.clearProgress();
+        if (cancelled) {                                  // nothing was posted — the user stopped it
+          flash("forum-flash", "Upload cancelled — nothing was posted.", "warn");
+          return;
+        }
+        if (!ids.length && failures.length) {             // every file failed: don't publish a bare post
+          flash("forum-flash", attachWarning("Nothing was posted — ", picked.length, failures), "warn");
+          return;                                         // the tray keeps the files, so retry is one tap
+        }
+      }
       const r = await api("/forum/posts", { method: "POST", body: { title: f.title.value, body: f.body.value, anonymous: f.anonymous.checked } });
       if (!r.ok) { flash("forum-flash", (r.data && r.data.error) || "Could not post"); return; }
-      const post = r.data && r.data.post, picker = $("forum-files");
+      const post = r.data && r.data.post;
       let attachWarn = "";   // non-empty => some/all photos didn't attach; shown instead of a clean "Posted."
-      if (post && post.id && picker && picker.files && picker.files.length) {
-        const picked = picker.files.length;
-        flash("forum-flash", "Uploading…", "ok");
-        const { ids, failures } = await uploadAll(picker.files);
-        if (ids.length) {
-          const ar = await api("/forum/posts/" + post.id + "/attachments", { method: "POST", body: { attachment_ids: ids } });
-          // A failed BIND is its own outcome: the files uploaded fine, they just didn't reach the post.
-          // Reporting it as "your photos couldn't be attached" was simply untrue about what happened.
-          if (!ar.ok) attachWarn = "Posted — but the attachment" + (picked === 1 ? "" : "s")
-            + " couldn't be added to it" + ((ar.data && ar.data.error) ? " — " + ar.data.error : "") + ".";
-        }
-        if (!attachWarn && failures.length)                 // the post itself is up; say what fell short and why
-          attachWarn = attachWarning("Posted — but ", picked, failures);
-        picker.value = "";
+      if (post && post.id && ids.length) {
+        const ar = await api("/forum/posts/" + post.id + "/attachments", { method: "POST", body: { attachment_ids: ids } });
+        // A failed BIND is its own outcome: the files uploaded fine, they just didn't reach the post.
+        // Reporting it as "your photos couldn't be attached" was simply untrue about what happened.
+        if (!ar.ok) attachWarn = "Posted — but the attachment" + (picked.length === 1 ? "" : "s")
+          + " couldn't be added to it" + ((ar.data && ar.data.error) ? " — " + ar.data.error : "") + ".";
       }
-      f.reset(); filesHint($("forum-files"), "forum-files-hint");
+      if (!attachWarn && failures.length)                 // the post itself is up; say what fell short and why
+        attachWarn = attachWarning("Posted — but ", picked.length, failures);
+      f.reset(); forumTray.clear();
       flash("forum-flash", attachWarn || "Posted.", attachWarn ? "warn" : "ok"); loadForum();
     });
-    $("forum-files").addEventListener("change", () => filesHint($("forum-files"), "forum-files-hint"));
     $("forum-refresh").addEventListener("click", loadForum);
     $("dashboard-refresh").addEventListener("click", () => loadDashboard());  // wrap: don't pass the click event as opts
     $("history-refresh").addEventListener("click", loadHistory);
@@ -3965,33 +4168,52 @@
     document.addEventListener("click", (e) => { if (!e.target.closest(".dm-search")) closeDmSuggest(); });
 
     onSubmit("dm-reply-form", async (f) => {
-      const text = f.body.value.trim(), picker = $("dm-files"), hasFiles = picker && picker.files && picker.files.length;
-      if (!dmPeer || (!text && !hasFiles)) return;             // nothing to send
+      const text = f.body.value.trim();
+      if (!dmPeer || (!text && !dmTray.files.length)) return;   // nothing to send
+      if (dmTray.hasBlocked()) {
+        flash("dm-reply-flash", "Remove the file that's over " + humanBytes(MEDIA_MAX_BYTES) + " before sending.", "warn");
+        return;
+      }
+      // #439: upload BEFORE sending, for the same reason as the forum composer — the message used to be
+      // delivered and only then did the upload run, so the recipient saw a bare message for the whole
+      // upload, and a failed upload left it permanently text-only.
+      const picked = dmTray.sendable();
+      let ids = [], failures = [], cancelled = false;
+      if (picked.length) {
+        dmTray.setBusy(true);
+        flash("dm-reply-flash", "Uploading…", "ok");
+        ({ ids, failures, cancelled } = await uploadAll(picked, dmTray.progress,
+                                                        (abort) => { dmTray.cancel = abort; }));
+        dmTray.setBusy(false); dmTray.clearProgress();
+        if (cancelled) {                                  // nothing was sent — the user stopped it
+          flash("dm-reply-flash", "Upload cancelled — nothing was sent.", "warn");
+          return;
+        }
+        if (!ids.length && failures.length && !text) {    // media-only send where everything failed
+          flash("dm-reply-flash", attachWarning("Nothing was sent — ", picked.length, failures), "warn");
+          return;                                         // the tray keeps the files, so retry is one tap
+        }
+      }
       if (text) {
         const r = await api("/messages", { method: "POST", body: { to: dmPeer, body: text } });
         if (!r.ok) { flash("dm-reply-flash", (r.data && r.data.error) || "Could not send"); return; }   // surface 429 / errors
       }
       let attachWarn = "";   // non-empty => the file(s) didn't attach; shown instead of silently clearing the flash
-      if (hasFiles) {
-        const picked = picker.files.length;
-        flash("dm-reply-flash", "Uploading…", "ok");
-        const { ids, failures } = await uploadAll(picker.files);   // attachments bind to the conversation, not a single message
+      if (picked.length) {
         const lead = "Sent" + (text ? " your message" : "") + ", but ";
         if (ids.length) {
           const ar = await api("/messages/" + encodeURIComponent(dmPeer) + "/attachments", { method: "POST", body: { attachment_ids: ids } });
           // Same distinction as the forum composer: uploaded-but-not-bound is not the same failure as
           // rejected-on-upload, and saying the file couldn't be attached would misdescribe it.
-          if (!ar.ok) attachWarn = lead + "the attachment" + (picked === 1 ? "" : "s")
+          if (!ar.ok) attachWarn = lead + "the attachment" + (picked.length === 1 ? "" : "s")
             + " couldn't be added to the conversation" + ((ar.data && ar.data.error) ? " — " + ar.data.error : "") + ".";
         }
         if (!attachWarn && failures.length)                 // never claim a silent success when something dropped
-          attachWarn = attachWarning(lead, picked, failures);
-        picker.value = ""; filesHint(picker, "dm-files-hint");
+          attachWarn = attachWarning(lead, picked.length, failures);
       }
-      f.reset(); autoGrow($("dm-reply"));
+      f.reset(); dmTray.clear(); autoGrow($("dm-reply"));
       flash("dm-reply-flash", attachWarn, attachWarn ? "warn" : "ok"); renderThread(true);   // land on the message I just sent, wherever I was reading
     });
-    $("dm-files").addEventListener("change", () => filesHint($("dm-files"), "dm-files-hint"));
     // Growing compose: the reply textarea grows with its content (capped by CSS max-height). Enter inserts a
     // newline (line drop); Shift+Enter sends. Sending is also always available via the Send button.
     function autoGrow(t) { if (!t) return; t.style.height = "auto"; t.style.height = Math.min(t.scrollHeight, 132) + "px"; }
