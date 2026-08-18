@@ -17,6 +17,7 @@ from ai.workout_plan import (
     MIN_DAYS_FOR_SPLIT,
     SPLITS,
     day_focus_sequence,
+    flatten_plan_to_volume,
     generate_workout_days,
     resolve_split_preference,
 )
@@ -367,3 +368,50 @@ def test_an_unusable_equipment_argument_degrades_to_bodyweight_only_never_crashe
     assert len(days) == 3
     pull_day = days[1]
     assert [e["muscle_group"] for e in pull_day["exercises"]] == ["back"]
+
+
+def test_flatten_plan_to_volume_sums_sets_per_muscle_group_across_every_day():
+    days = generate_workout_days("push_pull_legs", 6, FULL_EQUIPMENT, "maintain")
+    flattened = flatten_plan_to_volume(days)
+
+    assert isinstance(flattened, list)
+    assert all(set(entry) == {"muscle_group", "sets"} for entry in flattened)
+
+    expected: dict[str, float] = {}
+    for day in days:
+        for exercise in day["exercises"]:
+            expected[exercise["muscle_group"]] = (
+                expected.get(exercise["muscle_group"], 0) + exercise["sets"]
+            )
+
+    actual = {entry["muscle_group"]: entry["sets"] for entry in flattened}
+    assert actual == expected
+
+
+def test_flatten_plan_to_volume_on_empty_days_returns_empty_list():
+    assert flatten_plan_to_volume([]) == []
+
+
+@pytest.mark.parametrize(
+    "bad_days",
+    [None, "not-a-list", 123, {"day": 1}, [None], ["not-a-day"], [{"exercises": "not-a-list"}]],
+)
+def test_flatten_plan_to_volume_degrades_to_empty_list_on_malformed_input(bad_days):
+    assert flatten_plan_to_volume(bad_days) == []
+
+
+def test_flatten_plan_to_volume_skips_only_the_malformed_exercise_entries():
+    days = [
+        {
+            "day": 1,
+            "focus": "Full Body",
+            "exercises": [
+                {"name": "Squat", "sets": 4, "reps": "6-8", "muscle_group": "quads"},
+                {"name": "Bad entry", "sets": "four", "reps": "6-8", "muscle_group": "quads"},
+                "not-a-dict",
+                {"name": "No muscle group", "sets": 3, "reps": "6-8"},
+            ],
+        }
+    ]
+
+    assert flatten_plan_to_volume(days) == [{"muscle_group": "quads", "sets": 4}]
