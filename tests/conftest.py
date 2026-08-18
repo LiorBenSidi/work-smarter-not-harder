@@ -517,7 +517,8 @@ class FakeNotifications:
 
 class FakeMedia:
     """In-memory media index — mirrors ``web/services/media_store.py``'s ``DbMedia`` contract
-    (add / get / bind / list_for_target), so the media routes run without Mongo."""
+    (add / get / bind / list_for_target / list_for_owner / delete_for_owner), so the media routes run
+    without Mongo."""
 
     def __init__(self):
         self._by_id = {}
@@ -543,6 +544,16 @@ class FakeMedia:
     def list_for_target(self, target_type, target_id):
         return [dict(r) for r in self._by_id.values()
                 if r["target_type"] == target_type and r["target_id"] == target_id]
+
+    def list_for_owner(self, owner):
+        return [dict(r) for r in sorted(self._by_id.values(), key=lambda r: r["created_at"])
+                if r["owner"] == owner]
+
+    def delete_for_owner(self, owner):
+        doomed = [i for i, r in self._by_id.items() if r["owner"] == owner]
+        for media_id in doomed:
+            del self._by_id[media_id]
+        return len(doomed)
 
 
 class _CsrfClient:

@@ -23,14 +23,14 @@ from werkzeug.exceptions import NotFound
 
 from ratelimit import limiter
 from routes.auth import login_required
+from services.media_store import stored_name
 
 logger = logging.getLogger(__name__)
 
 media_bp = Blueprint("media", __name__)
 
-# Allowlisted MIME -> stored file extension. Keep in sync with the MEDIA_ALLOWED_MIME default in config.
-_EXT = {"image/png": ".png", "image/jpeg": ".jpg", "image/webp": ".webp",
-        "image/gif": ".gif", "video/mp4": ".mp4"}
+# The MIME -> extension map and the `<media_id><ext>` convention live in services/media_store.py, so
+# upload, serve and the #507 owner-purge all resolve a blob's filename the same way.
 
 
 def _media():
@@ -111,7 +111,7 @@ def upload():
         logger.warning("media upload rejected: MEDIA_ROOT is at/over MEDIA_MAX_TOTAL_BYTES")
         return jsonify(error="media storage is full"), 507
     media_id = uuid.uuid4().hex
-    stored = media_id + _EXT.get(file.mimetype, "")
+    stored = stored_name(media_id, file.mimetype)
     file.save(os.path.join(_media_root(), stored))
     size = os.path.getsize(os.path.join(_media_root(), stored))
     _media().add(media_id, session["username"], file.mimetype, size)
@@ -126,7 +126,7 @@ def serve(media_id):
         return jsonify(error="not found"), 404
     if not _can_view(rec, session["username"]):
         return jsonify(error="forbidden"), 403
-    stored = media_id + _EXT.get(rec["mime"], "")
+    stored = stored_name(media_id, rec["mime"])
     try:
         # Explicit download_name so a saved attachment keeps its extension (#338 item 6) — don't rely on
         # Werkzeug's implicit filename, which a version bump could drop. Stays `inline` (mimetype set), so
