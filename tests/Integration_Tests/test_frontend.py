@@ -700,10 +700,14 @@ def test_mutations_and_uploads_surface_their_failures(client):
     # renderer with the exact wrong sentence. Restating that here in string-shape would pin the wording
     # rather than the behaviour, and break on a rewrite that is perfectly correct.
     um = html[html.index("async function uploadMedia("):html.index("async function uploadAll(")]
-    assert "await res.json()" in um and "d.error" in um                            # the reason is read off the response...
+    # The reason is read off the response BODY, not inferred from the status. Asserted without naming the
+    # transport: the uploader moved from fetch() to XMLHttpRequest for byte progress, a stall timeout and
+    # Cancel (#438), so "await res.json()" would have pinned the mechanism rather than the behaviour.
+    assert "d.error" in um                                                         # the server's own reason is surfaced...
+    assert "JSON.parse(xhr.responseText)" in um                                    # ...parsed off the body
     assert "if (!res.ok) return null;" not in um                                   # ...not thrown away before parsing
     # DM reply: a dropped attachment must not clear the flash to a silent success.
-    dm = html[html.index('onSubmit("dm-reply-form"'):html.index('$("dm-files").addEventListener')]
+    dm = html[html.index('onSubmit("dm-reply-form"'):html.index("// Growing compose:")]
     assert "attachWarn" in dm and 'flash("dm-reply-flash", attachWarn' in dm
 
 
