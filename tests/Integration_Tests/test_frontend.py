@@ -1004,8 +1004,17 @@ def test_forum_updates_patch_in_place_never_teardown(client):
     ap = html[html.index("function applyPostTallies("):html.index("let voteInFlight")]
     assert "p0.score === d.score && p0.likes === d.likes && p0.dislikes === d.dislikes) return;" in ap
 
-    # -- posting a comment refreshes in place too (no detail rebuild just to show one new row)
-    assert "if (cr.ok) { f.reset(); refreshOpenPost(); }" in html
+    # -- posting a comment refreshes in place too (no detail rebuild just to show one new row).
+    # Asserted on the comment handler's CONTENT rather than on one exact line: the handler grew an upload
+    # step when comments gained media (#407), so pinning the old one-liner would have failed a change that
+    # keeps this contract perfectly. What #420 actually protects is the pair below — refresh in place, and
+    # never a full openPost() that would rebuild the detail and restart a playing attachment video.
+    ch = html[html.index('onSubmit("comment-form"'):html.index("function renderComments(")]
+    # Comments stripped first: the handler *explains* in prose why it does not call openPost(), and a raw
+    # substring search matches that explanation instead of a call.
+    ch_code = "\n".join(line.split("//")[0] for line in ch.splitlines())
+    assert "refreshOpenPost();" in ch_code
+    assert "openPost(" not in ch_code.replace("refreshOpenPost(", "")
     assert "if (cr.ok) openPost(id);" not in html
 
 

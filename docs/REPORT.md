@@ -13,7 +13,7 @@
 > +10 Azure deploy + CI/CD; supersedes [`FEEDBACK.md`](FEEDBACK.md)). Architecture detail lives in [`DESIGN.md`](DESIGN.md); the phased plan in
 > [`ROADMAP.md`](ROADMAP.md).
 >
-> **Last updated:** 2026-08-16 · **Suite at this snapshot:** **1289 checks, 1245 passing / 44 environment-gated**
+> **Last updated:** 2026-08-16 · **Suite at this snapshot:** **1308 checks, 1264 passing / 44 environment-gated**
 > (+ 27 browser e2e scenarios)
 > (`python -m pytest tests/ -q`; the env-gated ones run in CI's `compose-e2e` job against the live containers).
 > Since the 07-12 snapshot (783 tests): **Shiri's Random Forest landed** — a real `ai/model/model.pkl` +
@@ -42,7 +42,7 @@
 > `generate_workout_days` into `predict_one` itself, so a resolved `plan["days"]` is populated
 > end to end on a live `/predict` call, not just available as a standalone function (#276, #410), and to **1254** as the dashboard
 > began relaying that plan to the client, validated against the two shapes the contract allows (#410),
-> and to **1289** with the plan card and its split picker — including the guard that stops the
+> and to **1308** with the plan card and its split picker — including the guard that stops the
 > optimistic paint from suppressing the plan entirely (#410).
 > A pre-submission review took every file in the web/data lane and asked, per
 > test, whether it earns its place — by mutating the code it guards and checking that the test actually
@@ -226,19 +226,19 @@ Columns are the test-type dirs under `tests/`. Cells name representative file(s)
 | **Fault tolerance / isolation** | — | — | — | `test_fault_isolation` (2) · Full-System `test_parts_in_isolation` (12) | — | — |
 | **Whole-system journey** | — | — | — | `test_e2e` (1) · Full-System `test_everything_together_sync` (15) | — | — |
 
-**Totals by type (full suite, `pytest --collect-only`):** Unit **546** · Integration **445** · Negative **157** ·
-System **14** · Full-System **27** · Security **88** · Stress **12** → **1289 automated checks across the seven
+**Totals by type (full suite, `pytest --collect-only`):** Unit **546** · Integration **464** · Negative **157** ·
+System **14** · Full-System **27** · Security **88** · Stress **12** → **1308 automated checks across the seven
 pytest suites**, plus **27 browser end-to-end scenarios** driven separately (`tests/E2E_Tests/`, run in CI as
 the *e2e (browser · desktop + mobile)* job — not counted in the pytest total). This matches the header count.
 
-Read the total as *checks*, not as hand-written test functions: 1289 collected cases come from **954 test
+Read the total as *checks*, not as hand-written test functions: 1308 collected cases come from **973 test
 functions** (measured with `grep -c "^def test_"` across `tests/`), the remainder being parametrised cases (one `@parametrize` over 11 malformed payloads is 11
 collected cases, not 11 tests written). The suite is deliberately weighted toward the layers where a
 regression is cheapest to catch — unit and negative input walls — rather than toward volume.
 
-**Pass / skip:** the pre-07-12 snapshot was **747 pass, 36 skip in ~47 s**; the current suite is **1245 pass,
+**Pass / skip:** the pre-07-12 snapshot was **747 pass, 36 skip in ~47 s**; the current suite is **1264 pass,
 44 skip in ~86 s** (`python -m pytest tests/ -q`); in CI, where the `mongo:7` service is present, the same
-suite is **1271 pass, 18 skip**. All **44** local skips are env-gated and *not broken* — they run the
+suite is **1290 pass, 18 skip**. All **44** local skips are env-gated and *not broken* — they run the
 moment their dependency is present:
 
 - `test_db_mongo` (21) — the real-Mongo integration suite; skips without `TEST_MONGO_URI`, and **runs in CI**
@@ -272,7 +272,7 @@ machine (env vars, no local paths), and are exercised by CI on every PR. A run t
   fake), the logging configuration, and app config. Heavily parametrized on boundary and adversarial inputs
   (e.g. profile validation rejects injection objects, bools-as-numbers, and out-of-range values across every
   field).
-- **Integration (445)** — components wired together through the Flask test client: the auth flow, profile
+- **Integration (464)** — components wired together through the Flask test client: the auth flow, profile
   round-trip, check-in → `ai /predict` → persist, dashboard, history, and the full forum lifecycle. Two
   boundary suites are notable: `test_web_ai` stubs the `web → ai` HTTP seam with a contract-shaped response
   and asserts the dashboard surfaces it (and degrades to `ai_status: unavailable` when `ai` returns
@@ -288,7 +288,7 @@ machine (env vars, no local paths), and are exercised by CI on every PR. A run t
   (`test_csrf`), NoSQL-injection-safe queries (`test_profile`, `test_forum`), ownership enforcement on
   forum edit/delete (403), auth-gating of dashboard/history, and response-hardening (`test_web_hardening`).
 
-The two supporting directories complete the 1289: **Negative (157)** — adversarial and malformed input across
+The two supporting directories complete the 1308: **Negative (157)** — adversarial and malformed input across
 auth, profile, check-in, forum and media — and **Full-System (27)** — whole-stack journeys in-process, plus the
 parts-in-isolation suite. The per-type figures here are the same ones tabulated in §3; both are
 `pytest --collect-only` counts, not estimates.
@@ -466,7 +466,7 @@ between planes (§1). Full detail in [`COLLABORATORS.md`](../COLLABORATORS.md) a
 cp .env.example .env
 docker compose up --build          # 3 containers; only web is published
 # → http://localhost:8000/health   → then register, set a profile, check in, see the dashboard
-pytest -q                          # 1245 pass / 44 env-gated skip
+pytest -q                          # 1264 pass / 44 env-gated skip
 ```
 
 CI reproduces the gate on every PR (ruff → bandit → pytest + a `mongo:7` service). `main` is
