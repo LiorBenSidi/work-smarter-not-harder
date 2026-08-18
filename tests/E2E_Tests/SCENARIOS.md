@@ -326,4 +326,4 @@ Cross-screen: corner menu `#user-menu-panel`, Home FAB `#ctx-back`, check-in cap
 16. **Rename desync** — notification/comment/vote text stored name-less, re-resolved each render (136).
 17. **`?reset_token` read at boot + popstate** — deep-link lands on reset even mid-history; token single-use.
 
-> **Media (`web/routes/media.py`)** — fully implemented API (upload/serve/attach, MIME allowlist, per-viewer visibility) but **no UI wired** in `index.html`. Browser E2E can only reach it by POSTing directly. Flagged for the grader.
+> **Media (`web/routes/media.py`)** — fully implemented API (upload/serve/attach, MIME allowlist, per-viewer visibility), and the UI **is** wired in `index.html`: a picker on the forum and DM composers, the attachment tray (#471 — thumbnail, name, size, per-file remove), byte progress with a stall timeout and Cancel (#438), and attachment rendering under posts and in threads. Browser E2E drives it through `setFileInput` — see the scenarios tagged `media`. *(This note previously read "no UI wired"; that was true before #160 and is kept here only so the correction is visible.)*

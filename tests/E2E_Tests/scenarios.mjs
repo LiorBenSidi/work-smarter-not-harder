@@ -531,7 +531,21 @@ export const SCENARIOS = [
       await createPost(b, `${marker} ${payload}`, `body ${payload}`);
       await gotoScreen(b, "forum");
       await b.waitFor("#forum-list");
-      await b.wait(400);
+      // Poll for the post to reach the feed instead of sleeping a fixed 400ms (#524). `waitFor` resolves
+      // when the CONTAINER exists, not when the feed has loaded this post, and `createPost` ends at a
+      // submit that never confirms the row landed — so a fixed sleep was the only thing standing between
+      // this scenario and a red `main`. It failed exactly that way on an unchanged tree: same commit,
+      // byte-identical trees, passed twice and failed once, at mobile only. Both SECURITY assertions
+      // passed in that run; what raced was the freshness of the feed read below.
+      //
+      // The assertion is unweakened: if the post genuinely vanished, the marker never appears and the
+      // loop simply spends its budget before failing on the same condition as before.
+      for (let waited = 0; waited < 20000; waited += 400) {
+        const there = await b.evaluate(
+          `() => ((document.querySelector("#forum-list") || {}).textContent || "").includes(${JSON.stringify(marker)})`);
+        if (there) break;
+        await b.wait(400);
+      }
 
       // The requirement: attacker-supplied content must not run.
       const fired = await b.evaluate(`() => window.__xssFired === true`);
@@ -1073,6 +1087,45 @@ export const SCENARIOS = [
 
       // Nothing to clean up: both accounts are this scenario's own throwaways, and the refused file was
       // never stored — that is precisely what the message is reporting.
+    },
+  },
+
+  // #471: before the tray, both composers said only "1 file attached". You could not see WHICH file you
+  // picked — on a phone the OS picker is a grid of near-identical thumbnails — and you could not take it
+  // back off, because re-opening the picker and cancelling leaves the previous selection intact in every
+  // major browser. The only ways out were to send it or reload and lose the text you had typed.
+  //
+  // This drives the real control: pick a file, read the chip, click the remove button, and prove the
+  // selection is genuinely gone rather than merely hidden. Nothing is uploaded, so there is nothing to
+  // clean up.
+  {
+    name: "forum: the attachment tray shows what you picked and can remove it before sending",
+    tags: ["forum", "media"],
+    async fn(b) {
+      await registerAndLogin(b);
+      await gotoScreen(b, "forum");
+      // Wait on the FORM, not on #forum-files: the input is `hidden` inside its label (the visible
+      // control is the styled label), and waitFor requires a non-zero box, so waiting on the input
+      // itself can only ever time out.
+      await b.waitFor("#forum-form");
+
+      await b.setFileInput("#forum-files", new URL("./fixtures/pixel.png", import.meta.url).pathname);
+      await b.wait(400);
+
+      const chips = await b.pageExec(`document.querySelectorAll("#forum-tray .att-chip").length`);
+      assert(chips === 1, `the picked file was not shown in the composer — chips rendered: ${chips}`);
+      const name = await b.text("#forum-tray .att-name");
+      assert(/pixel\.png/.test(name || ""), `the chip must name the file — it read: ${JSON.stringify(name)}`);
+      const size = await b.text("#forum-tray .att-size");
+      assert(size && /B|KB|MB/.test(size), `the chip must show a size — it read: ${JSON.stringify(size)}`);
+
+      // The tray owns an ARRAY, not the picker's immutable FileList — this is what makes removal possible.
+      await b.click("#forum-tray .att-x");
+      await b.wait(300);
+      const after = await b.pageExec(`document.querySelectorAll("#forum-tray .att-chip").length`);
+      assert(after === 0, `remove left ${after} file(s) attached`);
+      const hint = await b.text("#forum-files-hint");
+      assert(!hint, `the composer still claimed files were attached after removal: ${JSON.stringify(hint)}`);
     },
   },
 ];

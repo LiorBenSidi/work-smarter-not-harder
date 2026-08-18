@@ -17,6 +17,7 @@ from itsdangerous import BadData, URLSafeTimedSerializer
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from ratelimit import limiter
+from services import media_store
 from services.db import DuplicateEmailError
 from services.email import code_email_html, link_email_html, send_email, send_email_async
 from services.identity import display_name
@@ -465,10 +466,14 @@ def change_email_consent():
 @login_required
 def export_data():
     """GDPR data portability: return the caller's data as a JSON download — account, profile, check-in
-    history, forum footprint (their posts, their comments, and every vote they cast), direct messages
-    and notifications. Two things are deliberately absent: the password hash, and uploaded media — the
-    media store exposes no owner-scoped read, so media can be neither exported here nor erased on
-    account deletion (#507). Served as an attachment so the browser saves a file."""
+    history, forum footprint (their posts, their comments, and every vote they cast), direct messages,
+    notifications and their uploaded media. One thing is deliberately absent: the password hash.
+
+    Media is the METADATA of each upload (id, type, size, when, what it is attached to) plus the URL
+    that serves it, not the bytes — a JSON export cannot carry a 10 MB video, and the caller is still
+    authenticated, so every listed URL is fetchable. Before #507 media was missing entirely, which was
+    the more misleading of the two options: the user got no record that their uploads existed at all.
+    Served as an attachment so the browser saves a file."""
     username = session["username"]
     cfg = current_app.config
     try:
@@ -482,6 +487,10 @@ def export_data():
             "forum": cfg["FORUM"].export_user(username),
             "messages": cfg["MESSAGES"].export_for_user(username),
             "notifications": cfg["NOTIFICATIONS"].list(username),
+            "media": [{"id": m["id"], "url": f"/media/{m['id']}", "mime": m.get("mime"),
+                       "size": m.get("size"), "created_at": m.get("created_at"),
+                       "attached_to": m.get("target_type"), "target_id": m.get("target_id")}
+                      for m in cfg["MEDIA"].list_for_owner(username)],
         }
     except Exception:
         logger.exception("data export failed for %s", username)
@@ -496,8 +505,11 @@ def export_data():
 @login_required
 def delete_account():
     """GDPR right to erasure: verify the password, then delete the user AND all their personal data
-    across every store (profile, history, forum content, DMs, notifications), end the session and drop
-    the cookies. Irreversible. The identity record is removed LAST, so a mid-cascade store failure leaves
+    across every store (profile, history, forum content, DMs, notifications, uploaded media), end the
+    session and drop the cookies. Irreversible. Media (#507) is erased as BOTH halves — the index
+    documents and the files on the volume — because until then it was the one store that outlived a
+    deleted account, leaving blobs on disk owned by a username that no longer existed.
+    The identity record is removed LAST, so a mid-cascade store failure leaves
     a still-recoverable, retryable account rather than data orphaned under a deleted handle."""
     data = request.get_json(silent=True)
     password = data.get("password") if isinstance(data, dict) else None
@@ -519,6 +531,7 @@ def delete_account():
         cfg["FORUM"].purge_user(username)
         cfg["MESSAGES"].delete_for_user(username)
         cfg["NOTIFICATIONS"].delete_for_user(username)
+        media_store.purge_owner(cfg["MEDIA"], cfg["MEDIA_ROOT"], username)   # documents + files (#507)
         _users().delete(username)                        # remove the identity record LAST
     except Exception:
         logger.exception("account deletion failed mid-cascade for %s", username)
