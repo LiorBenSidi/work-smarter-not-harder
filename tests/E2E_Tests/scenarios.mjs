@@ -73,6 +73,21 @@ async function createPost(b, title, body, anonymous = false) {
   await b.type("#forum-form [name=body]", body);
   if (anonymous) await b.pageExec(`(() => { const c = document.querySelector("#forum-form [name=anonymous]"); if (c && !c.checked) c.click(); return true; })()`);
   await b.submit("#forum-form", 1200);
+  // Wait for the post to actually REACH the feed before returning (#524's defect class, applied at the
+  // helper so every caller gets it). `submit` resolves when the handler was invoked, not when the post
+  // landed — so a caller that immediately does waitFor("#forum-list .post") or reads the feed was racing
+  // a network round-trip against a fixed settle. That surfaced as mobile-only timeouts on a loaded CI
+  // runner, in whichever scenario happened to lose the race, never the same one twice.
+  //
+  // An ANONYMOUS post still carries its title, so matching on the title works for both kinds.
+  for (let waited = 0; waited < 20000; waited += 300) {
+    const there = await b.evaluate(
+      `() => ((document.querySelector("#forum-list") || {}).textContent || "").includes(${JSON.stringify(title)})`);
+    if (there) return;
+    await b.wait(300);
+  }
+  // Deliberately not an assert: a few scenarios create a post they expect to be filtered OUT of the feed
+  // they are looking at. Returning lets the caller's own assertion be the one that speaks.
 }
 
 // A SECOND user driven over plain HTTP from the runner (node fetch, own cookie jar) — for cross-user
