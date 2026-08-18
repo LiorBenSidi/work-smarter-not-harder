@@ -301,3 +301,111 @@ def test_the_batch_read_requires_auth(media_client):
     c.post("/logout")
     assert c.post(f"/forum/posts/{pid}/comments/attachments",
                   json={"comment_ids": [cid]}).status_code == 401
+
+# ------------------------------------------------- media-only DMs notify the recipient (#408)
+# TA Online-Forum sub-requirement #5: "The clients will get a notification on the webapp when they
+# receive a new direct message." A DM sent as media with NO text produced nothing for the recipient —
+# no notification, no unread badge, no inbox row, no live push — because attachments bind to the
+# CONVERSATION, not to a message, so a media-only send had no message to hang any of that on. It
+# surfaced only if they already had that exact thread open, via the 15s poll backstop.
+
+
+def _media_only_send(c, to, ids):
+    return c.post("/messages", json={"to": to, "body": "", "attachment_ids": ids})
+
+
+def test_a_media_only_dm_notifies_the_recipient(media_client):
+    """The requirement itself: sending a photo with no caption must reach the recipient like any DM."""
+    c = media_client
+    _login(c, "alice")
+    mid = _upload_png(c).get_json()["id"]
+    c.post("/register", json={"username": "bob", "password": "s3cretpw!", "email": "bob@ex.com"})
+    assert _media_only_send(c, "bob", [mid]).status_code == 201
+    c.post("/messages/bob/attachments", json={"attachment_ids": [mid]})
+
+    c.post("/login", json={"username": "bob", "password": "s3cretpw!"})
+    data = c.get("/notifications").get_json()
+    assert data["unread"] == 1
+    assert data["notifications"][0]["type"] == "dm"
+    assert data["notifications"][0]["actor"] == "alice"
+
+
+def test_a_media_only_dm_creates_an_inbox_row_with_an_unread_count(media_client):
+    """The inbox is derived from the messages collection, so with no message there was no row at all —
+    the conversation simply did not exist for the recipient until they opened that exact thread."""
+    c = media_client
+    _login(c, "alice")
+    mid = _upload_png(c).get_json()["id"]
+    c.post("/register", json={"username": "bob", "password": "s3cretpw!", "email": "bob@ex.com"})
+    _media_only_send(c, "bob", [mid])
+
+    c.post("/login", json={"username": "bob", "password": "s3cretpw!"})
+    convos = c.get("/conversations").get_json()["conversations"]
+    assert [x["peer"] for x in convos] == ["alice"]
+    assert convos[0]["unread"] == 1
+
+
+def test_a_media_only_dm_stores_an_empty_body(media_client):
+    """The message exists to carry the notification, not text. Keeping the body EMPTY (rather than
+    inventing a caption like "Photo") matters: a fabricated body would land in the recipient's thread
+    and in the GDPR export as words the sender never wrote. The client renders the image instead."""
+    c = media_client
+    _login(c, "alice")
+    mid = _upload_png(c).get_json()["id"]
+    c.post("/register", json={"username": "bob", "password": "s3cretpw!", "email": "bob@ex.com"})
+    _media_only_send(c, "bob", [mid])
+
+    c.post("/login", json={"username": "bob", "password": "s3cretpw!"})
+    thread = c.get("/conversations/alice").get_json()["messages"]
+    assert [m["body"] for m in thread] == [""]
+
+
+def test_an_empty_dm_naming_someone_elses_blob_is_refused(media_client):
+    """The anti-spam gate. Without it, `{"body": "", "attachment_ids": ["anything"]}` is a way to send
+    someone an endless stream of blank messages, each one a notification and an unread badge."""
+    c = media_client
+    _login(c, "alice")
+    mid = _upload_png(c).get_json()["id"]          # alice's blob
+    c.post("/logout")
+    c.post("/register", json={"username": "mallory", "password": "s3cretpw!", "email": "m@ex.com"})
+    c.post("/login", json={"username": "mallory", "password": "s3cretpw!"})
+    r = _media_only_send(c, "alice", [mid])        # mallory names a blob she does not own
+    assert r.status_code == 400
+    assert c.get("/conversations").get_json()["conversations"] == []
+
+
+def test_an_empty_dm_naming_a_nonexistent_blob_is_refused(media_client):
+    c = media_client
+    _login(c, "alice")
+    c.post("/register", json={"username": "bob", "password": "s3cretpw!", "email": "bob@ex.com"})
+    assert _media_only_send(c, "bob", ["no-such-blob"]).status_code == 400
+
+
+def test_an_empty_dm_with_no_attachments_is_still_refused(media_client):
+    """The original validation is unchanged: an empty message with nothing attached is not a message."""
+    c = media_client
+    _login(c, "alice")
+    c.post("/register", json={"username": "bob", "password": "s3cretpw!", "email": "bob@ex.com"})
+    assert c.post("/messages", json={"to": "bob", "body": ""}).status_code == 400
+    assert c.post("/messages", json={"to": "bob", "body": "   ", "attachment_ids": []}).status_code == 400
+
+
+def test_a_text_dm_carrying_attachment_ids_still_sends(media_client):
+    """Text + media is the common case and must be untouched by the empty-body path."""
+    c = media_client
+    _login(c, "alice")
+    mid = _upload_png(c).get_json()["id"]
+    c.post("/register", json={"username": "bob", "password": "s3cretpw!", "email": "bob@ex.com"})
+    r = c.post("/messages", json={"to": "bob", "body": "look at this", "attachment_ids": [mid]})
+    assert r.status_code == 201
+    c.post("/login", json={"username": "bob", "password": "s3cretpw!"})
+    assert [m["body"] for m in c.get("/conversations/alice").get_json()["messages"]] == ["look at this"]
+
+
+def test_attachment_ids_must_be_a_list_of_strings(media_client):
+    """The same NoSQL-injection gate the rest of the payload gets."""
+    c = media_client
+    _login(c, "alice")
+    c.post("/register", json={"username": "bob", "password": "s3cretpw!", "email": "bob@ex.com"})
+    assert c.post("/messages", json={"to": "bob", "body": "hi", "attachment_ids": {"$ne": ""}}).status_code == 400
+    assert c.post("/messages", json={"to": "bob", "body": "hi", "attachment_ids": [1, 2]}).status_code == 400
