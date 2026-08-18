@@ -51,16 +51,36 @@ def test_cpu_burn_is_deterministic(bench):
     assert first["iterations"] == second["iterations"] == 5000
 
 
+def _timed(bench, iterations):
+    """Wall-clock cost of one `cpu_burn` call, in seconds."""
+    started = time.perf_counter()
+    bench.cpu_burn({"iterations": iterations})
+    return time.perf_counter() - started
+
+
 def test_cpu_burn_actually_scales_with_its_work_parameter(bench):
     """The knob must control real work. If `iterations` were ignored, every before/after row would be
     measuring the same (tiny) constant and the speedups would be noise."""
-    started = time.perf_counter()
-    bench.cpu_burn({"iterations": 20_000})
-    small = time.perf_counter() - started
+    # #435: the original measured ONE wall-clock sample of a ~0.7 ms window and put it in the ratio's
+    # DENOMINATOR, so a single OS scheduling stall inflated `small`, collapsed the ratio, and failed the
+    # test on a busy runner (~12% of runs under load) even though the knob works fine.
+    #
+    # Two changes, both needed. (1) Take the FASTEST of several repetitions rather than a single sample:
+    # a stall can only ever inflate a measurement, never deflate it, so the minimum converges on the real
+    # cost and is the standard least-noisy benchmark estimator. (2) Size the workloads so even the small
+    # one dwarfs a scheduling quantum.
+    #
+    # Note on the obvious alternative: `time.process_time()` looks like the tidier fix (it excludes time
+    # spent descheduled) and is correct on Linux — but on Windows it quantises to 15.625 ms, so a 0.7 ms
+    # window reads as exactly 0.0 and the ratio becomes 0/0. Measured here: 4 of 5 trials returned
+    # small=0.0, and one returned small=0.015625 with large=0.0 — a ratio of 0.0, i.e. a guaranteed red.
+    # `perf_counter` is a real sub-microsecond counter on both platforms, so min-of-N keeps this test
+    # honest on any machine (a CLAUDE.md requirement), not just on the Linux CI runner.
+    def fastest(iterations, repeats=5):
+        return min(_timed(bench, iterations) for _ in range(repeats))
 
-    started = time.perf_counter()
-    bench.cpu_burn({"iterations": 200_000})
-    large = time.perf_counter() - started
+    small = fastest(200_000)
+    large = fastest(2_000_000)
 
     assert large > small * 3, f"10x the iterations cost only {large / max(small, 1e-9):.1f}x the time"
 

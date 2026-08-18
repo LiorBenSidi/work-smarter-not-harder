@@ -134,7 +134,7 @@ def test_a_body_that_is_not_json_is_refused(client, route):
     assert response.status_code == 400
 
 
-def test_an_error_response_does_not_leak_internals(client, ai_app_module, jobqueue_module):
+def test_an_error_response_does_not_leak_internals(ai_app_module, jobqueue_module, monkeypatch):
     """A model traceback must not reach the caller through `/predict` — `web` would render it."""
 
     def boom(features):
@@ -143,7 +143,9 @@ def test_an_error_response_does_not_leak_internals(client, ai_app_module, jobque
     queue = jobqueue_module.JobQueue(
         workers=1, executor_factory=lambda: ThreadPoolExecutor(max_workers=1)
     )
-    jobqueue_module._resolve_target = lambda _name: boom
+    # monkeypatch, not a raw assignment: `jobqueue_module` is the SESSION-cached module (conftest), and
+    # `_worker()` resolves this same name on every later submit. A bare assignment would outlive this test.
+    monkeypatch.setattr(jobqueue_module, "_resolve_target", lambda _name: boom)
     app = ai_app_module.create_app(queue=queue)
     app.config["TESTING"] = True
     try:
