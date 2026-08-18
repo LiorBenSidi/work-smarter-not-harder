@@ -3383,33 +3383,39 @@
       if (more) more.addEventListener("click", loadMoreComments);
       loadCommentAtts(list);                                 // #407: fill each comment's media slot
     }
-    // Fetch and render each comment's attachments (#407). Best-effort per comment: one comment whose
-    // attachments fail to load must never blank the thread, so a failed read simply leaves that slot empty.
+    // Fetch and render the comments' attachments (#407) in ONE request for the whole page.
     //
-    // CACHED per comment id, which is the load-bearing part. renderComments() re-runs on every vote, every
-    // new comment and every in-place refresh, and a page holds up to COMMENT_PAGE_DEFAULT (50) comments —
-    // so fetching per render would fire 50 requests every time anyone voted, and 100 once a second page was
-    // loaded. Each comment is fetched ONCE per post-open; later renders paint from the cache. The cache is
-    // cleared in loadComments(), alongside the accumulators it belongs with.
+    // This was originally one request per comment, which was an N+1 at the BROWSER layer rather than the
+    // database one: a page holds up to COMMENT_PAGE_DEFAULT (50) comments, and 50 parallel requests
+    // against a browser limit of ~6 connections per origin means everything else the page needs — the
+    // forum feed included — queues behind the burst. Measured on the running app: opening a post with 20
+    // comments issued 20 requests. It now issues one, whatever the comment count.
+    //
+    // Still cached per comment id, because renderComments() re-runs on every vote, every new comment and
+    // every in-place refresh; only comments not already known are asked for. Best-effort throughout: a
+    // failed read leaves the slots empty rather than blanking the thread.
     function loadCommentAtts(list) {
       const postId = currentPostId;
+      const paint = (cid, atts) => {
+        const el = document.querySelector('.c-atts[data-cid="' + CSS.escape(String(cid)) + '"]');
+        if (el && atts && atts.length) el.innerHTML = attsHtml(atts);
+      };
+      const unknown = [];
       for (const c of list) {
-        const slot = document.querySelector('.c-atts[data-cid="' + CSS.escape(String(c.id)) + '"]');
-        const cached = commentAtts[c.id];
-        if (cached !== undefined) {                          // already known: repaint, no request
-          if (slot && cached.length) slot.innerHTML = attsHtml(cached);
-          continue;
-        }
-        commentAtts[c.id] = [];                              // claim it, so a re-render mid-flight can't refetch
-        api("/forum/posts/" + postId + "/comments/" + c.id + "/attachments").then((ar) => {
-          if (currentPostId !== postId) return;              // a newer open superseded this
-          const atts = (ar.ok && ar.data && ar.data.attachments) || [];
-          commentAtts[c.id] = atts;
-          if (!atts.length) return;
-          const el = document.querySelector('.c-atts[data-cid="' + CSS.escape(String(c.id)) + '"]');
-          if (el) el.innerHTML = attsHtml(atts);
-        });
+        if (commentAtts[c.id] !== undefined) paint(c.id, commentAtts[c.id]);   // known: repaint, no request
+        else unknown.push(c.id);
       }
+      if (!unknown.length) return;
+      unknown.forEach((id) => { commentAtts[id] = []; });   // claim them, so a re-render can't refetch
+      api("/forum/posts/" + postId + "/comments/attachments",
+          { method: "POST", body: { comment_ids: unknown } }).then((ar) => {
+        if (currentPostId !== postId) return;               // a newer open superseded this
+        const map = (ar.ok && ar.data && ar.data.attachments) || {};
+        for (const id of unknown) {
+          commentAtts[id] = map[id] || [];
+          paint(id, commentAtts[id]);
+        }
+      });
     }
     // Load a post's FIRST (newest) page of comments — resets the accumulator, so re-opening a post starts clean.
     async function loadComments(id) {

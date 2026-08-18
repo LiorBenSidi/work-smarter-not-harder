@@ -66,11 +66,14 @@ def _dm_key(a, b):
     return ":".join(sorted([a, b]))
 
 
-def _attachment_ids(data):
-    """Return a list of string media ids from ``{"attachment_ids": [...]}``, else None (invalid)."""
+def _attachment_ids(data, key="attachment_ids"):
+    """Return the list of string ids under ``key``, else None (invalid).
+
+    Shared by the attach routes (``attachment_ids``) and the batch comment read (``comment_ids``): the
+    list-of-strings check is the NoSQL-injection gate for both, since these ids reach a query."""
     if not isinstance(data, dict):
         return None
-    ids = data.get("attachment_ids")
+    ids = data.get(key)
     if not isinstance(ids, list) or not all(isinstance(i, str) for i in ids):
         return None
     return ids
@@ -223,6 +226,35 @@ def list_comment_attachments(post_id, comment_id):
     # Readable by any logged-in user, mirroring the post route: the forum is public, and `_can_view`
     # already treats a "comment" target as forum content.
     return _list("comment", _comment_key(post_id, comment_id))
+
+
+@media_bp.post("/forum/posts/<post_id>/comments/attachments")
+@login_required
+def list_many_comment_attachments(post_id):
+    """Attachments for MANY comments of one post, in a single request (#407).
+
+    A POST because it carries a list of ids, not because it writes anything — nothing here mutates.
+    The per-comment GET above still exists and is still the simplest thing to reason about, but calling
+    it once per comment made the page issue up to 50 parallel requests (COMMENT_PAGE_DEFAULT) against a
+    browser limit of ~6 connections per origin, so unrelated requests — the forum feed among them —
+    queued behind the burst. Measured on the running app: opening a post with 20 comments produced 20
+    requests; it now produces one.
+
+    Returns ``{"attachments": {comment_id: [...]}}`` keyed by COMMENT id (not the internal target id),
+    so the client never has to know how a comment target is composed.
+    """
+    ids = _attachment_ids(request.get_json(silent=True), key="comment_ids")
+    if ids is None:
+        return jsonify(error="comment_ids must be a list of ids"), 400
+    grouped = _media().list_for_targets("comment", [_comment_key(post_id, c) for c in ids])
+    out = {}
+    for comment_id in ids:
+        recs = grouped.get(_comment_key(post_id, comment_id)) or []
+        if recs:
+            out[comment_id] = [{"id": r["id"], "url": f"/media/{r['id']}", "mime": r["mime"],
+                                "owner": r.get("owner"), "created_at": r.get("created_at", 0)}
+                               for r in sorted(recs, key=lambda r: r.get("created_at", 0))]
+    return jsonify(attachments=out), 200
 
 
 @media_bp.post("/messages/<peer>/attachments")

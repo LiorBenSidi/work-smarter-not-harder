@@ -172,6 +172,16 @@ def test_comment_attachments_are_fetched_once_per_open_not_per_render(html):
     holds up to 50 comments — so fetching per render would fire 50 requests each time anyone voted. Each
     comment is fetched once and later renders paint from the cache."""
     fn = html[html.index("function loadCommentAtts("):html.index("// Load a post's FIRST")]
-    assert "commentAtts[c.id]" in fn
-    assert "if (cached !== undefined)" in fn                  # a known comment repaints without a request
+    assert "commentAtts[c.id] !== undefined" in fn            # a known comment repaints without a request
+    assert "unknown.push(c.id)" in fn                         # ...only the rest are asked for
     assert "commentAtts = {}" in html                         # ...and the cache resets with the accumulators
+
+
+def test_comment_attachments_are_fetched_in_one_batched_request(html):
+    """The per-comment fetch was an N+1 at the browser layer: 50 comments meant 50 parallel requests
+    against a ~6-connection limit, so the forum feed queued behind them. Pinned as a call-site shape
+    because that is what regresses — someone reinstating a per-comment call inside the loop."""
+    fn = html[html.index("function loadCommentAtts("):html.index("// Load a post's FIRST")]
+    assert '"/comments/attachments"' in fn or "/comments/attachments" in fn
+    assert "comment_ids: unknown" in fn                        # one call carrying every unknown id
+    assert "/attachments\").then" not in fn                    # no per-comment GET left in the loop

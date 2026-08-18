@@ -226,3 +226,78 @@ def test_comment_attachments_require_auth(media_client):
     assert c.get(f"/forum/posts/{pid}/comments/{cid}/attachments").status_code == 401
     assert c.post(f"/forum/posts/{pid}/comments/{cid}/attachments",
                   json={"attachment_ids": []}).status_code == 401
+
+
+def test_many_comments_attachments_come_back_in_one_request(media_client):
+    """#407 follow-up: asking per comment was an N+1 at the BROWSER layer. A page holds up to 50
+    comments, and 50 parallel requests against a ~6-connection-per-origin limit made every other
+    request — the forum feed included — queue behind the burst. Measured on the running app before the
+    fix: opening a post with 20 comments issued 20 requests; after, one."""
+    c = media_client
+    _login(c)
+    pid = c.post("/forum/posts", json={"title": "batch", "body": "b"}).get_json()["post"]["id"]
+    cids, mids = [], []
+    for i in range(3):
+        cid = c.post(f"/forum/posts/{pid}/comments", json={"body": f"c{i}"}).get_json()["comment"]["id"]
+        mid = _upload_png(c).get_json()["id"]
+        c.post(f"/forum/posts/{pid}/comments/{cid}/attachments", json={"attachment_ids": [mid]})
+        cids.append(cid)
+        mids.append(mid)
+
+    r = c.post(f"/forum/posts/{pid}/comments/attachments", json={"comment_ids": cids})
+    assert r.status_code == 200
+    grouped = r.get_json()["attachments"]
+    assert set(grouped) == set(cids)                                  # every comment keyed by ITS id
+    for cid, mid in zip(cids, mids):
+        assert [a["id"] for a in grouped[cid]] == [mid]
+        assert grouped[cid][0]["url"] == f"/media/{mid}"
+
+
+def test_the_batch_read_omits_comments_with_no_media(media_client):
+    """A comment with nothing attached must not come back as an empty key — the client treats presence
+    as 'this comment has media', and an empty list would render an empty attachment strip."""
+    c = media_client
+    _login(c)
+    pid, cid = _post_and_comment(c)
+    bare = c.post(f"/forum/posts/{pid}/comments", json={"body": "no media"}).get_json()["comment"]["id"]
+    mid = _upload_png(c).get_json()["id"]
+    c.post(f"/forum/posts/{pid}/comments/{cid}/attachments", json={"attachment_ids": [mid]})
+
+    grouped = c.post(f"/forum/posts/{pid}/comments/attachments",
+                     json={"comment_ids": [cid, bare]}).get_json()["attachments"]
+    assert list(grouped) == [cid]
+
+
+def test_the_batch_read_is_scoped_to_the_post_in_the_url(media_client):
+    """The target id carries both ids, so asking post A for post B's comment must return nothing —
+    otherwise the batch route would be a way to read attachments across posts."""
+    c = media_client
+    _login(c)
+    pid_a, cid_a = _post_and_comment(c)
+    pid_b = c.post("/forum/posts", json={"title": "other", "body": "b"}).get_json()["post"]["id"]
+    mid = _upload_png(c).get_json()["id"]
+    c.post(f"/forum/posts/{pid_a}/comments/{cid_a}/attachments", json={"attachment_ids": [mid]})
+
+    grouped = c.post(f"/forum/posts/{pid_b}/comments/attachments",
+                     json={"comment_ids": [cid_a]}).get_json()["attachments"]
+    assert grouped == {}
+
+
+def test_the_batch_read_rejects_a_non_list_of_strings(media_client):
+    """Same NoSQL-injection gate as the attach routes: these ids reach a query."""
+    c = media_client
+    _login(c)
+    pid, _ = _post_and_comment(c)
+    assert c.post(f"/forum/posts/{pid}/comments/attachments",
+                  json={"comment_ids": {"$ne": ""}}).status_code == 400
+    assert c.post(f"/forum/posts/{pid}/comments/attachments",
+                  json={"comment_ids": [1, 2]}).status_code == 400
+
+
+def test_the_batch_read_requires_auth(media_client):
+    c = media_client
+    _login(c)
+    pid, cid = _post_and_comment(c)
+    c.post("/logout")
+    assert c.post(f"/forum/posts/{pid}/comments/attachments",
+                  json={"comment_ids": [cid]}).status_code == 401
