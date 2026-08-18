@@ -92,19 +92,39 @@ def test_unknown_job_id_raises_job_not_found(make_queue, jobqueue_module):
 
 
 def test_concurrent_jobs_overlap_instead_of_serializing(make_queue):
-    """Four 0.3s jobs on four workers must finish in well under the 1.2s a serial queue would take.
+    """Four jobs on four workers must actually run AT THE SAME TIME.
 
     This is the whole point of the feature: without the pool, `/predict` calls queue up behind each
-    other. The bound is loose (0.9s) so a slow CI runner does not flake it, but it is still far below
-    the serial time.
+    other. Asserted by OBSERVING concurrency — each worker records how many peers are inside the
+    target with it — rather than by timing the batch against a fixed wall-clock bound. A wall-clock
+    bound measures the machine as much as the pool: on a saturated runner four overlapping 0.3s jobs
+    legitimately take longer than the serial time on an idle one, so the old `elapsed < 0.9` failed
+    under load while the pool was working perfectly (same instrument defect as #435). Observed
+    concurrency is load-independent and still fails for the real reason — a serialized pool never
+    gets two workers inside the target at once, so `peak` stays 1.
     """
-    queue = make_queue(slow, workers=4)
-    started = time.monotonic()
-    ids = [queue.submit({"seconds": 0.3}) for _ in range(4)]
+    lock = threading.Lock()
+    live, peak = [0], [0]
+    all_in = threading.Event()
+
+    def watched(features):
+        with lock:
+            live[0] += 1
+            peak[0] = max(peak[0], live[0])
+            if live[0] >= 4:
+                all_in.set()
+        # Hold the slot until every worker has arrived (or we give up), so overlap is observable
+        # regardless of how the OS interleaves them; the timeout keeps a serialized pool from hanging.
+        all_in.wait(10)
+        with lock:
+            live[0] -= 1
+        return {"state": "Moderate"}
+
+    queue = make_queue(watched, workers=4)
+    ids = [queue.submit({"n": i}) for i in range(4)]
     for job_id in ids:
-        queue.result(job_id, timeout=10)
-    elapsed = time.monotonic() - started
-    assert elapsed < 0.9, f"jobs serialized: {elapsed:.2f}s for 4x0.3s on 4 workers"
+        queue.result(job_id, timeout=30)
+    assert peak[0] == 4, f"jobs serialized: at most {peak[0]} of 4 workers ran concurrently"
 
 
 # --------------------------------------------------------------------------- bounding / backpressure
@@ -292,26 +312,36 @@ def _stuck_target(release):
 
 def test_a_hung_job_releases_its_slot_after_the_hard_timeout(make_queue, jobqueue_module):
     release = threading.Event()
-    queue = make_queue(_stuck_target(release), workers=2, max_pending=1, hard_timeout=0.05)
+    # Arm the reaper only AFTER the QueueFull check. With hard_timeout=0.05 from the start, a runner
+    # that stalls for >50ms between these two submits lets the second submit's reap abandon the hung
+    # job and free the slot — so QueueFull never raises and the test fails claiming the slot was not
+    # held, when the reaper was simply faster than the scheduler. Creating the queue with a long
+    # timeout makes the first assertion load-proof; shrinking the attribute then triggers the reap on
+    # demand (the same mutate-to-trigger idiom this file uses for `job_ttl`).
+    queue = make_queue(_stuck_target(release), workers=2, max_pending=1, hard_timeout=30)
     hung = queue.submit({"stuck": True})
     with pytest.raises(jobqueue_module.QueueFull):
         queue.submit({"n": 1})  # the hung job holds the only slot
+    queue.hard_timeout = 0.05   # now the hung job is past its deadline and reapable
 
     # Reaping happens ON submit, so retry until it frees the slot rather than sleeping past the
     # hard timeout once: a single `sleep(hard_timeout + 0.01)` is a knife-edge on a loaded CI box
     # (the job may not have started yet), which made this file flaky under a full-suite run. The
     # assertion is unweakened — if the reaper never fires, every attempt stays QueueFull and the
     # test fails on `ok is None`.
+    # The 5s deadline was still too tight on a saturated runner (reproduced: a 4x-oversubscribed box
+    # blew past it while the reaper was working). A generous deadline costs nothing when the code is
+    # healthy — the loop exits on the first successful submit — and is only spent on a real failure.
     ok = None
-    deadline = time.monotonic() + 5
+    deadline = time.monotonic() + 30
     while ok is None and time.monotonic() < deadline:
         time.sleep(0.02)
         try:
             ok = queue.submit({"n": 2})
         except jobqueue_module.QueueFull:
             continue
-    assert ok is not None, "the reaper never freed the hung job's slot within 5s"
-    assert queue.result(ok, timeout=5)["seen"] == ["n"]
+    assert ok is not None, "the reaper never freed the hung job's slot within 30s"
+    assert queue.result(ok, timeout=30)["seen"] == ["n"]
     assert queue.get(hung).status == "failed"
     assert "abandoned" in queue.get(hung).as_dict()["error"]
     assert queue.stats()["abandoned"] == 1
@@ -360,7 +390,15 @@ def test_a_pool_with_every_worker_hung_is_replaced(make_queue):
     nothing can score them. Once the presumed-hung count reaches the pool size, the pool itself is
     replaced so service resumes."""
     release = threading.Event()
+    entered = threading.Event()
     created = []
+
+    def stuck_target(features):
+        if features.get("stuck"):
+            entered.set()          # the hung job is genuinely INSIDE the worker now
+            release.wait(10)
+            return {"state": "late"}
+        return echo(features)
 
     def factory():
         executor = ThreadPoolExecutor(max_workers=1)
@@ -368,15 +406,21 @@ def test_a_pool_with_every_worker_hung_is_replaced(make_queue):
         return executor
 
     queue = make_queue(
-        _stuck_target(release), workers=1, max_pending=4, hard_timeout=0.05,
+        stuck_target, workers=1, max_pending=4, hard_timeout=0.05,
         executor_factory=factory,
     )
     queue.submit({"stuck": True})
-    time.sleep(0.06)
-    ok = queue.submit({"n": 1})  # reap: abandon + every worker presumed hung -> rebuild
+    # Wait for the job to actually START before timing past the hard timeout. A bare
+    # `sleep(hard_timeout + 0.01)` is the knife-edge this file already documents in
+    # test_a_hung_job_releases_its_slot_after_the_hard_timeout: on a saturated runner the stuck job
+    # may not have been dispatched yet, so the reap finds nothing to abandon, no worker is presumed
+    # hung, and the pool is never replaced — the test then reports a broken rebuild that works fine.
+    assert entered.wait(30), "the stuck job never reached the worker"
+    time.sleep(0.06)               # now provably past hard_timeout=0.05 measured from a started job
+    ok = queue.submit({"n": 1})    # reap: abandon + every worker presumed hung -> rebuild
     assert len(created) == 2, "the clogged pool was not replaced"
     assert queue.stats()["pool_rebuilds"] == 1
-    assert queue.result(ok, timeout=5)["seen"] == ["n"]  # scored by the fresh pool
+    assert queue.result(ok, timeout=30)["seen"] == ["n"]  # scored by the fresh pool
     release.set()  # unstick the leaked worker so teardown does not wait on it
 
 
@@ -408,13 +452,26 @@ def test_finished_jobs_are_reaped_once_past_their_ttl(make_queue, jobqueue_modul
 
 
 def test_reaping_never_drops_a_job_that_is_still_running(make_queue):
-    queue = make_queue(slow, workers=2, job_ttl=1)
-    in_flight = queue.submit({"seconds": 0.4})
-    queue.job_ttl = 0.001
-    time.sleep(0.01)
-    queue.submit({"seconds": 0.01})  # triggers a reap while `in_flight` is unfinished
-    assert queue.get(in_flight).status == "queued"
-    assert queue.result(in_flight, timeout=5)["state"] == "Moderate"
+    # The unfinished job is held open by an Event, not by a 0.4s sleep. A sleep only *probably*
+    # outlasts the reap: on a saturated runner the 0.01s pause below can stretch past 0.4s, the job
+    # finishes early, and the test fails with status 'done' — reporting a dropped job when nothing
+    # was dropped. Blocking makes "still running at reap time" a fact rather than a race.
+    release = threading.Event()
+
+    def blocking(features):
+        release.wait(30)
+        return {"state": "Moderate"}
+
+    queue = make_queue(blocking, workers=2, job_ttl=1)
+    try:
+        in_flight = queue.submit({"n": 1})
+        queue.job_ttl = 0.001
+        time.sleep(0.01)
+        queue.submit({"n": 2})  # triggers a reap while `in_flight` is unfinished
+        assert queue.get(in_flight).status == "queued"
+    finally:
+        release.set()           # never leave the pool blocked, even if an assertion above failed
+    assert queue.result(in_flight, timeout=30)["state"] == "Moderate"
 
 
 def test_the_job_store_is_capped_even_when_nothing_has_expired(make_queue):
