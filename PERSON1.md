@@ -18,7 +18,6 @@ Changing the shape is a **sync point** — update DESIGN + tell the team.
 
 ## Mandatory (course — graded)
 - **Local model, baked into the image** (`joblib` → `COPY` → load; no runtime download/train). **Pin scikit-learn**.
-- **Parallel programming (L7):** include a *measured* `multiprocessing` path for a CPU-bound batch (recommendation search / batch scoring / similarity) + NumPy vectorization in the feature pipeline — not the single-row predict. Serve behind gunicorn workers + `ai` replicas. **Status: NumPy vectorization done (`scripts/build_training_dataset.py`); the batch-multiprocessing path is not built — the only `ProcessPoolExecutor` in `ai/` is Elad's per-request queue pool (`ai/jobqueue.py`), not a batch task. Still open.**
 - **Fault tolerance:** keep `/predict` well-behaved so a failure degrades (web handles it), never crashes the app.
 - **Tests run on any machine** (no local paths) — unit (predict + binning) + the recommendation logic. A `TESTING` flag can expose internals for testing.
 
