@@ -1036,7 +1036,11 @@ def test_user_written_text_is_bidi_aware(client):
     assert '<span class="dm-meta" dir="ltr">' in html
     # inbox: peer name + last-message preview; activity feed line
     assert '<div class="dm-name" dir="auto">\' + escapeHtml(c.peer_name || c.peer)' in html
-    assert '<div class="dm-last" dir="auto">\' + escapeHtml(c.last_message || "")' in html
+    # The preview gained an "Attachment" placeholder for a media-only DM (#408), so the expression is no
+    # longer one call — but both properties this test exists to protect still hold: the element is
+    # dir="auto", and the user-written preview goes through escapeHtml.
+    assert '<div class="dm-last" dir="auto">' in html
+    assert "escapeHtml(c.last_message)" in html
     assert '<div class="dm-name" dir="auto">\' + escapeHtml(((n.actor' in html
     # bylines: ONLY the name is auto — the surrounding chrome must stay LTR
     assert '\'by \' + \'<span dir="auto">\' + escapeHtml(p.author) + \'</span>\'' in html

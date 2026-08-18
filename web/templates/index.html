@@ -3883,7 +3883,8 @@
       const changed = setHtmlIfChanged(el, cs.map((c) =>
         '<div class="dm-row" data-peer="' + escapeHtml(c.peer) + '">' + avatarHtml(c.peer, 40)
         + '<div class="dm-main"><div class="dm-name" dir="auto">' + escapeHtml(c.peer_name || c.peer) + '</div>'
-        + '<div class="dm-last" dir="auto">' + escapeHtml(c.last_message || "") + '</div></div>'
+        + '<div class="dm-last" dir="auto">' + (String(c.last_message || "").trim()
+              ? escapeHtml(c.last_message) : '<span class="muted">Attachment</span>') + '</div></div>'
         + (c.unread ? '<span class="dm-unread">' + escapeHtml(c.unread) + '</span>' : '') + '</div>'
       ).join(""));
       if (changed) el.querySelectorAll(".dm-row").forEach((d) => d.addEventListener("click", () => openThread(d.dataset.peer)));
@@ -4000,7 +4001,11 @@
       // Weave text + shared images into ONE chronological timeline: each image sits in ITS sender's column at
       // the moment it was shared. A run = consecutive items from the same sender on the same day (Signal grouping);
       // the time rides the last bubble, ticks ride my bubbles.
-      const items = dmMsgs.map((m) => ({ kind: "msg", sender: m.sender, at: m.created_at, m }))
+      // #408: a media-only send stores a message with an EMPTY body purely so the recipient gets a
+      // notification, a badge and an inbox row. Its image is already woven in below via dmAtts, so
+      // rendering the carrier as well would put a blank bubble next to the photo.
+      const items = dmMsgs.filter((m) => String(m.body || "").trim())
+        .map((m) => ({ kind: "msg", sender: m.sender, at: m.created_at, m }))
         .concat(dmAtts.map((a) => ({ kind: "media", sender: a.owner, at: a.created_at, a })))
         .sort((x, y) => (x.at || 0) - (y.at || 0));
       const older = dmMoreOlder
@@ -4194,8 +4199,13 @@
           return;                                         // the tray keeps the files, so retry is one tap
         }
       }
-      if (text) {
-        const r = await api("/messages", { method: "POST", body: { to: dmPeer, body: text } });
+      // #408: send a message even when there is NO text, as long as something uploaded. Attachments bind
+      // to the CONVERSATION, not to a message, so a media-only send used to create no message at all —
+      // and with no message there was no notification, no unread badge, no inbox row and no live push.
+      // The recipient saw it only if they already had that exact thread open. The ids go with the send so
+      // the server can verify the sender really owns them before accepting an empty body.
+      if (text || ids.length) {
+        const r = await api("/messages", { method: "POST", body: { to: dmPeer, body: text, attachment_ids: ids } });
         if (!r.ok) { flash("dm-reply-flash", (r.data && r.data.error) || "Could not send"); return; }   // surface 429 / errors
       }
       let attachWarn = "";   // non-empty => the file(s) didn't attach; shown instead of silently clearing the flash
