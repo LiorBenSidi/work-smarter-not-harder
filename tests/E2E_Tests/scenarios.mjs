@@ -1090,7 +1090,10 @@ export const SCENARIOS = [
     async fn(b) {
       await registerAndLogin(b);
       await gotoScreen(b, "forum");
-      await b.waitFor("#forum-files");
+      // Wait on the FORM, not on #forum-files: the input is `hidden` inside its label (the visible
+      // control is the styled label), and waitFor requires a non-zero box, so waiting on the input
+      // itself can only ever time out.
+      await b.waitFor("#forum-form");
 
       await b.setFileInput("#forum-files", new URL("./fixtures/pixel.png", import.meta.url).pathname);
       await b.wait(400);
