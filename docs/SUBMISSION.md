@@ -25,7 +25,9 @@ The graded project has **no zip** — it's a repo link.
 
 ---
 
-## Track A — Final project (graded · 50%) · due **23 Aug**
+## Track A — Final project (graded · 50%) · due **30 Aug**
+
+> `Proj_Guidelines.pdf` says 23 Aug; Moodle granted an extension to **30 Aug 2026** (box *"Actual Submission - Extention until 30.08"*).
 
 Rubric (`docs/GUIDELINES.md`, the TA's `WSNH_Guidelines`, 8 Jul): **75** proposal app + **5** Job Queue
 + **10** Online Forum + **10** Azure deploy & CI/CD. Penalties: −5/bug, −5/week late.
