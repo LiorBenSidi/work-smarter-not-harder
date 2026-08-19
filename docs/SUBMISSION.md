@@ -8,7 +8,10 @@ against a single source of truth and fix what they think is missing. Two indepen
 **✅ Implemented & verified**
 - **Graded build:** 3-container Docker app · **Job Queue (+5)** · **Online Forum (+10)** · **Azure deploy + CI/CD (+10)** · live HTTPS URL
 - **Report** (`REPORT.md`, 1319 tests) · **README** (run + test instructions) · risk assessment
-- **Per-member commits** present (Lior 308 · Elad 43 · Shiri 11 — the per-member grading requirement is met)
+- **Per-member commits** present — all three members commit under their own identity, so the per-member
+  grading requirement is met. Counts drift with every push; read them from the repo rather than from here:
+  `git shortlog -sn --all`. A `.mailmap` unifies the two identities Elad committed under (GitHub noreply +
+  the campus address), so that command lists **three** contributors, not four.
 - **Show Off gallery (Track B): ✅ SUBMITTED 29 Jul** (`207490913.zip` — team-approved, uploaded to Moodle)
 
 **⬜ Still open**
