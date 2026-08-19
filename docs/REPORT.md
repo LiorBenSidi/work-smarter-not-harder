@@ -13,7 +13,7 @@
 > +10 Azure deploy + CI/CD; supersedes [`FEEDBACK.md`](FEEDBACK.md)). Architecture detail lives in [`DESIGN.md`](DESIGN.md); the phased plan in
 > [`ROADMAP.md`](ROADMAP.md).
 >
-> **Last updated:** 2026-08-16 · **Suite at this snapshot:** **1317 checks, 1273 passing / 44 environment-gated**
+> **Last updated:** 2026-08-16 · **Suite at this snapshot:** **1318 checks, 1274 passing / 44 environment-gated**
 > (+ 27 browser e2e scenarios)
 > (`python -m pytest tests/ -q`; the env-gated ones run in CI's `compose-e2e` job against the live containers).
 > Since the 07-12 snapshot (783 tests): **Shiri's Random Forest landed** — a real `ai/model/model.pkl` +
@@ -42,7 +42,7 @@
 > `generate_workout_days` into `predict_one` itself, so a resolved `plan["days"]` is populated
 > end to end on a live `/predict` call, not just available as a standalone function (#276, #410), and to **1254** as the dashboard
 > began relaying that plan to the client, validated against the two shapes the contract allows (#410),
-> and to **1317** with the plan card and its split picker — including the guard that stops the
+> and to **1318** with the plan card and its split picker — including the guard that stops the
 > optimistic paint from suppressing the plan entirely (#410).
 > A pre-submission review took every file in the web/data lane and asked, per
 > test, whether it earns its place — by mutating the code it guards and checking that the test actually
@@ -226,19 +226,19 @@ Columns are the test-type dirs under `tests/`. Cells name representative file(s)
 | **Fault tolerance / isolation** | — | — | — | `test_fault_isolation` (2) · Full-System `test_parts_in_isolation` (12) | — | — |
 | **Whole-system journey** | — | — | — | `test_e2e` (1) · Full-System `test_everything_together_sync` (15) | — | — |
 
-**Totals by type (full suite, `pytest --collect-only`):** Unit **546** · Integration **472** · Negative **158** ·
-System **14** · Full-System **27** · Security **88** · Stress **12** → **1317 automated checks across the seven
+**Totals by type (full suite, `pytest --collect-only`):** Unit **546** · Integration **473** · Negative **158** ·
+System **14** · Full-System **27** · Security **88** · Stress **12** → **1318 automated checks across the seven
 pytest suites**, plus **27 browser end-to-end scenarios** driven separately (`tests/E2E_Tests/`, run in CI as
 the *e2e (browser · desktop + mobile)* job — not counted in the pytest total). This matches the header count.
 
-Read the total as *checks*, not as hand-written test functions: 1317 collected cases come from **981 test
+Read the total as *checks*, not as hand-written test functions: 1318 collected cases come from **982 test
 functions** (measured with `grep -c "^def test_"` across `tests/`), the remainder being parametrised cases (one `@parametrize` over 11 malformed payloads is 11
 collected cases, not 11 tests written). The suite is deliberately weighted toward the layers where a
 regression is cheapest to catch — unit and negative input walls — rather than toward volume.
 
-**Pass / skip:** the pre-07-12 snapshot was **747 pass, 36 skip in ~47 s**; the current suite is **1273 pass,
+**Pass / skip:** the pre-07-12 snapshot was **747 pass, 36 skip in ~47 s**; the current suite is **1274 pass,
 44 skip in ~86 s** (`python -m pytest tests/ -q`); in CI, where the `mongo:7` service is present, the same
-suite is **1299 pass, 18 skip**. All **44** local skips are env-gated and *not broken* — they run the
+suite is **1300 pass, 18 skip**. All **44** local skips are env-gated and *not broken* — they run the
 moment their dependency is present:
 
 - `test_db_mongo` (21) — the real-Mongo integration suite; skips without `TEST_MONGO_URI`, and **runs in CI**
@@ -272,7 +272,7 @@ machine (env vars, no local paths), and are exercised by CI on every PR. A run t
   fake), the logging configuration, and app config. Heavily parametrized on boundary and adversarial inputs
   (e.g. profile validation rejects injection objects, bools-as-numbers, and out-of-range values across every
   field).
-- **Integration (472)** — components wired together through the Flask test client: the auth flow, profile
+- **Integration (473)** — components wired together through the Flask test client: the auth flow, profile
   round-trip, check-in → `ai /predict` → persist, dashboard, history, and the full forum lifecycle. Two
   boundary suites are notable: `test_web_ai` stubs the `web → ai` HTTP seam with a contract-shaped response
   and asserts the dashboard surfaces it (and degrades to `ai_status: unavailable` when `ai` returns
@@ -288,7 +288,7 @@ machine (env vars, no local paths), and are exercised by CI on every PR. A run t
   (`test_csrf`), NoSQL-injection-safe queries (`test_profile`, `test_forum`), ownership enforcement on
   forum edit/delete (403), auth-gating of dashboard/history, and response-hardening (`test_web_hardening`).
 
-The two supporting directories complete the 1317: **Negative (158)** — adversarial and malformed input across
+The two supporting directories complete the 1318: **Negative (158)** — adversarial and malformed input across
 auth, profile, check-in, forum and media — and **Full-System (27)** — whole-stack journeys in-process, plus the
 parts-in-isolation suite. The per-type figures here are the same ones tabulated in §3; both are
 `pytest --collect-only` counts, not estimates.
@@ -423,6 +423,26 @@ Naming these is part of the assessment; an unlisted risk is an unnoticed one.
   may see one failed request — including a reviewer.** The mitigation is procedural and already in
   [`DEMO_DAY_CHECKLIST.md`](../presentation/DEMO_DAY_CHECKLIST.md) — freeze deploys while demoing. Detail: #462.
 
+* **Mongo runs without authentication.** `MONGO_INITDB_ROOT_USERNAME/PASSWORD` are env-gated and left blank,
+  so the database trusts anything that can open a socket to it. What stands between that and the internet is the
+  topology, not a credential: `db` publishes no host port and lives on the internal Docker network, so reaching it
+  already means holding code execution on the VM or inside a container — at which point the `.env` holding any
+  Mongo password sits right there too. The honest reason it stays this way *now* is narrower: `MONGO_INITDB_*`
+  only applies to an **empty** data directory, so turning auth on for the live stack means re-initialising the
+  `mongo-data` volume or running a `createUser` by hand on the VM — a data-bearing migration, not a config flip.
+  Residual risk, stated plainly: **anyone who gets any foothold on the VM reads and writes the whole database
+  unchallenged**, and there is no second factor slowing them down. Verified rather than assumed: prod answers
+  404 on `/queue/stats`, `/jobs` and `/predict`, and only Caddy publishes ports.
+
+* **Every container runs as root.** None of the three images declares a `USER`, so a remote-code-execution bug in
+  Flask, gunicorn or a dependency lands as uid 0 inside the container rather than as an unprivileged user — one
+  namespace boundary from the host instead of two. The uploaded blobs under `MEDIA_ROOT` are likewise written
+  root-owned. Dropping privileges is a three-line Dockerfile change; what makes it more than that is the named
+  volumes already on the VM (`media-data`, `web-logs`, `mongo-data`), which keep their root ownership when the
+  image's user changes — so the switch has to be paired with a one-time `chown` on the VM or the first upload
+  after the deploy fails with `EACCES`. Sequencing that against a live deploy days before submission buys less
+  than it risks, so it is recorded here rather than shipped quietly.
+
 ### 5.6 How the mitigations are kept honest
 
 Two habits, both visible in the test suite:
@@ -466,7 +486,7 @@ between planes (§1). Full detail in [`COLLABORATORS.md`](../COLLABORATORS.md) a
 cp .env.example .env
 docker compose up --build          # 3 containers; only web is published
 # → http://localhost:8000/health   → then register, set a profile, check in, see the dashboard
-pytest -q                          # 1273 pass / 44 env-gated skip
+pytest -q                          # 1274 pass / 44 env-gated skip
 ```
 
 CI reproduces the gate on every PR (ruff → bandit → pytest + a `mongo:7` service). `main` is
