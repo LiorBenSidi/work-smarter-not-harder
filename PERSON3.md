@@ -80,6 +80,11 @@ never commit it. (The GitHub-side secrets for the deploy are in [`SECRETS.md`](S
   - **Media no longer outlives the account** (#507, PR #533) — `delete_for_owner` on both `DbMedia` and the
     test fake, a seventh cascade in `delete_account` ordered before the identity record, the blobs unlinked
     under `MEDIA_ROOT`, and `media` added to the data export.
+  - **Deleting a post erases its photos** (#544) — the post's own attachments *and* its comments'
+    (a deleted post takes its comments with it). Before this they stayed on the volume and kept being
+    served to any logged-in user, because `_can_view` treats a post/comment target as public forum
+    content without asking whether the post still exists — a silent leak against `MEDIA_MAX_TOTAL_BYTES`
+    and a delete that did not delete. Found by probing the live stack, not the fakes.
   - **A media-only DM notifies the recipient** (#408, PR #538) — the send path now creates a message for a
     text-free send, so the existing notification / badge / inbox-row / SSE machinery fires unchanged.
 - [x] **Forum: received-engagement metric** (GUIDELINES §3.3 — "a per-user total in a personal area") —

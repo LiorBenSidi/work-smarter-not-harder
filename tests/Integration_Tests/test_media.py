@@ -429,3 +429,91 @@ def test_the_notification_names_an_attachment_when_the_dm_carries_no_text(media_
     c.post("/login", json={"username": "bob", "password": "s3cretpw!"})
     texts = [n["text"] for n in c.get("/notifications").get_json()["notifications"]]
     assert sorted(texts) == ["sent you a message", "sent you an attachment"]
+
+
+# ------------------------------------------------------------------ deleting a post erases its media (#544)
+
+def _media_root(c):
+    return c.raw.application.config["MEDIA_ROOT"]
+
+
+def _stored_files(c):
+    import os
+    root = _media_root(c)
+    return sorted(os.listdir(root)) if os.path.isdir(root) else []
+
+
+def test_deleting_a_post_erases_the_photos_attached_to_it(media_client):
+    """Delete must delete. The blob was still served to every logged-in user after its post was gone —
+    the post vanished from every screen, so nothing showed the owner the photo was still reachable."""
+    c = media_client
+    _login(c, "alice")
+    mid = _upload_png(c).get_json()["id"]
+    pid = c.post("/forum/posts", json={"title": "oops", "body": "wrong photo"}).get_json()["post"]["id"]
+    assert c.post(f"/forum/posts/{pid}/attachments", json={"attachment_ids": [mid]}).get_json()["bound"] == [mid]
+    assert c.get(f"/media/{mid}").status_code == 200
+
+    assert c.delete(f"/forum/posts/{pid}").status_code == 200
+
+    assert c.get(f"/media/{mid}").status_code == 404
+    assert c.get(f"/forum/posts/{pid}/attachments").get_json()["attachments"] == []
+    assert _stored_files(c) == [], "the bytes must leave the volume too, not just the index"
+
+
+def test_deleting_a_post_erases_the_photos_on_its_comments(media_client):
+    """A post takes its comments with it (`forum_delete_post`), so their attachments have to go too —
+    otherwise the leak simply moves one level down, where nothing lists it at all."""
+    c = media_client
+    _login(c, "alice")
+    pid = c.post("/forum/posts", json={"title": "thread", "body": "b"}).get_json()["post"]["id"]
+    cid = c.post(f"/forum/posts/{pid}/comments", json={"body": "mine"}).get_json()["comment"]["id"]
+    mid = _upload_png(c).get_json()["id"]
+    assert c.post(f"/forum/posts/{pid}/comments/{cid}/attachments",
+                  json={"attachment_ids": [mid]}).get_json()["bound"] == [mid]
+
+    assert c.delete(f"/forum/posts/{pid}").status_code == 200
+
+    assert c.get(f"/media/{mid}").status_code == 404
+    assert _stored_files(c) == []
+
+
+def test_deleting_a_post_leaves_every_other_posts_media_alone(media_client):
+    """The scoping guard: a purge that took one id too many would erase a stranger's photo, which is a
+    worse bug than the leak it fixes."""
+    c = media_client
+    _login(c, "alice")
+    keep_mid = _upload_png(c).get_json()["id"]
+    keep_pid = c.post("/forum/posts", json={"title": "keep", "body": "b"}).get_json()["post"]["id"]
+    c.post(f"/forum/posts/{keep_pid}/attachments", json={"attachment_ids": [keep_mid]})
+    doomed_mid = _upload_png(c).get_json()["id"]
+    doomed_pid = c.post("/forum/posts", json={"title": "doomed", "body": "b"}).get_json()["post"]["id"]
+    c.post(f"/forum/posts/{doomed_pid}/attachments", json={"attachment_ids": [doomed_mid]})
+
+    assert c.delete(f"/forum/posts/{doomed_pid}").status_code == 200
+
+    assert c.get(f"/media/{doomed_mid}").status_code == 404
+    assert c.get(f"/media/{keep_mid}").status_code == 200
+
+
+def test_an_unbound_upload_survives_an_unrelated_post_deletion(media_client):
+    """A blob still sitting in the composer belongs to nobody's post yet — a target-scoped purge must
+    not reach it, or drafting a photo while deleting an old post would silently lose the draft."""
+    c = media_client
+    _login(c, "alice")
+    draft = _upload_png(c).get_json()["id"]
+    pid = c.post("/forum/posts", json={"title": "old", "body": "b"}).get_json()["post"]["id"]
+    assert c.delete(f"/forum/posts/{pid}").status_code == 200
+    assert c.get(f"/media/{draft}").status_code == 200
+
+
+def test_a_media_store_failure_does_not_fail_a_delete_the_user_already_won(media_client, monkeypatch):
+    """The post is already gone when the purge runs; a media hiccup must not report failure for work
+    that succeeded, or the user retries a delete that cannot be repeated."""
+    c = media_client
+    _login(c, "alice")
+    pid = c.post("/forum/posts", json={"title": "p", "body": "b"}).get_json()["post"]["id"]
+    store = c.raw.application.config["MEDIA"]
+    monkeypatch.setattr(store, "list_for_post", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("mongo down")))
+
+    assert c.delete(f"/forum/posts/{pid}").status_code == 200
+    assert c.get(f"/forum/posts/{pid}").status_code == 404
