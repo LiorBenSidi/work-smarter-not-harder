@@ -517,8 +517,8 @@ class FakeNotifications:
 
 class FakeMedia:
     """In-memory media index — mirrors ``web/services/media_store.py``'s ``DbMedia`` contract
-    (add / get / bind / list_for_target / list_for_owner / delete_for_owner), so the media routes run
-    without Mongo."""
+    (add / get / bind / list_for_target / list_for_owner / delete_for_owner / list_for_post /
+    delete_for_post), so the media routes run without Mongo."""
 
     def __init__(self):
         self._by_id = {}
@@ -556,6 +556,24 @@ class FakeMedia:
     def list_for_owner(self, owner):
         return [dict(r) for r in sorted(self._by_id.values(), key=lambda r: r["created_at"])
                 if r["owner"] == owner]
+
+    def _under_post(self, rec, post_id):
+        # Mirrors DbMedia._post_scope: the post's own attachments plus every comment target under it,
+        # whose id is "<post_id>:<comment_id>" (#544).
+        return ((rec["target_type"] == "post" and rec["target_id"] == post_id)
+                or (rec["target_type"] == "comment"
+                    and isinstance(rec["target_id"], str)
+                    and rec["target_id"].startswith(post_id + ":")))
+
+    def list_for_post(self, post_id):
+        return [dict(r) for r in sorted(self._by_id.values(), key=lambda r: r["created_at"])
+                if self._under_post(r, post_id)]
+
+    def delete_for_post(self, post_id):
+        doomed = [i for i, r in self._by_id.items() if self._under_post(r, post_id)]
+        for media_id in doomed:
+            del self._by_id[media_id]
+        return len(doomed)
 
     def delete_for_owner(self, owner):
         doomed = [i for i, r in self._by_id.items() if r["owner"] == owner]

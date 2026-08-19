@@ -3,7 +3,8 @@
 Lior's slice of the Online Forum (+10). A vote now pushes a live notification to the post's author
 (§2.6) through the shared notification feed (the same feed DMs use, delivered in real time by the
 SSE stream); media/attachments on posts AND comments are built (Elad, #160/#407 — additive routes in
-routes/media.py, so this module is unmodified), and the cold-seed content is Shiri's.
+routes/media.py; the ONE hook back into this module is the purge on delete below, #544), and the
+cold-seed content is Shiri's.
 Input is validated + injection-safe before any query; the forum + notification stores are injected
 (the web->db seam). Anonymous posts hide the author in responses (but the owner is still notified).
 """
@@ -17,6 +18,7 @@ from ratelimit import limiter
 from routes.auth import login_required
 from services.db import COMMENT_PAGE_DEFAULT, COMMENT_PAGE_MAX, FORUM_PAGE_DEFAULT, FORUM_PAGE_MAX
 from services.identity import display_name
+from services.media_store import purge_post
 
 logger = logging.getLogger(__name__)
 
@@ -255,6 +257,19 @@ def delete_post(post_id):
         return jsonify(error="post not found"), 404
     if result == "forbidden":
         return jsonify(error="you can only delete your own post"), 403
+    # #544: the post is gone, so its photos must go too — the post's own and its comments' (a deleted
+    # post takes its comments with it). Until this, the blobs stayed on the volume AND kept being served
+    # to any logged-in user, because media's `_can_view` treats a post/comment target as public forum
+    # content without asking whether that post still exists.
+    #
+    # AFTER the delete, never before: purging first would destroy the photos of a still-live post if the
+    # delete then failed. Best-effort for the same reason the DM notification is — the user has already
+    # been told the delete succeeded, and it did; a media hiccup must not turn that into a 5xx they would
+    # retry. A failure leaves documents behind, which is the pre-#544 state and is logged, not silent.
+    try:
+        purge_post(current_app.config["MEDIA"], current_app.config["MEDIA_ROOT"], post_id)
+    except Exception:
+        logger.warning("could not purge media for deleted post %s", post_id, exc_info=True)
     return jsonify(status="deleted"), 200
 
 

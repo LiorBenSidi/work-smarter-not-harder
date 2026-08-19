@@ -13,6 +13,8 @@ Contract (mirrored by ``tests/conftest.py``'s ``FakeMedia``):
     list_for_target(target_type, target_id)                  -> list of bound record dicts
     list_for_owner(owner)                                    -> every record this user uploaded (#507)
     delete_for_owner(owner)                                  -> drop those records; returns the count
+    list_for_post(post_id)                                   -> the post's records AND its comments' (#544)
+    delete_for_post(post_id)                                 -> drop those records; returns the count
 
 A record dict: ``{id, owner, mime, size, target_type, target_id, peers}`` where ``target_type`` is one
 of ``"post"``/``"comment"``/``"dm"`` (or None while unbound) and ``peers`` is the 2-participant list a
@@ -22,9 +24,17 @@ Erasure (#507): media used to be the one store that SURVIVED account deletion �
 owner-scoped read or delete, so `delete_account` had nothing to call and a deleted user's uploads stayed
 both in Mongo and on the volume. ``list_for_owner`` / ``delete_for_owner`` close that, and
 ``purge_owner`` below is the one call that erases both halves (documents *and* bytes) together.
+
+Content erasure (#544): the same gap existed one level down. Deleting a post erased the post and its
+comments and left their blobs both on the volume and — because ``_can_view`` treats any ``post``/
+``comment`` target as public forum content without asking whether that post still exists — still served
+to every logged-in user. ``list_for_post`` / ``delete_for_post`` / ``purge_post`` close that. They are
+scoped INSIDE this store: a comment's target id is ``"<post_id>:<comment_id>"`` (#407), so one post id
+finds both halves without the forum data layer (Lior's ``db.py``) having to grow a media-aware call.
 """
 import logging
 import os
+import re
 import time
 
 logger = logging.getLogger(__name__)
@@ -64,6 +74,31 @@ def purge_owner(store, media_root, owner):
             # Never abort the cascade over one undeletable file: the document is already gone, so the
             # blob is unreachable through the app either way. Logged so it can be swept later.
             logger.warning("could not remove media file for %s while purging %s", rec["id"], owner,
+                           exc_info=True)
+    return documents, files
+
+
+def purge_post(store, media_root, post_id):
+    """Erase every blob bound to ``post_id`` — the post's own and its comments' — documents AND files.
+
+    Returns ``(documents_deleted, files_deleted)``. Same shape and same ordering rationale as
+    ``purge_owner``: the records are read BEFORE the documents are dropped, because the record is the
+    only thing that knows a blob's mime and therefore its filename.
+    """
+    records = store.list_for_post(post_id)
+    documents = store.delete_for_post(post_id)
+    files = 0
+    for rec in records:
+        path = os.path.join(media_root, stored_name(rec["id"], rec.get("mime")))
+        try:
+            os.remove(path)
+            files += 1
+        except FileNotFoundError:
+            logger.info("media %s had no file on disk while purging post %s", rec["id"], post_id)
+        except OSError:
+            # One undeletable file must not abort the rest: its document is already gone, so the blob is
+            # unreachable through the app either way. Logged so the volume can be swept later.
+            logger.warning("could not remove media file for %s while purging post %s", rec["id"], post_id,
                            exc_info=True)
     return documents, files
 
@@ -125,6 +160,27 @@ class DbMedia:
         """Drop every media document belonging to ``owner``; returns how many were removed. Bytes are
         removed by ``purge_owner``, which calls this — see that function for why the order matters."""
         return self._collection().delete_many({"owner": owner}).deleted_count
+
+    def _post_scope(self, post_id):
+        """Match the post's own attachments AND every comment attachment under it.
+
+        A comment target id is ``"<post_id>:<comment_id>"``, so the comment half is an ANCHORED prefix
+        match. ``re.escape`` keeps a post id built of regex metacharacters from being read as a pattern
+        (the ids the app mints are hex, but the value reaches here from the URL), and the anchor lets the
+        ``(target_type, target_id)`` index still serve the scan.
+        """
+        return {"$or": [{"target_type": "post", "target_id": post_id},
+                        {"target_type": "comment",
+                         "target_id": {"$regex": "^" + re.escape(post_id) + ":"}}]}
+
+    def list_for_post(self, post_id):
+        """Every blob a post deletion has to take with it (#544). Unbounded on purpose, exactly as
+        ``list_for_owner`` is: an erasure that silently leaves a tail behind is the bug being fixed."""
+        return [self._public(d) for d in self._collection().find(self._post_scope(post_id)).sort("created_at", 1)]
+
+    def delete_for_post(self, post_id):
+        """Drop those documents; returns how many. Bytes are removed by ``purge_post``, which calls this."""
+        return self._collection().delete_many(self._post_scope(post_id)).deleted_count
 
     def list_for_targets(self, target_type, target_ids):
         """Attachments for MANY targets in ONE query, grouped by target id (#407).
