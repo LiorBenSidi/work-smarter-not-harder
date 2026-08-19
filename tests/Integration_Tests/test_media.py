@@ -517,3 +517,95 @@ def test_a_media_store_failure_does_not_fail_a_delete_the_user_already_won(media
 
     assert c.delete(f"/forum/posts/{pid}").status_code == 200
     assert c.get(f"/forum/posts/{pid}").status_code == 404
+
+
+# ------------------------------------------------- abandoned uploads are reclaimed (#557)
+
+def _sweep_every_upload(c):
+    """Let every upload sweep. The throttle is real (and tested below); these tests are about WHAT the
+    sweep reclaims, not how often it runs."""
+    c.raw.application.config["MEDIA_SWEEP_INTERVAL_SECONDS"] = 0
+
+
+def _age_media(c, media_id, seconds):
+    """Backdate a blob's record — the sweep is time-based, and no test should sleep a day."""
+    rec = c.raw.application.config["MEDIA"].get(media_id)
+    c.raw.application.config["MEDIA"]._by_id[media_id]["created_at"] = rec["created_at"] - seconds
+
+
+def test_an_abandoned_upload_is_reclaimed_once_it_is_old_enough(media_client):
+    """Since #439 the composer uploads BEFORE publishing, so every draft someone changes their mind
+    about leaves a blob nothing points at. Invisible in every UI, counted against the volume cap
+    forever: one user who never publishes fills 500 MB in about three minutes and 507s everybody."""
+    c = media_client
+    _sweep_every_upload(c)
+    _login(c, "alice")
+    stale = _upload_png(c).get_json()["id"]
+    _age_media(c, stale, 60 * 60 * 48)          # abandoned two days ago
+
+    fresh = _upload_png(c).get_json()["id"]      # ...this upload triggers the sweep
+
+    assert c.get(f"/media/{stale}").status_code == 404, "the abandoned blob should have been reclaimed"
+    assert c.get(f"/media/{fresh}").status_code == 200, "the upload that triggered the sweep must survive"
+
+
+def test_the_sweep_never_touches_a_blob_that_is_actually_in_use(media_client):
+    """An attached blob is old by definition — a post from last year still shows its photo. Only the
+    UNBOUND ones are garbage, so age alone must never be the condition."""
+    c = media_client
+    _sweep_every_upload(c)
+    _login(c, "alice")
+    attached = _upload_png(c).get_json()["id"]
+    pid = c.post("/forum/posts", json={"title": "old post", "body": "b"}).get_json()["post"]["id"]
+    c.post(f"/forum/posts/{pid}/attachments", json={"attachment_ids": [attached]})
+    _age_media(c, attached, 60 * 60 * 24 * 400)   # over a year old, and still in use
+
+    _upload_png(c)                                 # trigger the sweep
+
+    assert c.get(f"/media/{attached}").status_code == 200
+
+
+def test_a_draft_still_being_written_survives_the_sweep(media_client):
+    """The blob a user picked thirty seconds ago is not garbage — reclaiming it would delete the photo
+    out from under an open composer."""
+    c = media_client
+    _sweep_every_upload(c)
+    _login(c, "alice")
+    draft = _upload_png(c).get_json()["id"]
+    _age_media(c, draft, 30)
+
+    _upload_png(c)
+
+    assert c.get(f"/media/{draft}").status_code == 200
+
+
+def test_a_full_volume_heals_itself_instead_of_507ing_forever(media_client):
+    """The volume cap (#313) stops the disk filling; it did not stop the app's upload capacity being
+    consumed forever, because nothing gave the space back. A 507 must first try to reclaim what is
+    already garbage — otherwise one user's abandoned drafts wedge uploads for everyone, permanently."""
+    c = media_client
+    _sweep_every_upload(c)
+    _login(c, "alice")
+    hog = _upload_png(c).get_json()["id"]
+    _age_media(c, hog, 60 * 60 * 48)
+    c.raw.application.config["MEDIA_MAX_TOTAL_BYTES"] = 1   # the volume is "full"
+
+    r = _upload_png(c)
+
+    assert r.status_code == 201, "the sweep should have freed the abandoned blob and let this through"
+    assert c.get(f"/media/{hog}").status_code == 404
+
+
+def test_the_sweep_is_throttled_so_an_upload_burst_does_not_pay_for_it_every_time(media_client):
+    """The sweep rides on uploads because the app has no scheduler, so it must not run on every one:
+    twenty uploads in a burst would otherwise mean twenty delete_many round-trips. The 507 path forces
+    it anyway (tested above) — that is the one caller that cannot wait."""
+    c = media_client
+    _login(c, "alice")
+    c.raw.application.config["MEDIA_SWEEP_INTERVAL_SECONDS"] = 3600
+
+    first = _upload_png(c).get_json()["id"]       # runs a sweep and starts the clock
+    _age_media(c, first, 60 * 60 * 48)            # now garbage by age...
+    _upload_png(c)                                # ...but this upload is inside the interval
+
+    assert c.get(f"/media/{first}").status_code == 200, "the throttle should have suppressed this sweep"

@@ -15,6 +15,8 @@ Contract (mirrored by ``tests/conftest.py``'s ``FakeMedia``):
     delete_for_owner(owner)                                  -> drop those records; returns the count
     list_for_post(post_id)                                   -> the post's records AND its comments' (#544)
     delete_for_post(post_id)                                 -> drop those records; returns the count
+    list_unbound_before(cutoff)                              -> abandoned uploads older than cutoff (#557)
+    delete_unbound_before(cutoff)                            -> drop those records; returns the count
 
 A record dict: ``{id, owner, mime, size, target_type, target_id, peers}`` where ``target_type`` is one
 of ``"post"``/``"comment"``/``"dm"`` (or None while unbound) and ``peers`` is the 2-participant list a
@@ -103,6 +105,37 @@ def purge_post(store, media_root, post_id):
     return documents, files
 
 
+def purge_unbound(store, media_root, ttl_seconds):
+    """Reclaim uploads that were never attached to anything and are older than ``ttl_seconds`` (#557).
+
+    Since #439 the composer uploads BEFORE it publishes, so every draft someone abandons leaves a blob
+    that no post, comment or DM points at — invisible in every UI, and counted against
+    ``MEDIA_MAX_TOTAL_BYTES`` forever. Without this, one user who never publishes fills the volume and
+    every later upload 507s for everybody, with no way back short of deleting files on the VM by hand.
+
+    Age alone is never the condition: an ATTACHED blob is old by definition (a post from last year still
+    shows its photo), so only ``target_type is None`` records are candidates. Returns
+    ``(documents_deleted, files_deleted)``.
+    """
+    cutoff = time.time() - ttl_seconds
+    records = store.list_unbound_before(cutoff)
+    if not records:
+        return 0, 0
+    documents = store.delete_unbound_before(cutoff)
+    files = 0
+    for rec in records:
+        path = os.path.join(media_root, stored_name(rec["id"], rec.get("mime")))
+        try:
+            os.remove(path)
+            files += 1
+        except FileNotFoundError:
+            logger.info("abandoned media %s had no file on disk", rec["id"])
+        except OSError:
+            logger.warning("could not remove abandoned media file %s", rec["id"], exc_info=True)
+    logger.info("reclaimed %d abandoned upload(s), %d file(s)", documents, files)
+    return documents, files
+
+
 class DbMedia:
     """Mongo-backed media index. Lazily resolves the ``media`` collection from the app's MONGO_URI, so
     the web app still boots + serves ``/health`` before Mongo is reachable (same pattern as the db.py
@@ -181,6 +214,20 @@ class DbMedia:
     def delete_for_post(self, post_id):
         """Drop those documents; returns how many. Bytes are removed by ``purge_post``, which calls this."""
         return self._collection().delete_many(self._post_scope(post_id)).deleted_count
+
+    def list_unbound_before(self, cutoff):
+        """Uploads still bound to nothing, older than ``cutoff`` (a UNIX timestamp) — #557.
+
+        Served by the `(target_type, target_id, created_at)` index on its `target_type` prefix, so the
+        read stays cheap however large the collection grows.
+        """
+        return [self._public(d) for d in
+                self._collection().find({"target_type": None, "created_at": {"$lt": cutoff}})]
+
+    def delete_unbound_before(self, cutoff):
+        """Drop those documents; returns how many. Bytes are removed by ``purge_unbound``."""
+        return self._collection().delete_many(
+            {"target_type": None, "created_at": {"$lt": cutoff}}).deleted_count
 
     def list_for_targets(self, target_type, target_ids):
         """Attachments for MANY targets in ONE query, grouped by target id (#407).
