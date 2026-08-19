@@ -16,7 +16,10 @@ They are cheap text assertions on the committed files (no Docker, no live stack)
 normal per-PR CI gate. Behaviour of the media/rate-limit code itself is covered by
 tests/Security_Tests/test_media_limits.py and test_rate_limit.py.
 """
+import json
+import os
 import re
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -275,3 +278,42 @@ def test_prod_media_bytes_persist_on_the_same_web_volume(prod):
     # mount AND declare the same named volume, so persistence holds on the deployed stack too.
     assert prod.count("- media-data:/app/media") == 1, "prod web must mount media-data (else uploads are ephemeral)"
     assert prod.count("media-data") == 2, "prod must MOUNT and DECLARE the media-data named volume"
+
+
+def test_the_ai_container_logs_the_requests_it_serves():
+    """`ai` served every /predict silently: gunicorn's access log is OFF by default, and ai/app.py logs
+    only the failure paths (shed, timeout, dead worker, raising job). A SUCCESSFUL prediction therefore
+    left no trace on the container that made it — so when web reports a degraded prediction there is
+    nothing to correlate against, and with `--scale ai=N` no way to tell which replica served it (#546).
+    Asserted here rather than trusted, because this is exactly how #539's scaling profile silently lost
+    `wsgi:app` and its logging: a dropped flag changes nothing visible until you need the logs.
+    """
+    dockerfile = _strip_comments((ROOT / "ai" / "Dockerfile").read_text())
+    assert "--access-logfile" in dockerfile and "--error-logfile" in dockerfile, \
+        "ai's gunicorn must log requests + errors, or the container is silent about its traffic"
+    assert '"--access-logfile", "-"' in dockerfile and '"--error-logfile", "-"' in dockerfile, \
+        "both logs must go to stdout/stderr so `docker logs ai` (and the VM's journal) carry them"
+
+
+def test_every_prod_service_bounds_its_logs(prod):
+    """Docker's json-file driver keeps EVERY line forever unless told otherwise, and the prod stack logs
+    a request per healthcheck at `interval: 10s` on two containers — ~8.6k lines per container per day of
+    pure heartbeat, on the same 1 GB VM disk Mongo writes to (#547). The failure mode isn't a crash; it's
+    Mongo failing writes on a full disk weeks later. Uploads are capped (MEDIA_MAX_TOTAL_BYTES, #313); the
+    logs recording those caps were not. Asserted per service so a service added later can't ship unbounded.
+    """
+    services = [name for name in ("caddy", "web", "ai", "db") if f"\n  {name}:" in prod]
+    assert len(services) == 4, "prod must define caddy/web/ai/db — update this test if that changes"
+    assert prod.count("max-size:") >= 1 and prod.count("max-file:") >= 1, \
+        "prod must bound the json-file log driver (max-size + max-file)"
+    # Anchored or repeated, every service has to END UP with the option — compose resolves both the same
+    # way, so assert on the merged config rather than on how it was written.
+    merged = subprocess.run(["docker", "compose", "-f", str(ROOT / "docker-compose.prod.yml"), "config", "--format", "json"],
+                            capture_output=True, text=True, cwd=str(ROOT),
+                            env={**os.environ, "IMAGE_OWNER": "x", "SECRET_KEY": "x", "SITE_ADDRESS": "localhost"})
+    if merged.returncode != 0:
+        pytest.skip("docker compose not available to resolve the merged prod config")
+    for name, svc in json.loads(merged.stdout)["services"].items():
+        opts = (svc.get("logging") or {}).get("options") or {}
+        assert opts.get("max-size"), f"{name} must cap its log file size"
+        assert opts.get("max-file"), f"{name} must cap how many rotated log files it keeps"
