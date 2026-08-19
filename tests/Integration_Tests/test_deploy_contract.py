@@ -317,3 +317,21 @@ def test_every_prod_service_bounds_its_logs(prod):
         opts = (svc.get("logging") or {}).get("options") or {}
         assert opts.get("max-size"), f"{name} must cap its log file size"
         assert opts.get("max-file"), f"{name} must cap how many rotated log files it keeps"
+
+
+def test_every_env_knob_the_app_reads_is_documented_in_env_example():
+    """`.env.example` is the only thing a deployer reads before setting up a stack — an undocumented
+    knob is one nobody knows to set, and two of them are anti-abuse switches (RATELIMIT_ENABLED,
+    MEDIA_ALLOWED_MIME). Drift is invisible until someone needs the knob in production, so it is
+    asserted: found 4 undocumented at the time this test was written, all of them shipped months earlier.
+
+    Scoped to `web/config.py` because that is the file whose defaults `.env.example` mirrors. TESTING and
+    FLASK_DEBUG are excluded on purpose: they are harness switches, not deployment configuration.
+    """
+    config = (ROOT / "web" / "config.py").read_text(encoding="utf-8")
+    read = set(re.findall(r'environ\.get\(\s*"([A-Z0-9_]+)"', config))
+    read |= set(re.findall(r'_env\w*\(\s*"([A-Z0-9_]+)"', config))
+    read -= {"TESTING", "FLASK_DEBUG"}
+    example = (ROOT / ".env.example").read_text(encoding="utf-8")
+    undocumented = sorted(k for k in read if k not in example)
+    assert not undocumented, f".env.example does not mention: {undocumented}"
