@@ -16,6 +16,8 @@ Serve: an unbound blob is visible to its uploader only; a post/comment attachmen
 """
 import logging
 import os
+import threading
+import time
 import uuid
 
 from flask import Blueprint, current_app, jsonify, request, send_from_directory, session
@@ -23,7 +25,7 @@ from werkzeug.exceptions import NotFound
 
 from ratelimit import limiter
 from routes.auth import login_required
-from services.media_store import stored_name
+from services.media_store import purge_unbound, stored_name
 
 logger = logging.getLogger(__name__)
 
@@ -59,6 +61,33 @@ def _disk_usage(root):
             return sum(e.stat().st_size for e in entries if e.is_file())
     except OSError:                                  # unreadable/racing dir -> treat as empty, don't 500
         return 0
+
+
+_sweep_lock = threading.Lock()
+
+
+def _sweep_abandoned_uploads(force=False):
+    """Reclaim never-attached uploads, throttled — the app has no scheduler, so it rides on uploads (#557).
+
+    Same shape as the job queue's lazy reaper: the work happens when traffic arrives, which is exactly
+    when the space is needed. `force` skips the throttle for the one caller that cannot wait — the 507
+    path, where the alternative is telling every user storage is full while the volume holds garbage.
+    """
+    now = time.time()
+    interval = current_app.config.get("MEDIA_SWEEP_INTERVAL_SECONDS", 300)
+    # The clock lives on the APP, not the module: two apps in one process (the test suite runs several)
+    # must not share a throttle, or one app's sweep silently suppresses another's.
+    with _sweep_lock:
+        if not force and now - current_app.config.get("_MEDIA_LAST_SWEEP", 0.0) < interval:
+            return 0, 0
+        current_app.config["_MEDIA_LAST_SWEEP"] = now
+    try:
+        return purge_unbound(_media(), _media_root(),
+                             current_app.config.get("MEDIA_UNBOUND_TTL_SECONDS", 86400))
+    except Exception:
+        # Reclaiming space must never fail an upload that would otherwise succeed.
+        logger.warning("could not sweep abandoned uploads", exc_info=True)
+        return 0, 0
 
 
 def _dm_key(a, b):
@@ -110,9 +139,14 @@ def upload():
     # Issue #313: bound the volume's TOTAL bytes, not just the per-file cap, so uploads can't fill the
     # VM's disk 10 MB at a time (a full disk wedges Mongo writes + logging). Checked before the write;
     # worst-case overshoot is one file (<= MEDIA_MAX_BYTES) — negligible against the volume-wide cap.
+    _sweep_abandoned_uploads()
     if _disk_usage(_media_root()) >= current_app.config["MEDIA_MAX_TOTAL_BYTES"]:
-        logger.warning("media upload rejected: MEDIA_ROOT is at/over MEDIA_MAX_TOTAL_BYTES")
-        return jsonify(error="media storage is full"), 507
+        # Before refusing everyone, reclaim what is already garbage (#557): the volume can be "full" of
+        # blobs no post, comment or DM points at, and a 507 that leaves them there is permanent.
+        _sweep_abandoned_uploads(force=True)
+        if _disk_usage(_media_root()) >= current_app.config["MEDIA_MAX_TOTAL_BYTES"]:
+            logger.warning("media upload rejected: MEDIA_ROOT is at/over MEDIA_MAX_TOTAL_BYTES")
+            return jsonify(error="media storage is full"), 507
     media_id = uuid.uuid4().hex
     stored = stored_name(media_id, file.mimetype)
     file.save(os.path.join(_media_root(), stored))
