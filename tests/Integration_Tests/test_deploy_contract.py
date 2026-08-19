@@ -375,3 +375,27 @@ def test_the_ai_healthcheck_can_see_a_wedged_queue(prod, dev_stack):
         healthcheck = ai_block[ai_block.index("healthcheck:"):]
         probe = healthcheck[:healthcheck.index("interval:")]
         assert "/queue/stats" in probe, f"{name}: ai's healthcheck must exercise the queue, not just /health"
+
+
+def test_the_deploy_reclaims_disk_on_the_vm(ci):
+    """IMAGE_TAG is the commit SHA, never `:latest`, so every deploy pulls a NEW image set and nothing
+    removed the old ones — they accumulated on the same disk Mongo writes to, one set per deploy, with
+    no ceiling. The prune must stay `-a` + time-filtered: `-a` skips anything a container references, so
+    the running stack survives, and the week's window keeps recent tags around for a fast rollback.
+    """
+    assert "docker image prune" in ci, "the deploy must reclaim images the VM no longer uses"
+    prune = ci[ci.index("docker image prune"):]
+    prune = prune[:prune.index("\n")]
+    assert "-af" in prune or ("-a" in prune and "-f" in prune), "the prune must be non-interactive and cover unused tags"
+    assert "until=" in prune, "keep a recent window so a rollback does not have to re-pull everything"
+
+
+def test_the_deploy_never_prunes_while_the_health_check_could_still_fail(ci):
+    """Ordering: reclaim only AFTER the deploy is known good. Pruning before the health check could
+    delete the very image a rollback is about to want, turning a recoverable bad deploy into an outage
+    that depends on GHCR being reachable at that moment.
+    """
+    assert ci.index("Record this SHA as the last-good deploy") < ci.index("docker image prune"), \
+        "the prune must run after the last-good SHA is recorded"
+    assert ci.index("Health check against the public HTTPS address") < ci.index("docker image prune"), \
+        "the prune must run after the health check"

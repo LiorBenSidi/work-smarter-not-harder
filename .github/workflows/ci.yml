@@ -308,6 +308,19 @@ jobs:
           HOST: ${{ vars.SSH_HOST }}
         run: ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=accept-new "$DEPLOY_USER@$HOST" "printf '%s' '${GITHUB_SHA::7}' > ~/app/.last_good_sha"
 
+      - name: Reclaim disk on the VM — drop images no container uses
+        if: success()
+        env:
+          HOST: ${{ vars.SSH_HOST }}
+        # Every deploy pulls a NEW image tag (IMAGE_TAG is the commit SHA, never :latest) and nothing
+        # removed the old ones, so the VM accumulated one image set per deploy forever — on the same disk
+        # Mongo writes to. Layer sharing keeps the per-deploy cost small while dependencies are unchanged;
+        # a requirements bump writes a fresh set. `-a` only removes images NO container references, so the
+        # running stack is never touched, and `until=168h` keeps a week of recent tags. The rollback target
+        # is safe either way: rollback re-pulls from GHCR before it starts anything.
+        run: |
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=accept-new "$DEPLOY_USER@$HOST"             "docker image prune -af --filter 'until=168h' && df -h / | tail -1"
+
       - name: Roll back to the previous SHA on an unhealthy deploy (R8.2)
         if: failure() && steps.deploy.outputs.prev != ''
         env:
