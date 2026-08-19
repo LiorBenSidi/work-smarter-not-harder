@@ -242,10 +242,12 @@ demo/review tool (`db/seed.py`: fake clients + posts + comments + likes); a fres
 **empty by design** (a real deployment starts empty), so run the seed when you want a populated app to
 show. Suite: **1309 collected** (1265 pass / 44 environment-gated), green in CI (real-Mongo IT runs on the `mongo:7` service).
 
-**Remaining:** tracked live in the [Issues tab](https://github.com/LiorBenSidi/work-smarter-not-harder/issues) —
-**F5's dashboard display** (#410, the critical path — the AI side is built and wired into `/predict`; the
-dashboard doesn't relay or render `plan` yet) plus the per-owner graded-gap list in #400 (comment media #407 ·
-DM attachment notify #408). Risk assessment and the honest
+**Remaining:** tracked live in the [Issues tab](https://github.com/LiorBenSidi/work-smarter-not-harder/issues).
+The graded gaps that block the submission are **closed** — F5's dashboard display (#410), comment media
+(#407) and the media-only DM notification (#408) all shipped. What is still open is documentation and
+polish: the report's per-type counts (#527), the proposal features we did not build and must disclose
+(#528), the streak badge below 380px (#525), the AI model backlog (#276), and the submission-tracking
+issues (#374 · #400 · #434 · #531). Risk assessment and the honest
 "what we did *not* mitigate" list: [`docs/REPORT.md`](docs/REPORT.md) §5.
 
 **Reviewing / grading this?** Start with [`docs/REVIEWER_NOTES.md`](docs/REVIEWER_NOTES.md) — how to run + log in
