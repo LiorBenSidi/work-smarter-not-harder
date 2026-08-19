@@ -10,9 +10,19 @@
 # job store is in-memory per process — a 2nd worker owns a 2nd store and `/jobs` 404s half the time), with the
 # process pool (AI_QUEUE_WORKERS) providing the parallelism. `web` runs one gthread worker with a wide thread
 # pool (it's I/O-bound — waits on Mongo + ai). Swap is kept as a safety net but no longer required at 32 GiB.
+# Bounded container logs (#547). Docker's json-file driver keeps every line FOREVER by default, and this
+# stack logs a request per healthcheck every 10s on two containers — on the same disk Mongo writes to.
+# 10 MB x 3 files caps each container at 30 MB; the oldest rotates out instead of the VM filling up.
+x-logging: &logging
+  driver: "json-file"
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 services:
   caddy:                                   # the public edge: terminates TLS, auto Let's Encrypt, HTTP->HTTPS (R10)
     image: caddy:2
+    logging: *logging
     restart: unless-stopped
     ports:
       - "80:80"                            # ACME HTTP-01 challenge + the HTTP->HTTPS redirect (R10.1/R10.4)
@@ -28,6 +38,7 @@ services:
 
   web:                                     # NO host port now — only Caddy reaches it, over the internal network
     image: ghcr.io/${IMAGE_OWNER:?set IMAGE_OWNER}/work-smarter-web:${IMAGE_TAG:-latest}   # CI pins the exact SHA (R5.2)
+    logging: *logging
     restart: unless-stopped                # self-heal + survive a VM reboot (R5.4)
     # PROD: 1 gthread worker x 16 threads. The web tier is I/O-bound (waits on Mongo + ai; those socket waits
     # release the GIL, so THREADS — not processes — are the lever), and scrypt hashing also releases the GIL, so
@@ -75,6 +86,7 @@ services:
 
   ai:                                      # internal only (OWNER: Shiri) — no host port
     image: ghcr.io/${IMAGE_OWNER:?set IMAGE_OWNER}/work-smarter-ai:${IMAGE_TAG:-latest}
+    logging: *logging
     restart: unless-stopped
     # PROD: exactly 1 gunicorn worker (architectural — the queue's in-memory job store must stay coherent;
     # a 2nd worker owns a 2nd store and `/jobs` 404s half the time). Threads accept concurrent requests;
@@ -99,6 +111,7 @@ services:
 
   db:                                      # MongoDB — internal only. Auth is env-gated (blank -> no auth).
     image: mongo:7
+    logging: *logging
     restart: unless-stopped
     environment:
       MONGO_INITDB_ROOT_USERNAME: ${MONGO_USER:-}
