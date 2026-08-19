@@ -335,3 +335,13 @@ def test_every_env_knob_the_app_reads_is_documented_in_env_example():
     example = (ROOT / ".env.example").read_text(encoding="utf-8")
     undocumented = sorted(k for k in read if k not in example)
     assert not undocumented, f".env.example does not mention: {undocumented}"
+
+
+def test_prod_backups_survive_the_container_that_wrote_them(prod):
+    """`db/backup.sh` has to run INSIDE the db container — mongodump ships in the mongo image and the VM
+    host has no MongoDB tools installed (measured: `/usr/bin/mongodump` in db, MISSING in web). An archive
+    written to a container path therefore dies with that container, and the next deploy recreates it (#550).
+    A host-side bind mount is what makes a backup a backup rather than a file with a countdown on it.
+    """
+    assert "- ./backups:/backups" in prod, \
+        "prod db must bind-mount a host directory for backup archives (a container path dies with the container)"

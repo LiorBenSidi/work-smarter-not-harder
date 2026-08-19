@@ -120,6 +120,11 @@ services:
       - "27017"
     volumes:
       - mongo-data:/data/db
+      # Backups land on the VM's own disk, not inside the container (#550): db/backup.sh runs INSIDE this
+      # container because mongodump ships in the mongo image and the VM host has no MongoDB tools. Without
+      # this mount every archive would die with the container it was written in — including on the next
+      # deploy. `docker compose exec -T db sh -c '... bash -s' < db/backup.sh` writes here.
+      - ./backups:/backups
     healthcheck:
       # mongosh is a heavy Node.js process; on a small VM run it less often + allow more time so transient
       # memory pressure doesn't flap the container to "unhealthy" (which would block web from ever starting).
