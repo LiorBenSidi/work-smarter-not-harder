@@ -409,3 +409,23 @@ def test_attachment_ids_must_be_a_list_of_strings(media_client):
     c.post("/register", json={"username": "bob", "password": "s3cretpw!", "email": "bob@ex.com"})
     assert c.post("/messages", json={"to": "bob", "body": "hi", "attachment_ids": {"$ne": ""}}).status_code == 400
     assert c.post("/messages", json={"to": "bob", "body": "hi", "attachment_ids": [1, 2]}).status_code == 400
+
+
+def test_the_notification_names_an_attachment_when_the_dm_carries_no_text(media_client):
+    """A media-only DM says "sent you an attachment"; a text DM says "sent you a message".
+
+    The recipient acts on the notification text alone — the badge is all they see until they open the
+    thread. Calling a photo "a message" sends them looking for words that were never written. #434
+    mutation: hard-coding the text to "sent you a message" left the whole suite green, so the branch
+    that picks the wording had no test at all.
+    """
+    c = media_client
+    _login(c, "alice")
+    mid = _upload_png(c).get_json()["id"]
+    c.post("/register", json={"username": "bob", "password": "s3cretpw!", "email": "bob@ex.com"})
+    assert _media_only_send(c, "bob", [mid]).status_code == 201
+    assert c.post("/messages", json={"to": "bob", "body": "and here's why"}).status_code == 201
+
+    c.post("/login", json={"username": "bob", "password": "s3cretpw!"})
+    texts = [n["text"] for n in c.get("/notifications").get_json()["notifications"]]
+    assert sorted(texts) == ["sent you a message", "sent you an attachment"]
