@@ -58,6 +58,21 @@ def _worker(target, features):
     return _resolve_target(target)(features)
 
 
+def _close(executor):
+    """Shut a retired pool down — always OUTSIDE the queue lock (#555).
+
+    `shutdown(wait=False)` still has to reach the pool's manager thread, and on a BROKEN pool that
+    can block; doing it under the lock froze every other queue call behind it. Jobs still running on
+    the retired pool are not cancelled: each one still resolves through `_on_done`.
+    """
+    if executor is None:
+        return
+    try:
+        executor.shutdown(wait=False)
+    except Exception:  # noqa: BLE001 - a pool that cannot be closed must not break the live one
+        logger.warning("retired worker pool did not shut down cleanly", exc_info=True)
+
+
 def _env_int(name, default):
     try:
         value = int(os.environ.get(name, ""))
@@ -187,20 +202,25 @@ class JobQueue:
         later submit raises BrokenProcessPool forever) or fully clogged by presumed-hung workers.
 
         Generation-guarded: N concurrent detections of the same dead pool rebuild it once, and a
-        stale detection can never throw away the fresh pool a previous one just built. Jobs still
-        in flight on the old pool are not lost — `shutdown(wait=False)` lets running work finish
+        stale detection can never throw away the fresh pool a previous one just built. Returns the
+        RETIRED pool so the caller can close it with `_close` after dropping the lock. Jobs still
+        in flight on the old pool are not lost — that deferred `shutdown(wait=False)` lets work finish
         (or, on a broken pool, resolve as failed), and each outcome flows through `_on_done` as
         usual. A truly hung worker process cannot be killed from here; the replacement restores
         service and the stuck process is leaked until the container restarts (REPORT.md §5.2).
         """
         if self._executor is None or generation != self._generation:
-            return
+            return None
         retired, self._executor = self._executor, self._executor_factory()
         self._generation += 1
         self._suspect_hung = 0
         self._counters["pool_rebuilds"] += 1
-        retired.shutdown(wait=False)
         logger.error("worker pool replaced (generation %d)", self._generation)
+        # The RETIRED pool is handed back for the caller to close after releasing the lock (#555):
+        # `shutdown()` on a broken pool blocks until its manager thread settles, and doing that under
+        # `self._lock` froze every other queue call — stats, submit, result — behind a lock nobody
+        # would ever release.
+        return retired
 
     # ---------------------------------------------------------------- the queue
 
@@ -231,8 +251,9 @@ class JobQueue:
                 break
             except BrokenProcessPool:
                 with self._lock:
-                    self._heal_locked(generation)
+                    retired = self._heal_locked(generation)
                     executor, generation = self._executor, self._generation
+                _close(retired)
                 if retried or executor is None:
                     self._undo_reservation(job.id)
                     raise
@@ -262,12 +283,16 @@ class JobQueue:
         else:
             status, payload, error = DONE, result, None
 
+        broken_generation = None
         with self._lock:
             job = self._jobs.get(job_id)
             if isinstance(exception, BrokenProcessPool) and job is not None:
-                # A worker process died. The pool this job ran on is permanently broken — every
-                # later submit onto it raises — so replace it. This job's result is lost either way.
-                self._heal_locked(job.generation)
+                # A worker process died. The pool this job ran on is permanently broken — every later
+                # submit onto it raises — so it must be replaced. NOT from here, though: this callback
+                # runs on the dead pool's OWN executor-manager thread, and rebuilding it from inside
+                # that thread never returns (#555). Settle the job first, then heal off-thread, so the
+                # caller gets its crash immediately instead of waiting out the /predict timeout.
+                broken_generation = job.generation
             if job_id in self._abandoned:
                 # The hard-timeout reaper already released this job's slot and settled it as
                 # failed; the worker was finishing late rather than hung. Releasing again would
@@ -286,6 +311,17 @@ class JobQueue:
             job.finished_at = time.monotonic()
 
         job.settled.set()  # outside the lock: waiters wake and immediately take it to read stats
+
+        if broken_generation is not None:
+            # A separate thread, because THIS one belongs to the pool being replaced.
+            threading.Thread(target=self._heal_async, args=(broken_generation,),
+                             name="jobqueue-heal", daemon=True).start()
+
+    def _heal_async(self, generation):
+        """Replace a pool that a dead worker broke, off the callback thread that discovered it."""
+        with self._lock:
+            retired = self._heal_locked(generation)
+        _close(retired)
 
     def result(self, job_id, timeout=None):
         """Block for a job's result — the synchronous `/predict` path.

@@ -44,6 +44,11 @@ def _strip_comments(text):
 
 
 @pytest.fixture(scope="module")
+def dev_stack():
+    return _strip_comments((ROOT / "docker-compose.yml").read_text())
+
+
+@pytest.fixture(scope="module")
 def test_stack():
     return _strip_comments((ROOT / "docker-compose.test.yml").read_text())
 
@@ -345,3 +350,28 @@ def test_prod_backups_survive_the_container_that_wrote_them(prod):
     """
     assert "- ./backups:/backups" in prod, \
         "prod db must bind-mount a host directory for backup archives (a container path dies with the container)"
+
+
+def test_ai_logs_its_requests_wherever_its_command_is_overridden(prod):
+    """#546 put the log flags in `ai/Dockerfile`, and prod overrides `command:` — which REPLACES the
+    image CMD, so prod shipped without them and its container stayed silent. Exactly the shape of #539,
+    where the scaling profile replaced web's command and silently dropped `wsgi:app`. Assert the
+    effective command, not the image default.
+    """
+    ai_block = prod[prod.index("\n  ai:"):]
+    command = ai_block[ai_block.index("command:"):].splitlines()[0]
+    assert "--access-logfile" in command and "--error-logfile" in command, \
+        "prod's ai command overrides the image CMD, so it must repeat the log flags"
+
+
+def test_the_ai_healthcheck_can_see_a_wedged_queue(prod, dev_stack):
+    """A dead pool worker left `/health` answering 200 while every prediction hung behind a lock that
+    was never released, so Docker reported the container healthy and never restarted it (#555). The
+    probe has to touch the queue itself: `/queue/stats` takes the queue's own lock, so it goes red
+    exactly when the queue is stuck — which is the only signal that reaches Docker's restart policy.
+    """
+    for name, stack in (("prod", prod), ("dev", dev_stack)):
+        ai_block = stack[stack.index("\n  ai:"):]
+        healthcheck = ai_block[ai_block.index("healthcheck:"):]
+        probe = healthcheck[:healthcheck.index("interval:")]
+        assert "/queue/stats" in probe, f"{name}: ai's healthcheck must exercise the queue, not just /health"
