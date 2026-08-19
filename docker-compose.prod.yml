@@ -91,7 +91,10 @@ services:
     # PROD: exactly 1 gunicorn worker (architectural — the queue's in-memory job store must stay coherent;
     # a 2nd worker owns a 2nd store and `/jobs` 404s half the time). Threads accept concurrent requests;
     # parallel scoring comes from the queue's process pool. --timeout 60 tolerates a slow first inference.
-    command: ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "1", "--threads", "8", "--timeout", "60", "app:create_app()"]
+    # --access-logfile/--error-logfile: this command REPLACES the image's CMD, so the flags #546 added to
+    # ai/Dockerfile do not reach prod unless they are repeated here — the same way #539's scaling profile
+    # silently dropped web's entrypoint. Without them the prod ai container logs nothing about its traffic.
+    command: ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "1", "--threads", "8", "--timeout", "60", "--access-logfile", "-", "--error-logfile", "-", "app:create_app()"]
     environment:
       # Pool size = the VM's 4 vCPU (each process loads its own model copy; 32 GiB has room). This is where
       # ai's parallelism lives — the measured 2.86x is at 4 workers (SCALING_REPORT.md).
@@ -103,7 +106,10 @@ services:
     expose:
       - "5000"
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:5000/health', timeout=3).status==200 else 1)"]
+      # /queue/stats, not /health (#555): a wedged job queue left /health answering 200 while every
+      # prediction hung, so Docker called a dead container healthy and never restarted it. The probe has
+      # to touch the thing that can wedge — stats takes the queue's own lock, so it fails when that lock is stuck.
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:5000/queue/stats', timeout=3).status==200 else 1)"]
       interval: 10s
       timeout: 5s
       retries: 5

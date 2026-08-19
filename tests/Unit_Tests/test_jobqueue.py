@@ -287,7 +287,17 @@ def test_two_jobs_dying_on_the_same_pool_rebuild_it_once_not_twice(make_queue):
     for job_id in (first, second):
         with pytest.raises(BrokenProcessPool):
             queue.result(job_id, timeout=5)
+
+    # The rebuild happens OFF the callback thread since #555 (rebuilding a process pool from its own
+    # manager thread deadlocks), so the caller can see its exception before the new pool exists. Poll
+    # for the rebuild, then keep watching: the invariant under test is that the second casualty finds
+    # an already-replaced pool and leaves it alone, so the count must settle at one and STAY there.
+    deadline = time.monotonic() + 5
+    while queue.stats()["pool_rebuilds"] < 1 and time.monotonic() < deadline:
+        time.sleep(0.01)
     assert queue.stats()["pool_rebuilds"] == 1
+    time.sleep(0.2)
+    assert queue.stats()["pool_rebuilds"] == 1, "the second casualty threw away the fresh pool"
 
 
 # --------------------------------------------------------------------------- hung workers
