@@ -64,6 +64,38 @@ monitor (R9).
 - The **live demo** (push a visible change → watch it reach the VM; break a PR test; show the monitor's down→up) is
   performed at grading, per the assignment's acceptance criteria.
 
+## Backups — how to actually run them on the VM (#550)
+
+`db/backup.sh` (Lior) dumps every collection to a timestamped gzip archive and prunes anything older than
+`RETENTION_DAYS`. Its header shows a host-side invocation, which **does not work on our VM**: `mongodump` ships
+inside the `mongo:7` image and the host deliberately has no MongoDB tools (measured — `/usr/bin/mongodump` in
+`db`, absent in `web`). Run it through the container instead, writing into the `./backups` bind mount that
+`docker-compose.prod.yml` now gives `db`, so archives live on the VM's disk and survive the next deploy:
+
+```bash
+# on the VM, from ~/app
+docker compose -f docker-compose.prod.yml exec -T db   sh -c 'MONGO_URI="mongodb://localhost:27017/worksmarter" BACKUP_DIR=/backups RETENTION_DAYS=7 bash -s'   < db/backup.sh
+```
+
+Verified end to end against a live stack: all collections dumped, `backup written: /backups/worksmarter-<stamp>.gz`,
+retention pruned. Restore the same way, from inside the container:
+
+```bash
+docker compose -f docker-compose.prod.yml exec -T db   mongorestore --gzip --archive=/backups/worksmarter-<stamp>.gz --uri="mongodb://localhost:27017/worksmarter"
+```
+
+**Scheduling is a VM-side step and is NOT done** — nothing in the repo or the pipeline runs this on a timer, so
+production has no backups until someone installs the cron entry (needs `db/backup.sh` present in `~/app`; the deploy
+ships compose + Caddyfile + `.env` only, so copy the script once with `scp`):
+
+```cron
+# 03:15 UTC daily
+15 3 * * * cd ~/app && docker compose -f docker-compose.prod.yml exec -T db sh -c 'MONGO_URI="mongodb://localhost:27017/worksmarter" BACKUP_DIR=/backups RETENTION_DAYS=7 bash -s' < db/backup.sh >> ~/app/backups/cron.log 2>&1
+```
+
+The archives sit on the same VM as the database, so this protects against a bad migration or an accidental drop —
+not against losing the VM. Off-box copies would need somewhere to put them, which the course does not provide.
+
 ## Beyond the rubric
 
 - **Real transactional email (enhancement, not graded).** The app sends OTP + password-reset mail via Brevo from the
