@@ -93,10 +93,30 @@ a non-compliant submission.
 
 | Item (in [`presentation/showoff/`](../presentation/showoff/)) | Requirement (18 Aug) | Measured | ✓ |
 |---|---|---|---|
-| [`metadata.json`](../presentation/showoff/metadata.json) | title · ~20-word + ~100-word desc · **all** members · `repo_url` | 20 / 104 words · 3 members · `repo_url` present · no `poster`, no `launch` | ✅ |
+| [`metadata.json`](../presentation/showoff/metadata.json) | title · ~20-word + ~100-word desc · **all** members · `repo_url` | 20 / 104 words · 3 members · `repo_url` present · no `launch` · `poster` kept — see below | ✅ |
 | [`poster.pdf`](../presentation/showoff/poster.pdf) | A3 · PDF · one page | **297.0 × 420.2 mm, 1 page, portrait** — renders inline on GitHub | ✅ |
 | [`demo.mp4`](../presentation/showoff/demo.mp4) | optional · 20–90 s · 1920×1080 · MP4 · silent | **27.9 s · 1920×1080 · h264 · no audio stream at all** — plays inline on GitHub | ✅ |
 | [`207490913.zip`](../presentation/showoff/207490913.zip) | **exactly** those files, flat, named after one member's ID | **3 entries, no folders, no `thumb.png`** | ✅ |
+
+**The `poster` field is kept, against the document — deliberately.** `how to submit.pdf` says *"Do not add a `poster` field"*, but the official checker **rejects** the zip without it:
+
+```
+[FAIL] metadata.json is missing required field(s): poster
+[PASS] zip contains exactly the expected files, nothing else
+```
+
+Reading the checker's own source settles what it is. `submission_checks.py:36` declares
+`REQUIRED_METADATA_FIELDS = ["title", "short_description", "long_description_md", "poster", "repo_url"]` — it
+requires **both** `poster` (a July rule) **and** `repo_url` (an 18 August one), so it matches *neither*
+document. Its file-list rule is the new one, which is why the `[PASS]` above accepted a zip with no
+`thumb.png`. The image was last pushed **2 Aug**, sixteen days before the rules were finalised: a snapshot
+from partway through the revision.
+
+We follow the **executable** authority, because the document itself claims the checker *"runs the exact same
+checks the course staff's import tool does"* — if that is still true, omitting `poster` means the import
+rejects the submission and the poster never reaches the gallery. An extra field the gallery ignores is the
+cheaper error. The conflict is being raised with the staff separately; the Moodle box is editable, so this is
+one re-upload away from reversing if they say drop it.
 
 **No `launch` block — deliberately.** Declaring one activates the compose Annex, and the root
 `docker-compose.yml` fails it twice: it has `volumes:` both service-level and top-level (rule 1 rejects

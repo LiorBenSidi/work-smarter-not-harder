@@ -9,6 +9,7 @@
   ],
   "tags": ["AI", "machine-learning", "fitness", "sports-science", "full-stack", "docker"],
   "tech_stack": ["Python", "Flask", "scikit-learn", "MongoDB", "Docker", "Docker Compose", "GitHub Actions", "Azure", "Caddy"],
+  "poster": { "type": "pdf" },
   "repo_url": "https://github.com/LiorBenSidi/work-smarter-not-harder",
   "links": [
     { "label": "Live App", "url": "https://app.worksmarternotharder.dev" }
