@@ -9,7 +9,11 @@ services:
     # Two env knobs (default = the tuned 1 worker x 16 threads): WEB_WORKERS (1 keeps memory:// rate caps exact)
     # and WEB_THREADS (16 = the measured knee; 8->16 gave +56% throughput under load). Scale on a bigger host
     # with one .env line — no rebuild.
-    command: ["gunicorn", "--bind", "0.0.0.0:5000", "--worker-class", "gthread", "--workers", "${WEB_WORKERS:-1}", "--threads", "${WEB_THREADS:-16}", "--timeout", "45", "--max-requests", "1000", "--max-requests-jitter", "100", "wsgi:app"]
+    # WEB_MAX_REQUESTS recycles the worker after N requests to bound memory-leak exposure — right for prod,
+    # wrong for a test run: with one worker there is a sub-second window where an in-flight connection dies,
+    # and the browser E2E suite lost whichever scenario was mid-request to it ("fetch failed", never the same
+    # scenario twice). CI's e2e job sets it to 0 to disable recycling for the duration; prod keeps 1000.
+    command: ["gunicorn", "--bind", "0.0.0.0:5000", "--worker-class", "gthread", "--workers", "${WEB_WORKERS:-1}", "--threads", "${WEB_THREADS:-16}", "--timeout", "45", "--max-requests", "${WEB_MAX_REQUESTS:-1000}", "--max-requests-jitter", "${WEB_MAX_REQUESTS_JITTER:-100}", "wsgi:app"]
     ports:
       - "8000:5000"                 # the ONLY published port
     environment:
