@@ -1,0 +1,170 @@
+<!doctype html>
+<!--
+  A3 gallery poster — the SOURCE for poster.pdf.
+
+  The original poster.pdf was printed from a poster.html that was never committed, so when the app
+  gained the F5 workout plan there was nothing to edit and the export could not be refreshed. This
+  file is that source, reconstructed from the PDF (its text, its palette, and its embedded images,
+  which live in poster-assets/). Keep it in the repo so the next change is an edit, not an
+  archaeology exercise.
+
+  Render:
+    "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" \
+      --headless --disable-gpu --no-pdf-header-footer \
+      --print-to-pdf=poster.pdf poster.html
+
+  A3 portrait = 297x420mm. The checker allows ±5% on each side, but @page below pins it exactly.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Work Smarter, Not Harder — A3 poster</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;700;900&family=Roboto+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  @page { size: 297mm 420mm; margin: 0; }
+
+  :root{
+    --bg:#060b11; --ink:#eef4f3; --accent:#63e6be; --muted:#8b97a8; --line:rgba(255,255,255,.10);
+    --font:"Roboto","Helvetica Neue",Arial,sans-serif;
+    --mono:"Roboto Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+  }
+  *{ box-sizing:border-box; margin:0; padding:0; }
+  html,body{ width:297mm; height:420mm; }
+  body{
+    background:var(--bg); color:var(--ink); font-family:var(--font);
+    -webkit-print-color-adjust:exact; print-color-adjust:exact;
+    padding:14mm 15mm 12mm;
+    display:flex; flex-direction:column;
+    position:relative; overflow:hidden;
+  }
+  /* the two ambient glows the original carries: teal top-left, violet down the right edge */
+  body::before,body::after{ content:""; position:absolute; z-index:0; pointer-events:none; }
+  body::before{ top:-70mm; left:-60mm; width:190mm; height:170mm; border-radius:50%;
+                background:radial-gradient(closest-side,rgba(41,168,143,.34),transparent 70%); }
+  body::after{ top:-30mm; right:-70mm; width:180mm; height:230mm; border-radius:50%;
+               background:radial-gradient(closest-side,rgba(84,74,190,.28),transparent 70%); }
+  body > *{ position:relative; z-index:1; }
+
+  /* ---------- header ---------- */
+  .top{ display:flex; align-items:flex-start; justify-content:space-between; gap:10mm; }
+  .top img{ width:34mm; height:auto; }
+  .course{ text-align:right; font-size:9.4pt; line-height:1.5; color:var(--muted); }
+  .course b{ display:block; color:var(--ink); font-weight:700; font-size:11pt; margin-bottom:.5mm; }
+  hr{ border:0; border-top:1px solid var(--line); margin:6mm 0 0; }
+
+  /* ---------- title ---------- */
+  .title{ display:flex; align-items:center; gap:7mm; margin:9mm 0 0; }
+  .dot{ width:15mm; height:15mm; border-radius:50%; flex:none;
+        background:radial-gradient(circle at 35% 32%, #9df5d8, #34d3a6 62%, #14a380);
+        box-shadow:0 0 14mm rgba(52,211,166,.34); }
+  h1{ font-size:39pt; font-weight:900; letter-spacing:-.6pt; line-height:1.04; }
+  .tagline{ margin-top:1.5mm; font-size:15pt; font-weight:700; color:var(--accent); }
+
+  /* ---------- team ---------- */
+  .team{ display:flex; align-items:center; gap:5mm; margin:7mm 0 0; }
+  .team .lbl{ font-size:9pt; font-weight:700; letter-spacing:.22em; color:var(--muted); }
+  .chip{ padding:2.6mm 6mm; border:1px solid rgba(255,255,255,.20); border-radius:999px;
+         font-size:12pt; font-weight:700; background:rgba(255,255,255,.045); white-space:nowrap; }
+
+  /* ---------- the two bullet columns ---------- */
+  .cols{ display:grid; grid-template-columns:1fr 1fr; gap:10mm; margin:10mm 0 0; }
+  .cols h2{ font-size:10pt; font-weight:700; letter-spacing:.16em; text-transform:uppercase;
+            color:var(--accent); margin-bottom:4mm; }
+  .cols li{ list-style:none; display:grid; grid-template-columns:4.5mm 1fr; gap:1mm;
+            font-size:11.6pt; line-height:1.45; margin-bottom:3.1mm; }
+  .cols li::before{ content:"›"; color:var(--accent); font-weight:700; }
+  .cols b{ font-weight:700; }
+
+  /* ---------- screenshots ---------- */
+  .shots{ display:grid; grid-template-columns:repeat(3,1fr); gap:7mm 8mm; margin:11mm 0 0; }
+  /* every tile shares the mockup aspect the original shots were captured at, so a screenshot taken
+     at a different viewport (the plan card, 390x844) still lines the grid up instead of stretching
+     the row it sits in. Cropped from the top: the app header stays, the overflow goes. */
+  .shot img{ width:100%; display:block; aspect-ratio:741/1284; object-fit:cover; object-position:top;
+             border-radius:4mm; border:1px solid rgba(255,255,255,.09); }
+  .shot figcaption{ margin-top:2.6mm; text-align:center; font-size:10.4pt; font-weight:700; color:var(--accent); }
+
+  /* ---------- footer ---------- */
+  .foot{ margin-top:auto; padding-top:6mm; border-top:1px solid var(--line);
+         display:flex; align-items:flex-end; justify-content:space-between; gap:10mm; }
+  .foot .url{ font-size:15pt; font-weight:700; color:var(--accent); }
+  .foot .repo{ margin-top:1.6mm; font-size:10.6pt; color:var(--muted); }
+  .qr{ display:flex; align-items:center; gap:4mm; }
+  .qr span{ font-size:10.4pt; color:var(--muted); text-align:right; line-height:1.35; }
+  .qr img{ width:23mm; height:23mm; background:#fff; padding:2mm; border-radius:2.5mm; }
+</style>
+</head>
+<body>
+
+  <header class="top">
+    <img src="poster-assets/technion-logo.png" alt="Technion — Israel Institute of Technology">
+    <div class="course">
+      <b>Writing Software for Machine Learning</b>
+      00950219 · Spring 2026<br>
+      Instructors: Noam Cohen &amp; Elad Kalif
+    </div>
+  </header>
+  <hr>
+
+  <div class="title">
+    <div class="dot"></div>
+    <div>
+      <h1>Work Smarter, Not Harder</h1>
+      <div class="tagline">An AI training-readiness coach</div>
+    </div>
+  </div>
+
+  <div class="team">
+    <span class="lbl">TEAM</span>
+    <span class="chip">Lior Ben Sidi</span>
+    <span class="chip">Shiri Haboob</span>
+    <span class="chip">Elad Nachalieli</span>
+  </div>
+
+  <section class="cols">
+    <div>
+      <h2>What it does</h2>
+      <ul>
+        <li><span>Log sleep, fatigue, soreness and load each morning.</span></li>
+        <li><span>A <b>locally-trained Random Forest</b> calls your readiness.</span></li>
+        <li><span>Ready, Moderate, or Rest — with a confidence score.</span></li>
+        <li><span>It becomes an action plan: what to train, calories to eat.</span></li>
+        <li><span>A community forum and real-time DMs keep you accountable.</span></li>
+      </ul>
+    </div>
+    <div>
+      <h2>Under the hood</h2>
+      <ul>
+        <li><span>Three Docker containers; only the web tier is exposed.</span></li>
+        <li><span>Two-step email <b>OTP</b> login with signed <b>session IDs</b>.</span></li>
+        <li><span>Transactional emails via <b>Brevo</b> (external SMTP relay).</span></li>
+        <li><span>Custom domain over HTTPS via <b>name.com</b> → Azure.</span></li>
+        <li><span>CI/CD auto-deploys green commits; <b>all five test types</b>.</span></li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="shots">
+    <figure class="shot"><img src="poster-assets/shot-1-login.png" alt="Log in and register screen"><figcaption>Log in &amp; register</figcaption></figure>
+    <figure class="shot"><img src="poster-assets/shot-2-readiness.png" alt="Daily readiness score with confidence bars"><figcaption>Readiness score</figcaption></figure>
+    <figure class="shot"><img src="poster-assets/shot-3-history.png" alt="History trend and weekly heatmap"><figcaption>History &amp; heatmap</figcaption></figure>
+    <figure class="shot"><img src="poster-assets/shot-4-forum.png" alt="Forum post with an attached video, votes and comments"><figcaption>Forum &amp; video</figcaption></figure>
+    <figure class="shot"><img src="poster-assets/shot-5-dms.png" alt="Real-time direct messages"><figcaption>Real-time DMs</figcaption></figure>
+    <figure class="shot"><img src="poster-assets/shot-6-plan.png" alt="Generated push/pull/legs workout plan with exercises, sets and reps"><figcaption>Your workout plan</figcaption></figure>
+  </section>
+
+  <footer class="foot">
+    <div>
+      <div class="url">app.worksmarternotharder.dev</div>
+      <div class="repo">github.com/LiorBenSidi/work-smarter-not-harder</div>
+    </div>
+    <div class="qr">
+      <span>Scan to<br>try it live</span>
+      <img src="poster-assets/qr.png" alt="QR code to app.worksmarternotharder.dev">
+    </div>
+  </footer>
+
+</body>
+</html>

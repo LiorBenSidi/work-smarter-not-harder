@@ -95,8 +95,24 @@ a non-compliant submission.
 |---|---|---|---|
 | [`metadata.json`](../presentation/showoff/metadata.json) | title · ~20-word + ~100-word desc · **all** members · `repo_url` | 20 / 104 words · 3 members · `repo_url` present · no `launch` · `poster` kept — see below | ✅ |
 | [`poster.pdf`](../presentation/showoff/poster.pdf) | A3 · PDF · one page | **297.0 × 420.2 mm, 1 page, portrait** — renders inline on GitHub | ✅ |
-| [`demo.mp4`](../presentation/showoff/demo.mp4) | optional · 20–90 s · 1920×1080 · MP4 · silent | **27.9 s · 1920×1080 · h264 · no audio stream at all** — plays inline on GitHub | ✅ |
+| [`poster.html`](../presentation/showoff/poster.html) + [`poster-assets/`](../presentation/showoff/poster-assets/) | — | **the poster's source**, so the next change is an edit rather than a rebuild | ✅ |
+| [`demo.mp4`](../presentation/showoff/demo.mp4) | optional · 20–90 s · 1920×1080 · MP4 · silent | **29.6 s · 1920×1080 · h264 · no audio stream at all** — plays inline on GitHub | ✅ |
 | [`207490913.zip`](../presentation/showoff/207490913.zip) | **exactly** those files, flat, named after one member's ID | **3 entries, no folders, no `thumb.png`** | ✅ |
+
+**Both assets were refreshed on 20 Aug** to cover the F5 workout plan, which shipped in #522/#523 *after*
+the originals were exported. Nothing in them was wrong — the plan was simply missing, while the copy claimed
+*"what to train"* and the video promised *"a clear action plan"*. The poster's sixth tile is now the generated
+push/pull/legs plan (it replaced the profile tile, whose calorie point the plan screenshot already carries),
+and the video gains a **"Know what to train"** scene cross-faded in after Readiness.
+
+The original `poster.pdf` was printed from a `poster.html` that was never committed, so there was no source to
+edit — it had to be reconstructed from the PDF's own text, palette and embedded images. **That source is now
+in the repo** (`poster.html` + `poster-assets/`), rendered with:
+
+```sh
+"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --headless --no-pdf-header-footer \
+  --print-to-pdf=poster.pdf poster.html
+```
 
 **The `poster` field is kept, against the document — deliberately.** `how to submit.pdf` says *"Do not add a `poster` field"*, but the official checker **rejects** the zip without it:
 
