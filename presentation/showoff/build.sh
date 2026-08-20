@@ -18,11 +18,13 @@ CHROME="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
 
 command -v zip >/dev/null || { echo "error: zip not found" >&2; exit 1; }
 [ -x "$CHROME" ] || { echo "error: Chrome not found at $CHROME" >&2; exit 1; }
+command -v node >/dev/null || { echo "error: node not found (render-poster.mjs needs it)" >&2; exit 1; }
 
 echo "==> rendering poster.html -> poster.pdf"
-"$CHROME" --headless --disable-gpu --no-pdf-header-footer \
-          --virtual-time-budget=6000 \
-          --print-to-pdf=poster.pdf poster.html 2>/dev/null
+# via CDP, NOT `chrome --print-to-pdf`. That CLI path lays the document out at Chrome's default paper
+# width and scales the result to the @page size, which silently produced a 241x340mm layout on a
+# 297x420mm sheet — a 69mm dead column down the right that nothing in the CSS explained.
+node render-poster.mjs poster.pdf
 
 echo "==> rebuilding $ID.zip"
 # Naming every file explicitly (rather than zipping the directory) is what keeps the archive to
@@ -79,6 +81,19 @@ try:
     inb = lambda v, t: t * (1 - TOL) <= v <= t * (1 + TOL)
     check("poster is A3", (inb(w, W) and inb(h, H)) or (inb(h, W) and inb(w, H)),
           "%.1f x %.1f mm" % (w * 25.4 / 72, h * 25.4 / 72))
+
+    # A3 page size is not enough: Chrome's --print-to-pdf once emitted a correctly-sized sheet carrying
+    # a Letter-width layout, leaving a 69mm dead column. Measure where the ink actually stops.
+    try:
+        import pypdfium2 as pf
+        img = pf.PdfDocument("poster.pdf")[0].render(scale=1.0).to_pil().convert("L")
+        pw, ph = img.size
+        pix = img.load()
+        cols = [x for x in range(pw) if any(pix[x, y] > 90 for y in range(0, ph, 3))]
+        right_mm = 297 * (pw - cols[-1]) / pw
+        check("poster fills the sheet", right_mm < 30, "right margin %.0f mm" % right_mm)
+    except ImportError:
+        print("    [skip] poster fill — pypdfium2 not installed")
 except ImportError:
     print("    [skip] poster geometry — pdfplumber not installed")
 

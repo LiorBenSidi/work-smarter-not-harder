@@ -31,7 +31,10 @@
     --mono:"Roboto Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
   }
   *{ box-sizing:border-box; margin:0; padding:0; }
-  html,body{ width:297mm; height:420mm; }
+  /* Do NOT set an explicit width/height here. In paged media the root is already sized to the page
+     area, and overriding it makes Chrome scale the whole document to fit — silently. That is what put a
+     241x340mm layout on a 297x420mm sheet (a uniform 0.81) and left a 69mm dead column down the right. */
+  html,body{ width:100%; height:100%; }
   body{
     background:var(--bg); color:var(--ink); font-family:var(--font);
     -webkit-print-color-adjust:exact; print-color-adjust:exact;
@@ -87,7 +90,7 @@
   /* every tile shares the mockup aspect the original shots were captured at, so a screenshot taken
      at a different viewport (the plan card, 390x844) still lines the grid up instead of stretching
      the row it sits in. Cropped from the top: the app header stays, the overflow goes. */
-  .shot img{ width:100%; display:block; aspect-ratio:741/1560; object-fit:cover; object-position:top;
+  .shot img{ width:100%; display:block; aspect-ratio:741/1400; object-fit:cover; object-position:top;
              border-radius:4mm; border:1px solid rgba(255,255,255,.09); }
   .shot figcaption{ margin-top:2.4mm; text-align:center; font-size:9.2pt; font-weight:700; color:var(--accent); }
 
@@ -98,7 +101,7 @@
   .foot .repo{ margin-top:1.6mm; font-size:10.6pt; color:var(--muted); }
   .qr{ display:flex; align-items:center; gap:4mm; }
   .qr span{ font-size:10.4pt; color:var(--muted); text-align:right; line-height:1.35; }
-  .qr img{ width:23mm; height:23mm; background:#fff; padding:2mm; border-radius:2.5mm; }
+  .qr img{ width:30mm; height:30mm; background:#fff; padding:2mm; border-radius:2.5mm; }
 </style>
 </head>
 <body>
