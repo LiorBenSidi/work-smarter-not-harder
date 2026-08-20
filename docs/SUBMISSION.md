@@ -17,7 +17,7 @@ against a single source of truth and fix what they think is missing. Two indepen
 - **F5 workout generator — dashboard display** — AI side built + wired into `/predict` (Shiri); the dashboard doesn't relay or render `plan` yet — the one open *graded* gap (web tier · [#410](https://github.com/LiorBenSidi/work-smarter-not-harder/issues/410))
 - **Demo video** of the app — not recorded yet (team; script at `presentation/WSNH Demo Video Script.md`)
 - **Paste the repo link** into the Moodle final-project box — Lior
-- **Upload the poster zip** to its own Moodle box (Track B, due **25 Aug**) — the 29 Jul upload was built to
+- **Upload the poster zip** to its own Moodle box (Track B, target **25 Aug**) — the 29 Jul upload was built to
   rules that were reversed on 18 Aug and has been **deleted**; the box is empty until the rebuilt zip goes up
 - **Seed prod · VM up · joint sign-off** before the TA review
 
@@ -63,7 +63,7 @@ Rubric (`docs/GUIDELINES.md`, the TA's `WSNH_Guidelines`, 8 Jul): **75** proposa
 
 ---
 
-## Track B — "Show Off Your Project" poster package (**not graded, but required**) · due **25 Aug** — ⬜ **NOT SUBMITTED**
+## Track B — "Show Off Your Project" poster package (**not graded, but required**) · target **25 Aug** — ⬜ **NOT SUBMITTED**
 
 Its own Moodle box ([`id=266452`](https://moodle25.technion.ac.il/mod/assign/view.php?id=266452)), separate
 from Track A. **Two dates, and they differ:** the announcement asks for *"August 25th (i.e. a couple days
