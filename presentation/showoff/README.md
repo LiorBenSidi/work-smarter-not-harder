@@ -25,9 +25,35 @@ and embedded images. Don't recreate that situation: **edit the source and re-ren
 | File | What it is |
 |---|---|
 | `poster.html` + `poster-assets/` | the poster's **source**. Edit this, never the PDF |
+| `seed-for-screenshots.py` | fills the two gaps `db/seed.py` leaves — check-in history and a DM thread |
 | `capture-screenshot.mjs` | re-takes an app mockup by driving the real UI |
 | `build.sh` | renders the PDF, rebuilds the zip, validates the result |
 | `metadata.json` | the gallery entry's text |
+
+### Populating the app first
+
+Three tiles need data a fresh account cannot produce: History needs a run of check-ins for its trend
+and heatmap, Messages needs a conversation, Forum needs posts. `db/seed.py` covers users and forum
+only, so run both:
+
+```sh
+./seed.sh                                    # users + forum posts/comments (existing tool)
+docker compose run --rm -v "$PWD:/repo" \
+  -e MONGO_URI="mongodb://db:27017/worksmarter" \
+  --entrypoint sh web -c 'exec python /repo/presentation/showoff/seed-for-screenshots.py'
+```
+
+The second prints the demo athlete's credentials; log in as that user to shoot. It writes 49
+back-dated check-ins and a five-message thread through the real `db.py` CRUD, so the rows are shaped
+exactly like user-created ones.
+
+**Clear E2E debris first** if the suite has run against this database — it leaves posts named
+`comment-media-*` authored by `e2e…` handles, which will otherwise end up on the poster:
+
+```sh
+docker compose exec -T db mongosh worksmarter --quiet \
+  --eval 'db.forum_posts.deleteMany({author:/^e2e/}); db.forum_comments.deleteMany({author:/^e2e/})'
+```
 
 ### A screenshot went stale
 

@@ -78,13 +78,18 @@
   .cols b{ font-weight:700; }
 
   /* ---------- screenshots ---------- */
-  .shots{ display:grid; grid-template-columns:repeat(3,1fr); gap:7mm 8mm; margin:11mm 0 0; }
+  /* Seven tiles: four across, then three centred beneath. Flex rather than grid, because a 4-column
+     grid leaves the short row hanging to the left, which reads as a mistake; justify-content:center
+     centres it on its own. Narrower tiles are also SHORTER at a fixed aspect, so going 3-up -> 4-up
+     buys vertical room rather than costing it. */
+  .shots{ display:flex; flex-wrap:wrap; justify-content:center; gap:6mm 7mm; margin:10mm 0 0; }
+  .shot{ width:calc((100% - 21mm) / 4); }        /* 4 columns, 3 gaps of 7mm */
   /* every tile shares the mockup aspect the original shots were captured at, so a screenshot taken
      at a different viewport (the plan card, 390x844) still lines the grid up instead of stretching
      the row it sits in. Cropped from the top: the app header stays, the overflow goes. */
-  .shot img{ width:100%; display:block; aspect-ratio:741/1284; object-fit:cover; object-position:top;
+  .shot img{ width:100%; display:block; aspect-ratio:741/1560; object-fit:cover; object-position:top;
              border-radius:4mm; border:1px solid rgba(255,255,255,.09); }
-  .shot figcaption{ margin-top:2.6mm; text-align:center; font-size:10.4pt; font-weight:700; color:var(--accent); }
+  .shot figcaption{ margin-top:2.4mm; text-align:center; font-size:9.2pt; font-weight:700; color:var(--accent); }
 
   /* ---------- footer ---------- */
   .foot{ margin-top:auto; padding-top:6mm; border-top:1px solid var(--line);
@@ -149,11 +154,12 @@
   <section class="shots">
     <figure class="shot"><img src="poster-assets/shot-1-login.png" alt="Log in and register screen"><figcaption>Log in &amp; register</figcaption></figure>
     <figure class="shot"><img src="poster-assets/shot-2-readiness.png" alt="Daily readiness score with confidence bars"><figcaption>Readiness score</figcaption></figure>
-    <figure class="shot"><img src="poster-assets/shot-3-history.png" alt="History trend and weekly heatmap"><figcaption>History &amp; heatmap</figcaption></figure>
-    <figure class="shot"><img src="poster-assets/shot-4-forum.png" alt="Forum post with an attached video, votes and comments"><figcaption>Forum &amp; video</figcaption></figure>
+    <figure class="shot"><img src="poster-assets/shot-6-plan.png" alt="Generated push/pull/legs plan with exercises, sets and reps"><figcaption>Your workout plan</figcaption></figure>
+    <figure class="shot"><img src="poster-assets/shot-3-history.png" alt="History trend over 49 check-ins and a weekly heatmap"><figcaption>History &amp; heatmap</figcaption></figure>
+    <figure class="shot"><img src="poster-assets/shot-4-forum.png" alt="Forum post with votes, comments and their own vote counts"><figcaption>Forum &amp; comments</figcaption></figure>
     <figure class="shot"><img src="poster-assets/shot-5-dms.png" alt="Real-time direct messages"><figcaption>Real-time DMs</figcaption></figure>
-    <figure class="shot"><img src="poster-assets/shot-6-plan.png" alt="Generated push/pull/legs workout plan with exercises, sets and reps"><figcaption>Your workout plan</figcaption></figure>
-  </section>
+    <figure class="shot"><img src="poster-assets/shot-7-profile.png" alt="Athlete profile: age, height, weight, goal and training split"><figcaption>Athlete profile</figcaption></figure>
+</section>
 
   <footer class="foot">
     <div>
