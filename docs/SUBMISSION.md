@@ -12,12 +12,13 @@ against a single source of truth and fix what they think is missing. Two indepen
   grading requirement is met. Counts drift with every push; read them from the repo rather than from here:
   `git shortlog -sn --all`. A `.mailmap` unifies the two identities Elad committed under (GitHub noreply +
   the campus address), so that command lists **three** contributors, not four.
-- **Show Off gallery (Track B): ✅ SUBMITTED 29 Jul** (`207490913.zip` — team-approved, uploaded to Moodle)
 
 **⬜ Still open**
 - **F5 workout generator — dashboard display** — AI side built + wired into `/predict` (Shiri); the dashboard doesn't relay or render `plan` yet — the one open *graded* gap (web tier · [#410](https://github.com/LiorBenSidi/work-smarter-not-harder/issues/410))
 - **Demo video** of the app — not recorded yet (team; script at `presentation/WSNH Demo Video Script.md`)
-- **Paste the repo link** into the Moodle final-project box (when it opens) — Lior _(Show Off zip ✅ uploaded 29 Jul)_
+- **Paste the repo link** into the Moodle final-project box — Lior
+- **Upload the poster zip** to its own Moodle box (Track B, due **25 Aug**) — the 29 Jul upload was built to
+  rules that were reversed on 18 Aug and has been **deleted**; the box is empty until the rebuilt zip goes up
 - **Seed prod · VM up · joint sign-off** before the TA review
 
 Naming: demo **video** = `VID_<id1>_<id2>_<id3>.mp4`; the Show Off **zip** = one member's ID (`207490913.zip`).
@@ -62,23 +63,57 @@ Rubric (`docs/GUIDELINES.md`, the TA's `WSNH_Guidelines`, 8 Jul): **75** proposa
 
 ---
 
-## Track B — "Show Off Your Project" gallery (optional · **NOT graded**) · due **1 Aug** — ✅ **SUBMITTED 29 Jul**
+## Track B — "Show Off Your Project" poster package (**not graded, but required**) · due **25 Aug** — ⬜ **NOT SUBMITTED**
 
-Moodle `id=266452` (Noam, 16 Jul). Per `instruction_for_students.pdf`: one zip named after **one** member's
-ID, built and uploaded by Lior. Package built & verified against the instruction:
+Its own Moodle box ([`id=266452`](https://moodle25.technion.ac.il/mod/assign/view.php?id=266452)), separate
+from Track A and with its own deadline: *"I opened a new submission box. Please complete by **August 25th**
+(i.e. a couple days after submitting the project)"* (Noam, 16 Jul). The project has since moved to 30 Aug, so
+the parenthetical rationale and the stated date no longer line up — **25 Aug satisfies both readings**, which
+is the date this track uses.
 
-| Item (in [`presentation/showoff/`](../presentation/showoff/)) | Requirement | Built | ✓ |
+Governed by **`how to submit.pdf` ("Updated on 2026-08-18")**, which supersedes the 16 Jul
+`instruction_for_students.pdf` and **reverses several of its rules**:
+
+| Rule | 16 Jul | 18 Aug (governing) |
+|---|---|---|
+| `thumb.png` | **required** — *"thumbnail of the above image"* | **forbidden** — the zip must hold *"exactly these files and nothing else"* |
+| `poster` field in `metadata.json` | **required** — *"poster.type is `pdf` or `image`"* | **forbidden** — *"Do not add a `poster` field"*; the gallery finds the poster by filename |
+| `repo_url` | absent (the repo went in `links`) | **[required] for every submission** |
+| poster format | *"An image (PNG/PDF) of size A3"* | **PDF only, A3, one page** |
+| `installation.md` / `install.sh` | required to run the real code | dropped — the repo must run via `docker compose up` |
+| video via an external link | allowed (`links` → *"Demo Video"*) | **won't play** — must be attached as `demo.mp4` |
+
+The 29 Jul upload was built to the old rules, so it was **deleted from Moodle** rather than left standing as
+a non-compliant submission.
+
+| Item (in [`presentation/showoff/`](../presentation/showoff/)) | Requirement (18 Aug) | Measured | ✓ |
 |---|---|---|---|
-| [`metadata.json`](../presentation/showoff/metadata.json) | title · ~20-word + ~100-word desc · team · links | ✅ in-repo | ✅ |
-| [`poster.pdf`](../presentation/showoff/poster.pdf) | A3 | 297 × 420 mm — **renders inline on GitHub** | ✅ |
-| [`thumb.png`](../presentation/showoff/thumb.png) | thumbnail | renders inline | ✅ |
-| [`demo.mp4`](../presentation/showoff/demo.mp4) | 20–90 s · 1920×1080 · MP4 · silent | 27.9 s — **plays inline on GitHub** | ✅ |
-| [`207490913.zip`](../presentation/showoff/207490913.zip) | the exact Moodle upload (named after **one** member's ID) | ✅ in-repo | ✅ |
+| [`metadata.json`](../presentation/showoff/metadata.json) | title · ~20-word + ~100-word desc · **all** members · `repo_url` | 20 / 104 words · 3 members · `repo_url` present · no `poster`, no `launch` | ✅ |
+| [`poster.pdf`](../presentation/showoff/poster.pdf) | A3 · PDF · one page | **297.0 × 420.2 mm, 1 page, portrait** — renders inline on GitHub | ✅ |
+| [`demo.mp4`](../presentation/showoff/demo.mp4) | optional · 20–90 s · 1920×1080 · MP4 · silent | **27.9 s · 1920×1080 · h264 · no audio stream at all** — plays inline on GitHub | ✅ |
+| [`207490913.zip`](../presentation/showoff/207490913.zip) | **exactly** those files, flat, named after one member's ID | **3 entries, no folders, no `thumb.png`** | ✅ |
 
-**The whole Show Off package is committed to [`presentation/showoff/`](../presentation/showoff/)** — the exact
-`207490913.zip` (the Moodle upload), **plus its unpacked files so Elad & Shiri could review the poster, thumbnail, and demo
-video inline on GitHub** (not just the metadata text). The zip is named after **one** member's ID per the
-instruction (all three names are inside `metadata.json`). **✅ Reviewed + approved by Elad & Shiri and UPLOADED to Moodle `id=266452` on 29 Jul 2026 — Track B complete.**
+**No `launch` block — deliberately.** Declaring one activates the compose Annex, and the root
+`docker-compose.yml` fails it twice: it has `volumes:` both service-level and top-level (rule 1 rejects
+*any* entry), and no service declares `mem_limit`/`cpus` (rule 4). The Annex applies only to a live launch
+(*"If you're only submitting a poster and/or video, none of this applies to you"*), so the field is omitted
+and the live site stays reachable through `links`.
+
+**Repo access.** The poster rules also require staff to clone *"without interactive authentication"*. The
+repo is public today; if it goes private before submission, **`cnoam` and `EladKal6` must be added as
+collaborators** — the same requirement Track A carries.
+
+**Verify before uploading:**
+
+```sh
+bash check_submission.sh presentation/showoff/207490913.zip   # official checker from Moodle; needs Docker
+```
+
+> ⚠️ **The instructions change without announcement.** On 18 Aug alone the box was renamed twice, its close
+> date moved, and the instructions PDF was replaced; the 16 Jul announcement was itself edited in place
+> (*"August 1st"* → *"August 25th"*). **Re-check Moodle immediately before uploading** —
+> [#531](https://github.com/LiorBenSidi/work-smarter-not-harder/issues/531) carries the baseline hashes of
+> every instruction file we hold.
 
 ---
 

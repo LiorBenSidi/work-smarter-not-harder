@@ -9,13 +9,8 @@
   ],
   "tags": ["AI", "machine-learning", "fitness", "sports-science", "full-stack", "docker"],
   "tech_stack": ["Python", "Flask", "scikit-learn", "MongoDB", "Docker", "Docker Compose", "GitHub Actions", "Azure", "Caddy"],
-  "poster": { "type": "pdf" },
+  "repo_url": "https://github.com/LiorBenSidi/work-smarter-not-harder",
   "links": [
-    { "label": "GitHub", "url": "https://github.com/LiorBenSidi/work-smarter-not-harder" },
     { "label": "Live App", "url": "https://app.worksmarternotharder.dev" }
-  ],
-  "launch": {
-    "type": "live",
-    "notes": "Deployed live on Azure over HTTPS at app.worksmarternotharder.dev. Register with any email (one-time code) to try it; seeded demo data is available on request."
-  }
+  ]
 }
