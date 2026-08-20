@@ -66,10 +66,15 @@ Rubric (`docs/GUIDELINES.md`, the TA's `WSNH_Guidelines`, 8 Jul): **75** proposa
 ## Track B — "Show Off Your Project" poster package (**not graded, but required**) · due **25 Aug** — ⬜ **NOT SUBMITTED**
 
 Its own Moodle box ([`id=266452`](https://moodle25.technion.ac.il/mod/assign/view.php?id=266452)), separate
-from Track A and with its own deadline: *"I opened a new submission box. Please complete by **August 25th**
-(i.e. a couple days after submitting the project)"* (Noam, 16 Jul). The project has since moved to 30 Aug, so
-the parenthetical rationale and the stated date no longer line up — **25 Aug satisfies both readings**, which
-is the date this track uses.
+from Track A. **Two dates, and they differ:** the announcement asks for *"August 25th (i.e. a couple days
+after submitting the project)"* (Noam, 16 Jul), while the box's own close time is **Sun 30 Aug 2026, 11:59 PM**
+— the same instant as Track A. We target **25 Aug**: it honours the request, and the box staying open to the
+30th is margin, not licence.
+
+The box description still reads *"The zip should contain exactly what described in
+`instruction_for_students.pdf`"*, but **that file is no longer attached to the section** — its resources are
+`how to submit.pdf`, `check_submission.sh`, and the "Update (easier!) submission" note. The description is
+un-updated text; **`how to submit.pdf` governs.**
 
 Governed by **`how to submit.pdf` ("Updated on 2026-08-18")**, which supersedes the 16 Jul
 `instruction_for_students.pdf` and **reverses several of its rules**:
