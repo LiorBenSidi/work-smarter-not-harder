@@ -98,7 +98,20 @@ async function apiUser(base) {
   const cookieHeader = () => [...jar.entries()].map(([k, v]) => `${k}=${v}`).join("; ");
   const call = async (path, opts = {}) => {
     const headers = { cookie: cookieHeader(), "X-CSRF-Token": jar.get("csrf_token") || "", ...(opts.body ? { "content-type": "application/json" } : {}), ...opts.headers };
-    const r = await fetch(base + path, { ...opts, headers });
+    // Retry TRANSPORT failures only. `web` runs gunicorn with `--max-requests 1000
+    // --max-requests-jitter 100` and a single worker, so it deliberately recycles that worker roughly
+    // once per full E2E run; an in-flight connection during the swap dies as an unhandled "fetch
+    // failed", killing whichever scenario happened to be mid-call. That is the app behaving as
+    // configured, not failing, so the harness has to tolerate it.
+    //
+    // An HTTP response — any status — is returned untouched, so a 429 from the anti-spam limiter, a
+    // 403 or a 500 still reach the caller exactly as before. This can only swallow a thrown fetch.
+    let r, lastErr = null;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try { r = await fetch(base + path, { ...opts, headers }); lastErr = null; break; }
+      catch (e) { lastErr = e; await new Promise((res) => setTimeout(res, 250 * (attempt + 1))); }
+    }
+    if (lastErr) throw lastErr;
     for (const c of r.headers.getSetCookie?.() || []) {
       const [pair] = c.split(";"); const eq = pair.indexOf("=");
       jar.set(pair.slice(0, eq).trim(), pair.slice(eq + 1).trim());
