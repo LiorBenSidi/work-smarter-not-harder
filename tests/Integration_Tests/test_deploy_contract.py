@@ -44,6 +44,11 @@ def _strip_comments(text):
 
 
 @pytest.fixture(scope="module")
+def dev_stack():
+    return _strip_comments((ROOT / "docker-compose.yml").read_text())
+
+
+@pytest.fixture(scope="module")
 def test_stack():
     return _strip_comments((ROOT / "docker-compose.test.yml").read_text())
 
@@ -345,3 +350,52 @@ def test_prod_backups_survive_the_container_that_wrote_them(prod):
     """
     assert "- ./backups:/backups" in prod, \
         "prod db must bind-mount a host directory for backup archives (a container path dies with the container)"
+
+
+def test_ai_logs_its_requests_wherever_its_command_is_overridden(prod):
+    """#546 put the log flags in `ai/Dockerfile`, and prod overrides `command:` — which REPLACES the
+    image CMD, so prod shipped without them and its container stayed silent. Exactly the shape of #539,
+    where the scaling profile replaced web's command and silently dropped `wsgi:app`. Assert the
+    effective command, not the image default.
+    """
+    ai_block = prod[prod.index("\n  ai:"):]
+    command = ai_block[ai_block.index("command:"):].splitlines()[0]
+    assert "--access-logfile" in command and "--error-logfile" in command, \
+        "prod's ai command overrides the image CMD, so it must repeat the log flags"
+
+
+def test_the_ai_healthcheck_can_see_a_wedged_queue(prod, dev_stack):
+    """A dead pool worker left `/health` answering 200 while every prediction hung behind a lock that
+    was never released, so Docker reported the container healthy and never restarted it (#555). The
+    probe has to touch the queue itself: `/queue/stats` takes the queue's own lock, so it goes red
+    exactly when the queue is stuck — which is the only signal that reaches Docker's restart policy.
+    """
+    for name, stack in (("prod", prod), ("dev", dev_stack)):
+        ai_block = stack[stack.index("\n  ai:"):]
+        healthcheck = ai_block[ai_block.index("healthcheck:"):]
+        probe = healthcheck[:healthcheck.index("interval:")]
+        assert "/queue/stats" in probe, f"{name}: ai's healthcheck must exercise the queue, not just /health"
+
+
+def test_the_deploy_reclaims_disk_on_the_vm(ci):
+    """IMAGE_TAG is the commit SHA, never `:latest`, so every deploy pulls a NEW image set and nothing
+    removed the old ones — they accumulated on the same disk Mongo writes to, one set per deploy, with
+    no ceiling. The prune must stay `-a` + time-filtered: `-a` skips anything a container references, so
+    the running stack survives, and the week's window keeps recent tags around for a fast rollback.
+    """
+    assert "docker image prune" in ci, "the deploy must reclaim images the VM no longer uses"
+    prune = ci[ci.index("docker image prune"):]
+    prune = prune[:prune.index("\n")]
+    assert "-af" in prune or ("-a" in prune and "-f" in prune), "the prune must be non-interactive and cover unused tags"
+    assert "until=" in prune, "keep a recent window so a rollback does not have to re-pull everything"
+
+
+def test_the_deploy_never_prunes_while_the_health_check_could_still_fail(ci):
+    """Ordering: reclaim only AFTER the deploy is known good. Pruning before the health check could
+    delete the very image a rollback is about to want, turning a recoverable bad deploy into an outage
+    that depends on GHCR being reachable at that moment.
+    """
+    assert ci.index("Record this SHA as the last-good deploy") < ci.index("docker image prune"), \
+        "the prune must run after the last-good SHA is recorded"
+    assert ci.index("Health check against the public HTTPS address") < ci.index("docker image prune"), \
+        "the prune must run after the health check"

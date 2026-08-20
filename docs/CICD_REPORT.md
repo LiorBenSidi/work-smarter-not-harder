@@ -64,6 +64,27 @@ monitor (R9).
 - The **live demo** (push a visible change → watch it reach the VM; break a PR test; show the monitor's down→up) is
   performed at grading, per the assignment's acceptance criteria.
 
+## Disk on the VM: what the deploy leaves behind
+
+`IMAGE_TAG` is the commit SHA (never `:latest`), which is what makes a deploy reproducible and a rollback
+one variable away — and it means **every deploy pulls a new image set**. Nothing removed the old ones, so
+the VM accumulated one set per deploy, forever, on the same disk Mongo writes to. Layer sharing keeps the
+incremental cost small while dependencies are unchanged; a `requirements.txt` bump writes a fresh set.
+
+The deploy now runs, only after the health check has passed and the last-good SHA is recorded:
+
+```bash
+docker image prune -af --filter 'until=168h' && df -h / | tail -1
+```
+
+`-a` removes only images **no container references**, so the running stack is never touched, and the
+one-week window keeps recent tags for a fast rollback. A rollback is safe even if its target was pruned:
+it re-pulls from GHCR before starting anything. The `df -h` prints the VM's remaining disk into the deploy
+log, so the trend is visible per deploy rather than discovered when the disk is full.
+
+Ordering matters and is asserted in `test_deploy_contract.py`: pruning *before* the health check could
+delete the image a rollback is about to want.
+
 ## Backups — how to actually run them on the VM (#550)
 
 `db/backup.sh` (Lior) dumps every collection to a timestamped gzip archive and prunes anything older than

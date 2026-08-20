@@ -25,6 +25,7 @@ per-PR gate alongside `test_deploy_contract.py`.
 import inspect
 import pickle
 import re
+import threading
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 from pathlib import Path
 
@@ -266,3 +267,76 @@ def test_the_test_runner_can_reach_the_ai_container(dev):
     test_stack = _strip_comments((ROOT / "docker-compose.test.yml").read_text())
     assert "AI_BASE_URL: http://ai:5000" in test_stack
     assert "ai: { condition: service_healthy }" in test_stack
+
+
+# --------------------------------------------------------------- a worker that really dies (#555)
+
+_DYING_TARGET = '''
+import os
+def suicide(features):
+    os._exit(1)          # a segfaulting model / an OOM-killed worker, reproduced exactly
+def fine(features):
+    return {"state": "Ready", "proba": {"Ready": 1.0}, "recommendations": []}
+'''
+
+
+@pytest.fixture
+def dying_target(tmp_path, monkeypatch):
+    """Put an importable module on `sys.path` whose worker kills its own process.
+
+    A real `ProcessPoolExecutor` child must be able to import the target by name, and the child
+    inherits the parent's `sys.path` under both fork and spawn — so a tmp module works on Linux CI
+    and on a Windows dev box alike.
+    """
+    (tmp_path / "wsnh_dying_worker.py").write_text(_DYING_TARGET, encoding="utf-8")
+    monkeypatch.syspath_prepend(str(tmp_path))
+    # `ai/` too: on a spawn platform the child re-imports `jobqueue` to unpickle `_worker`, and the
+    # conftest loader drops that path once the module is in memory. Without this the child dies of
+    # ModuleNotFoundError — still a BrokenProcessPool, but not the crash this test means to stage.
+    monkeypatch.syspath_prepend(str(ROOT / "ai"))
+    return "wsnh_dying_worker"
+
+
+def test_a_worker_that_dies_does_not_wedge_the_queue(jobqueue_module, dying_target, monkeypatch):
+    """A dead worker must cost one prediction, not the container.
+
+    Reproduced on a live `ai` container before this guard existed: killing one pool worker left
+    `/queue/stats` and `/jobs` hanging FOREVER while `/health` still answered 200, so Docker kept
+    reporting the container healthy and never restarted it — every prediction 504'd behind a lock
+    nobody would ever release. The cause is that a process pool runs its done-callbacks on its own
+    executor-manager thread, so rebuilding that pool from inside the callback deadlocks; every test
+    that only SIMULATES `BrokenProcessPool` (from a fake executor, or a ThreadPoolExecutor whose
+    callbacks run on ordinary threads) is blind to it. Hence a real process, really dying.
+    """
+    monkeypatch.setenv("AI_WORKER_TARGET", f"{dying_target}:suicide")
+    queue = jobqueue_module.JobQueue(workers=1, max_pending=8)
+    queue.start()
+    try:
+        job_id = queue.submit({"sleep_hours": 8})
+        with pytest.raises(Exception) as raised:
+            queue.result(job_id, timeout=30)
+        # The caller learns the job died; it must NOT be told "you waited too long" — that reads as a
+        # slow model and invites a retry into the same broken pool.
+        assert "BrokenProcessPool" in type(raised.value).__name__ or "BrokenProcessPool" in str(raised.value), \
+            f"a crashed worker must surface as a crash, got {type(raised.value).__name__}: {raised.value}"
+
+        # The queue is still answering: this is the assertion that was impossible before the fix.
+        answered = []
+        probe = threading.Thread(target=lambda: answered.append(queue.stats()), daemon=True)
+        probe.start()
+        probe.join(20)
+        assert answered, "stats() never returned — the queue lock is held by the crash handler"
+        assert answered[0]["failed"] >= 1
+
+        # ...and it can still do work: the pool was replaced rather than left broken.
+        monkeypatch.setenv("AI_WORKER_TARGET", f"{dying_target}:fine")
+        queue.target = f"{dying_target}:fine"
+        recovered = queue.submit({"sleep_hours": 8})
+        assert queue.result(recovered, timeout=30)["state"] == "Ready"
+        assert queue.stats()["pool_rebuilds"] >= 1
+    finally:
+        # Even the teardown has to survive the bug: with the lock held, `shutdown()` never returns,
+        # and a hanging teardown would take the whole suite down with it rather than report a failure.
+        closer = threading.Thread(target=queue.shutdown, daemon=True)
+        closer.start()
+        closer.join(15)
