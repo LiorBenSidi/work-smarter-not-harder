@@ -46,8 +46,12 @@ MAX_SETS_PER_GROUP = 60          # one week, one muscle group -- well past any r
 def _validate_training_program(value):
     """Return a clean ``{muscle_group: weekly_sets}`` dict, or ``None`` when the caller supplied none.
 
-    A group set to 0 is dropped rather than stored: "I don't train chest" and "chest: 0 sets" are the
-    same statement, and storing the zero would make the analysis read a trained-but-empty group.
+    A group set to **0 is stored**, not dropped (#583). This used to read a 0 as "I don't train it"
+    and discard it, which quietly destroyed the single most extreme case the balance analysis exists
+    to catch: `chest: 12, back: 0` is the largest pressing:pulling imbalance possible, and it never
+    reached `ai` at all. "I don't train it" now has its own unambiguous expression -- leave the box
+    blank, which the form says in as many words and which never reaches this function -- so 0 is free
+    to mean the number zero.
     """
     if value is None:
         return None
@@ -65,8 +69,7 @@ def _validate_training_program(value):
             raise ValueError(f"training_program['{group}'] must be an integer")
         if not 0 <= sets <= MAX_SETS_PER_GROUP:
             raise ValueError(f"training_program['{group}'] must be 0-{MAX_SETS_PER_GROUP}")
-        if sets:
-            clean[group] = sets
+        clean[group] = sets          # 0 included -- see the docstring (#583)
     return clean
 
 

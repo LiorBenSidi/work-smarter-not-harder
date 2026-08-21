@@ -2033,13 +2033,22 @@
 
     // ---- Profile ----
     onSubmit("profile-form", async (f) => {
-      // PROPOSAL-v2 §3's Advanced-tier input (#566): weekly sets per muscle group. A blank or 0 box
-      // means "I don't train it", so it is dropped -- and an untouched programme section omits the
-      // key entirely, leaving a pre-#566 profile exactly the shape it already had.
+      // PROPOSAL-v2 §3's Advanced-tier input (#566): weekly sets per muscle group.
+      //
+      // A BLANK box means "I don't train it" and is dropped. An explicit 0 is KEPT (#583): it means
+      // the number zero, and `chest: 12, back: 0` is the most extreme pressing:pulling imbalance the
+      // coach exists to flag. This filter used to demand a POSITIVE count, which discarded that case
+      // here -- before the server or `ai` ever saw it -- so fixing only the validator would leave the
+      // real UI behaving exactly as before. Blank still parses to NaN, so Number.isFinite draws the
+      // line between "no answer" and "zero". (Phrased without the old expression on purpose: the
+      // guard in test_frontend.py asserts that expression is absent, and prose must not trip it.)
+      //
+      // An untouched programme section omits the key entirely, leaving a pre-#566 profile the shape
+      // it already had.
       const program = Object.fromEntries(
         [...f.querySelectorAll("#training-program-group input[data-mg]")]
           .map((i) => [i.dataset.mg, Number.parseInt(i.value, 10)])
-          .filter(([, sets]) => Number.isFinite(sets) && sets > 0));
+          .filter(([, sets]) => Number.isFinite(sets) && sets >= 0));
       const body = {
         age: Number.parseInt(f.age.value, 10),
         gender: f.gender.value,
