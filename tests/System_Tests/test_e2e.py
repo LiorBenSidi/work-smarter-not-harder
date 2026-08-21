@@ -14,6 +14,7 @@ import pytest
 requests = pytest.importorskip("requests")
 
 from _live_auth import csrf_headers, sign_in  # noqa: E402  (after importorskip guards `requests`)
+from _live_http import live_session  # noqa: E402  (same reason: it builds a requests.Session)
 
 BASE = os.environ.get("E2E_BASE_URL", "").rstrip("/")
 pytestmark = pytest.mark.skipif(not BASE, reason="set E2E_BASE_URL to run the system e2e against a live stack")
@@ -21,9 +22,10 @@ pytestmark = pytest.mark.skipif(not BASE, reason="set E2E_BASE_URL to run the sy
 
 @pytest.fixture
 def client():
-    s = requests.Session()
-    s.get(f"{BASE}/health", timeout=5)              # seed the double-submit CSRF cookie
-    return s
+    # live_session, not a bare Session: gunicorn retires web's single worker every ~1000 requests and the
+    # graceful KEEP-ALIVE close surfaces as a ConnectionError mid-journey (#568). Transport-only retry —
+    # every HTTP status still reaches the assertions below.
+    return live_session(BASE, timeout=5)              # also seeds the double-submit CSRF cookie
 
 
 def _h(s):
