@@ -13,8 +13,7 @@ against a single source of truth and fix what they think is missing. Two indepen
   `git shortlog -sn --all`. A `.mailmap` unifies the two identities Elad committed under (GitHub noreply +
   the campus address), so that command lists **three** contributors, not four.
 
-**⬜ Still open**
-- **F5 workout generator — dashboard display** — AI side built + wired into `/predict` (Shiri); the dashboard doesn't relay or render `plan` yet — the one open *graded* gap (web tier · [#410](https://github.com/LiorBenSidi/work-smarter-not-harder/issues/410))
+**⬜ Still open** — *no build work remains; every item below is a hand-in step.*
 - **Demo video** of the app — not recorded yet (team; script at `presentation/WSNH Demo Video Script.md`)
 - **Paste the repo link** into the Moodle final-project box — Lior
 - **Upload the poster zip** to its own Moodle box (Track B, target **25 Aug**) — the 29 Jul upload was built to
@@ -26,7 +25,10 @@ The graded project has **no zip** — it's a repo link.
 
 ---
 
-## Track A — Final project (graded · 50%) · due **23 Aug**
+## Track A — Final project (graded · 50%) · due **Sun 30 Aug 2026, 23:59**
+
+> The original 23 Aug date was **extended**: the box *"Actual Submission - Extention until 30.08"* opened
+> 18 Aug and closes **Sun 30 Aug 2026, 11:59 PM**. Track B's poster box closes at the same instant (§Track B).
 
 Rubric (`docs/GUIDELINES.md`, the TA's `WSNH_Guidelines`, 8 Jul): **75** proposal app + **5** Job Queue
 + **10** Online Forum + **10** Azure deploy & CI/CD. Penalties: −5/bug, −5/week late.
@@ -49,13 +51,14 @@ Rubric (`docs/GUIDELINES.md`, the TA's `WSNH_Guidelines`, 8 Jul): **75** proposa
 - **Elad** — live Azure deploy · media/attachments (+ size caps) · rate-limiting · stress · cross-container
   test-runner · the AI job queue (+5). ✅ shipped (his own lane-validation, #388).
 - **Shiri** — the AI model (`ai/`): real `/predict` ✅ landed; **F5 workout generator's AI side ✅ built and
-  wired into `/predict`** (catalog, split resolution, exercise selection). F6's `program` input (#276 P7)
-  still unresolved — the generated plan isn't fed into `_program_recommendations` yet.
+  wired into `/predict`** (catalog, split resolution, exercise selection). **F6's input ✅ built too** (#566):
+  the Advanced tier enters its weekly programme on the profile, `services/ai_client.build_features` sends it
+  as `features["performed"]`, and `_program_recommendations` now fires on real data (#528 item 2 closed).
 
-### Open before hand-in (human steps / not built)
-- [ ] **Submit the GitHub repo link** in the Moodle final-project box when it opens (format is settled above:
-      repo link + video + report, **no zip**). Only residual: confirm *which* Moodle box — not a build task.
-- [ ] **F5 workout generator — dashboard display** (web tier) — AI side done; #410.
+### Open before hand-in (human steps only — no build work remains)
+- [ ] **Submit the GitHub repo link** in the *"Actual Submission - Extention until 30.08"* box (format settled
+      above: repo link + video + report, **no zip**). The box is identified; make the repo **private** and add
+      `EladKal6` and `cnoam` as collaborators **last**, since that hides it from everyone else.
 - [ ] **Seed prod once** before the TA review (`db/README.md` command) and confirm the **Azure VM is up**
       (instructor auto-shutdown ~23:50 UTC).
 - [ ] **Record the demo video** end-to-end on the real model.
@@ -113,12 +116,17 @@ shows a real seeded thread with per-comment votes rather than a video attachment
 
 The original `poster.pdf` was printed from a `poster.html` that was never committed, so there was no source to
 edit — it had to be reconstructed from the PDF's own text, palette and embedded images. **That source is now
-in the repo** (`poster.html` + `poster-assets/`), rendered with:
+in the repo** (`poster.html` + `poster-assets/`). Rebuild the whole package — render, rezip, validate — with:
 
 ```sh
-"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --headless --no-pdf-header-footer \
-  --print-to-pdf=poster.pdf poster.html
+bash presentation/showoff/build.sh
 ```
+
+**Do not render with `chrome --headless --print-to-pdf`.** It prints before the Google Font finishes
+loading, so the PDF embeds the CSS fallback (**HelveticaNeue**) instead of **Roboto**, and the 900-weight
+title silently loses its Black cut — the page size stays a correct A3, so nothing looks wrong until you
+inspect the embedded fonts. `build.sh` calls `render-poster.mjs`, which drives `Page.printToPDF` over CDP
+after the webfont has loaded and embeds Roboto Regular/Bold/Black correctly.
 
 **The `poster` field is kept, against the document — deliberately.** `how to submit.pdf` says *"Do not add a `poster` field"*, but the official checker **rejects** the zip without it:
 
@@ -154,6 +162,13 @@ collaborators** — the same requirement Track A carries.
 
 ```sh
 bash check_submission.sh presentation/showoff/207490913.zip   # official checker from Moodle; needs Docker
+```
+
+The staff image (`noam1023/check-submission`) is **amd64-only**, so on Apple Silicon it must be prefixed —
+otherwise it fails to pull rather than failing the zip, which is easy to misread as a passing check:
+
+```sh
+DOCKER_DEFAULT_PLATFORM=linux/amd64 bash check_submission.sh presentation/showoff/207490913.zip
 ```
 
 > ⚠️ **The instructions change without announcement.** On 18 Aug alone the box was renamed twice, its close

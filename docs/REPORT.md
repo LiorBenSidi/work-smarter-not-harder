@@ -2,9 +2,10 @@
 
 **Course:** Writing Software for Machine Learning (00950219), Technion — Spring 2026
 **Team:** Shiri Haboob · Lior Ben Sidi · Elad Nachalieli
-**Repository:** `LiorBenSidi/work-smarter-not-harder` · **Due:** 23 Aug 2026
+**Repository:** `LiorBenSidi/work-smarter-not-harder` · **Live site:** <https://app.worksmarternotharder.dev>
+· **Due:** 30 Aug 2026, 23:59
 
-> This is the living project report — the 23.08 deliverable required by the guidelines: an explanation of
+> This is the living project report — the 30.08 deliverable required by the guidelines: an explanation of
 > the app, a **feature × tests matrix drawn from the real suite**, and a **risk assessment**. It is kept
 > in-repo and updated as the build progresses. Spec sources: the **revised proposal of 28 Jun** — the version
 > the TA responded to, mirrored in-repo as [`PROPOSAL-v2.md`](PROPOSAL-v2.md) (**the contract**); the original
@@ -146,7 +147,10 @@ documents keyed by `post_id`, so a hot thread can't grow a post toward Mongo's 1
 
 `$jsonSchema` validators cover `users`, `profiles`, `analysis_history`, `forum_posts`, `messages` and
 `notifications`; `forum_comments`, `meta` and `media` carry none. **Not built:** the proposal's `programs`
-collection (v2 §9), which holds the catalog the workout generator draws on — it lands with **F5** (#276).
+collection (v2 §9), which was to hold the catalog the workout generator draws on. **F5 shipped without
+it** — the catalog lives as code in `ai/exercise_catalog.py` (99 exercises), which versions it with the
+engine that reads it and keeps it out of the `web`/`db` seam entirely. A deliberate deviation from v2 §9,
+not an omission (#276).
 
 ---
 
@@ -188,7 +192,9 @@ not a per-line credit — see §6.
 CI gate are complete and **proven end-to-end** (a real `web → ai → db` request path, the real-Mongo integration
 suite, and in-container logging all verified live); the calorie engine is built + unit-tested and its value is now live in `/predict`, the Random Forest model
 has landed (real `ai/model/model.pkl` + `inference.py`), and the deploy / real-time / scale plane are
-complete — the remaining work is integration + hardening toward the 23 Aug submission.
+complete. All eight of the proposal's §7 Main Features are built (§2); what remains before the **30 Aug**
+submission is the hand-in itself — the demo video and grader access to the repository — plus continued
+hardening. The proposal commitments we did *not* build are disclosed in §8 rather than left implicit.
 
 ---
 

@@ -127,8 +127,9 @@ omitted and the live site stays reachable through `links`.
 
 ## Writing the copy so it survives
 
-The text names **no counts and no vendors**, on purpose. The exercise catalog went 87 → 98
-mid-project and is still growing; naming a number would have dated the poster within a week. Same
+The text names **no counts and no vendors**, on purpose. The exercise catalog grew several times
+mid-project and may grow again; naming a number would have dated the poster within a week — and would
+have made a routine catalog edit a reason to re-render and re-upload the zip. Same
 reasoning retired "Brevo" and "name.com" — the app is provider-agnostic (`SMTP_HOST` is an env var),
 so naming whichever provider we happen to use makes the poster wrong the day someone switches.
 

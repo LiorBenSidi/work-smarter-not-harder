@@ -15,7 +15,7 @@
 |---|---|
 | **Thu 16 Jul** | **Presentation — 5 minutes (mandatory).** 24 projects; **we're slot 8 @ 9:15**. Class vote *during* the presentations — **7-place bonus:** 1st **+10** · 2nd **+7** · 3rd **+5** · 4th **+4** · 5th **+3** · 6th **+2** · 7th **+1** (on the final-project grade). |
 | **~Week 12** | **Working demo** to the TA (the live app / demo video). |
-| **23 Aug** | **Final submission** — the complete project. |
+| **Sun 30 Aug, 23:59** | **Final submission** — the complete project (extended from 23 Aug). Poster box closes at the same instant; Noam *asks* for it by 25 Aug. |
 
 **Penalties:** −5 per bug found · −5 per week late. So ship on time and land the fixes below.
 

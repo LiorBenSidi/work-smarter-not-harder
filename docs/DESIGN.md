@@ -37,8 +37,10 @@ carry none.*
   projection; the stored key is `_id`)* — owned by
   `web/services/media_store.py`, deliberately outside the `db.py` seam (no validator)
 
-> **Not built:** the proposal (§9) also specifies a **`programs`** collection to hold the program/exercise
-> catalog the workout generator draws on. It does not exist; it lands with **F5** (#276).
+> **Not built — deliberately.** The proposal (§9) also specifies a **`programs`** collection to hold the
+> program/exercise catalog the workout generator draws on. **F5 shipped without it:** the catalog lives as
+> code in `ai/exercise_catalog.py` (99 exercises), versioned with the engine that reads it, so `web` and
+> `db` never need to know the exercise list at all. A deviation from v2 §9, recorded in `REPORT.md` §8 (#276).
 
 ## 3. API contracts
 | Endpoint | Method | Container | Notes |

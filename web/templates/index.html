@@ -118,7 +118,6 @@
       box-shadow:0 0 18px color-mix(in srgb, var(--accent) 55%, transparent); }
     .brand-home-ico { display:none; width:14px; height:14px; stroke:var(--on-accent); fill:none; stroke-width:2.4; }
     .brand-name { font-size:16px; font-weight:800; letter-spacing:.04em; white-space:nowrap; }
-    .brand-tag { font-size:12px; color:var(--muted); white-space:nowrap; }
     /* Home FAB (mobile): a floating circular button pinned BOTTOM-LEFT, beside the centered nav pill —
        Wolt's "home button next to the search pill". ALWAYS a Home icon, shown off-Today / hidden on Today.
        Same 56px height as the pill (both bottom:12) so the two are vertically centered on one line. Desktop
@@ -905,7 +904,6 @@
     @media (prefers-reduced-motion: no-preference) {
       ::view-transition-old(root), ::view-transition-new(root) { animation-duration: .3s; animation-timing-function: cubic-bezier(.2,.7,.2,1); }
     }
-    @media (max-width: 640px) { .brand-tag { display:none; } }
     @media (max-width: 560px) { .row { grid-template-columns:1fr; } main { padding:16px 14px calc(92px + env(safe-area-inset-bottom)); } #who-name { display:none; } }
     /* Kill transitions for the instant of a theme switch so the palette change is atomic — otherwise
        each element animates its color/background at its own rate and the switch reads as a flicker. */
@@ -964,7 +962,6 @@
       <a class="brand" href="/" aria-label="Work Smarter, Not Harder — home">
         <span class="brand-dot" aria-hidden="true"><svg class="brand-home-ico" viewBox="0 0 24 24"><path d="M3 11l9-8 9 8M5 10v10h5v-6h4v6h5V10"/></svg></span>
         <span class="brand-name">Work Smarter, Not Harder</span>
-        <span class="brand-tag">readiness, every morning</span>
       </a>
     </div>
     <nav id="topnav" class="topnav" role="tablist" aria-label="Sections">
