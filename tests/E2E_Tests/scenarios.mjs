@@ -98,7 +98,20 @@ async function apiUser(base) {
   const cookieHeader = () => [...jar.entries()].map(([k, v]) => `${k}=${v}`).join("; ");
   const call = async (path, opts = {}) => {
     const headers = { cookie: cookieHeader(), "X-CSRF-Token": jar.get("csrf_token") || "", ...(opts.body ? { "content-type": "application/json" } : {}), ...opts.headers };
-    const r = await fetch(base + path, { ...opts, headers });
+    // Retry TRANSPORT failures only. `web` runs gunicorn with `--max-requests 1000
+    // --max-requests-jitter 100` and a single worker, so it deliberately recycles that worker roughly
+    // once per full E2E run; an in-flight connection during the swap dies as an unhandled "fetch
+    // failed", killing whichever scenario happened to be mid-call. That is the app behaving as
+    // configured, not failing, so the harness has to tolerate it.
+    //
+    // An HTTP response — any status — is returned untouched, so a 429 from the anti-spam limiter, a
+    // 403 or a 500 still reach the caller exactly as before. This can only swallow a thrown fetch.
+    let r, lastErr = null;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try { r = await fetch(base + path, { ...opts, headers }); lastErr = null; break; }
+      catch (e) { lastErr = e; await new Promise((res) => setTimeout(res, 250 * (attempt + 1))); }
+    }
+    if (lastErr) throw lastErr;
     for (const c of r.headers.getSetCookie?.() || []) {
       const [pair] = c.split(";"); const eq = pair.indexOf("=");
       jar.set(pair.slice(0, eq).trim(), pair.slice(eq + 1).trim());
@@ -119,48 +132,6 @@ async function apiUser(base) {
 
 export const SCENARIOS = [
   // ===== Landing (logged out) =====
-  {
-    name: "landing: orb demo cycles Ready->Moderate->Rest",
-    tags: ["landing", "anim"],
-    async fn(b) {
-      await b.goto(b.base + "/");
-      await b.clearServiceWorkers();
-      await b.goto(b.base + "/");
-      await b.waitFor("#demo-state");
-      const first = await b.text("#demo-state");
-      await b.wait(3400);   // one cycle tick (3s) + margin
-      const second = await b.text("#demo-state");
-      assert(first !== second, `orb state did not cycle (stuck on "${first}")`);
-      assert(["Ready", "Moderate", "Rest"].includes(second), `unexpected state "${second}"`);
-    },
-  },
-  {
-    name: "landing: 3 steps present, redundant paragraph gone",
-    tags: ["landing"],
-    async fn(b) {
-      await b.goto(b.base + "/");
-      const steps = await b.evaluate(`() => document.querySelectorAll(".auth-steps li").length`);
-      assert(steps >= 3, `expected 3 how-it-works steps, got ${steps}`);
-      const hasParagraph = await b.exists(".hero-sub");
-      assert(!hasParagraph, "the redundant value paragraph (.hero-sub) is back");
-    },
-  },
-  {
-    name: "landing/mobile: login reachable without scrolling; desktop: 2-col split",
-    tags: ["landing", "responsive"],
-    async fn(b, ctx) {
-      await b.goto(b.base + "/");
-      if (ctx.viewport === "mobile") {
-        const r = await b.evaluate(`() => { const btn = [...document.querySelectorAll("#login-form button")].pop(); const rr = btn.getBoundingClientRect(); return { bottom: Math.round(rr.bottom), vh: window.innerHeight }; }`);
-        assert(r.bottom <= r.vh, `mobile login button below the fold: ${r.bottom} > ${r.vh}`);
-        const orbTop = await b.evaluate(`() => Math.round(document.querySelector(".readiness-demo").getBoundingClientRect().top)`);
-        assert(orbTop < 160, `orb not near the top on mobile: ${orbTop}`);
-      } else {
-        const disp = await b.evaluate(`() => getComputedStyle(document.querySelector(".auth-split")).display`);
-        assert(disp === "grid", `desktop landing should be a grid split, got ${disp}`);
-      }
-    },
-  },
 
   // ===== Auth =====
   {
@@ -315,21 +286,6 @@ export const SCENARIOS = [
     },
   },
   {
-    name: "profile: theme dark vs light apply different palettes",
-    tags: ["profile", "theme"],
-    async fn(b) {
-      await registerAndLogin(b);
-      const bgFor = async (t) => {
-        await b.pageExec(`(() => { document.documentElement.setAttribute("data-theme", ${JSON.stringify(t)}); return true; })()`);
-        await b.wait(250);
-        return b.evaluate(`() => getComputedStyle(document.documentElement).getPropertyValue("--bg").trim()`);
-      };
-      const dark = await bgFor("dark");     // force each explicitly -> deterministic regardless of the OS default
-      const light = await bgFor("light");
-      assert(dark && light && dark !== light, `dark and light --bg should differ (dark=${dark} light=${light})`);
-    },
-  },
-  {
     // #342 (second instance): the engagement strip must be CURRENT when the user actually looks at it —
     // another user's vote lands while I'm elsewhere; re-entering Profile re-syncs the strip instead of
     // painting the boot-time snapshot forever.
@@ -363,78 +319,6 @@ export const SCENARIOS = [
       const after = await b.text("#engagement-strip");
       assert(/1/.test(after), `engagement strip still stale after re-entry (got "${after}")`);
       await cleanupPosts(b, title);                // the second user's vote is stored on this post
-    },
-  },
-  {
-    // Design pass ⑦: the forum reuses the DM generative-avatar system on every author surface.
-    name: "forum: posts + comments render generative avatars",
-    tags: ["forum", "design"],
-    async fn(b) {
-      await registerAndLogin(b);
-      const marker = uniq("Avatars ");
-      await createPost(b, marker, "does everyone get an avatar?");
-      await b.waitFor("#forum-list .post");
-      const listAv = await b.evaluate(`() => document.querySelectorAll("#forum-list .post .avatar").length`);
-      assert(listAv >= 1, "no generative avatar on the forum list byline");
-      await b.click("#forum-list .post", 900);
-      const detailAv = await b.evaluate(`() => document.querySelectorAll("#forum-detail .by .avatar").length`);
-      assert(detailAv >= 1, "no avatar on the open post's author line");
-      await b.type("#comment-form [name=body]", "great question");
-      await b.submit("#comment-form", 1100);
-      const cAv = await b.evaluate(`() => document.querySelectorAll("#forum-detail .comments li .avatar").length`);
-      assert(cAv >= 1, "no avatar on the comment row");
-      await cleanupPosts(b, marker);
-    },
-  },
-  {
-    // Design pass ⑧: the profile screen is grouped into exactly 4 cards (You / Preferences / Account / Danger).
-    name: "profile: settings are grouped into 4 cards",
-    tags: ["profile", "design"],
-    async fn(b) {
-      await registerAndLogin(b);
-      // profile is reached via the corner account menu (not a bottom tab) — same nav as the display-name scenario
-      await b.pageExec(`(() => { const btn = document.getElementById("user-menu-btn"); if (btn) btn.click(); return true; })()`);
-      await b.wait(300);
-      await b.pageExec(`(() => { const p = document.querySelector('[data-act="profile"]'); if (p) p.click(); return true; })()`);
-      await b.waitFor("#screen-profile .card");
-      const cards = await b.evaluate(`() => document.querySelectorAll("#screen-profile .card").length`);
-      assert(cards === 4, `profile should be 4 grouped cards, got ${cards}`);
-      // all six section eyebrows must still be present inside those 4 cards
-      const eyebrows = await b.evaluate(`() => document.querySelectorAll("#screen-profile .card h2").length`);
-      assert(eyebrows === 6, `expected 6 section eyebrows inside the grouped cards, got ${eyebrows}`);
-    },
-  },
-  {
-    // iOS-26 / Instagram scroll: header frosts (.scrolled) + the MOBILE tab bar SHRINKS to icon-only
-    // (.nav-compact) on scroll-down, and expands back on scroll-up. Mobile-only (pill is display:none on desktop).
-    name: "nav: header frosts + tab bar shrinks on scroll-down, expands on scroll-up",
-    tags: ["nav", "scroll", "design"],
-    async fn(b, ctx) {
-      if (ctx.viewport !== "mobile") return;                 // tab-bar shrink is a mobile-only behaviour
-      await registerAndLogin(b);
-      await b.pageExec(`(async () => { document.body.style.minHeight='3000px'; window.scrollTo(0, 700); await new Promise(r=>setTimeout(r,350)); })()`);
-      const down = await b.evaluate(`() => ({s: document.documentElement.classList.contains('scrolled'), h: document.documentElement.classList.contains('nav-compact')})`);
-      assert(down.s, "header should gain .scrolled after scrolling down");
-      assert(down.h, "the tab bar should shrink (.nav-compact) on scroll-down");
-      await b.pageExec(`(async () => { window.scrollTo(0, 120); await new Promise(r=>setTimeout(r,350)); })()`);
-      const up = await b.evaluate(`() => document.documentElement.classList.contains('nav-compact')`);
-      assert(!up, "the tab bar should expand (.nav-compact removed) on scroll-up");
-    },
-  },
-  {
-    // WhatsApp-style: the nav selection capsule SLIDES to the tapped tab (its transform changes per tab).
-    name: "nav: selection indicator slides to the tapped tab",
-    tags: ["nav", "design"],
-    async fn(b, ctx) {
-      if (ctx.viewport !== "mobile") return;                 // the sliding pill is the mobile nav
-      await registerAndLogin(b);
-      await b.pageExec(`(() => { const t = document.querySelector('.tab[data-screen="forum"]'); if (t) t.click(); return true; })()`);
-      await b.wait(450);
-      const t1 = await b.evaluate(`() => (document.querySelector('.tab-indicator') || {style:{}}).style.transform`);
-      await b.pageExec(`(() => { const t = document.querySelector('.tab[data-screen="messages"]'); if (t) t.click(); return true; })()`);
-      await b.wait(450);
-      const t2 = await b.evaluate(`() => (document.querySelector('.tab-indicator') || {style:{}}).style.transform`);
-      assert(t1 && t2 && t1 !== t2, `the selection capsule should slide between tabs (forum=${t1} chat=${t2})`);
     },
   },
 

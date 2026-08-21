@@ -46,6 +46,7 @@ EXERCISE_CATALOG = [
     {"name": "Barbell bench press", "muscle_group": "chest", "pattern": "push", "equipment": "barbell", "is_compound": True, "is_isometric": False},
     {"name": "Dumbbell bench press", "muscle_group": "chest", "pattern": "push", "equipment": "dumbbell", "is_compound": True, "is_isometric": False},
     {"name": "Incline dumbbell press", "muscle_group": "chest", "pattern": "push", "equipment": "dumbbell", "is_compound": True, "is_isometric": False},
+    {"name": "Incline barbell bench press", "muscle_group": "chest", "pattern": "push", "equipment": "barbell", "is_compound": True, "is_isometric": False},
     {"name": "Machine chest press", "muscle_group": "chest", "pattern": "push", "equipment": "machine", "is_compound": True, "is_isometric": False},
     {"name": "Push-up", "muscle_group": "chest", "pattern": "push", "equipment": "bodyweight", "is_compound": True, "is_isometric": False},
     {"name": "Band chest press", "muscle_group": "chest", "pattern": "push", "equipment": "bands", "is_compound": True, "is_isometric": False},

@@ -99,10 +99,11 @@ def dashboard():
         for e in entries[-_HISTORY_WINDOW:] if isinstance(e, dict)
     ]
 
-    # profile may be None -> score on the metrics alone ({**{}, **metrics} is just the metrics).
+    # profile may be None -> build_features scores on the metrics alone. It also translates the
+    # profile's training_program into features["performed"] for the balance analysis (#566).
     prediction = ai_client.predict(
         current_app.config["AI_URL"],
-        {**(profile or {}), **metrics, "history": trend_history},
+        ai_client.build_features(profile, metrics, history=trend_history),
         timeout=current_app.config["AI_CLIENT_TIMEOUT"],
     )
     if not isinstance(prediction, dict):
