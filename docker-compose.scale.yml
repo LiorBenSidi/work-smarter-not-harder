@@ -27,7 +27,7 @@ services:
     #   * gthread + --threads was lost, so web ran sync workers, not the measured 16-thread knee (#324);
     #   * --max-requests recycling was lost, so worker memory + per-PID logs grew unbounded;
     #   * --timeout 60 broke the documented ladder (must be 45 > AI_CLIENT_TIMEOUT 33 > queue 30).
-    command: ["gunicorn", "--bind", "0.0.0.0:5000", "--worker-class", "gthread", "--workers", "${WEB_WORKERS:-4}", "--threads", "${WEB_THREADS:-16}", "--timeout", "45", "--max-requests", "1000", "--max-requests-jitter", "100", "wsgi:app"]
+    command: ["gunicorn", "--bind", "0.0.0.0:5000", "--worker-class", "gthread", "--workers", "${WEB_WORKERS:-4}", "--threads", "${WEB_THREADS:-16}", "--timeout", "45", "--max-requests", "${WEB_MAX_REQUESTS:-1000}", "--max-requests-jitter", "${WEB_MAX_REQUESTS_JITTER:-100}", "wsgi:app"]
 
   ai:
     environment:
