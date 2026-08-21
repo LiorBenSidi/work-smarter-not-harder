@@ -49,7 +49,7 @@ services:
     # Both levers are env-tunable (WEB_WORKERS / WEB_THREADS) so the SAME image scales onto a bigger VM with one
     # .env line — no rebuild. CAVEAT: raising WEB_WORKERS>1 needs RATELIMIT_STORAGE_URI at a shared backend, else
     # the anti-abuse caps go N× looser. Compose interpolates the defaults at parse time.
-    command: ["gunicorn", "--bind", "0.0.0.0:5000", "--worker-class", "gthread", "--workers", "${WEB_WORKERS:-1}", "--threads", "${WEB_THREADS:-16}", "--timeout", "45", "--max-requests", "1000", "--max-requests-jitter", "100", "wsgi:app"]
+    command: ["gunicorn", "--bind", "0.0.0.0:5000", "--worker-class", "gthread", "--workers", "${WEB_WORKERS:-1}", "--threads", "${WEB_THREADS:-16}", "--timeout", "45", "--max-requests", "${WEB_MAX_REQUESTS:-1000}", "--max-requests-jitter", "${WEB_MAX_REQUESTS_JITTER:-100}", "wsgi:app"]
     environment:
       SECRET_KEY: ${SECRET_KEY:?set SECRET_KEY}
       MONGO_URI: ${MONGO_URI:-mongodb://db:27017/worksmarter}
