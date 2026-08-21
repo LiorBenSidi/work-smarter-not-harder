@@ -210,3 +210,75 @@ def test_an_explicit_null_is_treated_as_not_supplied(validate):
     fields effectively required, which is the opposite of the intent."""
     out = validate({**_ok(), "equipment": None, "split_preference": None})
     assert "equipment" not in out and "split_preference" not in out
+
+
+# ---------------------------------------------------------------------------
+# training_program — PROPOSAL-v2 §3's Advanced-tier input (#566): weekly sets
+# per muscle group, the first real input the balance analysis has ever had.
+# ---------------------------------------------------------------------------
+
+def test_accepts_a_training_program(validate):
+    """The Advanced tier's whole point is providing your own programme, so a well-formed one survives intact."""
+    out = validate({**_ok(), "training_program": {"chest": 12, "back": 14}})
+    assert out["training_program"] == {"chest": 12, "back": 14}
+
+
+def test_training_program_is_omitted_when_not_supplied(validate):
+    """A profile saved without one must keep exactly its old shape — no key invented for existing users."""
+    assert "training_program" not in validate(_ok())
+
+
+def test_an_explicit_null_training_program_is_treated_as_not_supplied(validate):
+    """A cleared form sends null; that must not 400, or the optional field becomes required in practice."""
+    assert "training_program" not in validate({**_ok(), "training_program": None})
+
+
+def test_a_zero_set_group_is_dropped_not_stored(validate):
+    """Not training a group and training it for zero sets are the same statement; storing the zero
+    would make the balance analysis read calves as trained-but-empty and flag a phantom imbalance."""
+    out = validate({**_ok(), "training_program": {"chest": 10, "calves": 0}})
+    assert out["training_program"] == {"chest": 10}
+
+
+@pytest.mark.parametrize("bad", [[], "chest", 5, [("chest", 3)]])
+def test_rejects_a_training_program_that_is_not_an_object(validate, bad):
+    """A list or a bare string is not a mapping; rejecting it here keeps a malformed shape out of the store."""
+    with pytest.raises(ValueError):
+        validate({**_ok(), "training_program": bad})
+
+
+@pytest.mark.parametrize("group", ["forearms", "lats", "", "CHEST"])
+def test_rejects_an_unknown_muscle_group(validate, group):
+    """Only ai/'s own 10 groups accumulate volume — an unrecognised key would be silently ignored
+    downstream, so the athlete's entry would vanish with no error. Reject it where it can be reported."""
+    with pytest.raises(ValueError):
+        validate({**_ok(), "training_program": {group: 8}})
+
+
+@pytest.mark.parametrize("sets", [True, False, 8.5, "8", None, [8]])
+def test_rejects_non_integer_set_counts(validate, sets):
+    """Sets are whole repetitions of work. bool is an int subclass in Python, so True must be rejected
+    explicitly or it would store as 1 set."""
+    with pytest.raises(ValueError):
+        validate({**_ok(), "training_program": {"chest": sets}})
+
+
+@pytest.mark.parametrize("sets", [-1, 61, 10_000])
+def test_rejects_out_of_range_set_counts(validate, sets):
+    """A negative week is impossible and an absurd one is a typo; both would skew the balance analysis."""
+    with pytest.raises(ValueError):
+        validate({**_ok(), "training_program": {"chest": sets}})
+
+
+def test_rejects_more_groups_than_exist(validate):
+    """A payload larger than the taxonomy is malformed by construction — bound it before iterating."""
+    program = {f"group{i}": 5 for i in range(20)}
+    with pytest.raises(ValueError):
+        validate({**_ok(), "training_program": program})
+
+
+@pytest.mark.parametrize("group", ["chest", "back", "shoulders", "biceps", "triceps",
+                                   "quads", "hamstrings", "glutes", "calves", "core"])
+def test_accepts_every_muscle_group_the_form_offers(validate, group):
+    """Each of the 10 boxes in the profile form must actually be accepted on submit, or the UI lies."""
+    assert validate({**_ok(), "training_program": {group: 6}})["training_program"] == {group: 6}

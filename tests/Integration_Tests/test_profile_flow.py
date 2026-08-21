@@ -66,3 +66,32 @@ def test_profile_is_per_user(profile_client):
     profile_client.post("/logout")
     _login(profile_client, "bob")
     assert profile_client.get("/profile").get_json()["profile"] is None
+
+
+def test_save_then_get_keeps_the_training_programme(profile_client):
+    """The Advanced-tier programme (#566) must survive the round trip like every other field.
+
+    It is the input the balance analysis reads, so a save path that dropped it would leave the
+    feature looking built while producing nothing — the exact failure mode #566 was opened about.
+    """
+    _login(profile_client)
+    body = {**_profile(), "training_program": {"chest": 16, "back": 14, "quads": 12}}
+    assert profile_client.post("/profile", json=body).status_code == 200
+    got = profile_client.get("/profile").get_json()["profile"]
+    assert got["training_program"] == {"chest": 16, "back": 14, "quads": 12}
+
+
+def test_a_profile_saved_without_a_programme_has_no_such_key(profile_client):
+    """Every profile saved before #566 must keep its exact shape — no key invented on their behalf,
+    which would make an untouched account look like it had answered a question it was never asked."""
+    _login(profile_client)
+    assert profile_client.post("/profile", json=_profile()).status_code == 200
+    assert "training_program" not in profile_client.get("/profile").get_json()["profile"]
+
+
+def test_save_rejects_an_unknown_muscle_group(profile_client):
+    """Rejected at the route, not silently dropped: a group ai/ does not know would never accumulate
+    volume, so the athlete's entry would vanish with no error anywhere."""
+    _login(profile_client)
+    body = {**_profile(), "training_program": {"forearms": 8}}
+    assert profile_client.post("/profile", json=body).status_code == 400

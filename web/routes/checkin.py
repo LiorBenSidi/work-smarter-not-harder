@@ -73,7 +73,8 @@ def checkin():
         return jsonify(error="profile store unavailable"), 503
 
     # readiness is assessed from today's metrics + the profile context; degrade if the ai is down.
-    prediction = ai_client.predict(current_app.config["AI_URL"], {**(profile or {}), **metrics},
+    prediction = ai_client.predict(current_app.config["AI_URL"],
+                                   ai_client.build_features(profile, metrics),
                                    timeout=current_app.config["AI_CLIENT_TIMEOUT"])
     ok = isinstance(prediction, dict)
     # calories is persisted to history AND returned to the client, so guard it to a finite number: a
@@ -150,7 +151,8 @@ def regenerate_recommendations():
         profile = current_app.config["PROFILES"].get(username)
     except Exception:
         profile = None
-    prediction = ai_client.predict(current_app.config["AI_URL"], {**(profile or {}), **metrics},
+    prediction = ai_client.predict(current_app.config["AI_URL"],
+                                   ai_client.build_features(profile, metrics),
                                    timeout=current_app.config["AI_CLIENT_TIMEOUT"])
     if not isinstance(prediction, dict):
         return jsonify(error="ai unavailable"), 503                      # can't regenerate right now; client keeps the note

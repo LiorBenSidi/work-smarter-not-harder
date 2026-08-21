@@ -1,8 +1,9 @@
 """Profile routes — GET/POST /profile (gated). OWNER: Lior (F2 route + the db side).
 
 The current user's profile (docs/DESIGN.md §2: age, gender, height, weight, goal,
-training_frequency) plus the two OPTIONAL training preferences F5 plans from — equipment and
-split_preference. Input is validated + injection-safe before any query; the profile store is
+training_frequency), the two OPTIONAL training preferences F5 plans from — equipment and
+split_preference — and the OPTIONAL training_program the Advanced tier provides (#566, weekly sets
+per muscle group). Input is validated + injection-safe before any query; the profile store is
 injected (``app.config["PROFILES"]`` — the web->db seam: ``.get`` / ``.save``).
 """
 import logging
@@ -28,6 +29,45 @@ GOALS = {"lose", "maintain", "gain"}
 # and it is not the same as "not asked yet".
 EQUIPMENT = ("bodyweight", "dumbbell", "barbell", "kettlebell", "machine", "bands", "pullup_bar")
 SPLITS = ("full_body", "upper_lower", "push_pull_legs", "no_preference")
+
+# PROPOSAL-v2 §3's Advanced tier asks the athlete to *provide* their current programme, not only to
+# receive one -- the half of §3 that was never built (#566, #528 item 2). This is that input, held as
+# weekly sets per muscle group.
+#
+# Muscle-group level rather than per-exercise, per docs/PERFORMED_VOLUME_SPEC.md "Option 1": `web`
+# then never needs `ai/exercise_catalog.py`'s exercise list or its muscle-group mapping, so the two
+# containers stay as decoupled as they are today. The 10 groups are ai/'s own taxonomy -- matching it
+# exactly is what makes every logged set actually count in the balance analysis.
+TRAINING_PROGRAM_GROUPS = ("chest", "back", "shoulders", "biceps", "triceps",
+                           "quads", "hamstrings", "glutes", "calves", "core")
+MAX_SETS_PER_GROUP = 60          # one week, one muscle group -- well past any real programme
+
+
+def _validate_training_program(value):
+    """Return a clean ``{muscle_group: weekly_sets}`` dict, or ``None`` when the caller supplied none.
+
+    A group set to 0 is dropped rather than stored: "I don't train chest" and "chest: 0 sets" are the
+    same statement, and storing the zero would make the analysis read a trained-but-empty group.
+    """
+    if value is None:
+        return None
+    if not isinstance(value, dict):
+        # catches an injection object's siblings (a list, a bare string) before any of it is stored
+        raise ValueError("training_program must be an object")
+    if len(value) > len(TRAINING_PROGRAM_GROUPS):
+        raise ValueError(f"training_program may list at most {len(TRAINING_PROGRAM_GROUPS)} muscle groups")
+    clean = {}
+    for group, sets in value.items():
+        if not isinstance(group, str) or group not in TRAINING_PROGRAM_GROUPS:
+            raise ValueError(f"training_program keys must each be one of {sorted(TRAINING_PROGRAM_GROUPS)}")
+        # bool is an int subclass, so exclude it explicitly -- as the numeric profile fields do
+        if isinstance(sets, bool) or not isinstance(sets, int):
+            raise ValueError(f"training_program['{group}'] must be an integer")
+        if not 0 <= sets <= MAX_SETS_PER_GROUP:
+            raise ValueError(f"training_program['{group}'] must be 0-{MAX_SETS_PER_GROUP}")
+        if sets:
+            clean[group] = sets
+    return clean
 
 
 def _validate_equipment(value):
@@ -89,6 +129,7 @@ def validate_profile(data):
 
     equipment = _validate_equipment(data.get("equipment"))
     split_preference = _validate_split(data.get("split_preference"))
+    training_program = _validate_training_program(data.get("training_program"))
 
     clean = {
         "age": _num("age", 10, 120, integer=True),
@@ -103,6 +144,8 @@ def validate_profile(data):
         clean["equipment"] = equipment
     if split_preference is not None:
         clean["split_preference"] = split_preference
+    if training_program is not None:
+        clean["training_program"] = training_program
     return clean
 
 
