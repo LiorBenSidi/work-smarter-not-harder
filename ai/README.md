@@ -117,13 +117,29 @@ The recommendation engine can use:
 - readiness state and current recovery metrics
 - the user's goal
 - optional recent history
-- optional weekly program information
+- optional weekly performed training volume, per muscle group
 
 When history is available, the engine can detect repeated low-readiness states and trends such as declining sleep or increasing fatigue.
 
-When weekly program information is available, it can identify simple training-volume imbalances between muscle groups.
+When weekly performed-volume information is available, it can identify simple training-volume imbalances between muscle groups.
 
 The engine does not invent missing measurements. If optional information is unavailable or invalid, it uses only the valid information that was actually provided.
+
+### Why the balance analysis reads performed volume, not the prescribed plan
+
+The muscle-group balance analysis (`_program_recommendations`) is fed `features["performed"]` —
+what the athlete actually logged — not the plan the workout generator itself prescribed. This is a
+deliberate choice, made after measuring the alternative, not an oversight: feeding the analysis its
+own generator's output was tried, and running it against every split/frequency/equipment
+combination `generate_workout_days` can produce showed the prescribed plan is balanced by
+construction — volume always lands inside the analysis's own thresholds (6–20 sets per muscle
+group, chest:back ratio 0.67–1.5), so it could never actually fire. A balance check against a plan
+the same engine just wrote would also be circular even if it did fire. The analysis itself was
+always correct; it just never had a real input. Real signal needs what the athlete actually did,
+which is why `features["performed"]` — a new, currently-proposed addition to the `/predict` request
+contract — carries logged volume instead. See `docs/DESIGN.md` §3 for the proposed shape and
+`docs/PERFORMED_VOLUME_SPEC.md` for the full collection/aggregation proposal (both pending review,
+not yet sent to the team).
 
 Daily calorie targets are calculated using the Mifflin-St Jeor equation when enough valid profile information is available. Invalid or incomplete profile data does not cause prediction to fail; the calorie field is simply omitted.
 
@@ -138,11 +154,11 @@ The AI tests cover:
 - recommendation generation
 - partial and invalid inputs
 - trend analysis
-- program balance
+- performed-volume balance
 - calorie calculation
 - queue and API compatibility
 
-The recommendation-engine test suite currently passes all 14 tests. The full AI prediction path was also tested successfully both locally and inside the Docker container.
+The recommendation-engine test suite currently passes all 19 tests. The full AI prediction path was also tested successfully both locally and inside the Docker container.
 
 ## Performance and parallel programming
 

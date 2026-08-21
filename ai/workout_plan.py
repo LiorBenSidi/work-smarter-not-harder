@@ -14,6 +14,7 @@ Output shape agreed with Lior on #410: resolve_split_preference returns a fragme
 from __future__ import annotations
 
 import math
+from collections import defaultdict
 from typing import Any
 
 try:
@@ -462,3 +463,47 @@ def generate_workout_days(
         )
 
     return days
+
+
+def flatten_plan_to_volume(days: Any) -> list[dict]:
+    """Flatten a `plan["days"]` list into the flat muscle-group volume shape
+    `ai/recommendations.py::_program_recommendations` accepts: `[{"muscle_group", "sets"}, ...]`,
+    summed across every day and exercise in the plan.
+
+    Not called anywhere in the live `/predict` path. `_program_recommendations` is fed
+    `features["performed"]` (actual logged volume), not the prescribed plan this function
+    flattens -- prescribed volume from `generate_workout_days` is balanced by construction
+    (every day/split/equipment combination lands inside the analyser's own thresholds), so
+    feeding it prescribed volume can never fire a real recommendation. This function exists as a
+    reusable utility for anything that legitimately needs prescribed weekly volume (e.g. a future
+    "prescribed vs. performed" comparison view), not as part of the recommendation trigger.
+
+    Defensive on malformed input (never the live model's own output, but this is a public utility):
+    a non-list `days`, or entries missing the expected keys, contribute nothing rather than raise.
+    """
+    if not isinstance(days, list):
+        return []
+
+    volumes: dict[str, float] = defaultdict(float)
+
+    for day in days:
+        if not isinstance(day, dict):
+            continue
+        exercises = day.get("exercises")
+        if not isinstance(exercises, list):
+            continue
+        for exercise in exercises:
+            if not isinstance(exercise, dict):
+                continue
+            muscle_group = exercise.get("muscle_group")
+            sets = exercise.get("sets")
+            if not isinstance(muscle_group, str):
+                continue
+            if not isinstance(sets, (int, float)) or isinstance(sets, bool):
+                continue
+            volumes[muscle_group] += sets
+
+    return [
+        {"muscle_group": muscle_group, "sets": sets}
+        for muscle_group, sets in volumes.items()
+    ]
