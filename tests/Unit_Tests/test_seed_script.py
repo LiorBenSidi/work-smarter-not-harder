@@ -65,9 +65,12 @@ def seed_run(tmp_path):
     assert result.returncode == 0, f"seed.sh failed: {result.stderr}"
     assert log.exists(), "seed.sh never reached 'docker compose run'"
 
-    recorded = log.read_text().splitlines()
-    call_env = dict(line.split("=", 1) for line in recorded if not line.startswith("ARG="))
-    args = [line[len("ARG="):] for line in recorded if line.startswith("ARG=")]
+    # The recording is the two env lines, then one "ARG=" line per argument. The arguments cannot be read
+    # line-by-line: the last one is the container-side shell script and is many lines long, so a per-line
+    # parse reads its body as further env entries (and blows up on the first line with no "=" in it).
+    env_text, _, args_text = log.read_text().partition("ARG=")
+    call_env = dict(line.split("=", 1) for line in env_text.splitlines() if line)
+    args = [a.rstrip("\n") for a in args_text.split("\nARG=")] if args_text else []
     return call_env, args
 
 
