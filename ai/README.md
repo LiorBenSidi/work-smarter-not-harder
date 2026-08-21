@@ -51,6 +51,63 @@ The trained model is stored in `ai/model/model.pkl`, and the training results ar
 
 The model is baked into the Docker image and loaded locally at runtime. No model download or training occurs while the service is running.
 
+## Exercise catalog
+
+The workout generator (`ai/workout_plan.py`, `ai/exercise_catalog.py`) draws from **98** hand-curated
+exercise entries, not a public dataset. This is a deliberate choice, evaluated against the
+alternative rather than assumed.
+
+Four public exercise/workout datasets were researched as possible replacements or supplements:
+free-exercise-db (800+ entries, Unlicense/public domain), wger (845+ entries, app AGPL-3+ / exercise
+data CC-BY-SA 3.0), exercemus/exercises (MIT, curated from the above two plus wger, ships a
+pre-built muscle-group map), and exercises-dataset (1,324 entries, MIT). None uses the same 10-group
+muscle taxonomy this catalog does, so each would need a manual remap, and none of the four carries
+`is_compound`/`is_isometric` fields at all — both are hand-judged per entry in the current catalog
+(Plank as the sole isometric, for example, was an individual decision, not something derivable
+mechanically from any of these sources).
+
+**Decision: keep the current hand-curated catalog, not swap.** Auditing hundreds of imported entries
+for correctness — `is_compound`/`is_isometric` especially — carries real risk of silent errors, and
+none of the four datasets researched combines a clean license, this catalog's exact muscle-group
+taxonomy, and those two fields. The provenance is already disclosed in the catalog's own module
+docstring (`ai/exercise_catalog.py:1-6`).
+
+### Coverage per muscle group
+
+Every one of the 10 muscle groups has at least 6 exercises (measured directly from
+`EXERCISE_CATALOG`, not estimated):
+
+| Group | Exercises |
+|---|---:|
+| Chest | 14 |
+| Shoulders | 13 |
+| Quads | 12 |
+| Back | 11 |
+| Biceps | 10 |
+| Glutes | 9 |
+| Hamstrings | 8 |
+| Triceps | 8 |
+| Core | 7 |
+| Calves | 6 |
+| **Total** | **98** |
+
+### How much of the catalog the generator actually reaches
+
+`generate_workout_days`'s real reach was measured exhaustively rather than estimated: across every
+one of the 127 possible non-empty equipment subsets, all 3 resolved splits, and every
+`training_frequency` from 1 to 14 (5,334 calls total), **49 of the 98 catalog entries are ever
+selected** — the other 49 are structurally unreachable under the generator as it exists today (the
+picker prefers the same exercise for a given muscle-group/pattern/equipment/day-type slot and never
+rotates, so isolation variants and secondary-equipment alternates for an already-covered slot are
+never chosen).
+
+That 49/98 split does not reduce the risk of auditing a swap, and is not read as a reason to trim the
+catalog to just the reachable half: `is_compound`/`is_isometric` still need the same manual judgment
+per entry regardless of which half happens to be live right now; a dataset swap's license risk is
+independent of exercise count; and the unreached entries are not safe to drop — they exist for
+equipment-degradation coverage that different athletes' equipment does reach, and a future change to
+the picker (adding rotation for weekly variety, for instance) would need them.
+
 ## Recommendations and calories
 
 After predicting the readiness state, the recommendation engine uses the current recovery metrics and available user information to generate actionable recommendations.
