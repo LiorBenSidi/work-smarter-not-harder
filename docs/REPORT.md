@@ -510,6 +510,21 @@ branch-protected and merges only on green CI.
   "Option 1" (muscle-group level, so `web` never needs `ai/exercise_catalog.py`'s exercise list and the two
   containers stay decoupled). This closes **#528 item 2** — the Advanced tier's "provide your workout
   program", which the v2 proposal §3 commits to — so it is no longer a disclosed gap but a shipped feature.
+- **Recommended training frequency (v2 §3, Beginner tier) — not built; scope stated.** The proposal's
+  beginner output list is *"Calorie target · Beginner workout program · Recommended training frequency"*.
+  The first two ship; the third does not. `training_frequency` is an **input only** — collected in the
+  profile form, validated in `web/routes/profile.py`, and consumed downstream for the calorie activity
+  band (`ai/recommendations.py::_activity_from_frequency`) and for split resolution
+  (`ai/workout_plan.py::resolve_split_preference`). Nothing produces a *recommended* frequency back to the
+  user. Disclosed rather than built (#528), under the guidelines' *"if you want to remove features, let us
+  know beforehand"*.
+- **Beginner / Intermediate / Advanced tiers (v2 §3) — not built as tiers; scope stated.** v2 §3 frames the
+  audience as three tiers with different inputs and different outputs. **No tier is stored, inferred, or
+  branched on anywhere** — the words appear in `web/` only as source comments naming which proposal tier an
+  input came from. What shipped instead is a single uniform path whose output scales with the data the user
+  gives: a check-in without recovery metrics still scores, and the planning inputs (equipment, split
+  preference, and the Advanced tier's training programme from #566) are **optional for every user** rather
+  than gated behind a tier. Disclosed rather than built (#528).
 - **F6 + F7 merge** — in scope, not pending: the merge is in the v2 proposal the team sent the TA (28 Jun),
   and the TA's guidelines explicitly permit notified feature changes; the balance rule is built
   (`_program_recommendations`). See `ROADMAP.md` → "Scope decision".
