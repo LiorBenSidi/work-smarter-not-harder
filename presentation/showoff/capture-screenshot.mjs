@@ -2,6 +2,10 @@
 //
 //   docker compose up -d                                   # stack must be running on :8000
 //   node presentation/showoff/capture-screenshot.mjs poster-assets/shot-6-plan.png
+//   node presentation/showoff/capture-screenshot.mjs poster-assets/shot-7-profile.png profile
+//
+// Second argument picks the screen: "plan" (default) or "profile". Both start from the same
+// throwaway account and the same saved profile, because the plan cannot render without one.
 //
 // Real UI, real render, throwaway local account — no fixtures and no hand-made mockups, so what
 // lands on the poster is what the app actually produces. Registers a user, fills a profile, files
@@ -20,8 +24,9 @@ import { Browser, VIEWPORTS } from "../../tests/E2E_Tests/lib/cdp.mjs";
 
 const BASE = process.env.E2E_BASE_URL || "http://localhost:8000";
 const OUT = process.argv[2];
-if (!OUT) {
-  console.error("usage: node capture-screenshot.mjs <output.png>");
+const SCREEN = (process.argv[3] || "plan").toLowerCase();
+if (!OUT || !["plan", "profile"].includes(SCREEN)) {
+  console.error("usage: node capture-screenshot.mjs <output.png> [plan|profile]");
   process.exit(1);
 }
 const uniq = (p) => `${p}${Date.now().toString(36)}`;
@@ -69,6 +74,15 @@ const profiled = await b.pageExec(`(() => {
   const eq = document.querySelectorAll('#equipment-group input[type=checkbox]');
   eq.forEach(c => { if (!c.checked) c.click(); });
   out.equipment = eq.length;
+  // The Advanced-tier weekly programme (#566). Filled with a balanced week so the profile tile
+  // shows the section populated, the way an athlete who answered it would see it.
+  const PROGRAM = { chest: 12, back: 14, shoulders: 9, biceps: 8, triceps: 8,
+                    quads: 12, hamstrings: 10, glutes: 10, calves: 6, core: 8 };
+  out.program = 0;
+  for (const [mg, sets] of Object.entries(PROGRAM)) {
+    const el = document.querySelector('#training-program-group input[data-mg="' + mg + '"]');
+    if (el) { el.value = String(sets); el.dispatchEvent(new Event("input", {bubbles:true})); out.program++; }
+  }
   const f = document.getElementById("profile-form");
   out.form = !!f;
   if (f) f.requestSubmit();
@@ -76,6 +90,26 @@ const profiled = await b.pageExec(`(() => {
 })()`);
 console.log("profile ->", JSON.stringify(profiled));
 await b.wait(1400);
+
+if (SCREEN === "profile") {
+  // Frame the profile card from its top edge, just under the sticky header, so the tile starts on
+  // the heading rather than mid-field. No check-in needed: this screen does not depend on one.
+  await b.pageExec(`(() => {
+    const card = document.querySelector("#screen-profile .card");
+    if (!card) return false;
+    const hdr = document.querySelector("header, .appbar, .topbar");
+    const hh = hdr ? hdr.getBoundingClientRect().height : 0;
+    window.scrollTo({ top: card.getBoundingClientRect().top + window.scrollY - hh - 14, behavior: "instant" });
+    return true;
+  })()`);
+  await b.wait(600);
+  console.log("programme inputs on screen:",
+    await b.evaluate(`() => document.querySelectorAll('#training-program-group input[data-mg]').length`));
+  await b.screenshot(OUT);
+  console.log("saved", OUT);
+  await b.close();
+  process.exit(0);
+}
 
 // Today is deliberately outside the tab model, so it is reached via #nav-home, not [data-screen].
 await b.pageExec(`(() => { const h = document.getElementById("nav-home"); if (h) { h.hidden = false; h.click(); return true; } return false; })()`);
