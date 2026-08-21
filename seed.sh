@@ -48,6 +48,16 @@ echo "Seeding demo content into the running database…"
 # Rancher/Lima, or any folder outside Docker Desktop's File-sharing list), the bind
 # mount silently succeeds but is EMPTY. Without the guard you'd get a bare
 # "python: can't open file '/repo/db/seed.py'" and no clue why.
+#
+# MSYS_NO_PATHCONV / MSYS2_ARG_CONV_EXCL are the Windows half of that same guard, and they
+# have to be set or the mount lands in the wrong place on EVERY Git Bash run. Git Bash
+# rewrites arguments that look like unix paths into Windows paths, and it rewrites BOTH
+# halves of "$PWD:/repo" -- so `-v /c/Users/you/repo:/repo` reaches docker as
+# `-v C:/Users/you/repo:C:/repo`. The mount succeeds, at `C:/repo`, and `/repo` is empty:
+# the exact symptom the guard below reports, but with a cause its advice cannot fix --
+# moving the project under $HOME does nothing (verified on Windows 11, #580).
+# Both are plain env vars: unset and unused on macOS/Linux.
+MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' \
 docker compose run --rm \
   -v "$PWD:/repo" \
   -e MONGO_URI="mongodb://db:27017/worksmarter" \

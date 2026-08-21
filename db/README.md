@@ -49,8 +49,13 @@ The `db` container is **internal** (no published port), so the one-liner above (
 reusing the `web` image (it already has `pymongo` + `werkzeug`) with the repo mounted:
 
 ```
-docker compose run --rm -v "$PWD:/repo" -e MONGO_URI=mongodb://db:27017/worksmarter web python /repo/db/seed.py
+MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' \
+  docker compose run --rm -v "$PWD:/repo" -e MONGO_URI=mongodb://db:27017/worksmarter web python /repo/db/seed.py
 ```
+
+The two `MSYS_*` vars matter **only on Windows/Git Bash**, where the shell rewrites both halves of
+`"$PWD:/repo"` into Windows paths and the repo lands at `C:/repo` instead of `/repo` (#580). They are
+unset and ignored on macOS/Linux, so the line is safe to paste anywhere.
 
 Idempotent (a re-run prints "forum already has posts — skipping"). **Verified** end-to-end against a live
 compose stack: an empty forum → 5 fake clients + 5 posts + 6 comments (+ likes). This is the command to
