@@ -1301,6 +1301,22 @@
                   <label class="seg"><input type="checkbox" name="equipment" value="pullup_bar"><span>Pull-up bar</span></label>
                 </div>
               </fieldset>
+              <fieldset class="settings-group" id="training-program-group" style="margin-top:16px">
+                <legend>Your current training programme</legend>
+                <p class="muted" style="margin:-2px 0 12px">Optional. Weekly sets per muscle group &mdash; what you train <em>now</em>. The coach checks it against balanced-training guidelines and flags anything under- or over-trained. Leave a group blank if you don&rsquo;t train it.</p>
+                <div class="row">
+                  <div><label for="tp-chest">Chest</label><input id="tp-chest" data-mg="chest" type="number" min="0" max="60" step="1" inputmode="numeric" placeholder="sets"></div>
+                  <div><label for="tp-back">Back</label><input id="tp-back" data-mg="back" type="number" min="0" max="60" step="1" inputmode="numeric" placeholder="sets"></div>
+                  <div><label for="tp-shoulders">Shoulders</label><input id="tp-shoulders" data-mg="shoulders" type="number" min="0" max="60" step="1" inputmode="numeric" placeholder="sets"></div>
+                  <div><label for="tp-biceps">Biceps</label><input id="tp-biceps" data-mg="biceps" type="number" min="0" max="60" step="1" inputmode="numeric" placeholder="sets"></div>
+                  <div><label for="tp-triceps">Triceps</label><input id="tp-triceps" data-mg="triceps" type="number" min="0" max="60" step="1" inputmode="numeric" placeholder="sets"></div>
+                  <div><label for="tp-quads">Quads</label><input id="tp-quads" data-mg="quads" type="number" min="0" max="60" step="1" inputmode="numeric" placeholder="sets"></div>
+                  <div><label for="tp-hamstrings">Hamstrings</label><input id="tp-hamstrings" data-mg="hamstrings" type="number" min="0" max="60" step="1" inputmode="numeric" placeholder="sets"></div>
+                  <div><label for="tp-glutes">Glutes</label><input id="tp-glutes" data-mg="glutes" type="number" min="0" max="60" step="1" inputmode="numeric" placeholder="sets"></div>
+                  <div><label for="tp-calves">Calves</label><input id="tp-calves" data-mg="calves" type="number" min="0" max="60" step="1" inputmode="numeric" placeholder="sets"></div>
+                  <div><label for="tp-core">Core</label><input id="tp-core" data-mg="core" type="number" min="0" max="60" step="1" inputmode="numeric" placeholder="sets"></div>
+                </div>
+              </fieldset>
               <div style="margin-top:16px"><button type="submit" class="block">Save profile</button></div>
               <div id="profile-flash" class="flash" aria-live="polite"></div>
             </form>
@@ -2020,6 +2036,13 @@
 
     // ---- Profile ----
     onSubmit("profile-form", async (f) => {
+      // PROPOSAL-v2 §3's Advanced-tier input (#566): weekly sets per muscle group. A blank or 0 box
+      // means "I don't train it", so it is dropped -- and an untouched programme section omits the
+      // key entirely, leaving a pre-#566 profile exactly the shape it already had.
+      const program = Object.fromEntries(
+        [...f.querySelectorAll("#training-program-group input[data-mg]")]
+          .map((i) => [i.dataset.mg, Number.parseInt(i.value, 10)])
+          .filter(([, sets]) => Number.isFinite(sets) && sets > 0));
       const body = {
         age: Number.parseInt(f.age.value, 10),
         gender: f.gender.value,
@@ -2031,6 +2054,7 @@
         // name, so read the checked ones directly rather than through the form's named accessor.
         split_preference: f.split_preference.value,
         equipment: [...f.querySelectorAll('input[name="equipment"]:checked')].map((c) => c.value),
+        ...(Object.keys(program).length ? { training_program: program } : {}),
       };
       const r = await api("/profile", { method: "POST", body });
       if (r.ok) { flash("profile-flash", "Saved.", "ok"); loadDashboard(); }
@@ -2242,6 +2266,12 @@
         if (f.split_preference) f.split_preference.value = p.split_preference || "no_preference";
         const owned = Array.isArray(p.equipment) ? p.equipment : [];
         f.querySelectorAll('input[name="equipment"]').forEach((c) => { c.checked = owned.includes(c.value); });
+        // Same story for the programme: a profile saved before #566 has no key, so every box clears
+        // rather than keeping the previous athlete's numbers on screen.
+        const program = (p.training_program && typeof p.training_program === "object") ? p.training_program : {};
+        f.querySelectorAll("#training-program-group input[data-mg]").forEach((i) => {
+          i.value = program[i.dataset.mg] ?? "";
+        });
       }
       loadEngagement(u);
     }

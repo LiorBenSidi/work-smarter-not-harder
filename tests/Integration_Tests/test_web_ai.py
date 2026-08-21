@@ -52,3 +52,52 @@ def test_dashboard_degrades_when_ai_unreachable(make_client, fake_users, fake_pr
         resp = client.get("/dashboard")
     assert resp.status_code == 200                               # never crashes (fault tolerance)
     assert resp.get_json()["ai_status"] == "unavailable"
+
+
+# ---------------------------------------------------------------------------
+# The Advanced-tier programme input (#566). Until this shipped,
+# ai/recommendations.py::_program_recommendations had been built and unit-tested
+# since 12 Jul but had NO producer at all — web never sent the field it reads.
+# These two tests cover the seam from both sides: web emits it, and ai consumes
+# what web emits. A unit test on either side alone would still have passed while
+# the feature did nothing.
+# ---------------------------------------------------------------------------
+
+def test_dashboard_sends_the_stored_programme_as_performed(make_client, fake_users, fake_profiles, fake_history, web_app_module):
+    """The route must put the athlete's programme on the wire under ai's name and shape.
+
+    Asserting the payload, not just that the call happened: a route that sent `training_program`
+    verbatim would look identical from the outside and the analysis would silently see nothing.
+    """
+    client = make_client(fake_users, fake_profiles, history=fake_history)
+    _login_with_profile_and_checkin(client, fake_profiles, fake_history)
+    fake_profiles.save("alice", {"age": 30, "goal": "maintain",
+                                 "training_program": {"chest": 18, "back": 12}})
+    prediction = {"state": "Ready", "proba": {"Ready": 0.9}, "recommendations": [], "calories": 2400}
+    with patch.object(_ai_client(web_app_module), "predict", return_value=prediction) as mock_predict:
+        client.get("/dashboard")
+    sent = mock_predict.call_args.args[1]
+    assert sent["performed"] == [{"muscle_group": "chest", "sets": 18},
+                                 {"muscle_group": "back", "sets": 12}]
+    assert "training_program" not in sent
+
+
+def test_what_web_sends_is_what_ai_can_actually_analyse(web_app_module):
+    """The contract test between the two halves: run web's real payload through ai's real engine.
+
+    This is the check that would have caught the original defect — `_program_recommendations` was
+    correct, web's storage was correct, and the feature still produced nothing because the two sides
+    never met. An imbalanced programme (chest 24 / back 4 — over the 20-set cap, under the 6-set
+    floor, and outside the 0.67-1.5 pressing:pulling band) must produce real advice.
+    """
+    from ai.recommendations import generate_recommendations
+
+    build_features = _ai_client(web_app_module).build_features
+    features = build_features(
+        {"age": 30, "goal": "maintain", "training_program": {"chest": 24, "back": 4}},
+        {"sleep_hours": 8, "resting_hr": 55, "fatigue": 3, "soreness": 2, "training_load": 5},
+    )
+    advice = " ".join(generate_recommendations("Ready", features)).lower()
+    assert "chest volume is high" in advice          # the over-volume rule fired
+    assert "pulling volume" in advice                # the pressing:pulling ratio rule fired
+    assert "back volume is low" in advice            # the under-volume rule fired

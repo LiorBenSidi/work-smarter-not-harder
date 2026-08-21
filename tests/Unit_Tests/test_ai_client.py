@@ -94,3 +94,59 @@ def test_predict_returns_none_when_the_ai_answers_with_an_error_status(ai_client
     monkeypatch.setattr(ai_client.requests, "post",
                         lambda *a, **k: _Resp({"detail": "model failed to load"}, status_error=err))
     assert ai_client.predict("http://ai:5000", {"x": 1}) is None
+
+
+# ---------------------------------------------------------------------------
+# build_features — the single place the /predict body is assembled (#566).
+# Three routes used to build it independently; the translation below has to
+# happen for all of them or the balance analysis silently sees nothing.
+# ---------------------------------------------------------------------------
+
+def test_build_features_merges_profile_and_metrics(ai_client):
+    """The payload is profile context plus today's metrics — the behaviour the three call sites had."""
+    out = ai_client.build_features({"age": 30, "goal": "gain"}, {"fatigue": 4})
+    assert out == {"age": 30, "goal": "gain", "fatigue": 4}
+
+
+def test_build_features_tolerates_a_missing_profile(ai_client):
+    """A user who has not filled a profile must still be scored on metrics alone, never crash."""
+    assert ai_client.build_features(None, {"fatigue": 4}) == {"fatigue": 4}
+
+
+def test_build_features_passes_extra_keys_through(ai_client):
+    """/dashboard sends `history` alongside; the builder must not swallow caller-supplied extras."""
+    out = ai_client.build_features({"age": 30}, {"fatigue": 4}, history=[{"assessment": "Ready"}])
+    assert out["history"] == [{"assessment": "Ready"}]
+
+
+def test_build_features_translates_training_program_to_performed(ai_client):
+    """The profile stores {group: sets}; ai/recommendations.py reads features["performed"] as a flat
+    list. Getting this wrong is invisible — the analysis just returns nothing — so assert the shape."""
+    out = ai_client.build_features({"training_program": {"chest": 12, "back": 6}}, {"fatigue": 4})
+    assert out["performed"] == [{"muscle_group": "chest", "sets": 12},
+                                {"muscle_group": "back", "sets": 6}]
+
+
+def test_build_features_does_not_leak_the_profile_key_onto_the_wire(ai_client):
+    """`training_program` is web's vocabulary, `performed` is ai's. Sending both would put a second
+    name for the same data on a contract that already has one."""
+    out = ai_client.build_features({"training_program": {"chest": 12}}, {"fatigue": 4})
+    assert "training_program" not in out
+
+
+def test_build_features_omits_performed_when_there_is_no_program(ai_client):
+    """Every profile saved before #566 has no programme; the analysis must then contribute nothing
+    rather than receive an empty list it would have to special-case."""
+    assert "performed" not in ai_client.build_features({"age": 30}, {"fatigue": 4})
+
+
+def test_build_features_omits_performed_for_an_empty_program(ai_client):
+    """An athlete who cleared every box has said nothing, not "I train zero sets of everything"."""
+    assert "performed" not in ai_client.build_features({"training_program": {}}, {"fatigue": 4})
+
+
+def test_metrics_win_over_a_same_named_profile_key(ai_client):
+    """Today's check-in is the fresher fact; the original `{**profile, **metrics}` ordering said so
+    and the builder must keep saying so."""
+    out = ai_client.build_features({"training_load": 2}, {"training_load": 9})
+    assert out["training_load"] == 9

@@ -13,7 +13,7 @@
 > +10 Azure deploy + CI/CD; supersedes [`FEEDBACK.md`](FEEDBACK.md)). Architecture detail lives in [`DESIGN.md`](DESIGN.md); the phased plan in
 > [`ROADMAP.md`](ROADMAP.md).
 >
-> **Last updated:** 2026-08-21 · **Suite at this snapshot:** **1347 checks, 1303 passing / 44 environment-gated**
+> **Last updated:** 2026-08-21 · **Suite at this snapshot:** **1411 checks, 1367 passing / 44 environment-gated**
 > (+ 20 browser e2e scenarios)
 > (`python -m pytest tests/ -q`; the env-gated ones run in CI's `compose-e2e` job against the live containers).
 > Since the 07-12 snapshot (783 tests): **Shiri's Random Forest landed** — a real `ai/model/model.pkl` +
@@ -163,7 +163,7 @@ not a per-line credit — see §6.
 | F3 — Readiness analysis — **the model** (Random Forest, real `/predict`) | ✅ merged (`ai/model/model.pkl` + `inference.py`; `test_ai_queue_api` loads the real RF) | ai |
 | F4 — Calorie recommendation (Mifflin–St Jeor, `ai/calories.py`) | ✅ engine + unit tests; live value now wired into `/predict` (`calculate_calories` in `predict_one`) | ai |
 | F5 — Workout generator | ✅ **AI generation built and wired into `/predict`** — `resolve_split_preference` + `generate_workout_days` produce a real day-by-day plan (goal + days + equipment + split → plan from the program catalog) on every live prediction. **User-visible now too**: `GET /dashboard` relays the plan and the card renders it — a collapsible day-by-day programme, or a `split_options` picker at 4-5 sessions/week (#410, closed). No swap (TA-confirmed). | ai ✅ · web ✅ |
-| F6 — Program-balance analysis (push/pull volume, merged into F7) | 🟡 shape fixed in `_program_recommendations` (reads `features["performed"]`, PR #529) — still inert end-to-end: no web/db producer exists for `performed` yet, disclosed in #528; team decision is disclose, not build, before submission | ai |
+| F6 — Program-balance analysis (push/pull volume, merged into F7) | ✅ **built end-to-end** — the Advanced tier enters its own weekly programme on the profile (`training_program`, sets per muscle group), `ai_client.build_features` sends it as `features["performed"]`, and `_program_recommendations` returns real under/over-volume and pressing:pulling advice from it (#566, closing #528 item 2). Built to `docs/PERFORMED_VOLUME_SPEC.md` "Option 1" | ai ✅ · web ✅ |
 | F7 — Action plan / recommendations — **web surfaces the list**; **engine** | ✅ | web ✅ · ai ✅ (`generate_recommendations`) |
 | F8 — Dashboard | ✅ current state ✅ · calories ✅ · progress history ✅ · active workout plan ✅ — `web/routes/dashboard.py` relays `plan` and the card renders it (collapsible day-by-day programme, or a `split_options` picker at 4-5 sessions/week). Closed in #410. | web |
 | F9 — History tracking | ✅ | web |
@@ -203,11 +203,12 @@ Columns are the test-type dirs under `tests/`. Cells name representative file(s)
 | Feature / component | Unit | Integration | Negative | System / Full-System | Security | Stress |
 |---|---|---|---|---|---|---|
 | **F1 Accounts / Auth** | `test_auth_validation` (25) · `test_email` (18) | `test_auth_flow` (13) · `test_login_otp` (16) · `test_password_reset` (12) · `test_register_verify` (11) · `test_account_*` (25) | `test_auth_negative` (33) | `test_e2e` leg | `test_auth` (10) · `test_csrf` (6) · `test_debug_email_override` (7) | — |
-| **F2 Profile** | `test_profile_validation` (45) | `test_profile_flow` (6) · `test_identity_display` (3) | in `test_profile_checkin_negative` (59) | `test_e2e` leg | `test_profile` (1) | — |
-| **F3 Readiness (web path)** | `test_checkin_validation` (23) · `test_ai_client` (5) | `test_checkin_flow` (13) · `test_web_ai` (2) | in `test_profile_checkin_negative` (59) | `test_e2e` leg | — | — |
-| **F3 Readiness (model — Shiri)** | `test_ai_inference` (16) · `test_ai_recommendations` (14) · `test_ai_binning` (21) | `test_ai_queue_api` (27, loads the real `model.pkl`) | — | — | — | — |
+| **F2 Profile** | `test_profile_validation` (77) | `test_profile_flow` (9) · `test_identity_display` (3) | in `test_profile_checkin_negative` (59) | `test_e2e` leg | `test_profile` (1) | — |
+| **F3 Readiness (web path)** | `test_checkin_validation` (23) · `test_ai_client` (13) | `test_checkin_flow` (13) · `test_web_ai` (4) | in `test_profile_checkin_negative` (59) | `test_e2e` leg | — | — |
+| **F3 Readiness (model — Shiri)** | `test_ai_inference` (16) · `test_ai_recommendations` (19) · `test_ai_binning` (21) | `test_ai_queue_api` (27, loads the real `model.pkl`) | — | — | — | — |
 | **F4 Calorie** | `test_calories` (14) | via `test_checkin_flow` / `test_dashboard_flow` | — | — | — | — |
-| **F7 Action plan / recommendations** | (engine covered by the F3-model unit tests) | `test_web_ai` (2) · `test_dashboard_flow` (13) | — | `test_e2e` leg | — | — |
+| **F6 Program balance (Advanced-tier input)** | `test_ai_client` (13) — the `training_program` -> `performed` translation | `test_web_ai` (4) — the web->ai seam, including web's real payload run through ai's real engine · `test_profile_flow` (9) | `test_training_program_negative` (19) | — | (profile wall) | — |
+| **F7 Action plan / recommendations** | (engine covered by the F3-model unit tests) | `test_web_ai` (4) · `test_dashboard_flow` (13) | — | `test_e2e` leg | — | — |
 | **F8 Dashboard** | — | `test_dashboard_flow` (13) | — | `test_e2e` leg | `test_dashboard` (1) | — |
 | **F9 History** | — | `test_history_flow` (4) | — | `test_e2e` leg | `test_history` (1) | — |
 | **Online Forum (CRUD/UI, votes)** | `test_forum_validation` (16) | `test_forum_flow` (19) · `test_comment_votes` (7) | `test_forum_negative` (35) | `test_e2e` leg | `test_forum` (3) | in `test_load` (forum flood) |
@@ -226,19 +227,19 @@ Columns are the test-type dirs under `tests/`. Cells name representative file(s)
 | **Fault tolerance / isolation** | — | — | — | `test_fault_isolation` (2) · Full-System `test_parts_in_isolation` (12) | — | — |
 | **Whole-system journey** | — | — | — | `test_e2e` (1) · Full-System `test_everything_together_sync` (15) | — | — |
 
-**Totals by type (full suite, `pytest --collect-only`):** Unit **564** · Integration **484** · Negative **158** ·
-System **14** · Full-System **27** · Security **88** · Stress **12** → **1347 automated checks across the seven
+**Totals by type (full suite, `pytest --collect-only`):** Unit **604** · Integration **489** · Negative **177** ·
+System **14** · Full-System **27** · Security **88** · Stress **12** → **1411 automated checks across the seven
 pytest suites**, plus **20 browser end-to-end scenarios** driven separately (`tests/E2E_Tests/`, run in CI as
 the *e2e (browser · desktop + mobile)* job — not counted in the pytest total). This matches the header count.
 
-Read the total as *checks*, not as hand-written test functions: 1347 collected cases come from **1005 test
+Read the total as *checks*, not as hand-written test functions: 1411 collected cases come from **1031 test
 functions** (measured with `grep -c "^def test_"` across `tests/`), the remainder being parametrised cases (one `@parametrize` over 11 malformed payloads is 11
 collected cases, not 11 tests written). The suite is deliberately weighted toward the layers where a
 regression is cheapest to catch — unit and negative input walls — rather than toward volume.
 
-**Pass / skip:** the pre-07-12 snapshot was **747 pass, 36 skip in ~47 s**; the current suite is **1303 pass,
+**Pass / skip:** the pre-07-12 snapshot was **747 pass, 36 skip in ~47 s**; the current suite is **1367 pass,
 44 skip** (`python -m pytest tests/ -q`); in CI, where the `mongo:7` service is present, the same
-suite is **1329 pass, 18 skip**. All **44** local skips are env-gated and *not broken* — they run the
+suite is **1393 pass, 18 skip**. All **44** local skips are env-gated and *not broken* — they run the
 moment their dependency is present:
 
 - `test_db_mongo` (21) — the real-Mongo integration suite; skips without `TEST_MONGO_URI`, and **runs in CI**
@@ -267,12 +268,12 @@ The five canonical types live under `tests/{Unit,Integration,System,Stress,Secur
 `Negative_Tests/` for adversarial-input coverage and `Full_System_Tests/` for whole-stack journeys), run on any
 machine (env vars, no local paths), and are exercised by CI on every PR. A run that collects **0 tests fails** the gate.
 
-- **Unit (564)** — pure functions and single components in isolation: input validators (auth / profile /
+- **Unit (604)** — pure functions and single components in isolation: input validators (auth / profile /
   check-in / forum), the calorie formula, the `db.py` CRUD and Mongo-internals logic (against an in-memory
   fake), the logging configuration, and app config. Heavily parametrized on boundary and adversarial inputs
   (e.g. profile validation rejects injection objects, bools-as-numbers, and out-of-range values across every
   field).
-- **Integration (484)** — components wired together through the Flask test client: the auth flow, profile
+- **Integration (489)** — components wired together through the Flask test client: the auth flow, profile
   round-trip, check-in → `ai /predict` → persist, dashboard, history, and the full forum lifecycle. Two
   boundary suites are notable: `test_web_ai` stubs the `web → ai` HTTP seam with a contract-shaped response
   and asserts the dashboard surfaces it (and degrades to `ai_status: unavailable` when `ai` returns
@@ -288,7 +289,7 @@ machine (env vars, no local paths), and are exercised by CI on every PR. A run t
   (`test_csrf`), NoSQL-injection-safe queries (`test_profile`, `test_forum`), ownership enforcement on
   forum edit/delete (403), auth-gating of dashboard/history, and response-hardening (`test_web_hardening`).
 
-The two supporting directories complete the 1347: **Negative (158)** — adversarial and malformed input across
+The two supporting directories complete the 1411: **Negative (177)** — adversarial and malformed input across
 auth, profile, check-in, forum and media — and **Full-System (27)** — whole-stack journeys in-process, plus the
 parts-in-isolation suite. The per-type figures here are the same ones tabulated in §3; both are
 `pytest --collect-only` counts, not estimates.
@@ -486,7 +487,7 @@ between planes (§1). Full detail in [`COLLABORATORS.md`](../COLLABORATORS.md) a
 cp .env.example .env
 docker compose up --build          # 3 containers; only web is published
 # → http://localhost:8000/health   → then register, set a profile, check in, see the dashboard
-pytest -q                          # 1303 pass / 44 env-gated skip
+pytest -q                          # 1367 pass / 44 env-gated skip
 ```
 
 CI reproduces the gate on every PR (ruff → bandit → pytest + a `mongo:7` service). `main` is
@@ -502,9 +503,12 @@ branch-protected and merges only on green CI.
   `GET /dashboard` relays the plan and the card renders it (#410, closed). No swap (TA-confirmed). Tracked in #276.
   F6's shape fix merged (PR #529): `_program_recommendations` now reads `features["performed"]` (actual
   logged training volume) instead of prescribed `program` data — the analysis can genuinely fire now.
-  Still inert end-to-end, for a different reason: no web/db producer exists yet for `features["performed"]`,
-  disclosed as a known gap in #528. Team decision (#528, #276) is to disclose rather than build the producer
-  before submission; the design is ready at `docs/PERFORMED_VOLUME_SPEC.md` if anyone picks it up.
+  **And it now does.** #566 built the web/db producer that had never existed: the Advanced tier enters its
+  own programme on the profile as weekly sets per muscle group, and `services/ai_client.build_features`
+  translates it to `features["performed"]` on every prediction. Built to `docs/PERFORMED_VOLUME_SPEC.md`
+  "Option 1" (muscle-group level, so `web` never needs `ai/exercise_catalog.py`'s exercise list and the two
+  containers stay decoupled). This closes **#528 item 2** — the Advanced tier's "provide your workout
+  program", which the v2 proposal §3 commits to — so it is no longer a disclosed gap but a shipped feature.
 - **F6 + F7 merge** — in scope, not pending: the merge is in the v2 proposal the team sent the TA (28 Jun),
   and the TA's guidelines explicitly permit notified feature changes; the balance rule is built
   (`_program_recommendations`). See `ROADMAP.md` → "Scope decision".

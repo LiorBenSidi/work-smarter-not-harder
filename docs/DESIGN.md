@@ -53,7 +53,7 @@ carry none.*
 
 **`plan`** (F5, #276/#410) is **always present** — unlike `calories`, it never needs a complete profile to produce a safe value. It reads `split_preference`, `training_frequency`, `equipment` and `goal` straight off the request's `features` (the web already merges the athlete's profile into that payload before calling `/predict`, so no extra plumbing was needed on the web side). `ai/workout_plan.py:resolve_split_preference` returns one of two shapes: `{"split": <full_body|upper_lower|push_pull_legs>, "days": null}` when the split is unambiguous, or `{"split_options": [<str>, <str>]}` at 4 or 5 training days/week, where the web is expected to prompt the athlete to choose rather than the engine guessing (agreed with Lior on #410). `predict_one` then fills `days` via `generate_workout_days` when resolved — real exercises drawn from `EXERCISE_CATALOG` (goal shapes sets/reps only, never which exercises are picked); the ambiguous `{"split_options": [...]}` shape is left completely untouched, since there is nothing to generate for a split that hasn't been chosen yet. The dashboard card for `plan` is tracked separately in #410.
 
-**⚠️ PROPOSED — not yet implemented, a sync point with `web`/`db` (#276 P7, #528 item 2).** The
+**✅ BUILT (#566) — the `web`/`db` producer this described now exists (#276 P7, #528 item 2).** The
 undertrained-muscle-group balance analysis (`ai/recommendations.py::_program_recommendations`) is
 fully built and unit-tested, but has never had a real input in production: prescribed plan volume
 (`generate_workout_days`'s own output) is balanced by construction, so feeding it the plan it just
@@ -64,9 +64,12 @@ request field, `features["performed"]`: a flat list `[{"muscle_group": <str>, "s
 7-day window** — the same shape `_program_recommendations` already accepts, and a 7-day window so
 the analysis's existing weekly thresholds (6–20 sets, chest:back ratio 0.67–1.5) need no
 recalibration. `ai/recommendations.py` already reads `features.get("performed")` for this analysis
-as of today; what web/db would need to add — collecting, storing and aggregating the athlete's
-actual logged volume into this shape — is out of scope for `ai/` and not touched here. Detailed
-proposal: `docs/PERFORMED_VOLUME_SPEC.md` (draft, not yet sent to the team).
+as of today, and **`web` now sends it**: the athlete's own weekly programme is entered on the profile
+(`training_program`, validated in `web/routes/profile.py`) and translated to this exact shape by
+`web/services/ai_client.py:build_features` on every prediction — one builder shared by `/checkin`,
+the recommendations regen and `/dashboard`, so no call site can be wired and its siblings missed.
+Design: `docs/PERFORMED_VOLUME_SPEC.md`, "Option 1" (muscle-group level, no cross-container
+dependency on `ai/exercise_catalog.py`).
 
 ## 4. AI decision engine (the heart)
 One pipeline, two capabilities:
