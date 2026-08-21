@@ -7,9 +7,14 @@ Supported inputs:
 - Current check-in: sleep_hours, fatigue, soreness, training_load
 - Profile: age, gender, height, weight, goal, training_frequency
 - Optional history: list of previous entries with metrics/assessment
-- Optional program: list/dict describing muscle-group volume or workout items
+- Optional performed: list/dict describing actual logged muscle-group training volume
 
-Missing optional data is skipped; the engine never invents history or program details.
+Missing optional data is skipped; the engine never invents history or performed-volume details.
+
+`performed` (not `program`) feeds the muscle-group balance analysis. `generate_workout_days`'s
+prescribed plan is balanced by construction -- every split/frequency/equipment combination it
+produces already lands inside the balance thresholds below, so an analysis fed prescribed volume
+can never actually fire. Real signal needs what the athlete actually did, not what was assigned.
 """
 
 from __future__ import annotations
@@ -210,8 +215,12 @@ def _history_recommendations(history: Any) -> list[tuple[int, str]]:
     return items
 
 
-def _program_recommendations(program: Any) -> list[tuple[int, str]]:
-    """Analyze optional muscle-group weekly volume when present.
+def _program_recommendations(performed: Any) -> list[tuple[int, str]]:
+    """Analyze actual logged muscle-group weekly volume when present.
+
+    Shape-agnostic (works on any volume distribution it's handed): the name predates this
+    function being pointed at logged/performed data instead of a prescribed plan, kept to avoid
+    unnecessary churn in its tests and call sites.
 
     Accepted forms:
     - {"weekly_sets": {"chest": 16, "back": 8, ...}}
@@ -219,15 +228,15 @@ def _program_recommendations(program: Any) -> list[tuple[int, str]]:
     """
     volumes: dict[str, float] = defaultdict(float)
 
-    if isinstance(program, dict):
-        weekly_sets = program.get("weekly_sets")
+    if isinstance(performed, dict):
+        weekly_sets = performed.get("weekly_sets")
         if isinstance(weekly_sets, dict):
             for muscle, sets in weekly_sets.items():
                 value = _finite_number(sets)
                 if value is not None and value >= 0:
                     volumes[str(muscle).strip().lower()] += value
-    elif isinstance(program, list):
-        for item in program:
+    elif isinstance(performed, list):
+        for item in performed:
             if not isinstance(item, dict):
                 continue
             muscle = item.get("muscle_group")
@@ -260,8 +269,8 @@ def _program_recommendations(program: Any) -> list[tuple[int, str]]:
 def generate_recommendations(state: str, features: Any, *, max_items: int = 5) -> list[str]:
     """Return a prioritized recommendation list.
 
-    Current check-in recommendations always work. History/program analysis is added only when
-    those optional structures are actually provided.
+    Current check-in recommendations always work. History/performed-volume analysis is added
+    only when those optional structures are actually provided.
     """
     if not isinstance(features, dict):
         features = {}
@@ -269,7 +278,7 @@ def generate_recommendations(state: str, features: Any, *, max_items: int = 5) -
     candidates = []
     candidates.extend(_current_recovery_recommendations(state, features))
     candidates.extend(_history_recommendations(features.get("history")))
-    candidates.extend(_program_recommendations(features.get("program")))
+    candidates.extend(_program_recommendations(features.get("performed")))
 
     ordered: list[str] = []
     seen: set[str] = set()
