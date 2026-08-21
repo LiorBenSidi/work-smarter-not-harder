@@ -373,12 +373,13 @@ export const SCENARIOS = [
       assert(await b.evaluate(`() => document.querySelector("#checkin-form").checkValidity()`) === true,
         "with both numbers filled the form is natively valid, so the app's own guard is what is under test");
       await b.pageExec(`(() => { document.querySelector("#checkin-form").requestSubmit(); return true; })()`);
-      await b.wait(900);
+      // Wait for the refusal MESSAGE, not for a fixed 900ms: it is the app's own signal that the submit
+      // round-trip finished, so "nothing was saved" below is read AFTER the request completed instead of
+      // racing it. The negative check itself keeps its pause-free form — it needs no state to arrive (#568).
+      await b.waitUntil(`() => { const el = document.querySelector("#checkin-flash"); return !!(el && el.textContent.trim()); }`,
+        { what: "the app refused the check-in but told the user nothing about why" });
       assert(await savedCount() === 0,
         "a check-in with no fatigue/soreness/training_load was SAVED — the app's own guard did not refuse it");
-      const why = await b.text("#checkin-flash");
-      assert(why && why.trim().length > 0,
-        "the app refused the check-in but told the user nothing about why");
 
       await b.pageExec(`(() => {
         document.querySelectorAll("#checkin-form .scale").forEach((sc) => {
@@ -387,8 +388,8 @@ export const SCENARIOS = [
         });
         return true;
       })()`);
-      await b.wait(150);
-      assert(await b.evaluate(gate) === "false", "a fully-filled check-in must announce Submit as available");
+      await b.waitUntil(`() => (${gate})() === "false"`,
+        { what: "a fully-filled check-in must announce Submit as available" });
 
       // (3) Below the model's floor (sleep_hours >= 1): the gate shuts AND a submit must still save nothing.
       await b.pageExec(`(() => {
@@ -397,9 +398,8 @@ export const SCENARIOS = [
         el.dispatchEvent(new Event("input", { bubbles: true }));
         return true;
       })()`);
-      await b.wait(150);
-      assert(await b.evaluate(gate) === "true",
-        "sleep_hours below the model's minimum must re-announce Submit as unavailable");
+      await b.waitUntil(`() => (${gate})() === "true"`,
+        { what: "sleep_hours below the model's minimum must re-announce Submit as unavailable" });
       await b.pageExec(`(() => { document.querySelector("#checkin-form").requestSubmit(); return true; })()`);
       await b.wait(900);
       assert(await savedCount() === 0,
@@ -524,9 +524,8 @@ export const SCENARIOS = [
         el.dispatchEvent(new Event("input", { bubbles: true }));
         return true;
       })()`);
-      await b.wait(150);
-      assert(await b.evaluate(btnDisabled) === false,
-        "the exact confirmation word did NOT arm the button — the gate cannot be passed at all");
+      await b.waitUntil(`() => (${btnDisabled})() === false`,
+        { what: "the exact confirmation word did NOT arm the button — the gate cannot be passed at all" });
 
       // nothing was submitted, so the account must still be there
       const stillAlive = await b.pageExec(`(async () => (await fetch("/me")).status)()`);
@@ -592,9 +591,7 @@ export const SCENARIOS = [
         return true;
       })()`);
       assert(opened === true, "the stored check-in did not render a row in History");
-      await b.wait(600);
-
-      assert(await b.visible("#history-detail"), "clicking a History row did not open its detail");
+      await b.waitFor("#history-detail");
 
       // the load-bearing assertion: the modal shows the inputs THIS entry was logged with
       const shown = await b.text("#hdetail-body");
@@ -605,8 +602,7 @@ export const SCENARIOS = [
 
       // ESC closes it and hands the page back — a modal that traps the user is worse than no modal
       await b.pageExec(`(() => { document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })); return true; })()`);
-      await b.wait(400);
-      assert(!(await b.visible("#history-detail")), "ESC did not close the History detail");
+      await b.waitGone("#history-detail", { what: "ESC did not close the History detail" });
       const locked = await b.evaluate(`() => document.documentElement.style.overflow + "|" + document.body.style.overflowY`);
       assert(!/hidden/.test(locked), `the page scroll lock survived the modal closing (${locked})`);
 
@@ -833,7 +829,8 @@ export const SCENARIOS = [
           bubbles: bs.length, lastText: bs.length ? bs[bs.length - 1].textContent : "" }); })()`;
 
       await b.pageExec(`(() => { document.querySelector("#dm-thread").scrollTop = 0; return true; })()`);
-      await b.wait(200);
+      await b.waitUntil(`() => document.querySelector("#dm-thread").scrollTop === 0`,
+        { what: "the thread pane never scrolled to the top, so \"scrolled up\" cannot be set up" });
       const before = JSON.parse(await b.pageExec(metrics));
       assert(before.bubbles >= 8, `expected the seeded thread on screen, saw ${before.bubbles} bubbles`);
       assert(before.fromBottom > 100,
@@ -846,12 +843,15 @@ export const SCENARIOS = [
         if (await b.pageExec(`document.querySelector("#dm-thread").textContent.includes(${JSON.stringify(sent)})`)) break;
         await b.wait(400);
       }
-      await b.wait(400);                                 // let the post-send scroll settle before reading it
+      // The post-send scroll is animated, so poll it to rest instead of pausing 400ms and hoping: on a
+      // loaded runner the fixed pause could expire mid-animation and the failure then read as "their own
+      // message is off screen" — a product bug that had not happened (#568).
+      await b.waitUntil(`() => { const x = document.querySelector("#dm-thread");
+        return Math.round(x.scrollHeight - x.scrollTop - x.clientHeight) < 40; }`,
+        { what: `sending left the reader scrolled away from the bottom (was ${before.fromBottom}px from it) — their own message is off screen` });
       const after = JSON.parse(await b.pageExec(metrics));
       assert(after.lastText.includes(sent),
         `the sent message never reached the thread: last bubble was ${JSON.stringify(after.lastText.slice(0, 60))}`);
-      assert(after.fromBottom < 40,
-        `sending left the reader ${after.fromBottom}px from the bottom (was ${before.fromBottom}px) — their own message is off screen`);
       assert(after.lastBelowFold <= 4,
         `the message just sent sits ${after.lastBelowFold}px below the fold`);
 
@@ -1009,20 +1009,17 @@ export const SCENARIOS = [
       await b.waitFor("#forum-form");
 
       await b.setFileInput("#forum-files", new URL("./fixtures/pixel.png", import.meta.url).pathname);
-      await b.wait(400);
-
-      const chips = await b.pageExec(`document.querySelectorAll("#forum-tray .att-chip").length`);
-      assert(chips === 1, `the picked file was not shown in the composer — chips rendered: ${chips}`);
+      await b.waitUntil(`() => document.querySelectorAll("#forum-tray .att-chip").length === 1`,
+        { what: "the picked file was not shown in the composer" });
       const name = await b.text("#forum-tray .att-name");
       assert(/pixel\.png/.test(name || ""), `the chip must name the file — it read: ${JSON.stringify(name)}`);
       const size = await b.text("#forum-tray .att-size");
       assert(size && /B|KB|MB/.test(size), `the chip must show a size — it read: ${JSON.stringify(size)}`);
 
       // The tray owns an ARRAY, not the picker's immutable FileList — this is what makes removal possible.
-      await b.click("#forum-tray .att-x");
-      await b.wait(300);
-      const after = await b.pageExec(`document.querySelectorAll("#forum-tray .att-chip").length`);
-      assert(after === 0, `remove left ${after} file(s) attached`);
+      await b.click("#forum-tray .att-x", 0);
+      await b.waitUntil(`() => document.querySelectorAll("#forum-tray .att-chip").length === 0`,
+        { what: "remove left the file attached" });
       const hint = await b.text("#forum-files-hint");
       assert(!hint, `the composer still claimed files were attached after removal: ${JSON.stringify(hint)}`);
     },
@@ -1055,9 +1052,8 @@ export const SCENARIOS = [
       await b.waitFor("#comment-form");
 
       await b.setFileInput("#comment-files", new URL("./fixtures/pixel.png", import.meta.url).pathname);
-      await b.wait(400);
-      const chips = await b.pageExec(`document.querySelectorAll("#comment-tray .att-chip").length`);
-      assert(chips === 1, `the comment composer did not show the picked file — chips: ${chips}`);
+      await b.waitUntil(`() => document.querySelectorAll("#comment-tray .att-chip").length === 1`,
+        { what: "the comment composer did not show the picked file" });
 
       await b.type("#comment-form [name=body]", "here is the photo");
       await b.submit("#comment-form", 1200);
