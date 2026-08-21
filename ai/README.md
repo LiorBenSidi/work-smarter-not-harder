@@ -108,6 +108,12 @@ independent of exercise count; and the unreached entries are not safe to drop â€
 equipment-degradation coverage that different athletes' equipment does reach, and a future change to
 the picker (adding rotation for weekly variety, for instance) would need them.
 
+**Known, accepted gap: biceps has zero bodyweight-equipment exercises in the catalog** â€” a
+bodyweight-only athlete gets no biceps exercise on any day. Not something being built around right
+now: a self-resistance/isometric bodyweight curl was considered and rejected as too non-standard for
+this catalog, and a pull-up-bar exercise (e.g. Chin-up) was also considered and rejected since it
+requires equipment, contradicting the bodyweight-only case it would exist to address.
+
 ## Recommendations and calories
 
 After predicting the readiness state, the recommendation engine uses the current recovery metrics and available user information to generate actionable recommendations.
