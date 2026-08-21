@@ -2367,7 +2367,8 @@
             + '<span class="streak-cap">' + (loggedToday ? "· logged today" : "· check in to keep it") + "</span>";
           el.hidden = false;
         } else if (hasHistory) {
-          el.innerHTML = ICON.flame + '<span class="streak-cap">Start a new streak: check in today</span>';
+          el.innerHTML = ICON.flame + '<span class="streak-n">Start a streak</span>'
+            + '<span class="streak-cap">· check in today</span>';
           el.hidden = false;
         } else {
           el.hidden = true;                                              // brand-new user: the first-check-in flow onboards

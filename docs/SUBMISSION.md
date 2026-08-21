@@ -7,7 +7,7 @@ against a single source of truth and fix what they think is missing. Two indepen
 
 **✅ Implemented & verified**
 - **Graded build:** 3-container Docker app · **Job Queue (+5)** · **Online Forum (+10)** · **Azure deploy + CI/CD (+10)** · live HTTPS URL
-- **Report** (`REPORT.md`, 1411 tests) · **README** (run + test instructions) · risk assessment
+- **Report** (`REPORT.md`, 1412 tests) · **README** (run + test instructions) · risk assessment
 - **Per-member commits** present — all three members commit under their own identity, so the per-member
   grading requirement is met. Counts drift with every push; read them from the repo rather than from here:
   `git shortlog -sn --all`. A `.mailmap` unifies the two identities Elad committed under (GitHub noreply +
@@ -35,7 +35,7 @@ Rubric (`docs/GUIDELINES.md`, the TA's `WSNH_Guidelines`, 8 Jul): **75** proposa
 |---|---|---|---|
 | The application | this repo @ `main` | all | ✅ `docker compose up --build` (3 containers, only `web` published) |
 | Live URL over HTTPS | app.worksmarternotharder.dev | Elad (deploy) | ✅ live, auto-deploy + rollback |
-| **Report** | [`docs/REPORT.md`](REPORT.md) | all (Lior drafted) | ✅ current — **1411 tests** (1393 pass / 18 env-gated in CI). The single source is the live `.md`; the stale 2026-07-11 `REPORT.pdf` was removed — regenerate a fresh PDF from this only if the TA wants a file. |
+| **Report** | [`docs/REPORT.md`](REPORT.md) | all (Lior drafted) | ✅ current — **1412 tests** (1394 pass / 18 env-gated in CI). The single source is the live `.md`; the stale 2026-07-11 `REPORT.pdf` was removed — regenerate a fresh PDF from this only if the TA wants a file. |
 | Rubric / guidelines | [`docs/GUIDELINES.md`](GUIDELINES.md) | — | ✅ |
 | Roadmap | [`docs/ROADMAP.md`](ROADMAP.md) | — | ✅ |
 | Presentation + demo video | `presentation/` (see the checklist) | all | 🟡 deck ✅ (presented 16 Jul); **demo video ⬜ to record** → `VID_<ids>.mp4` |
@@ -96,11 +96,11 @@ a non-compliant submission.
 | [`metadata.json`](../presentation/showoff/metadata.json) | title · ~20-word + ~100-word desc · **all** members · `repo_url` | 20 / 104 words · 3 members · `repo_url` present · no `launch` · `poster` kept — see below | ✅ |
 | [`poster.pdf`](../presentation/showoff/poster.pdf) | A3 · PDF · one page | **297.0 × 420.2 mm, 1 page, portrait** — renders inline on GitHub | ✅ |
 | [`poster.html`](../presentation/showoff/poster.html) + [`poster-assets/`](../presentation/showoff/poster-assets/) | — | **the poster's source**, so the next change is an edit rather than a rebuild | ✅ |
-| [`build.sh`](../presentation/showoff/build.sh) · [`capture-screenshot.mjs`](../presentation/showoff/capture-screenshot.mjs) · [`seed-for-screenshots.py`](../presentation/showoff/seed-for-screenshots.py) | — | render + rezip + validate; re-shoot one tile; populate history and DMs so tiles aren't empty | ✅ |
+| [`build.sh`](../presentation/showoff/build.sh) · [`render-poster.mjs`](../presentation/showoff/render-poster.mjs) · [`capture-screenshot.mjs`](../presentation/showoff/capture-screenshot.mjs) · [`seed-for-screenshots.py`](../presentation/showoff/seed-for-screenshots.py) | — | render + rezip + validate; re-shoot one tile; populate history and DMs so tiles aren't empty | ✅ |
 | [`demo.mp4`](../presentation/showoff/demo.mp4) | optional · 20–90 s · 1920×1080 · MP4 · silent | **29.6 s · 1920×1080 · h264 · no audio stream at all** — plays inline on GitHub | ✅ |
 | [`207490913.zip`](../presentation/showoff/207490913.zip) | **exactly** those files, flat, named after one member's ID | **3 entries, no folders, no `thumb.png`** | ✅ |
 
-**Both assets were refreshed on 20 Aug.** They predated the F5 workout plan (#522/#523), so neither showed
+**Both assets were refreshed on 20 Aug, and the poster again on 21 Aug** (#578: #567/#570 changed the plan's exercise selection, and #564/#576 changed the profile screen, dating those two tiles). They predated the F5 workout plan (#522/#523), so neither showed
 the app's headline AI output while the copy claimed *"what to train"* and the video promised *"a clear action
 plan"*. The video gains a **"Know what to train"** scene cross-faded in after Readiness.
 
