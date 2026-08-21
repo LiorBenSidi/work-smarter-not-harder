@@ -31,6 +31,7 @@ and embedded images. Don't recreate that situation: **edit the source and re-ren
 | `render-demo.mjs` | shoots `demo.html`'s slides to 1920×1080 PNGs |
 | `build-demo.sh` | renders the slides, stitches `demo.mp4`, re-checks the gallery rules |
 | `build.sh` | renders the PDF, rebuilds the zip, validates the result |
+| `metadata.json` | the gallery entry's text |
 
 **`demo.mp4` had no source until now**, which is the same trap this section opens with. When F5's
 workout plan and the Advanced-tier programme (#566) shipped, the clip could not be updated — only
@@ -40,7 +41,6 @@ updates both, and the two can never drift apart.
 
 A segment's screen time lives in its own `data-secs` attribute, beside its content, so changing what
 a slide says and how long it stays are one edit in one file.
-| `metadata.json` | the gallery entry's text |
 
 ### Populating the app first
 
