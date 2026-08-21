@@ -506,6 +506,23 @@ branch-protected and merges only on green CI.
 - **F6 + F7 merge** — in scope, not pending: the merge is in the v2 proposal the team sent the TA (28 Jun),
   and the TA's guidelines explicitly permit notified feature changes; the balance rule is built
   (`_program_recommendations`). See `ROADMAP.md` → "Scope decision".
+- **Exercise catalog (F5/F6)** — hand-curated, not derived from a public dataset (evaluated and rejected;
+  see `ai/README.md` → "Exercise catalog" for the four datasets researched and why none replaced it).
+  Every muscle group has at least 6 exercises, measured directly from `EXERCISE_CATALOG`:
+
+  | Group | Exercises |
+  |---|---:|
+  | Chest | 14 |
+  | Shoulders | 13 |
+  | Quads | 12 |
+  | Back | 11 |
+  | Biceps | 10 |
+  | Glutes | 9 |
+  | Hamstrings | 8 |
+  | Triceps | 8 |
+  | Core | 7 |
+  | Calves | 6 |
+  | **Total** | **98** |
 - **Exact readiness categories + final feature set** *(SETTLED — baked into the shipped `model.pkl`:
   features `sleep_hours` · `fatigue` · `soreness` · `training_load`, class labels + ready-threshold in the
   same bundle; the `/predict` contract shapes were pinned all along)*.
