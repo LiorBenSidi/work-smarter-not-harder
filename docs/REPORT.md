@@ -162,10 +162,10 @@ not a per-line credit — see §6.
 | F3 — Readiness analysis — **web path** (check-in → `ai /predict` → persist → surface) | ✅ | web |
 | F3 — Readiness analysis — **the model** (Random Forest, real `/predict`) | ✅ merged (`ai/model/model.pkl` + `inference.py`; `test_ai_queue_api` loads the real RF) | ai |
 | F4 — Calorie recommendation (Mifflin–St Jeor, `ai/calories.py`) | ✅ engine + unit tests; live value now wired into `/predict` (`calculate_calories` in `predict_one`) | ai |
-| F5 — Workout generator | 🟡 **AI generation built and wired into `/predict`** — `resolve_split_preference` + `generate_workout_days` produce a real day-by-day plan (goal + days + equipment + split → plan from the program catalog) on every live prediction. **Not yet user-visible**: the dashboard doesn't relay or render `plan` yet (#410, web tier). No swap (TA-confirmed). | ai |
-| F6 — Program-balance analysis (push/pull volume, merged into F7) | 🟡 built in `_program_recommendations` (the F6→F7 merge is settled in the v2 proposal — not pending); one gap: no `program` input feeds it yet (#276 P7), which F5 supplies | ai |
+| F5 — Workout generator | ✅ **AI generation built and wired into `/predict`** — `resolve_split_preference` + `generate_workout_days` produce a real day-by-day plan (goal + days + equipment + split → plan from the program catalog) on every live prediction. **User-visible now too**: `GET /dashboard` relays the plan and the card renders it — a collapsible day-by-day programme, or a `split_options` picker at 4-5 sessions/week (#410, closed). No swap (TA-confirmed). | ai ✅ · web ✅ |
+| F6 — Program-balance analysis (push/pull volume, merged into F7) | 🟡 shape fixed in `_program_recommendations` (reads `features["performed"]`, PR #529) — still inert end-to-end: no web/db producer exists for `performed` yet, disclosed in #528; team decision is disclose, not build, before submission | ai |
 | F7 — Action plan / recommendations — **web surfaces the list**; **engine** | ✅ | web ✅ · ai ✅ (`generate_recommendations`) |
-| F8 — Dashboard | 🟡 current state ✅ · calories ✅ · progress history ✅ — but **not the active workout plan**, which the v2 proposal §7 also lists. **No longer blocked on the AI side** — `/predict` returns a real `plan` on every call — the gap is now purely web-side: `web/routes/dashboard.py` doesn't read or forward `plan`, and no frontend card or `split_options` picker exists yet. Tracked in #410. | web |
+| F8 — Dashboard | ✅ current state ✅ · calories ✅ · progress history ✅ · active workout plan ✅ — `web/routes/dashboard.py` relays `plan` and the card renders it (collapsible day-by-day programme, or a `split_options` picker at 4-5 sessions/week). Closed in #410. | web |
 | F9 — History tracking | ✅ | web |
 | Online Forum — CRUD/UI (posts, comments, votes, anonymity, edit/delete-own) | ✅ | web |
 | Online Forum — real-time layer (SSE push, DM, vote + DM notifications, media attachments) | ✅ | web (DM/SSE/notifications) · deploy (media, size caps) |
@@ -498,11 +498,13 @@ branch-protected and merges only on green CI.
 
 - **F5 — workout generator (Shiri)** — required by the v2 proposal. **AI generation built and wired into
   `/predict`**: `resolve_split_preference` + `generate_workout_days` produce a real plan (goal + days +
-  equipment + split → plan from the program catalog) on every live prediction. **Still open**: the dashboard
-  doesn't relay or render `plan` yet — tracked in #410 (web tier). No swap (TA-confirmed). Tracked in #276.
-  F6's `program` input (#276 P7) is still unresolved — `generate_workout_days`'s output is not yet fed into
-  `_program_recommendations`'s `program` argument; `predict_one` computes `recommendations` from the raw
-  request features before `plan` exists, and nothing currently connects the two.
+  equipment + split → plan from the program catalog) on every live prediction. **Dashboard relay done too**:
+  `GET /dashboard` relays the plan and the card renders it (#410, closed). No swap (TA-confirmed). Tracked in #276.
+  F6's shape fix merged (PR #529): `_program_recommendations` now reads `features["performed"]` (actual
+  logged training volume) instead of prescribed `program` data — the analysis can genuinely fire now.
+  Still inert end-to-end, for a different reason: no web/db producer exists yet for `features["performed"]`,
+  disclosed as a known gap in #528. Team decision (#528, #276) is to disclose rather than build the producer
+  before submission; the design is ready at `docs/PERFORMED_VOLUME_SPEC.md` if anyone picks it up.
 - **F6 + F7 merge** — in scope, not pending: the merge is in the v2 proposal the team sent the TA (28 Jun),
   and the TA's guidelines explicitly permit notified feature changes; the balance rule is built
   (`_program_recommendations`). See `ROADMAP.md` → "Scope decision".
