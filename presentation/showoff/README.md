@@ -57,14 +57,32 @@ docker compose exec -T db mongosh worksmarter --quiet \
 
 ### A screenshot went stale
 
+The stack must be running the code you want to shoot. **Rebuild first** — a container left up from
+an earlier session serves the old templates, and the screenshot will silently show stale UI:
+
 ```sh
-docker compose up -d
-node presentation/showoff/capture-screenshot.mjs presentation/showoff/poster-assets/shot-6-plan.png
+REGISTER_VERIFY_EMAIL=0 OTP_ENABLED=0 SMTP_HOST= SESSION_COOKIE_SECURE=0 RATELIMIT_ENABLED=0 \
+  docker compose up -d --build
+docker compose exec -T web grep -c training-program-group templates/index.html   # sanity: >0
 ```
 
-It registers a throwaway account, fills a profile, files a check-in and shoots the plan card at the
-same mobile viewport as the other tiles. For a *different* screen, copy it and change the
-navigation — the harness API is in [`tests/E2E_Tests/lib/cdp.mjs`](../../tests/E2E_Tests/lib/cdp.mjs).
+Then shoot the screen you need:
+
+```sh
+node presentation/showoff/capture-screenshot.mjs presentation/showoff/poster-assets/shot-6-plan.png
+node presentation/showoff/capture-screenshot.mjs presentation/showoff/poster-assets/shot-7-profile.png profile
+```
+
+It registers a throwaway account and fills a profile — including the Advanced-tier weekly programme
+(#566) — then either files a check-in and shoots the plan card, or shoots the profile card directly.
+Both run at the same mobile viewport as the other tiles. For a screen it does not cover yet, add a
+branch next to the `profile` one; the harness API is in
+[`tests/E2E_Tests/lib/cdp.mjs`](../../tests/E2E_Tests/lib/cdp.mjs).
+
+**Which tiles actually go stale:** work out which screens a change touched rather than re-shooting
+all seven. `git log <last-shot>..HEAD -- web/ ai/` and then checking the hunk line numbers against
+the template is enough — an `ai/` change to exercise selection dates `shot-6-plan`, a profile-form
+change dates `shot-7-profile`, and neither touches the other five.
 
 Tiles are cropped to a shared aspect ratio in CSS, so a shot taken at a different viewport still
 lines the grid up instead of stretching its row.
