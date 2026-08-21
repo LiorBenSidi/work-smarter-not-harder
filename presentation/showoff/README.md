@@ -70,19 +70,32 @@ Then shoot the screen you need:
 
 ```sh
 node presentation/showoff/capture-screenshot.mjs presentation/showoff/poster-assets/shot-6-plan.png
-node presentation/showoff/capture-screenshot.mjs presentation/showoff/poster-assets/shot-7-profile.png profile
+node presentation/showoff/capture-screenshot.mjs presentation/showoff/poster-assets/shot-7-profile.png   profile
+node presentation/showoff/capture-screenshot.mjs presentation/showoff/poster-assets/shot-8-programme.png programme
 ```
 
 It registers a throwaway account and fills a profile — including the Advanced-tier weekly programme
 (#566) — then either files a check-in and shoots the plan card, or shoots the profile card directly.
-Both run at the same mobile viewport as the other tiles. For a screen it does not cover yet, add a
-branch next to the `profile` one; the harness API is in
+All three run at the same mobile viewport as the other tiles. For a screen it does not cover yet, add
+a branch next to the `profile` one; the harness API is in
 [`tests/E2E_Tests/lib/cdp.mjs`](../../tests/E2E_Tests/lib/cdp.mjs).
 
+**Why `profile` and `programme` are two tiles of one screen.** The profile card is ~2597 CSS px tall,
+and a tile prints only its **top ~737** — the poster crops to `aspect-ratio: 741/1400` from the top.
+Card-top through programme-bottom spans ~2223 px, so fitting both would take roughly a 0.33× zoom:
+about 4px type. Two tiles cost nothing, because at seven the four-column grid left row two holding
+three with a gap; the eighth fills it without adding a row or a millimetre of sheet.
+
+The `programme` branch does not pick its scroll offset by eye — it sweeps candidate offsets and keeps
+the one that lands the most muscle groups on the **printed** band while keeping the section heading
+visible and the equipment chips fully clear of the sticky header. It then prints how many groups
+survived the crop, because measuring against the viewport instead of the printed band is exactly how
+#566 ended up cropped off the sheet in the first place.
+
 **Which tiles actually go stale:** work out which screens a change touched rather than re-shooting
-all seven. `git log <last-shot>..HEAD -- web/ ai/` and then checking the hunk line numbers against
+all eight. `git log <last-shot>..HEAD -- web/ ai/` and then checking the hunk line numbers against
 the template is enough — an `ai/` change to exercise selection dates `shot-6-plan`, a profile-form
-change dates `shot-7-profile`, and neither touches the other five.
+change dates `shot-7-profile` and `shot-8-programme`, and neither touches the other five.
 
 Tiles are cropped to a shared aspect ratio in CSS, so a shot taken at a different viewport still
 lines the grid up instead of stretching its row.

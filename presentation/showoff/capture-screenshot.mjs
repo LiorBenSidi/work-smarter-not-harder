@@ -2,10 +2,13 @@
 //
 //   docker compose up -d                                   # stack must be running on :8000
 //   node presentation/showoff/capture-screenshot.mjs poster-assets/shot-6-plan.png
-//   node presentation/showoff/capture-screenshot.mjs poster-assets/shot-7-profile.png profile
+//   node presentation/showoff/capture-screenshot.mjs poster-assets/shot-7-profile.png   profile
+//   node presentation/showoff/capture-screenshot.mjs poster-assets/shot-8-programme.png programme
 //
-// Second argument picks the screen: "plan" (default) or "profile". Both start from the same
-// throwaway account and the same saved profile, because the plan cannot render without one.
+// Second argument picks the screen: "plan" (default), "profile", or "programme". All three start
+// from the same throwaway account and the same saved profile, because the plan cannot render
+// without one. "profile" and "programme" are two frames of the SAME screen -- see the geometry
+// note at the "programme" branch for why they cannot be one tile.
 //
 // Real UI, real render, throwaway local account — no fixtures and no hand-made mockups, so what
 // lands on the poster is what the app actually produces. Registers a user, fills a profile, files
@@ -25,8 +28,8 @@ import { Browser, VIEWPORTS } from "../../tests/E2E_Tests/lib/cdp.mjs";
 const BASE = process.env.E2E_BASE_URL || "http://localhost:8000";
 const OUT = process.argv[2];
 const SCREEN = (process.argv[3] || "plan").toLowerCase();
-if (!OUT || !["plan", "profile"].includes(SCREEN)) {
-  console.error("usage: node capture-screenshot.mjs <output.png> [plan|profile]");
+if (!OUT || !["plan", "profile", "programme"].includes(SCREEN)) {
+  console.error("usage: node capture-screenshot.mjs <output.png> [plan|profile|programme]");
   process.exit(1);
 }
 const uniq = (p) => `${p}${Date.now().toString(36)}`;
@@ -103,8 +106,86 @@ if (SCREEN === "profile") {
     return true;
   })()`);
   await b.wait(600);
-  console.log("programme inputs on screen:",
-    await b.evaluate(`() => document.querySelectorAll('#training-program-group input[data-mg]').length`));
+  await b.screenshot(OUT);
+  console.log("saved", OUT);
+  await b.close();
+  process.exit(0);
+}
+
+if (SCREEN === "programme") {
+  // Why the Advanced-tier programme (#566) gets its OWN tile rather than sharing the profile's.
+  //
+  // GEOMETRY, measured rather than guessed: the profile card is ~2597 CSS px tall, and the poster
+  // crops every tile to aspect-ratio 741/1400 with object-position:top, so only the TOP ~737 CSS px
+  // of a capture ever reaches the printed sheet. Card-top through programme-bottom spans ~2223 px --
+  // fitting both would need roughly a 0.33x zoom, about 4px type. So one tile cannot carry the
+  // profile fields AND the programme at a readable size.
+  //
+  // Two tiles cost nothing: the grid is four columns, so seven tiles left row two holding three with
+  // a gap. Eight fills it -- still two rows, same sheet height.
+  // Pick the offset by MEASURING, not by taste: sweep a few back-offs above the programme block and
+  // keep the one that lands the most muscle groups on the printed sheet while still showing the
+  // section heading. Anchoring on the equipment chips reads nicer but only survives 2 of 10 groups.
+  const framed = await b.pageExec(`(() => {
+    const grp = document.querySelector("#training-program-group");
+    if (!grp) return { ok: false, why: "no #training-program-group" };
+    const hdr = document.querySelector("header, .appbar, .topbar");
+    const hh = hdr ? hdr.getBoundingClientRect().height : 0;
+    const block = grp.closest("fieldset, section") || grp;
+    const band = Math.round(window.innerWidth / (741 / 1400));
+    const inputs = Array.from(grp.querySelectorAll("input[data-mg]"));
+    const heading = Array.from(document.querySelectorAll("#screen-profile *")).find(
+      e => /current training programme/i.test(e.textContent || "") && e.children.length === 0);
+    let best = null;
+    // The header is STICKY and content scrolls under it, so simply landing on the block's top edge
+    // leaves the equipment chips peeking out beneath the bar — sliced mid-row, which reads as a
+    // mistake. Negative back-offs scroll a little further so the chips clear the bar entirely.
+    // A candidate is only acceptable when the section heading is on the sheet AND no equipment chip
+    // is visible below the header.
+    const chips = Array.from(document.querySelectorAll("#equipment-group *"))
+      .filter(e => e.children.length === 0 && (e.textContent || "").trim());
+    for (const back of [14, 0, -12, -24, -36]) {
+      const y = Math.max(0, block.getBoundingClientRect().top + window.scrollY - hh - back);
+      window.scrollTo({ top: y, behavior: "instant" });
+      const onSheet = inputs.filter(e => { const r = e.getBoundingClientRect();
+        return r.top >= 0 && r.bottom <= band; }).length;
+      const hr = heading ? heading.getBoundingClientRect() : null;
+      const headOK = !!(hr && hr.top >= 0 && hr.bottom <= band);
+      const chipVisible = chips.some(c => { const r = c.getBoundingClientRect();
+        return r.bottom > hh + 2 && r.top < band; });
+      if (headOK && !chipVisible && (!best || onSheet > best.onSheet)) {
+        best = { back, y: Math.round(y), onSheet };
+      }
+    }
+    if (!best) return { ok: false, why: "no offset kept the heading on the sheet" };
+    window.scrollTo({ top: best.y, behavior: "instant" });
+    return { ok: true, anchoredOn: "programme", chosenBackOff: best.back,
+             scrolledTo: best.y, groupsOnSheet: best.onSheet };
+  })()`);
+  console.log("framing ->", JSON.stringify(framed));
+  await b.wait(600);
+  // Prove the grid reaches the PRINTED sheet, not merely the viewport. The poster crops each tile to
+  // 741/1400 from the top, so the band that survives is the top (viewportWidth / (741/1400)) CSS px --
+  // ~737 at 390 wide. Measuring against the viewport instead would pass on inputs the poster throws
+  // away, which is the silent mis-frame that put #566 off the sheet in the first place.
+  const visible = await b.evaluate(`() => {
+    const band = Math.round(window.innerWidth / (741 / 1400));
+    const els = Array.from(document.querySelectorAll('#training-program-group input[data-mg]'));
+    const onSheet = els.filter(e => { const r = e.getBoundingClientRect();
+      return r.top >= 0 && r.bottom <= band; });
+    const heading = Array.from(document.querySelectorAll('#screen-profile *')).find(
+      e => /current training programme/i.test(e.textContent || "") && e.children.length === 0);
+    const hr = heading ? heading.getBoundingClientRect() : null;
+    return { posterBandCssPx: band, total: els.length,
+             onPrintedSheet: onSheet.length,
+             groupsShown: onSheet.map(e => e.getAttribute('data-mg')),
+             filled: els.filter(e => e.value !== "").length,
+             headingOnSheet: !!(hr && hr.top >= 0 && hr.bottom <= band) };
+  }`);
+  console.log("programme on the printed sheet:", JSON.stringify(visible));
+  if (!visible || visible.onPrintedSheet === 0) {
+    console.error("WARNING: no programme input survives the poster crop — reframe before shipping");
+  }
   await b.screenshot(OUT);
   console.log("saved", OUT);
   await b.close();

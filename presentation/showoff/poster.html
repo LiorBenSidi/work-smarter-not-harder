@@ -81,10 +81,14 @@
   .cols b{ font-weight:700; }
 
   /* ---------- screenshots ---------- */
-  /* Seven tiles: four across, then three centred beneath. Flex rather than grid, because a 4-column
-     grid leaves the short row hanging to the left, which reads as a mistake; justify-content:center
-     centres it on its own. Narrower tiles are also SHORTER at a fixed aspect, so going 3-up -> 4-up
-     buys vertical room rather than costing it. */
+  /* Eight tiles: four across, twice. Flex rather than grid, because a 4-column grid leaves a short
+     row hanging to the left, which reads as a mistake; justify-content:center centres it on its own.
+     Narrower tiles are also SHORTER at a fixed aspect, so going 3-up -> 4-up buys vertical room
+     rather than costing it.
+     The eighth tile was free: at seven, row two held three with a gap, so adding the training
+     programme filled that gap without adding a row or a millimetre of height. It exists because the
+     profile card is ~2597 CSS px tall while a tile prints only its top ~737, so the athlete's own
+     programme (#566) could not share the profile tile at readable size. */
   .shots{ display:flex; flex-wrap:wrap; justify-content:center; gap:6mm 7mm; margin:10mm 0 0; }
   .shot{ width:calc((100% - 21mm) / 4); }        /* 4 columns, 3 gaps of 7mm */
   /* every tile shares the mockup aspect the original shots were captured at, so a screenshot taken
@@ -162,6 +166,7 @@
     <figure class="shot"><img src="poster-assets/shot-4-forum.png" alt="Forum post with votes, comments and their own vote counts"><figcaption>Forum &amp; comments</figcaption></figure>
     <figure class="shot"><img src="poster-assets/shot-5-dms.png" alt="Real-time direct messages"><figcaption>Real-time DMs</figcaption></figure>
     <figure class="shot"><img src="poster-assets/shot-7-profile.png" alt="Athlete profile: age, height, weight, goal and training split"><figcaption>Athlete profile</figcaption></figure>
+    <figure class="shot"><img src="poster-assets/shot-8-programme.png" alt="The athlete's own weekly training programme: sets per muscle group, which the coach checks for balance"><figcaption>Your training programme</figcaption></figure>
 </section>
 
   <footer class="foot">

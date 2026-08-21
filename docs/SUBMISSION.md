@@ -110,9 +110,12 @@ plan"*. The video gains a **"Know what to train"** scene cross-faded in after Re
 **Every poster screenshot was re-taken** against current `main`, not just the new one — the originals were
 from 19 July and four of the six had drifted (Today gained its calorie recommendation; History gained filter
 chips; the Forum composer gained attachments and anonymity; Messages changed shape). The poster now carries
-**seven** tiles, four across and three centred beneath: login · readiness · workout plan · history · forum ·
-DMs · profile. The forum caption changed from *"Forum & video"* to *"Forum & comments"*, because the shot now
-shows a real seeded thread with per-comment votes rather than a video attachment.
+**eight** tiles, four across and four beneath: login · readiness · workout plan · history · forum · DMs ·
+profile · training programme. The forum caption changed from *"Forum & video"* to *"Forum & comments"*, because
+the shot now shows a real seeded thread with per-comment votes rather than a video attachment. The eighth tile
+was added last and cost nothing: at seven, row two held three with a gap, so the Advanced-tier programme (#566)
+filled it without adding a row. It needs its own tile because the profile card is ~2597 CSS px tall while a
+tile prints only its top ~737, so the profile fields and the programme cannot share one at readable size.
 
 The original `poster.pdf` was printed from a `poster.html` that was never committed, so there was no source to
 edit — it had to be reconstructed from the PDF's own text, palette and embedded images. **That source is now
