@@ -4,9 +4,10 @@
 > `VID_<id1>_<id2>_<id3>.mp4`. It is one of the three required hand-in items (repo link · video · report) and
 > is **not yet recorded**.
 >
-> It is **not** the Show Off gallery clip. That one is separate, 20–90 s and **silent**, cut as
-> `presentation/showoff/demo.mp4` (27.9 s). Don't confuse the two: this script's voiceover would disqualify the
-> gallery clip, and the gallery clip is far too short for this.
+> It is **not** the Show Off gallery clip. That one is separate, 20–90 s and **silent**:
+> `presentation/showoff/demo.mp4`, **57 s**, rebuilt from its own committed source
+> (`presentation/showoff/demo.html` → `build-demo.sh`). Don't confuse the two — this script's voiceover
+> would disqualify the gallery clip, and the gallery clip is far too short for this.
 
 **Goal:** show *every* graded feature working on the **live** site (https://app.worksmarternotharder.dev).
 The Moodle announcement asks for "a video of you using the app… you are **highly advised to demonstrate all of
