@@ -1,9 +1,15 @@
-# Proposed: logging performed training volume (`features["performed"]`)
+# Logging performed training volume (`features["performed"]`)
 
-**Status: draft, not sent to the team.** This is a proposal from the AI side for what `web`/`db`
-would need to build to close #276 P7 / #528 item 2 — it is not a request to build it yet, and
-nothing here is final. Flagging the sync point in `docs/DESIGN.md` §3 as PROPOSED; this file is the
-detail behind that flag.
+**Status: BUILT (#566).** This began as a proposal from the AI side for what `web`/`db` would need
+to build to close #276 P7 / #528 item 2. `web` now implements it — **"Option 1" below**, the
+muscle-group-level variant, chosen for the reason given there: `web` never has to know
+`ai/exercise_catalog.py`'s exercise list, so the two containers stay as decoupled as they were.
+
+The athlete's own weekly programme is entered on the profile (`training_program`, validated in
+`web/routes/profile.py`) and translated to the `features["performed"]` shape specified below by
+`web/services/ai_client.py:build_features`, on every prediction. No `ai/` change was needed, exactly
+as this document predicted. The sync point in `docs/DESIGN.md` §3 is marked BUILT accordingly. The
+rest of this file is kept as written — it is the design the implementation follows.
 
 ## Why this exists
 
