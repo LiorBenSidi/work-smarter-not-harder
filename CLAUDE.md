@@ -9,7 +9,7 @@ requirements: [`docs/Proj_Guidelines.pdf`](docs/Proj_Guidelines.pdf) + [`docs/TA
 
 ## Current status (updated 2026-07-17) — read this first
 The backend is built and CI-gated; **the graded live demo was presented 16 Jul.** The open work is Shiri's
-model lane + the final 23 Aug submission. If you're picking up work, build **within** an open lane below,
+model lane + the final **30 Aug** submission. If you're picking up work, build **within** an open lane below,
 keep `main` green (PR-only), and **don't re-do or "polish" the built parts**.
 - ✅ **Built (Lior):** the `web` tier (auth · profile · daily check-in · dashboard · history · forum CRUD+UI ·
   **direct messages + live DM notifications** (the Chat tab: conversations · threads · generative avatars · a

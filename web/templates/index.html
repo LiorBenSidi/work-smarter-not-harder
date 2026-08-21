@@ -118,7 +118,6 @@
       box-shadow:0 0 18px color-mix(in srgb, var(--accent) 55%, transparent); }
     .brand-home-ico { display:none; width:14px; height:14px; stroke:var(--on-accent); fill:none; stroke-width:2.4; }
     .brand-name { font-size:16px; font-weight:800; letter-spacing:.04em; white-space:nowrap; }
-    .brand-tag { font-size:12px; color:var(--muted); white-space:nowrap; }
     /* Home FAB (mobile): a floating circular button pinned BOTTOM-LEFT, beside the centered nav pill —
        Wolt's "home button next to the search pill". ALWAYS a Home icon, shown off-Today / hidden on Today.
        Same 56px height as the pill (both bottom:12) so the two are vertically centered on one line. Desktop
@@ -905,7 +904,6 @@
     @media (prefers-reduced-motion: no-preference) {
       ::view-transition-old(root), ::view-transition-new(root) { animation-duration: .3s; animation-timing-function: cubic-bezier(.2,.7,.2,1); }
     }
-    @media (max-width: 640px) { .brand-tag { display:none; } }
     @media (max-width: 560px) { .row { grid-template-columns:1fr; } main { padding:16px 14px calc(92px + env(safe-area-inset-bottom)); } #who-name { display:none; } }
     /* Kill transitions for the instant of a theme switch so the palette change is atomic — otherwise
        each element animates its color/background at its own rate and the switch reads as a flicker. */
@@ -964,7 +962,6 @@
       <a class="brand" href="/" aria-label="Work Smarter, Not Harder — home">
         <span class="brand-dot" aria-hidden="true"><svg class="brand-home-ico" viewBox="0 0 24 24"><path d="M3 11l9-8 9 8M5 10v10h5v-6h4v6h5V10"/></svg></span>
         <span class="brand-name">Work Smarter, Not Harder</span>
-        <span class="brand-tag">readiness, every morning</span>
       </a>
     </div>
     <nav id="topnav" class="topnav" role="tablist" aria-label="Sections">
@@ -2036,13 +2033,22 @@
 
     // ---- Profile ----
     onSubmit("profile-form", async (f) => {
-      // PROPOSAL-v2 §3's Advanced-tier input (#566): weekly sets per muscle group. A blank or 0 box
-      // means "I don't train it", so it is dropped -- and an untouched programme section omits the
-      // key entirely, leaving a pre-#566 profile exactly the shape it already had.
+      // PROPOSAL-v2 §3's Advanced-tier input (#566): weekly sets per muscle group.
+      //
+      // A BLANK box means "I don't train it" and is dropped. An explicit 0 is KEPT (#583): it means
+      // the number zero, and `chest: 12, back: 0` is the most extreme pressing:pulling imbalance the
+      // coach exists to flag. This filter used to demand a POSITIVE count, which discarded that case
+      // here -- before the server or `ai` ever saw it -- so fixing only the validator would leave the
+      // real UI behaving exactly as before. Blank still parses to NaN, so Number.isFinite draws the
+      // line between "no answer" and "zero". (Phrased without the old expression on purpose: the
+      // guard in test_frontend.py asserts that expression is absent, and prose must not trip it.)
+      //
+      // An untouched programme section omits the key entirely, leaving a pre-#566 profile the shape
+      // it already had.
       const program = Object.fromEntries(
         [...f.querySelectorAll("#training-program-group input[data-mg]")]
           .map((i) => [i.dataset.mg, Number.parseInt(i.value, 10)])
-          .filter(([, sets]) => Number.isFinite(sets) && sets > 0));
+          .filter(([, sets]) => Number.isFinite(sets) && sets >= 0));
       const body = {
         age: Number.parseInt(f.age.value, 10),
         gender: f.gender.value,
@@ -2367,7 +2373,8 @@
             + '<span class="streak-cap">' + (loggedToday ? "· logged today" : "· check in to keep it") + "</span>";
           el.hidden = false;
         } else if (hasHistory) {
-          el.innerHTML = ICON.flame + '<span class="streak-cap">Start a new streak: check in today</span>';
+          el.innerHTML = ICON.flame + '<span class="streak-n">Start a streak</span>'
+            + '<span class="streak-cap">· check in today</span>';
           el.hidden = false;
         } else {
           el.hidden = true;                                              // brand-new user: the first-check-in flow onboards

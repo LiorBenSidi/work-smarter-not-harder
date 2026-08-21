@@ -59,7 +59,7 @@ App: <https://app.worksmarternotharder.dev> · Accounts seeded for the demo: **l
 
 - **Architecture** — 4 containers (web / ai / db / caddy) on an internal network; **Caddy is the only
   public surface**, terminating TLS with auto Let's Encrypt HTTPS.
-- **Testing** — **1411 checks** across unit / integration / negative / system / security / stress. CI gates **every**
+- **Testing** — **1412 checks** across unit / integration / negative / system / security / stress. CI gates **every**
   merge (unit+integration → cross-container compose run → browser e2e on desktop *and* mobile), then
   auto-deploys to Azure.
 - **Real-time** — Server-Sent Events for chat, notifications **and** the forum. No client polling on the

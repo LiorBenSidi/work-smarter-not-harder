@@ -1361,3 +1361,27 @@ def test_choosing_a_split_saves_a_whole_profile_and_re_reads(client):
     assert "loadDashboard()" in handler, "the plan must be re-read so the picker is replaced by the days"
     assert handler.index("if (!r.ok)") < handler.index("loadDashboard()"), \
         "a failed save must not be followed by a re-read that hides the failure"
+
+
+def test_the_programme_composer_sends_an_explicit_zero_and_omits_a_blank(client):
+    """A muscle group typed as 0 must be SENT; one left blank must not be (#583).
+
+    This is the first of the three gates the same bug sat behind. The server validator and the ai
+    analysis were both fixed for it, but the browser filtered `sets > 0` before the request was even
+    built — so a server-only fix would turn the suite green while the real app went on discarding the
+    value. `chest: 12, back: 0` is the largest pressing:pulling imbalance the coach exists to flag,
+    and `min="0"` on the input invites exactly that entry, so silently dropping it is a defect a
+    reviewer finds by typing the boundary the field advertises.
+
+    The blank half matters just as much and is asserted here too: blanks parse to NaN, and it is
+    Number.isFinite — not the comparison — that keeps an unanswered group out of the payload. Lose
+    that and every untouched group arrives as 0 and earns advice nobody asked for.
+    """
+    html = client.get("/").get_data(as_text=True)
+    builder = html[html.index("const program = Object.fromEntries"):html.index("const body = {")]
+
+    assert "sets >= 0" in builder, \
+        "an explicit 0 must survive the filter — `sets > 0` drops the worst imbalance there is"
+    assert "sets > 0" not in builder, "the `> 0` filter is the #583 defect; it must not come back"
+    assert "Number.isFinite(sets)" in builder, \
+        "a blank box parses to NaN and must still be omitted, or unanswered groups arrive as 0"

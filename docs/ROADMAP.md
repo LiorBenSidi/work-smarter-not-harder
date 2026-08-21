@@ -112,7 +112,7 @@ The only coordination points are the seams (`/predict` shape, `db.py`'s function
 | Demo video of using the app | ⬜ | all |
 | Azure VM deploy + CI/CD auto-deploy (+10) | ✅ **done** — every green `main` auto-deploys to the Azure VM, served over HTTPS at `app.worksmarternotharder.dev` (`/ready` gate + auto-rollback); the graded live **demo was presented 16 Jul** | Lior (pipeline) · Elad (live VM + demo) |
 | Online Forum — real-time, 8 sub-features (+10) | 🟡 posts/comments/post-votes + anonymity + edit/delete-own + **P2P DM (text) + live DM notifications (SSE push) + vote notifications + comment votes + anti-spam messaging rate-limit** done; media/attachments + file-size caps done (#160); **received-engagement metric done** (`GET /me/engagement` + a Profile-screen card); open: fuller cold-seeding | Lior (CRUD/UI + DM + notifications + vote-notifs + comment-votes) · Elad (media ✅ #160 · engagement metric ✅) · Shiri (seed content) |
-| Present 16 Jul (6 min) · demo by Wk 12 · final 23 Aug | 🟡 presented **16 Jul** ✅; final submission **23 Aug** outstanding | all |
+| Present 16 Jul (6 min) · demo by Wk 12 · final **30 Aug** | 🟡 presented **16 Jul** ✅; final submission **30 Aug 23:59** outstanding (extended from 23 Aug) | all |
 | No shipped API keys | ✅ local model | Shiri |
 
 Legend: ✅ done · 🟡 partial / in-progress · ⬜ not started.
@@ -138,4 +138,4 @@ tested (incl. votes-as-a-list and a real-Mongo integration suite that runs in CI
 **real-time layer** (SSE, DM, notifications) was built by **Lior** (see the §Forum table above).
 **Team rule (Lior, 10 Jul): responsibilities not assigned in writing fall to Elad.** **Still to build:** the
 RF model + real `/predict` + recommendation engine + cold-seed content (Shiri). Elad's demo was presented
-**16 Jul** and the UptimeRobot monitor went live **17 Jul** (R9) — his lane is complete. Due **23 Aug 2026**.
+**16 Jul** and the UptimeRobot monitor went live **17 Jul** (R9) — his lane is complete. Due **30 Aug 2026, 23:59**.

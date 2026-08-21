@@ -7,14 +7,13 @@ against a single source of truth and fix what they think is missing. Two indepen
 
 **✅ Implemented & verified**
 - **Graded build:** 3-container Docker app · **Job Queue (+5)** · **Online Forum (+10)** · **Azure deploy + CI/CD (+10)** · live HTTPS URL
-- **Report** (`REPORT.md`, 1418 tests) · **README** (run + test instructions) · risk assessment
+- **Report** (`REPORT.md`, 1421 tests) · **README** (run + test instructions) · risk assessment
 - **Per-member commits** present — all three members commit under their own identity, so the per-member
   grading requirement is met. Counts drift with every push; read them from the repo rather than from here:
   `git shortlog -sn --all`. A `.mailmap` unifies the two identities Elad committed under (GitHub noreply +
   the campus address), so that command lists **three** contributors, not four.
 
-**⬜ Still open**
-- **F5 workout generator — dashboard display** — AI side built + wired into `/predict` (Shiri); the dashboard doesn't relay or render `plan` yet — the one open *graded* gap (web tier · [#410](https://github.com/LiorBenSidi/work-smarter-not-harder/issues/410))
+**⬜ Still open** — *no build work remains; every item below is a hand-in step.*
 - **Demo video** of the app — not recorded yet (team; script at `presentation/WSNH Demo Video Script.md`)
 - **Paste the repo link** into the Moodle final-project box — Lior
 - **Upload the poster zip** to its own Moodle box (Track B, target **25 Aug**) — the 29 Jul upload was built to
@@ -37,7 +36,7 @@ Rubric (`docs/GUIDELINES.md`, the TA's `WSNH_Guidelines`, 8 Jul): **75** proposa
 |---|---|---|---|
 | The application | this repo @ `main` | all | ✅ `docker compose up --build` (3 containers, only `web` published) |
 | Live URL over HTTPS | app.worksmarternotharder.dev | Elad (deploy) | ✅ live, auto-deploy + rollback |
-| **Report** | [`docs/REPORT.md`](REPORT.md) | all (Lior drafted) | ✅ current — **1418 tests** (1400 pass / 18 env-gated in CI). The single source is the live `.md`; the stale 2026-07-11 `REPORT.pdf` was removed — regenerate a fresh PDF from this only if the TA wants a file. |
+| **Report** | [`docs/REPORT.md`](REPORT.md) | all (Lior drafted) | ✅ current — **1421 tests** (1403 pass / 18 env-gated in CI). The single source is the live `.md`; the stale 2026-07-11 `REPORT.pdf` was removed — regenerate a fresh PDF from this only if the TA wants a file. |
 | Rubric / guidelines | [`docs/GUIDELINES.md`](GUIDELINES.md) | — | ✅ |
 | Roadmap | [`docs/ROADMAP.md`](ROADMAP.md) | — | ✅ |
 | Presentation + demo video | `presentation/` (see the checklist) | all | 🟡 deck ✅ (presented 16 Jul); **demo video ⬜ to record** → `VID_<ids>.mp4` |
@@ -51,13 +50,14 @@ Rubric (`docs/GUIDELINES.md`, the TA's `WSNH_Guidelines`, 8 Jul): **75** proposa
 - **Elad** — live Azure deploy · media/attachments (+ size caps) · rate-limiting · stress · cross-container
   test-runner · the AI job queue (+5). ✅ shipped (his own lane-validation, #388).
 - **Shiri** — the AI model (`ai/`): real `/predict` ✅ landed; **F5 workout generator's AI side ✅ built and
-  wired into `/predict`** (catalog, split resolution, exercise selection). F6's `program` input (#276 P7)
-  still unresolved — the generated plan isn't fed into `_program_recommendations` yet.
+  wired into `/predict`** (catalog, split resolution, exercise selection). **F6's input ✅ built too** (#566):
+  the Advanced tier enters its weekly programme on the profile, `services/ai_client.build_features` sends it
+  as `features["performed"]`, and `_program_recommendations` now fires on real data (#528 item 2 closed).
 
-### Open before hand-in (human steps / not built)
-- [ ] **Submit the GitHub repo link** in the Moodle final-project box when it opens (format is settled above:
-      repo link + video + report, **no zip**). Only residual: confirm *which* Moodle box — not a build task.
-- [ ] **F5 workout generator — dashboard display** (web tier) — AI side done; #410.
+### Open before hand-in (human steps only — no build work remains)
+- [ ] **Submit the GitHub repo link** in the *"Actual Submission - Extention until 30.08"* box (format settled
+      above: repo link + video + report, **no zip**). The box is identified; make the repo **private** and add
+      `EladKal6` and `cnoam` as collaborators **last**, since that hides it from everyone else.
 - [ ] **Seed prod once** before the TA review (`db/README.md` command) and confirm the **Azure VM is up**
       (instructor auto-shutdown ~23:50 UTC).
 - [ ] **Record the demo video** end-to-end on the real model.
@@ -98,29 +98,37 @@ a non-compliant submission.
 | [`metadata.json`](../presentation/showoff/metadata.json) | title · ~20-word + ~100-word desc · **all** members · `repo_url` | 20 / 104 words · 3 members · `repo_url` present · no `launch` · `poster` kept — see below | ✅ |
 | [`poster.pdf`](../presentation/showoff/poster.pdf) | A3 · PDF · one page | **297.0 × 420.2 mm, 1 page, portrait** — renders inline on GitHub | ✅ |
 | [`poster.html`](../presentation/showoff/poster.html) + [`poster-assets/`](../presentation/showoff/poster-assets/) | — | **the poster's source**, so the next change is an edit rather than a rebuild | ✅ |
-| [`build.sh`](../presentation/showoff/build.sh) · [`capture-screenshot.mjs`](../presentation/showoff/capture-screenshot.mjs) · [`seed-for-screenshots.py`](../presentation/showoff/seed-for-screenshots.py) | — | render + rezip + validate; re-shoot one tile; populate history and DMs so tiles aren't empty | ✅ |
+| [`build.sh`](../presentation/showoff/build.sh) · [`render-poster.mjs`](../presentation/showoff/render-poster.mjs) · [`capture-screenshot.mjs`](../presentation/showoff/capture-screenshot.mjs) · [`seed-for-screenshots.py`](../presentation/showoff/seed-for-screenshots.py) | — | render + rezip + validate; re-shoot one tile; populate history and DMs so tiles aren't empty | ✅ |
 | [`demo.mp4`](../presentation/showoff/demo.mp4) | optional · 20–90 s · 1920×1080 · MP4 · silent | **29.6 s · 1920×1080 · h264 · no audio stream at all** — plays inline on GitHub | ✅ |
 | [`207490913.zip`](../presentation/showoff/207490913.zip) | **exactly** those files, flat, named after one member's ID | **3 entries, no folders, no `thumb.png`** | ✅ |
 
-**Both assets were refreshed on 20 Aug.** They predated the F5 workout plan (#522/#523), so neither showed
+**Both assets were refreshed on 20 Aug, and the poster again on 21 Aug** (#578: #567/#570 changed the plan's exercise selection, and #564/#576 changed the profile screen, dating those two tiles). They predated the F5 workout plan (#522/#523), so neither showed
 the app's headline AI output while the copy claimed *"what to train"* and the video promised *"a clear action
 plan"*. The video gains a **"Know what to train"** scene cross-faded in after Readiness.
 
 **Every poster screenshot was re-taken** against current `main`, not just the new one — the originals were
 from 19 July and four of the six had drifted (Today gained its calorie recommendation; History gained filter
 chips; the Forum composer gained attachments and anonymity; Messages changed shape). The poster now carries
-**seven** tiles, four across and three centred beneath: login · readiness · workout plan · history · forum ·
-DMs · profile. The forum caption changed from *"Forum & video"* to *"Forum & comments"*, because the shot now
-shows a real seeded thread with per-comment votes rather than a video attachment.
+**eight** tiles, four across and four beneath: login · readiness · workout plan · history · forum · DMs ·
+profile · training programme. The forum caption changed from *"Forum & video"* to *"Forum & comments"*, because
+the shot now shows a real seeded thread with per-comment votes rather than a video attachment. The eighth tile
+was added last and cost nothing: at seven, row two held three with a gap, so the Advanced-tier programme (#566)
+filled it without adding a row. It needs its own tile because the profile card is ~2597 CSS px tall while a
+tile prints only its top ~737, so the profile fields and the programme cannot share one at readable size.
 
 The original `poster.pdf` was printed from a `poster.html` that was never committed, so there was no source to
 edit — it had to be reconstructed from the PDF's own text, palette and embedded images. **That source is now
-in the repo** (`poster.html` + `poster-assets/`), rendered with:
+in the repo** (`poster.html` + `poster-assets/`). Rebuild the whole package — render, rezip, validate — with:
 
 ```sh
-"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --headless --no-pdf-header-footer \
-  --print-to-pdf=poster.pdf poster.html
+bash presentation/showoff/build.sh
 ```
+
+**Do not render with `chrome --headless --print-to-pdf`.** It prints before the Google Font finishes
+loading, so the PDF embeds the CSS fallback (**HelveticaNeue**) instead of **Roboto**, and the 900-weight
+title silently loses its Black cut — the page size stays a correct A3, so nothing looks wrong until you
+inspect the embedded fonts. `build.sh` calls `render-poster.mjs`, which drives `Page.printToPDF` over CDP
+after the webfont has loaded and embeds Roboto Regular/Bold/Black correctly.
 
 **The `poster` field is kept, against the document — deliberately.** `how to submit.pdf` says *"Do not add a `poster` field"*, but the official checker **rejects** the zip without it:
 
@@ -156,6 +164,13 @@ collaborators** — the same requirement Track A carries.
 
 ```sh
 bash check_submission.sh presentation/showoff/207490913.zip   # official checker from Moodle; needs Docker
+```
+
+The staff image (`noam1023/check-submission`) is **amd64-only**, so on Apple Silicon it must be prefixed —
+otherwise it fails to pull rather than failing the zip, which is easy to misread as a passing check:
+
+```sh
+DOCKER_DEFAULT_PLATFORM=linux/amd64 bash check_submission.sh presentation/showoff/207490913.zip
 ```
 
 > ⚠️ **The instructions change without announcement.** On 18 Aug alone the box was renamed twice, its close
