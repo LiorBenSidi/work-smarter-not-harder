@@ -50,6 +50,7 @@ only, so run both:
 
 ```sh
 ./seed.sh                                    # users + forum posts/comments (existing tool)
+MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' \
 docker compose run --rm -v "$PWD:/repo" \
   -e MONGO_URI="mongodb://db:27017/worksmarter" \
   --entrypoint sh web -c 'exec python /repo/presentation/showoff/seed-for-screenshots.py'

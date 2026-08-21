@@ -116,6 +116,37 @@ export class Browser {
     throw new Error(`waitFor timeout: ${selector}`);
   }
 
+  // Poll a page expression until it reports the state the next assertion is about to check. Same shape as
+  // `evaluate`: an arrow-FUNCTION string, invoked each tick. Strictly stronger than `wait(N)` before a
+  // POSITIVE assertion — it returns the moment the state arrives (so the run is faster on the happy path)
+  // and only gives up after a budget many times longer than any hand-picked pause, so a loaded CI runner
+  // cannot lose the race. On timeout it throws carrying `what`, which is the sentence the assertion it
+  // replaced used to print, so a genuine product failure still reads the same way (#568).
+  //
+  // NOT for negative assertions ("nothing was saved", "the button stayed disabled"). There is no state to
+  // wait for there, and a poll would return the instant the thing under test wrongly happened — the fixed
+  // pause IS the test in that case. See #568 for the site-by-site split.
+  async waitUntil(fnExpr, { timeout = 12000, poll = 80, what = fnExpr } = {}) {
+    const start = Date.now();
+    let last;
+    while (Date.now() - start < timeout) {
+      last = await this.evaluate(fnExpr);
+      if (last) return last;
+      await sleep(poll);
+    }
+    throw new Error(`waitUntil timeout after ${timeout}ms: ${what} (last value: ${JSON.stringify(last)})`);
+  }
+
+  // The disappearing half of waitFor: poll until the selector is gone or no longer visible. Waiting for a
+  // thing to vanish is not a negative assertion — the state is observable, so it is pollable.
+  async waitGone(selector, { timeout = 12000, what = `${selector} never went away` } = {}) {
+    return this.waitUntil(
+      `() => { const el = document.querySelector(${JSON.stringify(selector)}); if (!el) return true;
+        const r = el.getBoundingClientRect(); const cs = getComputedStyle(el);
+        return !(r.width > 0 && r.height > 0) || el.hidden || cs.visibility === "hidden" || cs.display === "none"; }`,
+      { timeout, what });
+  }
+
   async click(selector, settleMs = 400) {
     const found = await this.evaluate(`() => { const el = document.querySelector(${JSON.stringify(selector)}); if (!el) return false; el.click(); return true; }`);
     if (!found) throw new Error(`click: selector not found: ${selector}`);

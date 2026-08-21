@@ -108,7 +108,8 @@ python scripts/scaling_benchmark.py --url http://localhost:5099/predict --label 
 # Axis 2 — horizontal (replicas, driven from inside the compose network like web does)
 AI_WORKER_TARGET=bench:cpu_burn AI_QUEUE_WORKERS=1 \
   docker compose -f docker-compose.yml -f docker-compose.scale.yml up -d --build --scale ai=2 ai
-docker run --rm --network work-smarter-not-harder_default -v "$PWD/scripts:/bench:ro" python:3.12-slim \
+MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' \
+  docker run --rm --network work-smarter-not-harder_default -v "$PWD/scripts:/bench:ro" python:3.12-slim \
   python /bench/scaling_benchmark.py --url http://ai:5000/predict --label replicas=2
 
 # The ramped locust version of Axis 1/2

@@ -14,7 +14,11 @@
 > +10 Azure deploy + CI/CD; supersedes [`FEEDBACK.md`](FEEDBACK.md)). Architecture detail lives in [`DESIGN.md`](DESIGN.md); the phased plan in
 > [`ROADMAP.md`](ROADMAP.md).
 >
-> **Last updated:** 2026-08-21 · **Suite at this snapshot:** **1414 checks, 1370 passing / 44 environment-gated**
+> **On the date:** [`Proj_Guidelines.pdf`](Proj_Guidelines.pdf) states *"The final submission date is
+> The 23th of August, 2026"*; the course later granted an extension on Moodle to **30 Aug 2026**
+> (submission box *"Actual Submission - Extention until 30.08"*), which is the date this report uses.
+>
+> **Last updated:** 2026-08-21 · **Suite at this snapshot:** **1421 checks, 1377 passing / 44 environment-gated**
 > (+ 20 browser e2e scenarios)
 > (`python -m pytest tests/ -q`; the env-gated ones run in CI's `compose-e2e` job against the live containers).
 > Since the 07-12 snapshot (783 tests): **Shiri's Random Forest landed** — a real `ai/model/model.pkl` +
@@ -225,8 +229,8 @@ Columns are the test-type dirs under `tests/`. Cells name representative file(s)
 | **AI job-queue +5 (Elad)** | `test_jobqueue` (40) · `test_bench` (18) | `test_ai_queue_contract` (22) | — | `test_ai_queue_live` (10) | `test_ai_queue` (28) | `test_pool_scaling` (2) · `test_queue_backpressure` (6) |
 | **Deploy / scale (Elad)** | — | `test_deploy_contract` (32) · `test_scale_contract` (11) · `test_pin_contract` (4) | — | — | — | — |
 | **Rate-limiting / anti-spam (Elad)** | — | — | — | — | `test_rate_limit` (9) | in `test_load` |
-| **Data layer (`db.py` + Mongo)** | `test_db` (67) · `test_backup_script` (2) · `test_seed` (8) | `test_db_mongo` (22, real Mongo) · `test_real_mongo_guard` (7) | — | — | (injection-safe queries) | — |
-| **Frontend (SPA / CSRF / a11y / mobile)** | `test_frontend_mobile_guards` (16) | `test_frontend` (49) | — | `test_e2e` leg | `test_csrf` (6) · `test_web_hardening` (4) · `test_review_hardening` (3) | — |
+| **Data layer (`db.py` + Mongo)** | `test_db` (67) · `test_backup_script` (2) · `test_seed` (8) · `test_seed_script` (2, the seeding wrapper's docker invocation — #580) | `test_db_mongo` (22, real Mongo) · `test_real_mongo_guard` (7) | — | — | (injection-safe queries) | — |
+| **Frontend (SPA / CSRF / a11y / mobile)** | `test_frontend_mobile_guards` (15) | `test_frontend` (39) | — | `test_e2e` leg | `test_csrf` (6) · `test_web_hardening` (4) · `test_review_hardening` (3) | — |
 | **Observability (logging)** | `test_logging_config` (21) | — | — | — | (access-log path escaping) | — |
 | **App config / debug flag / secret** | `test_config` (16) · `test_scaffold` (4) | — | — | — | (no `.env` tracked) | — |
 | **Error handling · ready gate · perf** | — | `test_error_handlers` (5) · `test_ready` (3) · `test_perf` (7) | — | — | — | — |
@@ -234,19 +238,19 @@ Columns are the test-type dirs under `tests/`. Cells name representative file(s)
 | **Fault tolerance / isolation** | — | — | — | `test_fault_isolation` (2) · Full-System `test_parts_in_isolation` (12) | — | — |
 | **Whole-system journey** | — | — | — | `test_e2e` (1) · Full-System `test_everything_together_sync` (15) | — | — |
 
-**Totals by type (full suite, `pytest --collect-only`):** Unit **606** · Integration **490** · Negative **177** ·
-System **14** · Full-System **27** · Security **88** · Stress **12** → **1414 automated checks across the seven
+**Totals by type (full suite, `pytest --collect-only`):** Unit **608** · Integration **495** · Negative **177** ·
+System **14** · Full-System **27** · Security **88** · Stress **12** → **1421 automated checks across the seven
 pytest suites**, plus **20 browser end-to-end scenarios** driven separately (`tests/E2E_Tests/`, run in CI as
 the *e2e (browser · desktop + mobile)* job — not counted in the pytest total). This matches the header count.
 
-Read the total as *checks*, not as hand-written test functions: 1414 collected cases come from **1034 test
+Read the total as *checks*, not as hand-written test functions: 1421 collected cases come from **1040 test
 functions** (measured with `grep -c "^def test_"` across `tests/`), the remainder being parametrised cases (one `@parametrize` over 11 malformed payloads is 11
 collected cases, not 11 tests written). The suite is deliberately weighted toward the layers where a
 regression is cheapest to catch — unit and negative input walls — rather than toward volume.
 
-**Pass / skip:** the pre-07-12 snapshot was **747 pass, 36 skip in ~47 s**; the current suite is **1370 pass,
+**Pass / skip:** the pre-07-12 snapshot was **747 pass, 36 skip in ~47 s**; the current suite is **1377 pass,
 44 skip** (`python -m pytest tests/ -q`); in CI, where the `mongo:7` service is present, the same
-suite is **1396 pass, 18 skip**. All **44** local skips are env-gated and *not broken* — they run the
+suite is **1403 pass, 18 skip**. All **44** local skips are env-gated and *not broken* — they run the
 moment their dependency is present:
 
 - `test_db_mongo` (22) — the real-Mongo integration suite; skips without `TEST_MONGO_URI`, and **runs in CI**
@@ -275,12 +279,12 @@ The five canonical types live under `tests/{Unit,Integration,System,Stress,Secur
 `Negative_Tests/` for adversarial-input coverage and `Full_System_Tests/` for whole-stack journeys), run on any
 machine (env vars, no local paths), and are exercised by CI on every PR. A run that collects **0 tests fails** the gate.
 
-- **Unit (606)** — pure functions and single components in isolation: input validators (auth / profile /
+- **Unit (608)** — pure functions and single components in isolation: input validators (auth / profile /
   check-in / forum), the calorie formula, the `db.py` CRUD and Mongo-internals logic (against an in-memory
   fake), the logging configuration, and app config. Heavily parametrized on boundary and adversarial inputs
   (e.g. profile validation rejects injection objects, bools-as-numbers, and out-of-range values across every
   field).
-- **Integration (490)** — components wired together through the Flask test client: the auth flow, profile
+- **Integration (495)** — components wired together through the Flask test client: the auth flow, profile
   round-trip, check-in → `ai /predict` → persist, dashboard, history, and the full forum lifecycle. Two
   boundary suites are notable: `test_web_ai` stubs the `web → ai` HTTP seam with a contract-shaped response
   and asserts the dashboard surfaces it (and degrades to `ai_status: unavailable` when `ai` returns
@@ -296,7 +300,7 @@ machine (env vars, no local paths), and are exercised by CI on every PR. A run t
   (`test_csrf`), NoSQL-injection-safe queries (`test_profile`, `test_forum`), ownership enforcement on
   forum edit/delete (403), auth-gating of dashboard/history, and response-hardening (`test_web_hardening`).
 
-The two supporting directories complete the 1414: **Negative (177)** — adversarial and malformed input across
+The two supporting directories complete the 1421: **Negative (177)** — adversarial and malformed input across
 auth, profile, check-in, forum and media — and **Full-System (27)** — whole-stack journeys in-process, plus the
 parts-in-isolation suite. The per-type figures here are the same ones tabulated in §3; both are
 `pytest --collect-only` counts, not estimates.
@@ -494,7 +498,7 @@ between planes (§1). Full detail in [`COLLABORATORS.md`](../COLLABORATORS.md) a
 cp .env.example .env
 docker compose up --build          # 3 containers; only web is published
 # → http://localhost:8000/health   → then register, set a profile, check in, see the dashboard
-pytest -q                          # 1370 pass / 44 env-gated skip
+pytest -q                          # 1377 pass / 44 env-gated skip
 ```
 
 CI reproduces the gate on every PR (ruff → bandit → pytest + a `mongo:7` service). `main` is
@@ -516,6 +520,21 @@ branch-protected and merges only on green CI.
   "Option 1" (muscle-group level, so `web` never needs `ai/exercise_catalog.py`'s exercise list and the two
   containers stay decoupled). This closes **#528 item 2** — the Advanced tier's "provide your workout
   program", which the v2 proposal §3 commits to — so it is no longer a disclosed gap but a shipped feature.
+- **Recommended training frequency (v2 §3, Beginner tier) — not built; scope stated.** The proposal's
+  beginner output list is *"Calorie target · Beginner workout program · Recommended training frequency"*.
+  The first two ship; the third does not. `training_frequency` is an **input only** — collected in the
+  profile form, validated in `web/routes/profile.py`, and consumed downstream for the calorie activity
+  band (`ai/recommendations.py::_activity_from_frequency`) and for split resolution
+  (`ai/workout_plan.py::resolve_split_preference`). Nothing produces a *recommended* frequency back to the
+  user. Disclosed rather than built (#528), under the guidelines' *"if you want to remove features, let us
+  know beforehand"*.
+- **Beginner / Intermediate / Advanced tiers (v2 §3) — not built as tiers; scope stated.** v2 §3 frames the
+  audience as three tiers with different inputs and different outputs. **No tier is stored, inferred, or
+  branched on anywhere** — the words appear in `web/` only as source comments naming which proposal tier an
+  input came from. What shipped instead is a single uniform path whose output scales with the data the user
+  gives: a check-in without recovery metrics still scores, and the planning inputs (equipment, split
+  preference, and the Advanced tier's training programme from #566) are **optional for every user** rather
+  than gated behind a tier. Disclosed rather than built (#528).
 - **F6 + F7 merge** — in scope, not pending: the merge is in the v2 proposal the team sent the TA (28 Jun),
   and the TA's guidelines explicitly permit notified feature changes; the balance rule is built
   (`_program_recommendations`). See `ROADMAP.md` → "Scope decision".

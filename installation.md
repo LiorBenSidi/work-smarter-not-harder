@@ -35,10 +35,16 @@ client (e.g. **`coach_maya`**) with the demo password **`demo-seed-pw`** and bro
 > outside those (e.g. under `/tmp`), the mount is empty and `./seed.sh` says so and prints the fix — either
 > move the project under your **home directory** and re-run, or allow the folder in
 > *Docker Desktop → Settings → Resources → File sharing*. Keeping the project in your home directory avoids this entirely.
+>
+> **On Windows this had a second cause, now fixed in `seed.sh` (#580).** Git Bash rewrites *both* halves
+> of a `-v "$PWD:/repo"` argument into Windows paths, so the repo mounted at `C:/repo` and `/repo` was
+> empty — from any folder, home directory included. `seed.sh` now sets `MSYS_NO_PATHCONV=1` and
+> `MSYS2_ARG_CONV_EXCL='*'` itself; if you run the manual command below by hand in Git Bash, keep them.
 
 Equivalent manual step:
 ```bash
-docker compose run --rm -v "$PWD:/repo" -e MONGO_URI=mongodb://db:27017/worksmarter web python /repo/db/seed.py
+MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' \
+  docker compose run --rm -v "$PWD:/repo" -e MONGO_URI=mongodb://db:27017/worksmarter web python /repo/db/seed.py
 ```
 
 ## Stop
