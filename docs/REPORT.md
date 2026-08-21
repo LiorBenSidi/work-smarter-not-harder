@@ -2,9 +2,10 @@
 
 **Course:** Writing Software for Machine Learning (00950219), Technion — Spring 2026
 **Team:** Shiri Haboob · Lior Ben Sidi · Elad Nachalieli
-**Repository:** `LiorBenSidi/work-smarter-not-harder` · **Due:** 23 Aug 2026
+**Repository:** `LiorBenSidi/work-smarter-not-harder` · **Due:** 30 Aug 2026
+**Live site:** <https://app.worksmarternotharder.dev> — deployed from green `main` by the CI/CD pipeline; `/ready` gates every deploy.
 
-> This is the living project report — the 23.08 deliverable required by the guidelines: an explanation of
+> This is the living project report — the final deliverable required by the guidelines: an explanation of
 > the app, a **feature × tests matrix drawn from the real suite**, and a **risk assessment**. It is kept
 > in-repo and updated as the build progresses. Spec sources: the **revised proposal of 28 Jun** — the version
 > the TA responded to, mirrored in-repo as [`PROPOSAL-v2.md`](PROPOSAL-v2.md) (**the contract**); the original
@@ -12,6 +13,10 @@
 > rubric in [`GUIDELINES.md`](GUIDELINES.md) (75 build · +5 Job Queue · +10 Forum ·
 > +10 Azure deploy + CI/CD; supersedes [`FEEDBACK.md`](FEEDBACK.md)). Architecture detail lives in [`DESIGN.md`](DESIGN.md); the phased plan in
 > [`ROADMAP.md`](ROADMAP.md).
+>
+> **On the date:** [`Proj_Guidelines.pdf`](Proj_Guidelines.pdf) states *"The final submission date is
+> The 23th of August, 2026"*; the course later granted an extension on Moodle to **30 Aug 2026**
+> (submission box *"Actual Submission - Extention until 30.08"*), which is the date this report uses.
 >
 > **Last updated:** 2026-08-21 · **Suite at this snapshot:** **1418 checks, 1374 passing / 44 environment-gated**
 > (+ 20 browser e2e scenarios)
@@ -188,7 +193,7 @@ not a per-line credit — see §6.
 CI gate are complete and **proven end-to-end** (a real `web → ai → db` request path, the real-Mongo integration
 suite, and in-container logging all verified live); the calorie engine is built + unit-tested and its value is now live in `/predict`, the Random Forest model
 has landed (real `ai/model/model.pkl` + `inference.py`), and the deploy / real-time / scale plane are
-complete — the remaining work is integration + hardening toward the 23 Aug submission.
+complete — the remaining work is integration + hardening toward the 30 Aug submission.
 
 ---
 
