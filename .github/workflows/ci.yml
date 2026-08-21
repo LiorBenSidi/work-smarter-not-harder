@@ -135,6 +135,13 @@ jobs:
             echo "SMTP_HOST="
             echo "SESSION_COOKIE_SECURE=0"
             echo "RATELIMIT_ENABLED=0"
+            # Disable gunicorn's worker recycling for the run. With one worker, a recycle leaves a
+            # sub-second window where an in-flight connection dies, and the suite lost whichever
+            # scenario was mid-request to it ("fetch failed", never the same scenario twice — see the
+            # 17:01:41 autorestart against the 17:01:41.98 failure). Prod keeps --max-requests 1000;
+            # this only removes the trigger inside CI, where a leak over one 10-minute run is moot.
+            echo "WEB_MAX_REQUESTS=0"
+            echo "WEB_MAX_REQUESTS_JITTER=0"
           } > .env
 
       - name: Boot the stack (detached) and wait for it to serve

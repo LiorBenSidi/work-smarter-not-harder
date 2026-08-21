@@ -14,7 +14,7 @@
 > [`ROADMAP.md`](ROADMAP.md).
 >
 > **Last updated:** 2026-08-21 · **Suite at this snapshot:** **1347 checks, 1303 passing / 44 environment-gated**
-> (+ 28 browser e2e scenarios)
+> (+ 20 browser e2e scenarios)
 > (`python -m pytest tests/ -q`; the env-gated ones run in CI's `compose-e2e` job against the live containers).
 > Since the 07-12 snapshot (783 tests): **Shiri's Random Forest landed** — a real `ai/model/model.pkl` +
 > `inference.py` (exercised by `test_ai_queue_api`), with the readiness recommendation engine and the
@@ -228,7 +228,7 @@ Columns are the test-type dirs under `tests/`. Cells name representative file(s)
 
 **Totals by type (full suite, `pytest --collect-only`):** Unit **564** · Integration **484** · Negative **158** ·
 System **14** · Full-System **27** · Security **88** · Stress **12** → **1347 automated checks across the seven
-pytest suites**, plus **28 browser end-to-end scenarios** driven separately (`tests/E2E_Tests/`, run in CI as
+pytest suites**, plus **20 browser end-to-end scenarios** driven separately (`tests/E2E_Tests/`, run in CI as
 the *e2e (browser · desktop + mobile)* job — not counted in the pytest total). This matches the header count.
 
 Read the total as *checks*, not as hand-written test functions: 1347 collected cases come from **1005 test
@@ -486,7 +486,7 @@ between planes (§1). Full detail in [`COLLABORATORS.md`](../COLLABORATORS.md) a
 cp .env.example .env
 docker compose up --build          # 3 containers; only web is published
 # → http://localhost:8000/health   → then register, set a profile, check in, see the dashboard
-pytest -q                          # 1285 pass / 44 env-gated skip
+pytest -q                          # 1303 pass / 44 env-gated skip
 ```
 
 CI reproduces the gate on every PR (ruff → bandit → pytest + a `mongo:7` service). `main` is
