@@ -123,8 +123,10 @@ skip without their dependency and run the moment it exists (they are not unwritt
 # the cross-container harness: boots web+db+ai + a test-runner container, exits with the runner's code
 docker compose -f docker-compose.yml -f docker-compose.test.yml up --build --exit-code-from tests
 
-TEST_MONGO_URI=mongodb://localhost:27017 pytest tests/Integration_Tests/test_db_mongo.py  # real Mongo
-E2E_BASE_URL=http://localhost:8000       pytest tests/System_Tests                        # live stack
+# Both need a reachable service, and `db`/`ai` publish no host port (only `web` is exposed), so from
+# the host these degrade to clean SKIPS — the harness above is what actually runs them.
+TEST_MONGO_URI=mongodb://localhost:27017/worksmarter_test pytest tests/Integration_Tests/test_db_mongo.py
+E2E_BASE_URL=http://localhost:8000                        pytest tests/System_Tests
 ```
 `AI_BASE_URL` un-skips the live job-queue suite (real worker processes, concurrent `/predict`, a burst shedding
 with 503). The harness above sets it to `http://ai:5000` **inside** the compose network — `ai` publishes no host
