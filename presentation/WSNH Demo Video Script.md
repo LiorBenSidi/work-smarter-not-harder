@@ -24,10 +24,12 @@ say, and **which rubric item it proves** — so a TA can tick every box.
 | 2 | **Log out → log in** → **2-step code** screen → enter code → in | "Login is two-factor: password, then a one-time code." | Build (auth), security |
 | 3 | **Daily check-in** → fill **all five**: sleep · resting HR · **fatigue** · soreness · training load → **Submit** → the **readiness ring** (Ready/Moderate/Rest) + recommendation + calories | "One morning check-in → a readiness state, a recommendation, and a calorie target — from the local model." | Build (the core product), AI |
 | 4 | **History** tab → the past check-ins / trend | "Every check-in is persisted and trended." | Build (persistence) |
+| 4b | Back on the **Dashboard**: the **workout plan** card the prediction returned — the split, the days, the exercises per day | "The same prediction also returns a training plan: the split, the days, and the exercises for each — generated locally, from the profile." | Build (F5 workout generator) |
+| 4c | **Profile** → the **training-programme** boxes (weekly sets per muscle group) → save → re-run a check-in → the **muscle-group balance** note in the recommendation | "If you already have a programme, enter it, and the analysis reads your real weekly volume and tells you what is under-trained." | Build (F6 balance, the Advanced-tier input) |
 | 5 | **Forum** → create a **post** with a **title + body + image** | "The forum: posts with image and video attachments…" | Forum #1 |
-| 6 | Add a **comment** (text); **like/dislike** the post and the comment; show the **per-item 👍/👎 counts** on the row, the detail and the comment | "…comments on every post, and like/dislike on both, with the counts on each." | Forum #2, #3 |
+| 6 | Add a **comment** — **with an image attached** (#407 shipped; film it) — then **like/dislike** the post and the comment and show the **per-item 👍/👎 counts** on the row, the detail and the comment | "…comments on every post, with their own attachments, and like/dislike on both, with the counts on each." | Forum #2, #3 |
 | 7 | Toggle **anonymous** on a post | "Posts can be anonymous — a bonus we kept." | Forum bonus (anonymity) |
-| 8 | **Chat** → search a user → send a **DM** with an image → (switch to 2nd account) the DM **arrives with no refresh** + a **notification** | "Direct messages with media, delivered in real time — no refresh — and a notification fires." | Forum #4, #5, real-time |
+| 8 | **Chat** → search a user → send a DM that is **an image and nothing else** → (switch to 2nd account) the DM **arrives with no refresh** + a **notification** | "Direct messages with media, delivered in real time — no refresh — and a notification fires even when the message is only a photo." | Forum #4, #5, real-time |
 | 9 | Back on account 1: a **notification** that account 2 liked your post | "Notifications for likes too." | Forum #5 |
 | 10 | Try to **upload an oversized file** → rejected; (optional) rapid-fire posts → rate-limited | "Anti-abuse: file-size caps and anti-spam rate-limits." | Forum #6 (anti-abuse) |
 | 11 | Mention the feed came **pre-seeded** (existing posts/users on first load) — prod already holds real content, so this needs no setup | "The forum launches cold-seeded with clients and history." | Forum #7 (cold-seeding) |
@@ -37,12 +39,13 @@ say, and **which rubric item it proves** — so a TA can tick every box.
 | 15 | Close on the live URL | "Work Smarter, Not Harder — live, tested, and deployed." | wrap |
 
 ## Coverage checklist (tick before you publish)
-- [ ] **75 build:** auth (1,2), core check-in→readiness (3), history (4), the app is clearly a working product.
+- [ ] **75 build:** auth (1,2), core check-in→readiness (3), history (4), the workout plan and the
+      programme-balance input (4b, 4c), the app is clearly a working product.
 - [ ] **+5 Job Queue:** shot 14 (queue + parallel + the scaling number).
-- [ ] **+10 Forum:** shots 5–11 cover the built sub-features + real-time + anonymity bonus. **One is still not
-      built — do not film it:** media on *comments* (#407). An attachment-only DM sends no notification
-      (#408) — send text alongside the image. *(Per-item like/dislike counts were the second gap; #409 closed
-      31 Jul and the counts now render on the row, the detail and each comment — film them.)*
+- [ ] **+10 Forum:** shots 5–11 cover **every** built sub-feature + real-time + the anonymity bonus.
+      **All three former gaps are closed — film them rather than working around them:** comment media
+      (#407), the attachment-only DM notification (#408), and the per-item like/dislike counts (#409),
+      which render on the row, the detail and each comment.
 - [ ] **+10 Azure/CI-CD:** shot 0 (live HTTPS) + shot 13 (pipeline test-on-commit → auto-deploy).
 - [ ] **Security posture:** email-verify (1), 2FA (2), file-size/rate-limit (10), HTTPS (0).
 
@@ -67,6 +70,8 @@ shipped and live, so let the visuals sell it in passing — no extra shots, just
 ## Still outstanding
 - **[ FILL IN ] The video itself** — not recorded. Save the final cut as `VID_<id1>_<id2>_<id3>.mp4`.
 
-*(Two former placeholders are resolved: shot 3 no longer waits on the model, which landed 11–12 Jul; and shot 11
-needs no setup, because prod already holds real posts and users. Seeding a **fresh** clone is `./seed.sh` — worth
-knowing, because `install.sh` alone leaves a reviewer with an empty forum.)*
+*(Former placeholders, all resolved: shot 3 no longer waits on the model, which landed 11–12 Jul; shot 11
+needs no setup, because prod already holds real posts and users; and the three "do not film it" warnings are
+gone — #407, #408 and #409 all shipped. Shots 4b/4c are new: the plan card (#410) and the Advanced-tier
+programme input (#566/#576) both landed after this script was first written. Seeding a **fresh** clone is
+`./seed.sh` — worth knowing, because `install.sh` alone leaves a reviewer with an empty forum.)*
