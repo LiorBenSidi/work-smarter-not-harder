@@ -118,7 +118,51 @@ def test_lose_and_maintain_goals_do_not_recommend_eating_more():
         assert "eat more" not in joined
 
 
-def test_program_balance_supports_weekly_sets_mapping():
+def test_performed_volume_supports_weekly_sets_mapping():
+    result = generate_recommendations(
+        "Ready",
+        {
+            "performed": {
+                "weekly_sets": {
+                    "chest": 18,
+                    "back": 8,
+                    "legs": 4,
+                }
+            }
+        },
+    )
+
+    assert any("Pressing volume" in item for item in result)
+    assert any("legs" in item.lower() for item in result)
+
+
+def test_performed_volume_supports_flat_list_mapping_and_fires_on_realistic_imbalance():
+    """The contract shape web/db is expected to send: a flat list of muscle-group/sets pairs
+    aggregated over a trailing week, mirroring what an athlete who trained chest hard and never
+    trained back would actually log -- not the generator's own balanced-by-construction output."""
+    result = generate_recommendations(
+        "Ready",
+        {
+            "performed": [
+                {"muscle_group": "chest", "sets": 22},
+                {"muscle_group": "shoulders", "sets": 12},
+                {"muscle_group": "triceps", "sets": 10},
+                {"muscle_group": "quads", "sets": 14},
+                {"muscle_group": "back", "sets": 3},
+            ]
+        },
+    )
+
+    joined = " ".join(result).lower()
+    assert "chest volume is high" in joined
+    assert "back volume is low" in joined
+    assert "pressing volume is much higher than pulling volume" in joined
+
+
+def test_prescribed_program_alone_no_longer_fires_the_volume_recommendation():
+    """Regression guard for the balanced-by-construction bug: a prescribed/program payload, with
+    no performed data, must not trigger the muscle-group balance analysis anymore -- only
+    features["performed"] does. Proves the fix, not just a rename."""
     result = generate_recommendations(
         "Ready",
         {
@@ -132,8 +176,9 @@ def test_program_balance_supports_weekly_sets_mapping():
         },
     )
 
-    assert any("Pressing volume" in item for item in result)
-    assert any("legs" in item.lower() for item in result)
+    assert result == [
+        "Readiness is high; continue with the planned session using normal progression."
+    ]
 
 
 def test_calories_support_web_profile_field_names():
@@ -312,12 +357,12 @@ def test_invalid_training_frequency_does_not_crash():
     assert calories >= 1200
 
 
-def test_invalid_optional_history_and_program_are_ignored():
+def test_invalid_optional_history_and_performed_are_ignored():
     result = generate_recommendations(
         "Ready",
         {
             "history": "not-a-list",
-            "program": "not-a-program",
+            "performed": "not-performed-data",
         },
     )
 

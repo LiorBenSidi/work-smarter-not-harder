@@ -13,7 +13,7 @@
 > +10 Azure deploy + CI/CD; supersedes [`FEEDBACK.md`](FEEDBACK.md)). Architecture detail lives in [`DESIGN.md`](DESIGN.md); the phased plan in
 > [`ROADMAP.md`](ROADMAP.md).
 >
-> **Last updated:** 2026-08-20 · **Suite at this snapshot:** **1335 checks, 1291 passing / 44 environment-gated**
+> **Last updated:** 2026-08-21 · **Suite at this snapshot:** **1347 checks, 1303 passing / 44 environment-gated**
 > (+ 20 browser e2e scenarios)
 > (`python -m pytest tests/ -q`; the env-gated ones run in CI's `compose-e2e` job against the live containers).
 > Since the 07-12 snapshot (783 tests): **Shiri's Random Forest landed** — a real `ai/model/model.pkl` +
@@ -162,10 +162,10 @@ not a per-line credit — see §6.
 | F3 — Readiness analysis — **web path** (check-in → `ai /predict` → persist → surface) | ✅ | web |
 | F3 — Readiness analysis — **the model** (Random Forest, real `/predict`) | ✅ merged (`ai/model/model.pkl` + `inference.py`; `test_ai_queue_api` loads the real RF) | ai |
 | F4 — Calorie recommendation (Mifflin–St Jeor, `ai/calories.py`) | ✅ engine + unit tests; live value now wired into `/predict` (`calculate_calories` in `predict_one`) | ai |
-| F5 — Workout generator | 🟡 **AI generation built and wired into `/predict`** — `resolve_split_preference` + `generate_workout_days` produce a real day-by-day plan (goal + days + equipment + split → plan from the program catalog) on every live prediction. **Not yet user-visible**: the dashboard doesn't relay or render `plan` yet (#410, web tier). No swap (TA-confirmed). | ai |
-| F6 — Program-balance analysis (push/pull volume, merged into F7) | 🟡 built in `_program_recommendations` (the F6→F7 merge is settled in the v2 proposal — not pending); one gap: no `program` input feeds it yet (#276 P7), which F5 supplies | ai |
+| F5 — Workout generator | ✅ **AI generation built and wired into `/predict`** — `resolve_split_preference` + `generate_workout_days` produce a real day-by-day plan (goal + days + equipment + split → plan from the program catalog) on every live prediction. **User-visible now too**: `GET /dashboard` relays the plan and the card renders it — a collapsible day-by-day programme, or a `split_options` picker at 4-5 sessions/week (#410, closed). No swap (TA-confirmed). | ai ✅ · web ✅ |
+| F6 — Program-balance analysis (push/pull volume, merged into F7) | 🟡 shape fixed in `_program_recommendations` (reads `features["performed"]`, PR #529) — still inert end-to-end: no web/db producer exists for `performed` yet, disclosed in #528; team decision is disclose, not build, before submission | ai |
 | F7 — Action plan / recommendations — **web surfaces the list**; **engine** | ✅ | web ✅ · ai ✅ (`generate_recommendations`) |
-| F8 — Dashboard | 🟡 current state ✅ · calories ✅ · progress history ✅ — but **not the active workout plan**, which the v2 proposal §7 also lists. **No longer blocked on the AI side** — `/predict` returns a real `plan` on every call — the gap is now purely web-side: `web/routes/dashboard.py` doesn't read or forward `plan`, and no frontend card or `split_options` picker exists yet. Tracked in #410. | web |
+| F8 — Dashboard | ✅ current state ✅ · calories ✅ · progress history ✅ · active workout plan ✅ — `web/routes/dashboard.py` relays `plan` and the card renders it (collapsible day-by-day programme, or a `split_options` picker at 4-5 sessions/week). Closed in #410. | web |
 | F9 — History tracking | ✅ | web |
 | Online Forum — CRUD/UI (posts, comments, votes, anonymity, edit/delete-own) | ✅ | web |
 | Online Forum — real-time layer (SSE push, DM, vote + DM notifications, media attachments) | ✅ | web (DM/SSE/notifications) · deploy (media, size caps) |
@@ -226,19 +226,19 @@ Columns are the test-type dirs under `tests/`. Cells name representative file(s)
 | **Fault tolerance / isolation** | — | — | — | `test_fault_isolation` (2) · Full-System `test_parts_in_isolation` (12) | — | — |
 | **Whole-system journey** | — | — | — | `test_e2e` (1) · Full-System `test_everything_together_sync` (15) | — | — |
 
-**Totals by type (full suite, `pytest --collect-only`):** Unit **552** · Integration **484** · Negative **158** ·
-System **14** · Full-System **27** · Security **88** · Stress **12** → **1335 automated checks across the seven
+**Totals by type (full suite, `pytest --collect-only`):** Unit **564** · Integration **484** · Negative **158** ·
+System **14** · Full-System **27** · Security **88** · Stress **12** → **1347 automated checks across the seven
 pytest suites**, plus **20 browser end-to-end scenarios** driven separately (`tests/E2E_Tests/`, run in CI as
 the *e2e (browser · desktop + mobile)* job — not counted in the pytest total). This matches the header count.
 
-Read the total as *checks*, not as hand-written test functions: 1335 collected cases come from **999 test
+Read the total as *checks*, not as hand-written test functions: 1347 collected cases come from **1005 test
 functions** (measured with `grep -c "^def test_"` across `tests/`), the remainder being parametrised cases (one `@parametrize` over 11 malformed payloads is 11
 collected cases, not 11 tests written). The suite is deliberately weighted toward the layers where a
 regression is cheapest to catch — unit and negative input walls — rather than toward volume.
 
-**Pass / skip:** the pre-07-12 snapshot was **747 pass, 36 skip in ~47 s**; the current suite is **1291 pass,
+**Pass / skip:** the pre-07-12 snapshot was **747 pass, 36 skip in ~47 s**; the current suite is **1303 pass,
 44 skip** (`python -m pytest tests/ -q`); in CI, where the `mongo:7` service is present, the same
-suite is **1317 pass, 18 skip**. All **44** local skips are env-gated and *not broken* — they run the
+suite is **1329 pass, 18 skip**. All **44** local skips are env-gated and *not broken* — they run the
 moment their dependency is present:
 
 - `test_db_mongo` (21) — the real-Mongo integration suite; skips without `TEST_MONGO_URI`, and **runs in CI**
@@ -267,7 +267,7 @@ The five canonical types live under `tests/{Unit,Integration,System,Stress,Secur
 `Negative_Tests/` for adversarial-input coverage and `Full_System_Tests/` for whole-stack journeys), run on any
 machine (env vars, no local paths), and are exercised by CI on every PR. A run that collects **0 tests fails** the gate.
 
-- **Unit (552)** — pure functions and single components in isolation: input validators (auth / profile /
+- **Unit (564)** — pure functions and single components in isolation: input validators (auth / profile /
   check-in / forum), the calorie formula, the `db.py` CRUD and Mongo-internals logic (against an in-memory
   fake), the logging configuration, and app config. Heavily parametrized on boundary and adversarial inputs
   (e.g. profile validation rejects injection objects, bools-as-numbers, and out-of-range values across every
@@ -288,7 +288,7 @@ machine (env vars, no local paths), and are exercised by CI on every PR. A run t
   (`test_csrf`), NoSQL-injection-safe queries (`test_profile`, `test_forum`), ownership enforcement on
   forum edit/delete (403), auth-gating of dashboard/history, and response-hardening (`test_web_hardening`).
 
-The two supporting directories complete the 1335: **Negative (158)** — adversarial and malformed input across
+The two supporting directories complete the 1347: **Negative (158)** — adversarial and malformed input across
 auth, profile, check-in, forum and media — and **Full-System (27)** — whole-stack journeys in-process, plus the
 parts-in-isolation suite. The per-type figures here are the same ones tabulated in §3; both are
 `pytest --collect-only` counts, not estimates.
@@ -486,7 +486,7 @@ between planes (§1). Full detail in [`COLLABORATORS.md`](../COLLABORATORS.md) a
 cp .env.example .env
 docker compose up --build          # 3 containers; only web is published
 # → http://localhost:8000/health   → then register, set a profile, check in, see the dashboard
-pytest -q                          # 1291 pass / 44 env-gated skip
+pytest -q                          # 1303 pass / 44 env-gated skip
 ```
 
 CI reproduces the gate on every PR (ruff → bandit → pytest + a `mongo:7` service). `main` is
@@ -498,14 +498,33 @@ branch-protected and merges only on green CI.
 
 - **F5 — workout generator (Shiri)** — required by the v2 proposal. **AI generation built and wired into
   `/predict`**: `resolve_split_preference` + `generate_workout_days` produce a real plan (goal + days +
-  equipment + split → plan from the program catalog) on every live prediction. **Still open**: the dashboard
-  doesn't relay or render `plan` yet — tracked in #410 (web tier). No swap (TA-confirmed). Tracked in #276.
-  F6's `program` input (#276 P7) is still unresolved — `generate_workout_days`'s output is not yet fed into
-  `_program_recommendations`'s `program` argument; `predict_one` computes `recommendations` from the raw
-  request features before `plan` exists, and nothing currently connects the two.
+  equipment + split → plan from the program catalog) on every live prediction. **Dashboard relay done too**:
+  `GET /dashboard` relays the plan and the card renders it (#410, closed). No swap (TA-confirmed). Tracked in #276.
+  F6's shape fix merged (PR #529): `_program_recommendations` now reads `features["performed"]` (actual
+  logged training volume) instead of prescribed `program` data — the analysis can genuinely fire now.
+  Still inert end-to-end, for a different reason: no web/db producer exists yet for `features["performed"]`,
+  disclosed as a known gap in #528. Team decision (#528, #276) is to disclose rather than build the producer
+  before submission; the design is ready at `docs/PERFORMED_VOLUME_SPEC.md` if anyone picks it up.
 - **F6 + F7 merge** — in scope, not pending: the merge is in the v2 proposal the team sent the TA (28 Jun),
   and the TA's guidelines explicitly permit notified feature changes; the balance rule is built
   (`_program_recommendations`). See `ROADMAP.md` → "Scope decision".
+- **Exercise catalog (F5/F6)** — hand-curated, not derived from a public dataset (evaluated and rejected;
+  see `ai/README.md` → "Exercise catalog" for the four datasets researched and why none replaced it).
+  Every muscle group has at least 6 exercises, measured directly from `EXERCISE_CATALOG`:
+
+  | Group | Exercises |
+  |---|---:|
+  | Chest | 15 |
+  | Shoulders | 13 |
+  | Quads | 12 |
+  | Back | 11 |
+  | Biceps | 10 |
+  | Glutes | 9 |
+  | Hamstrings | 8 |
+  | Triceps | 8 |
+  | Core | 7 |
+  | Calves | 6 |
+  | **Total** | **99** |
 - **Exact readiness categories + final feature set** *(SETTLED — baked into the shipped `model.pkl`:
   features `sleep_hours` · `fatigue` · `soreness` · `training_load`, class labels + ready-threshold in the
   same bundle; the `/predict` contract shapes were pinned all along)*.
