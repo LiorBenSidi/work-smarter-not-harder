@@ -7,7 +7,7 @@ against a single source of truth and fix what they think is missing. Two indepen
 
 **✅ Implemented & verified**
 - **Graded build:** 3-container Docker app · **Job Queue (+5)** · **Online Forum (+10)** · **Azure deploy + CI/CD (+10)** · live HTTPS URL
-- **Report** (`REPORT.md`, 1411 tests) · **README** (run + test instructions) · risk assessment
+- **Report** (`REPORT.md`, 1416 tests) · **README** (run + test instructions) · risk assessment
 - **Per-member commits** present — all three members commit under their own identity, so the per-member
   grading requirement is met. Counts drift with every push; read them from the repo rather than from here:
   `git shortlog -sn --all`. A `.mailmap` unifies the two identities Elad committed under (GitHub noreply +
@@ -35,7 +35,7 @@ Rubric (`docs/GUIDELINES.md`, the TA's `WSNH_Guidelines`, 8 Jul): **75** proposa
 |---|---|---|---|
 | The application | this repo @ `main` | all | ✅ `docker compose up --build` (3 containers, only `web` published) |
 | Live URL over HTTPS | app.worksmarternotharder.dev | Elad (deploy) | ✅ live, auto-deploy + rollback |
-| **Report** | [`docs/REPORT.md`](REPORT.md) | all (Lior drafted) | ✅ current — **1411 tests** (1393 pass / 18 env-gated in CI). The single source is the live `.md`; the stale 2026-07-11 `REPORT.pdf` was removed — regenerate a fresh PDF from this only if the TA wants a file. |
+| **Report** | [`docs/REPORT.md`](REPORT.md) | all (Lior drafted) | ✅ current — **1416 tests** (1398 pass / 18 env-gated in CI). The single source is the live `.md`; the stale 2026-07-11 `REPORT.pdf` was removed — regenerate a fresh PDF from this only if the TA wants a file. |
 | Rubric / guidelines | [`docs/GUIDELINES.md`](GUIDELINES.md) | — | ✅ |
 | Roadmap | [`docs/ROADMAP.md`](ROADMAP.md) | — | ✅ |
 | Presentation + demo video | `presentation/` (see the checklist) | all | 🟡 deck ✅ (presented 16 Jul); **demo video ⬜ to record** → `VID_<ids>.mp4` |
