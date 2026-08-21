@@ -203,24 +203,24 @@ Columns are the test-type dirs under `tests/`. Cells name representative file(s)
 | Feature / component | Unit | Integration | Negative | System / Full-System | Security | Stress |
 |---|---|---|---|---|---|---|
 | **F1 Accounts / Auth** | `test_auth_validation` (25) · `test_email` (18) | `test_auth_flow` (13) · `test_login_otp` (16) · `test_password_reset` (12) · `test_register_verify` (11) · `test_account_*` (29) · `test_login_otp_reuse` (8) · `test_otp_resend` (4) · `test_email_smtp_delivery` (2) | `test_auth_negative` (33) | `test_e2e` leg | `test_auth` (10) · `test_csrf` (6) · `test_debug_email_override` (7) | — |
-| **F2 Profile** | `test_profile_validation` (77) | `test_profile_flow` (9) · `test_identity_display` (3) | in `test_profile_checkin_negative` (59) | `test_e2e` leg | `test_profile` (1) | — |
-| **F3 Readiness (web path)** | `test_checkin_validation` (23) · `test_ai_client` (13) | `test_checkin_flow` (13) · `test_web_ai` (4) | in `test_profile_checkin_negative` (59) | `test_e2e` leg | — | — |
-| **F3 Readiness (model — Shiri)** | `test_ai_inference` (16) · `test_ai_recommendations` (19) · `test_ai_binning` (21) | `test_ai_queue_api` (27, loads the real `model.pkl`) | — | — | — | — |
+| **F2 Profile** | `test_profile_validation` (77) | `test_profile_flow` (9) · `test_identity_display` (3) | in `test_profile_checkin_negative` (60) | `test_e2e` leg | `test_profile` (1) | — |
+| **F3 Readiness (web path)** | `test_checkin_validation` (23) · `test_ai_client` (13) | `test_checkin_flow` (13) · `test_web_ai` (4) | in `test_profile_checkin_negative` (60) | `test_e2e` leg | — | — |
+| **F3 Readiness (model — Shiri)** | `test_ai_inference` (20) · `test_ai_recommendations` (19) · `test_ai_binning` (21) | `test_ai_queue_api` (27, loads the real `model.pkl`) | — | — | — | — |
 | **F4 Calorie** | `test_calories` (14) | via `test_checkin_flow` / `test_dashboard_flow` | — | — | — | — |
 | **F5 Workout generator** | `test_workout_plan` (121) · `test_exercise_catalog` (13) | `test_dashboard_flow` (23) — `test_dashboard_relays_a_resolved_workout_plan`, the plan surviving the ai -> web relay verbatim | — | — | — | — |
 | **F6 Program balance (Advanced-tier input)** | `test_ai_client` (13) — the `training_program` -> `performed` translation | `test_web_ai` (4) — the web->ai seam, including web's real payload run through ai's real engine · `test_profile_flow` (9) | `test_training_program_negative` (19) | — | (profile wall) | — |
-| **F7 Action plan / recommendations** | (engine covered by the F3-model unit tests) | `test_web_ai` (4) · `test_dashboard_flow` (13) | — | `test_e2e` leg | — | — |
-| **F8 Dashboard** | — | `test_dashboard_flow` (13) | — | `test_e2e` leg | `test_dashboard` (1) | — |
+| **F7 Action plan / recommendations** | (engine covered by the F3-model unit tests) | `test_web_ai` (4) · `test_dashboard_flow` (23) | — | `test_e2e` leg | — | — |
+| **F8 Dashboard** | — | `test_dashboard_flow` (23) | — | `test_e2e` leg | `test_dashboard` (1) | — |
 | **F9 History** | — | `test_history_flow` (4) | — | `test_e2e` leg | `test_history` (1) | — |
 | **Online Forum (CRUD/UI, votes)** | `test_forum_validation` (16) | `test_forum_flow` (19) · `test_comment_votes` (7) | `test_forum_negative` (35) | `test_e2e` leg | `test_forum` (3) | in `test_load` (forum flood) |
 | **Forum real-time (DM · notifications · SSE)** | `test_messages_db` (18) | `test_messages` (28) · `test_forum_notifications` (10) | in `test_messages_media_negative` (30) | — | `test_messages_privacy` (4) | — |
 | **Forum engagement metric (Elad)** | `test_db_engagement` (7) | `test_engagement` (7) | — | — | — | — |
-| **Media (Elad)** | `test_media_store` (3) | `test_media` (8) · `test_frontend_media_composer` (18) · `test_elad_lane_journey` (4) | `test_messages_media_negative` (30) | `test_elad_lane_live` (1, live HTTP incl. 10 MB cap) | `test_media_limits` (11) | — |
-| **AI job-queue +5 (Elad)** | `test_jobqueue` (40) · `test_bench` (18) | `test_ai_queue_contract` (21) | — | `test_ai_queue_live` (10) | `test_ai_queue` (28) | `test_pool_scaling` (2) · `test_queue_backpressure` (6) |
-| **Deploy / scale (Elad)** | — | `test_deploy_contract` (24) · `test_scale_contract` (9) · `test_pin_contract` (4) | — | — | — | — |
+| **Media (Elad)** | `test_media_store` (8) | `test_media` (39) · `test_frontend_media_composer` (18) · `test_elad_lane_journey` (4) | `test_messages_media_negative` (30) | `test_elad_lane_live` (1, live HTTP incl. 10 MB cap) | `test_media_limits` (11) | — |
+| **AI job-queue +5 (Elad)** | `test_jobqueue` (40) · `test_bench` (18) | `test_ai_queue_contract` (22) | — | `test_ai_queue_live` (10) | `test_ai_queue` (28) | `test_pool_scaling` (2) · `test_queue_backpressure` (6) |
+| **Deploy / scale (Elad)** | — | `test_deploy_contract` (32) · `test_scale_contract` (11) · `test_pin_contract` (4) | — | — | — | — |
 | **Rate-limiting / anti-spam (Elad)** | — | — | — | — | `test_rate_limit` (9) | in `test_load` |
 | **Data layer (`db.py` + Mongo)** | `test_db` (67) · `test_backup_script` (2) · `test_seed` (8) | `test_db_mongo` (22, real Mongo) · `test_real_mongo_guard` (7) | — | — | (injection-safe queries) | — |
-| **Frontend (SPA / CSRF / a11y / mobile)** | `test_frontend_mobile_guards` (16) | `test_frontend` (39) | — | `test_e2e` leg | `test_csrf` (6) · `test_web_hardening` (4) · `test_review_hardening` (3) | — |
+| **Frontend (SPA / CSRF / a11y / mobile)** | `test_frontend_mobile_guards` (16) | `test_frontend` (49) | — | `test_e2e` leg | `test_csrf` (6) · `test_web_hardening` (4) · `test_review_hardening` (3) | — |
 | **Observability (logging)** | `test_logging_config` (21) | — | — | — | (access-log path escaping) | — |
 | **App config / debug flag / secret** | `test_config` (16) · `test_scaffold` (4) | — | — | — | (no `.env` tracked) | — |
 | **Error handling · ready gate · perf** | — | `test_error_handlers` (5) · `test_ready` (3) · `test_perf` (7) | — | — | — | — |
@@ -243,13 +243,13 @@ regression is cheapest to catch — unit and negative input walls — rather tha
 suite is **1394 pass, 18 skip**. All **44** local skips are env-gated and *not broken* — they run the
 moment their dependency is present:
 
-- `test_db_mongo` (21) — the real-Mongo integration suite; skips without `TEST_MONGO_URI`, and **runs in CI**
+- `test_db_mongo` (22) — the real-Mongo integration suite; skips without `TEST_MONGO_URI`, and **runs in CI**
   against a `mongo:7` service on every PR.
 - `test_seed_mongo` (4) — the real-Mongo cold-seed test; same `TEST_MONGO_URI` gate, also **runs in CI**.
 - `test_ai_queue_live` (10) — the live AI-queue behaviour (bounded queue + process pool over HTTP); runs when
   `AI_BASE_URL` points at the running `ai` container, as CI's `compose-e2e` job does.
 - `test_load` (4) — the live-stack stress burst; runs when `E2E_BASE_URL` points at a live stack.
-- `test_e2e` + `test_elad_lane_live` (2) — full-stack system journeys; run against a live stack (`E2E_BASE_URL`).
+- `test_e2e` + `test_elad_lane_live` (1) — full-stack system journeys; run against a live stack (`E2E_BASE_URL`).
 - `test_fault_isolation` (2) — destructive container-stop resilience checks; run with `FAULT_TEST=1`.
 
 With the live stack up (`TEST_MONGO_URI` + `AI_BASE_URL` + `E2E_BASE_URL` set), the real-Mongo, live-AI-queue,
