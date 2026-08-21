@@ -18,6 +18,7 @@ import pytest
 requests = pytest.importorskip("requests")
 
 from _live_auth import TIMEOUT, csrf_headers, sign_in  # noqa: E402  (after importorskip guards `requests`)
+from _live_http import live_session  # noqa: E402  (same reason: it builds a requests.Session)
 
 BASE = os.environ.get("E2E_BASE_URL", "").rstrip("/")
 pytestmark = pytest.mark.skipif(not BASE, reason="set E2E_BASE_URL to run against a live stack")
@@ -26,9 +27,10 @@ _PNG = b"\x89PNG\r\n\x1a\nlive-journey-bytes"
 
 
 def _session():
-    s = requests.Session()
-    s.get(f"{BASE}/health", timeout=TIMEOUT)   # seed the double-submit CSRF cookie
-    return s
+    # Transport-retrying (#568): this journey uploads media over several round-trips, so it is exactly the
+    # kind of long run that meets gunicorn's --max-requests worker swap. Statuses pass through untouched —
+    # the 413 the upload-cap assertion depends on is still a real 413.
+    return live_session(BASE, timeout=TIMEOUT)   # also seeds the double-submit CSRF cookie
 
 
 def _h(s):

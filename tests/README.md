@@ -43,7 +43,7 @@ These are the **universal guardrails** every owner's work must pass before it ca
 | Calorie (F4) | ✓ | ✓ | ✓ | – | – | Shiri | `Unit_Tests/test_calories.py` (unit ✓) |
 | Workout (F5) | ✓ | ✓ | ✓ | – | – | Shiri | (add) |
 | Dashboard / History (F7/F8) | ✓ | ✓ | ✓ | – | – | Lior | `System_Tests/test_e2e.py` |
-| Deploy + CI/CD | – | ✓ | ✓ | ✓ | – | Lior (CI) / Elad (deploy + stress) | `Integration_Tests/test_deploy_contract.py`, `Stress_Tests/test_load.py` |
+| Deploy + CI/CD | – | ✓ | ✓ | ✓ | – | Lior (CI) / Elad (deploy + stress) | `Integration_Tests/test_deploy_contract.py`, `Integration_Tests/test_live_http_retry.py` (the live-stack client survives gunicorn's worker recycle, #568), `Stress_Tests/test_load.py` |
 | Forum media (§10) | – | ✓ | – | – | ✓ | Elad | `Integration_Tests/test_media.py`, `Security_Tests/test_media_limits.py` |
 | AI job queue (§2, +5) | ✓ | ✓ | ✓ | ✓ | ✓ | Elad | `Unit_Tests/test_jobqueue.py`, `Integration_Tests/test_ai_queue_api.py` + `test_ai_queue_contract.py`, `System_Tests/test_ai_queue_live.py`, `Stress_Tests/test_queue_backpressure.py`, `Security_Tests/test_ai_queue.py` |
 | Scaling (§4) | ✓ | ✓ | – | ✓ | – | Elad | `Unit_Tests/test_bench.py`, `Integration_Tests/test_scale_contract.py`, `Stress_Tests/test_pool_scaling.py` (real process pool; skips under 4 cores) |
