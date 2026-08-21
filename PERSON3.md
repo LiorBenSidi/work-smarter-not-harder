@@ -93,6 +93,22 @@ never commit it. (The GitHub-side secrets for the deploy are in [`SECRETS.md`](S
   the seam + the test fake, additive only. *Taken under the team rule (Lior, 10 Jul): unassigned
   responsibilities go to Elad.*
 - [x] **Rate limiting** — `flask-limiter` on the public routes (login/register/forum) (PR #160). *(Messaging already has an anti-spam rate-limit — 20/min.)*
+- [x] **The repo runs first-try on Windows** (#580, PR #581) — the platform in the guidelines' *"runs first
+  try on any computer"* that nobody had tested. From a clean clone on Windows 11 + Docker Desktop (WSL2):
+  `install.sh` ✅, health/ready ✅, register→verify→`/me` ✅, only `web` published ✅, `pytest` **1365 pass /
+  46 skip / 0 fail** ✅, the cross-container harness **exit 0** ✅, and the shell scripts still **LF** under a
+  system-level `core.autocrlf=true` ✅. One real defect: `./seed.sh` failed from *every* folder, home directory
+  included, because Git Bash rewrites **both halves** of `-v "$PWD:/repo"` and the repo mounted at `C:/repo`.
+  `MSYS_NO_PATHCONV` / `MSYS2_ARG_CONV_EXCL` fix it; they are inert on macOS/Linux, which is exactly why CI
+  could never have caught it. Guarded by `Unit_Tests/test_seed_script.py` (fake `docker` on `PATH`, asserts the
+  recorded invocation; red when the prefix is removed).
+- [x] **E2E reliability — the fixed-pause class closed** (#568, PRs #573 + #584). Three fixes: the browser
+  client, `Stress_Tests/test_load.py` (since #327), and the **third client nobody had counted** — `compose-e2e`
+  boots at gunicorn's default `--max-requests 1000` and drove the live-stack pytest suites on a bare
+  `requests.Session` with no tolerance (#573 fixes it at the client, so the harness keeps exercising the
+  graceful-close path prod actually has). Then the 20 assert-after-fixed-pause sites, classified by hand
+  because a regex mis-classifies them: 5 poll ticks · **4 genuinely negative, where the pause IS the test** ·
+  11 converted to polling via two new helpers (`waitUntil`, `waitGone`). `wait(N)`-before-assert: **20 → 7**.
 - [x] **Risk assessment** — [`docs/REPORT.md`](docs/REPORT.md) §5, rewritten around the question *"which test
   goes red if this mitigation disappears?"*. Five sub-sections: dependency failure · the job queue's four new
   failure modes · scale & deploy · abuse/security/data · **what we deliberately did not mitigate** (`/jobs`
