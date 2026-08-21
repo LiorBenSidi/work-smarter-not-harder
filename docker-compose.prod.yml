@@ -10,9 +10,19 @@
 # job store is in-memory per process — a 2nd worker owns a 2nd store and `/jobs` 404s half the time), with the
 # process pool (AI_QUEUE_WORKERS) providing the parallelism. `web` runs one gthread worker with a wide thread
 # pool (it's I/O-bound — waits on Mongo + ai). Swap is kept as a safety net but no longer required at 32 GiB.
+# Bounded container logs (#547). Docker's json-file driver keeps every line FOREVER by default, and this
+# stack logs a request per healthcheck every 10s on two containers — on the same disk Mongo writes to.
+# 10 MB x 3 files caps each container at 30 MB; the oldest rotates out instead of the VM filling up.
+x-logging: &logging
+  driver: "json-file"
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 services:
   caddy:                                   # the public edge: terminates TLS, auto Let's Encrypt, HTTP->HTTPS (R10)
     image: caddy:2
+    logging: *logging
     restart: unless-stopped
     ports:
       - "80:80"                            # ACME HTTP-01 challenge + the HTTP->HTTPS redirect (R10.1/R10.4)
@@ -28,6 +38,7 @@ services:
 
   web:                                     # NO host port now — only Caddy reaches it, over the internal network
     image: ghcr.io/${IMAGE_OWNER:?set IMAGE_OWNER}/work-smarter-web:${IMAGE_TAG:-latest}   # CI pins the exact SHA (R5.2)
+    logging: *logging
     restart: unless-stopped                # self-heal + survive a VM reboot (R5.4)
     # PROD: 1 gthread worker x 16 threads. The web tier is I/O-bound (waits on Mongo + ai; those socket waits
     # release the GIL, so THREADS — not processes — are the lever), and scrypt hashing also releases the GIL, so
@@ -75,11 +86,15 @@ services:
 
   ai:                                      # internal only (OWNER: Shiri) — no host port
     image: ghcr.io/${IMAGE_OWNER:?set IMAGE_OWNER}/work-smarter-ai:${IMAGE_TAG:-latest}
+    logging: *logging
     restart: unless-stopped
     # PROD: exactly 1 gunicorn worker (architectural — the queue's in-memory job store must stay coherent;
     # a 2nd worker owns a 2nd store and `/jobs` 404s half the time). Threads accept concurrent requests;
     # parallel scoring comes from the queue's process pool. --timeout 60 tolerates a slow first inference.
-    command: ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "1", "--threads", "8", "--timeout", "60", "app:create_app()"]
+    # --access-logfile/--error-logfile: this command REPLACES the image's CMD, so the flags #546 added to
+    # ai/Dockerfile do not reach prod unless they are repeated here — the same way #539's scaling profile
+    # silently dropped web's entrypoint. Without them the prod ai container logs nothing about its traffic.
+    command: ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "1", "--threads", "8", "--timeout", "60", "--access-logfile", "-", "--error-logfile", "-", "app:create_app()"]
     environment:
       # Pool size = the VM's 4 vCPU (each process loads its own model copy; 32 GiB has room). This is where
       # ai's parallelism lives — the measured 2.86x is at 4 workers (SCALING_REPORT.md).
@@ -91,7 +106,10 @@ services:
     expose:
       - "5000"
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:5000/health', timeout=3).status==200 else 1)"]
+      # /queue/stats, not /health (#555): a wedged job queue left /health answering 200 while every
+      # prediction hung, so Docker called a dead container healthy and never restarted it. The probe has
+      # to touch the thing that can wedge — stats takes the queue's own lock, so it fails when that lock is stuck.
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:5000/queue/stats', timeout=3).status==200 else 1)"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -99,6 +117,7 @@ services:
 
   db:                                      # MongoDB — internal only. Auth is env-gated (blank -> no auth).
     image: mongo:7
+    logging: *logging
     restart: unless-stopped
     environment:
       MONGO_INITDB_ROOT_USERNAME: ${MONGO_USER:-}
@@ -107,6 +126,11 @@ services:
       - "27017"
     volumes:
       - mongo-data:/data/db
+      # Backups land on the VM's own disk, not inside the container (#550): db/backup.sh runs INSIDE this
+      # container because mongodump ships in the mongo image and the VM host has no MongoDB tools. Without
+      # this mount every archive would die with the container it was written in — including on the next
+      # deploy. `docker compose exec -T db sh -c '... bash -s' < db/backup.sh` writes here.
+      - ./backups:/backups
     healthcheck:
       # mongosh is a heavy Node.js process; on a small VM run it less often + allow more time so transient
       # memory pressure doesn't flap the container to "unhealthy" (which would block web from ever starting).

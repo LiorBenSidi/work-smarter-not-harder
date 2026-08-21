@@ -161,6 +161,28 @@ _PUSH_PULL_TARGETS = {
     "Pull": (("back", "pull"), ("biceps", "pull"), ("shoulders", "pull")),
 }
 
+_CATALOG_BY_NAME = {entry["name"]: entry for entry in EXERCISE_CATALOG}
+
+# Explicit exercise selections for Upper/Push/Pull -- unlike every other slot in this file,
+# these are NOT auto-selected by _select_exercise. Chosen by hand for volume/variety reasons
+# that don't reduce to "prefer compound, break ties by declaration order". Full Body, Lower and
+# Legs are untouched and keep using _select_exercise as before.
+_MULTI_EXERCISE_NAMES = {
+    "chest": ["Barbell bench press", "Incline dumbbell press", "Dumbbell flye"],
+    "shoulders": ["Barbell overhead press", "Dumbbell front raise", "Dumbbell lateral raise"],
+    "back": ["Pull-up", "Lat pulldown", "Seated cable row"],
+    "biceps": ["Barbell curl", "Dumbbell hammer curl"],
+    "triceps": ["Barbell close-grip bench press", "Triceps rope pushdown (Cable)"],
+}
+
+# Pull day deliberately excludes shoulders even though "shoulders" is a _MULTI_EXERCISE_NAMES key
+# (Upper and Push both use that list) -- doubling shoulder volume on both Push AND Pull in the
+# same week risks overloading the joint. Pull's shoulders slot stays a single auto-selected pick.
+_PUSH_PULL_MULTI_GROUPS = {
+    "Push": frozenset({"chest", "shoulders", "triceps"}),
+    "Pull": frozenset({"back", "biceps"}),
+}
+
 
 def _athlete_equipment(equipment: Any) -> set[str]:
     """Normalize to a set of strings. None/missing/garbage -> empty set (bodyweight-only,
@@ -270,6 +292,50 @@ def _pick(
         picks.append(entry)
 
 
+def _select_named_exercises(
+    names: list[str], available_equipment: set[str], *, exclude: set[str]
+) -> list[dict]:
+    """Pick specific catalog entries by exact name, in the given order.
+
+    Skips (does not substitute) any name already picked this day, or whose equipment the
+    athlete doesn't have -- same "never invent, gracefully skip" rule the rest of this file
+    already uses for the supplementary quads slot and the adductor/abductor gap. An athlete
+    missing the right equipment simply gets fewer than the full named list, not a swapped-in
+    replacement -- see _pick_multi_or_fallback for what happens when that leaves zero.
+    """
+    picks: list[dict] = []
+    for name in names:
+        entry = _CATALOG_BY_NAME[name]
+        if entry["name"] in exclude:
+            continue
+        if entry["equipment"] != "bodyweight" and entry["equipment"] not in available_equipment:
+            continue
+        picks.append(entry)
+        exclude.add(entry["name"])
+    return picks
+
+
+def _pick_multi_or_fallback(
+    picks: list[dict],
+    exclude: set[str],
+    muscle_group: str,
+    pattern: str | None,
+    equipment: set[str],
+    names: list[str],
+) -> None:
+    """Try the named list first; if none of it is equipment-eligible (e.g. a bodyweight-only
+    athlete against an all-barbell/machine/dumbbell list), fall back to the same auto-selection
+    every other slot in this file uses (_pick) so the group still gets one guaranteed pick
+    instead of nothing -- keeps that equipment tier at parity with today's behavior rather than
+    silently losing a whole muscle group on these days.
+    """
+    named = _select_named_exercises(names, equipment, exclude=exclude)
+    if named:
+        picks.extend(named)
+        return
+    _pick(picks, exclude, muscle_group, pattern, equipment)
+
+
 def _full_body_exercises(equipment: set[str]) -> list[dict]:
     """Legs are compressed to 4 slots rather than one-per-sub-group: a compound squat (quads
     primary, glutes secondary -- covers glutes via overlap, no separate glutes-general or
@@ -308,7 +374,12 @@ def _upper_exercises(equipment: set[str]) -> list[dict]:
     picks: list[dict] = []
     exclude: set[str] = set()
     for muscle_group, pattern in _UPPER_TARGETS:
-        _pick(picks, exclude, muscle_group, pattern, equipment)
+        if muscle_group in _MULTI_EXERCISE_NAMES:
+            _pick_multi_or_fallback(
+                picks, exclude, muscle_group, pattern, equipment, _MULTI_EXERCISE_NAMES[muscle_group]
+            )
+        else:
+            _pick(picks, exclude, muscle_group, pattern, equipment)  # core only, unchanged
     return picks
 
 
@@ -345,9 +416,15 @@ def _push_pull_exercises(focus: str, equipment: set[str]) -> list[dict]:
     the way a first-occurrence-only rule would be."""
     picks: list[dict] = []
     exclude: set[str] = set()
+    multi_groups = _PUSH_PULL_MULTI_GROUPS.get(focus, frozenset())
 
     for muscle_group, pattern in _PUSH_PULL_TARGETS[focus]:
-        _pick(picks, exclude, muscle_group, pattern, equipment)
+        if muscle_group in multi_groups:
+            _pick_multi_or_fallback(
+                picks, exclude, muscle_group, pattern, equipment, _MULTI_EXERCISE_NAMES[muscle_group]
+            )
+        else:
+            _pick(picks, exclude, muscle_group, pattern, equipment)  # Pull's shoulders slot only
 
     return picks
 

@@ -16,7 +16,10 @@ They are cheap text assertions on the committed files (no Docker, no live stack)
 normal per-PR CI gate. Behaviour of the media/rate-limit code itself is covered by
 tests/Security_Tests/test_media_limits.py and test_rate_limit.py.
 """
+import json
+import os
 import re
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -38,6 +41,11 @@ def _strip_comments(text):
         if code:
             lines.append(code)
     return "\n".join(lines) + "\n"
+
+
+@pytest.fixture(scope="module")
+def dev_stack():
+    return _strip_comments((ROOT / "docker-compose.yml").read_text())
 
 
 @pytest.fixture(scope="module")
@@ -275,3 +283,119 @@ def test_prod_media_bytes_persist_on_the_same_web_volume(prod):
     # mount AND declare the same named volume, so persistence holds on the deployed stack too.
     assert prod.count("- media-data:/app/media") == 1, "prod web must mount media-data (else uploads are ephemeral)"
     assert prod.count("media-data") == 2, "prod must MOUNT and DECLARE the media-data named volume"
+
+
+def test_the_ai_container_logs_the_requests_it_serves():
+    """`ai` served every /predict silently: gunicorn's access log is OFF by default, and ai/app.py logs
+    only the failure paths (shed, timeout, dead worker, raising job). A SUCCESSFUL prediction therefore
+    left no trace on the container that made it — so when web reports a degraded prediction there is
+    nothing to correlate against, and with `--scale ai=N` no way to tell which replica served it (#546).
+    Asserted here rather than trusted, because this is exactly how #539's scaling profile silently lost
+    `wsgi:app` and its logging: a dropped flag changes nothing visible until you need the logs.
+    """
+    dockerfile = _strip_comments((ROOT / "ai" / "Dockerfile").read_text())
+    assert "--access-logfile" in dockerfile and "--error-logfile" in dockerfile, \
+        "ai's gunicorn must log requests + errors, or the container is silent about its traffic"
+    assert '"--access-logfile", "-"' in dockerfile and '"--error-logfile", "-"' in dockerfile, \
+        "both logs must go to stdout/stderr so `docker logs ai` (and the VM's journal) carry them"
+
+
+def test_every_prod_service_bounds_its_logs(prod):
+    """Docker's json-file driver keeps EVERY line forever unless told otherwise, and the prod stack logs
+    a request per healthcheck at `interval: 10s` on two containers — ~8.6k lines per container per day of
+    pure heartbeat, on the same 1 GB VM disk Mongo writes to (#547). The failure mode isn't a crash; it's
+    Mongo failing writes on a full disk weeks later. Uploads are capped (MEDIA_MAX_TOTAL_BYTES, #313); the
+    logs recording those caps were not. Asserted per service so a service added later can't ship unbounded.
+    """
+    services = [name for name in ("caddy", "web", "ai", "db") if f"\n  {name}:" in prod]
+    assert len(services) == 4, "prod must define caddy/web/ai/db — update this test if that changes"
+    assert prod.count("max-size:") >= 1 and prod.count("max-file:") >= 1, \
+        "prod must bound the json-file log driver (max-size + max-file)"
+    # Anchored or repeated, every service has to END UP with the option — compose resolves both the same
+    # way, so assert on the merged config rather than on how it was written.
+    merged = subprocess.run(["docker", "compose", "-f", str(ROOT / "docker-compose.prod.yml"), "config", "--format", "json"],
+                            capture_output=True, text=True, cwd=str(ROOT),
+                            env={**os.environ, "IMAGE_OWNER": "x", "SECRET_KEY": "x", "SITE_ADDRESS": "localhost"})
+    if merged.returncode != 0:
+        pytest.skip("docker compose not available to resolve the merged prod config")
+    for name, svc in json.loads(merged.stdout)["services"].items():
+        opts = (svc.get("logging") or {}).get("options") or {}
+        assert opts.get("max-size"), f"{name} must cap its log file size"
+        assert opts.get("max-file"), f"{name} must cap how many rotated log files it keeps"
+
+
+def test_every_env_knob_the_app_reads_is_documented_in_env_example():
+    """`.env.example` is the only thing a deployer reads before setting up a stack — an undocumented
+    knob is one nobody knows to set, and two of them are anti-abuse switches (RATELIMIT_ENABLED,
+    MEDIA_ALLOWED_MIME). Drift is invisible until someone needs the knob in production, so it is
+    asserted: found 4 undocumented at the time this test was written, all of them shipped months earlier.
+
+    Scoped to `web/config.py` because that is the file whose defaults `.env.example` mirrors. TESTING and
+    FLASK_DEBUG are excluded on purpose: they are harness switches, not deployment configuration.
+    """
+    config = (ROOT / "web" / "config.py").read_text(encoding="utf-8")
+    read = set(re.findall(r'environ\.get\(\s*"([A-Z0-9_]+)"', config))
+    read |= set(re.findall(r'_env\w*\(\s*"([A-Z0-9_]+)"', config))
+    read -= {"TESTING", "FLASK_DEBUG"}
+    example = (ROOT / ".env.example").read_text(encoding="utf-8")
+    undocumented = sorted(k for k in read if k not in example)
+    assert not undocumented, f".env.example does not mention: {undocumented}"
+
+
+def test_prod_backups_survive_the_container_that_wrote_them(prod):
+    """`db/backup.sh` has to run INSIDE the db container — mongodump ships in the mongo image and the VM
+    host has no MongoDB tools installed (measured: `/usr/bin/mongodump` in db, MISSING in web). An archive
+    written to a container path therefore dies with that container, and the next deploy recreates it (#550).
+    A host-side bind mount is what makes a backup a backup rather than a file with a countdown on it.
+    """
+    assert "- ./backups:/backups" in prod, \
+        "prod db must bind-mount a host directory for backup archives (a container path dies with the container)"
+
+
+def test_ai_logs_its_requests_wherever_its_command_is_overridden(prod):
+    """#546 put the log flags in `ai/Dockerfile`, and prod overrides `command:` — which REPLACES the
+    image CMD, so prod shipped without them and its container stayed silent. Exactly the shape of #539,
+    where the scaling profile replaced web's command and silently dropped `wsgi:app`. Assert the
+    effective command, not the image default.
+    """
+    ai_block = prod[prod.index("\n  ai:"):]
+    command = ai_block[ai_block.index("command:"):].splitlines()[0]
+    assert "--access-logfile" in command and "--error-logfile" in command, \
+        "prod's ai command overrides the image CMD, so it must repeat the log flags"
+
+
+def test_the_ai_healthcheck_can_see_a_wedged_queue(prod, dev_stack):
+    """A dead pool worker left `/health` answering 200 while every prediction hung behind a lock that
+    was never released, so Docker reported the container healthy and never restarted it (#555). The
+    probe has to touch the queue itself: `/queue/stats` takes the queue's own lock, so it goes red
+    exactly when the queue is stuck — which is the only signal that reaches Docker's restart policy.
+    """
+    for name, stack in (("prod", prod), ("dev", dev_stack)):
+        ai_block = stack[stack.index("\n  ai:"):]
+        healthcheck = ai_block[ai_block.index("healthcheck:"):]
+        probe = healthcheck[:healthcheck.index("interval:")]
+        assert "/queue/stats" in probe, f"{name}: ai's healthcheck must exercise the queue, not just /health"
+
+
+def test_the_deploy_reclaims_disk_on_the_vm(ci):
+    """IMAGE_TAG is the commit SHA, never `:latest`, so every deploy pulls a NEW image set and nothing
+    removed the old ones — they accumulated on the same disk Mongo writes to, one set per deploy, with
+    no ceiling. The prune must stay `-a` + time-filtered: `-a` skips anything a container references, so
+    the running stack survives, and the week's window keeps recent tags around for a fast rollback.
+    """
+    assert "docker image prune" in ci, "the deploy must reclaim images the VM no longer uses"
+    prune = ci[ci.index("docker image prune"):]
+    prune = prune[:prune.index("\n")]
+    assert "-af" in prune or ("-a" in prune and "-f" in prune), "the prune must be non-interactive and cover unused tags"
+    assert "until=" in prune, "keep a recent window so a rollback does not have to re-pull everything"
+
+
+def test_the_deploy_never_prunes_while_the_health_check_could_still_fail(ci):
+    """Ordering: reclaim only AFTER the deploy is known good. Pruning before the health check could
+    delete the very image a rollback is about to want, turning a recoverable bad deploy into an outage
+    that depends on GHCR being reachable at that moment.
+    """
+    assert ci.index("Record this SHA as the last-good deploy") < ci.index("docker image prune"), \
+        "the prune must run after the last-good SHA is recorded"
+    assert ci.index("Health check against the public HTTPS address") < ci.index("docker image prune"), \
+        "the prune must run after the health check"

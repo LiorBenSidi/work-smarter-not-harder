@@ -3019,6 +3019,7 @@
     // #331: comments live in their own collection, fetched paginated via GET /forum/posts/<id>/comments.
     // We accumulate the newest-first pages (deduped by id) and render them sorted OLDEST-first, so the
     // reading order matches the old embedded list; "Load more comments" pages back to older comments.
+    let commentAtts = {};                                  // #407: comment id -> attachments, fetched once per post-open
     let commentAccum = [], commentsNextBefore = null;
     // Supersede-guards: a slower OLDER re-render must not overwrite a newer one. Votes now patch in place
     // (#420), but openPost/loadForum still overlap on open-while-loading, entry re-syncs and the SSE/backstop
@@ -3284,14 +3285,57 @@
         + '<h4 style="margin:14px 0 6px">Comments' + (p.comment_count ? ' <span class="muted">(' + escapeHtml(p.comment_count) + ')</span>' : '') + '</h4>'
         + '<div id="comments-box"><p class="muted">Loading comments…</p></div>'
         + '<form id="comment-form" style="margin-top:10px"><textarea name="body" placeholder="Add a comment" aria-label="Add a comment" maxlength="2000" rows="2" required style="resize:vertical"></textarea>'
+        // #407 (TA Online-Forum sub-requirement #2): a comment takes images/videos too. Same attach control
+        // and same tray as the forum composer, so the three composers behave identically.
+        + '<div style="display:flex;align-items:center;gap:10px;margin-top:8px;flex-wrap:wrap">'
+        +   '<label class="ghost" style="cursor:pointer;display:inline-flex;align-items:center;gap:7px;padding:6px 10px;border-radius:10px;font-weight:600;font-size:13px" title="Attach photos or a clip — PNG, JPEG, WebP, GIF or MP4, up to {{ media_max_label }}">'
+        +     '<input type="file" id="comment-files" accept="image/png,image/jpeg,image/webp,image/gif,video/mp4" multiple hidden>'
+        +     '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>'
+        +     '<span>Add photos</span></label>'
+        +   '<span id="comment-files-hint" class="muted" style="font-size:12px"></span></div>'
+        + '<div id="comment-tray" class="att-tray"></div>'
         + '<div style="margin-top:8px"><button type="submit">Comment</button></div></form></div>';
       loadComments(id);                                     // #331: fetch this post's comments (paginated) into #comments-box
+      // openPost() rebuilds this form every time, so the tray is rebuilt with it (it binds listeners to
+      // the elements that exist now). Nothing to tear down: the old nodes go with the innerHTML.
+      const commentTray = makeTray("comment-files", "comment-tray", "comment-files-hint");
       onSubmit("comment-form", async (f) => {
+        if (commentTray.hasBlocked()) {
+          flash("forum-flash", "Remove the file that's over " + humanBytes(MEDIA_MAX_BYTES) + " before commenting.", "warn");
+          return;
+        }
+        // Upload first, then create the comment (#439's ordering, for the same reason): a comment must
+        // never be published without the media it was written around, and a failed upload must not leave
+        // a stray comment behind.
+        const picked = commentTray.sendable();
+        let ids = [], failures = [], cancelled = false;
+        if (picked.length) {
+          commentTray.setBusy(true);
+          flash("forum-flash", "Uploading…", "ok");
+          ({ ids, failures, cancelled } = await uploadAll(picked, commentTray.progress,
+                                                          (abort) => { commentTray.cancel = abort; }));
+          commentTray.setBusy(false); commentTray.clearProgress();
+          if (cancelled) { flash("forum-flash", "Upload cancelled — nothing was posted.", "warn"); return; }
+          if (!ids.length && failures.length) {   // every file refused: don't post a bare comment
+            flash("forum-flash", attachWarning("Nothing was posted — ", picked.length, failures), "warn");
+            return;                               // the tray keeps the files, so retry is one tap
+          }
+        }
         const cr = await api("/forum/posts/" + id + "/comments", { method: "POST", body: { body: f.body.value } });
+        if (!cr.ok) { flash("forum-flash", (cr.data && cr.data.error) || "Couldn't post your comment — please try again."); return; }
+        let warn = "";
+        const cid = cr.data && cr.data.comment && cr.data.comment.id;
+        if (cid && ids.length) {
+          const ar = await api("/forum/posts/" + id + "/comments/" + cid + "/attachments",
+                               { method: "POST", body: { attachment_ids: ids } });
+          if (!ar.ok) warn = "Commented — but the attachment" + (picked.length === 1 ? "" : "s")
+            + " couldn't be added to it" + ((ar.data && ar.data.error) ? " — " + ar.data.error : "") + ".";
+        }
+        if (!warn && failures.length) warn = attachWarning("Commented — but ", picked.length, failures);
         // On success: clear the composer and pull the new comment in via the in-place refresh — a full
         // openPost() here rebuilt the detail and reset an attachment video just for one new row (#420).
-        if (cr.ok) { f.reset(); refreshOpenPost(); }
-        else flash("forum-flash", (cr.data && cr.data.error) || "Couldn't post your comment — please try again.");
+        f.reset(); commentTray.clear(); refreshOpenPost();
+        if (warn) flash("forum-flash", warn, "warn");
       });
       // Load this post's media attachments and render them under the body (best-effort; never wedges the post).
       api("/forum/posts/" + id + "/attachments").then((ar) => {
@@ -3326,7 +3370,9 @@
             + '<div class="c-vote"><button class="ghost mini cvote" data-cid="' + escapeHtml(c.id) + '" data-val="1" aria-label="Upvote comment">'
             + ICON.up + ' ' + countPill(c.likes, "like", true) + '</button>'
             + '<button class="ghost mini cvote" data-cid="' + escapeHtml(c.id) + '" data-val="-1" aria-label="Downvote comment">'
-            + ICON.down + ' ' + countPill(c.dislikes, "dislike", true) + '</button></div></li>'
+            + ICON.down + ' ' + countPill(c.dislikes, "dislike", true) + '</button></div>'
+            // #407: a slot for this comment's media, filled in after the render by loadCommentAtts().
+            + '<div class="c-atts" data-cid="' + escapeHtml(c.id) + '"></div></li>'
           ).join("") + '</ul>'
         : '<p class="muted">No comments yet.</p>';
       if (commentsNextBefore) html += '<button type="button" class="ghost forum-more" id="comments-more" style="margin:10px auto 0;display:block">Load more comments</button>';
@@ -3335,10 +3381,45 @@
         b.addEventListener("click", () => voteComment(b.dataset.cid, Number(b.dataset.val))));
       const more = document.getElementById("comments-more");
       if (more) more.addEventListener("click", loadMoreComments);
+      loadCommentAtts(list);                                 // #407: fill each comment's media slot
+    }
+    // Fetch and render the comments' attachments (#407) in ONE request for the whole page.
+    //
+    // This was originally one request per comment, which was an N+1 at the BROWSER layer rather than the
+    // database one: a page holds up to COMMENT_PAGE_DEFAULT (50) comments, and 50 parallel requests
+    // against a browser limit of ~6 connections per origin means everything else the page needs — the
+    // forum feed included — queues behind the burst. Measured on the running app: opening a post with 20
+    // comments issued 20 requests. It now issues one, whatever the comment count.
+    //
+    // Still cached per comment id, because renderComments() re-runs on every vote, every new comment and
+    // every in-place refresh; only comments not already known are asked for. Best-effort throughout: a
+    // failed read leaves the slots empty rather than blanking the thread.
+    function loadCommentAtts(list) {
+      const postId = currentPostId;
+      const paint = (cid, atts) => {
+        const el = document.querySelector('.c-atts[data-cid="' + CSS.escape(String(cid)) + '"]');
+        if (el && atts && atts.length) el.innerHTML = attsHtml(atts);
+      };
+      const unknown = [];
+      for (const c of list) {
+        if (commentAtts[c.id] !== undefined) paint(c.id, commentAtts[c.id]);   // known: repaint, no request
+        else unknown.push(c.id);
+      }
+      if (!unknown.length) return;
+      unknown.forEach((id) => { commentAtts[id] = []; });   // claim them, so a re-render can't refetch
+      api("/forum/posts/" + postId + "/comments/attachments",
+          { method: "POST", body: { comment_ids: unknown } }).then((ar) => {
+        if (currentPostId !== postId) return;               // a newer open superseded this
+        const map = (ar.ok && ar.data && ar.data.attachments) || {};
+        for (const id of unknown) {
+          commentAtts[id] = map[id] || [];
+          paint(id, commentAtts[id]);
+        }
+      });
     }
     // Load a post's FIRST (newest) page of comments — resets the accumulator, so re-opening a post starts clean.
     async function loadComments(id) {
-      commentAccum = []; commentsNextBefore = null;
+      commentAccum = []; commentsNextBefore = null; commentAtts = {};   // #407: attachments are per-open
       const r = await api("/forum/posts/" + id + "/comments");
       if (currentPostId !== id) return;                      // a newer open superseded this
       if (!r.ok || !r.data) { const box = document.getElementById("comments-box"); if (box) box.innerHTML = '<p class="muted">Couldn\'t load comments.</p>'; return; }
@@ -3883,7 +3964,8 @@
       const changed = setHtmlIfChanged(el, cs.map((c) =>
         '<div class="dm-row" data-peer="' + escapeHtml(c.peer) + '">' + avatarHtml(c.peer, 40)
         + '<div class="dm-main"><div class="dm-name" dir="auto">' + escapeHtml(c.peer_name || c.peer) + '</div>'
-        + '<div class="dm-last" dir="auto">' + escapeHtml(c.last_message || "") + '</div></div>'
+        + '<div class="dm-last" dir="auto">' + (String(c.last_message || "").trim()
+              ? escapeHtml(c.last_message) : '<span class="muted">Attachment</span>') + '</div></div>'
         + (c.unread ? '<span class="dm-unread">' + escapeHtml(c.unread) + '</span>' : '') + '</div>'
       ).join(""));
       if (changed) el.querySelectorAll(".dm-row").forEach((d) => d.addEventListener("click", () => openThread(d.dataset.peer)));
@@ -4000,7 +4082,11 @@
       // Weave text + shared images into ONE chronological timeline: each image sits in ITS sender's column at
       // the moment it was shared. A run = consecutive items from the same sender on the same day (Signal grouping);
       // the time rides the last bubble, ticks ride my bubbles.
-      const items = dmMsgs.map((m) => ({ kind: "msg", sender: m.sender, at: m.created_at, m }))
+      // #408: a media-only send stores a message with an EMPTY body purely so the recipient gets a
+      // notification, a badge and an inbox row. Its image is already woven in below via dmAtts, so
+      // rendering the carrier as well would put a blank bubble next to the photo.
+      const items = dmMsgs.filter((m) => String(m.body || "").trim())
+        .map((m) => ({ kind: "msg", sender: m.sender, at: m.created_at, m }))
         .concat(dmAtts.map((a) => ({ kind: "media", sender: a.owner, at: a.created_at, a })))
         .sort((x, y) => (x.at || 0) - (y.at || 0));
       const older = dmMoreOlder
@@ -4194,8 +4280,13 @@
           return;                                         // the tray keeps the files, so retry is one tap
         }
       }
-      if (text) {
-        const r = await api("/messages", { method: "POST", body: { to: dmPeer, body: text } });
+      // #408: send a message even when there is NO text, as long as something uploaded. Attachments bind
+      // to the CONVERSATION, not to a message, so a media-only send used to create no message at all —
+      // and with no message there was no notification, no unread badge, no inbox row and no live push.
+      // The recipient saw it only if they already had that exact thread open. The ids go with the send so
+      // the server can verify the sender really owns them before accepting an empty body.
+      if (text || ids.length) {
+        const r = await api("/messages", { method: "POST", body: { to: dmPeer, body: text, attachment_ids: ids } });
         if (!r.ok) { flash("dm-reply-flash", (r.data && r.data.error) || "Could not send"); return; }   // surface 429 / errors
       }
       let attachWarn = "";   // non-empty => the file(s) didn't attach; shown instead of silently clearing the flash

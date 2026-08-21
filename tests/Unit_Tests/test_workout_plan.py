@@ -312,6 +312,96 @@ def test_bodyweight_only_pull_skips_biceps_and_shoulders_gracefully():
     assert groups == ["back"]
 
 
+def test_push_day_uses_the_exact_named_exercises_for_chest_shoulders_and_triceps():
+    day = generate_workout_days("push_pull_legs", 3, FULL_EQUIPMENT, "gain")[0]
+    assert day["focus"] == "Push"
+    names = [exercise["name"] for exercise in day["exercises"]]
+    assert names == [
+        "Barbell bench press", "Incline dumbbell press", "Dumbbell flye",
+        "Barbell overhead press", "Dumbbell front raise", "Dumbbell lateral raise",
+        "Barbell close-grip bench press", "Triceps rope pushdown (Cable)",
+        "Plank",
+    ]
+
+
+def test_pull_day_uses_the_exact_named_exercises_for_back_and_biceps_but_not_shoulders():
+    """shoulders is one of the muscle groups that gets a named list on Upper and Push, but Pull
+    must keep it at a single auto-selected pick -- doubling shoulder volume on both Push AND
+    Pull in the same week was the explicit reason to hold it back here."""
+    day = generate_workout_days("push_pull_legs", 3, FULL_EQUIPMENT, "gain")[1]
+    assert day["focus"] == "Pull"
+    names = [exercise["name"] for exercise in day["exercises"]]
+    assert names[:5] == [
+        "Pull-up", "Lat pulldown", "Seated cable row",
+        "Barbell curl", "Dumbbell hammer curl",
+    ]
+    assert len(names) == 6  # the 5 named exercises plus exactly one auto-selected shoulders pick
+    groups = [exercise["muscle_group"] for exercise in day["exercises"]]
+    assert groups.count("shoulders") == 1
+
+
+def test_upper_day_uses_the_exact_named_exercises_for_all_five_groups():
+    day = generate_workout_days("upper_lower", 2, FULL_EQUIPMENT, "gain")[0]
+    assert day["focus"] == "Upper"
+    names = [exercise["name"] for exercise in day["exercises"]]
+    assert names == [
+        "Barbell bench press", "Incline dumbbell press", "Dumbbell flye",
+        "Barbell overhead press", "Dumbbell front raise", "Dumbbell lateral raise",
+        "Pull-up", "Lat pulldown", "Seated cable row",
+        "Barbell curl", "Dumbbell hammer curl",
+        "Barbell close-grip bench press", "Triceps rope pushdown (Cable)",
+        "Plank",
+    ]
+
+
+def test_bodyweight_only_push_falls_back_to_one_auto_selected_exercise_per_group():
+    """No named Push exercise is bodyweight equipment (all barbell/machine/dumbbell/cable), so
+    the fallback must degrade chest/shoulders/triceps to _pick's normal single auto-selection
+    rather than leaving them empty -- an equipment-starved athlete still gets a full day."""
+    day = generate_workout_days("push_pull_legs", 3, [], "gain")[0]
+    assert day["focus"] == "Push"
+    groups = [exercise["muscle_group"] for exercise in day["exercises"]]
+    assert groups.count("chest") == 1
+    assert groups.count("shoulders") == 1
+    assert groups.count("triceps") == 1
+    assert groups.count("core") == 1
+    assert len(groups) == 4
+    names = [exercise["name"] for exercise in day["exercises"]]
+    assert "Push-up" in names
+    assert "Pike push-up" in names
+
+
+def test_bodyweight_only_upper_falls_back_per_group_and_still_skips_biceps():
+    """Biceps has zero bodyweight entries anywhere in the catalog -- a pre-existing gap,
+    unrelated to this feature -- so the fallback must not invent one. Chest/shoulders/back/
+    triceps each degrade to one auto-selected exercise instead of the named list."""
+    day = generate_workout_days("upper_lower", 2, [], "gain")[0]
+    assert day["focus"] == "Upper"
+    groups = [exercise["muscle_group"] for exercise in day["exercises"]]
+    assert "biceps" not in groups
+    for group in ("chest", "shoulders", "back", "triceps", "core"):
+        assert groups.count(group) == 1
+    assert len(groups) == 5
+
+
+def test_every_named_multi_exercise_actually_exists_in_the_catalog():
+    """The Upper/Push/Pull named lists are hand-typed strings, not derived from the catalog --
+    if a referenced exercise is ever renamed (as happened to two entries in #535), this fails
+    with a clear assertion instead of a raw KeyError deep inside _select_named_exercises."""
+    from ai.exercise_catalog import EXERCISE_CATALOG
+
+    catalog_names = {entry["name"] for entry in EXERCISE_CATALOG}
+    named_exercises = [
+        "Barbell bench press", "Incline dumbbell press", "Dumbbell flye",
+        "Barbell overhead press", "Dumbbell front raise", "Dumbbell lateral raise",
+        "Pull-up", "Lat pulldown", "Seated cable row",
+        "Barbell curl", "Dumbbell hammer curl",
+        "Barbell close-grip bench press", "Triceps rope pushdown (Cable)",
+    ]
+    for name in named_exercises:
+        assert name in catalog_names, f"{name!r} is not in EXERCISE_CATALOG"
+
+
 @pytest.mark.parametrize(("goal", "sets", "reps"), [
     ("gain", 4, "6-8"),
     ("maintain", 3, "8-12"),

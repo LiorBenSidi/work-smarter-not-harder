@@ -68,8 +68,25 @@ never commit it. (The GitHub-side secrets for the deploy are in [`SECRETS.md`](S
   **fault-isolation** (`System_Tests/test_fault_isolation.py`: stop `ai` / stop `db` → web survives,
   `/ready` degrades to 503) + stress (`Stress_Tests/locustfile.py` + a dependency-free burst in
   `test_load.py`). Deploy/harness invariants are locked by `Integration_Tests/test_deploy_contract.py`.
-- [x] **Forum:** media/attachment storage (images/video in **posts and DMs**) + file-size limits (PR #160).
-  ⬜ **Comments do not accept media** — no route, no UI (TA Forum sub-req #2): [#407](https://github.com/LiorBenSidi/work-smarter-not-harder/issues/407).
+- [x] **Forum:** media/attachment storage (images/video in **posts, comments and DMs**) + file-size limits
+  (PR #160; comments landed with [#407](https://github.com/LiorBenSidi/work-smarter-not-harder/issues/407) /
+  PR #537 — `POST|GET /forum/posts/<pid>/comments/<cid>/attachments`, author-gated, target id `pid:cid`).
+  Three follow-ups shipped on the same surface:
+  - **Composer rework** (#471/#438/#439, PR #534) — a managed file array behind a shared attachment tray
+    (thumbnail + name + size + per-file remove), a client-side size pre-check against `MEDIA_MAX_BYTES`
+    before any bytes move, `fetch` → `XMLHttpRequest` for real byte progress, a **stall** timeout (not a
+    flat one — a flat timeout kills a legitimate 10 MB upload on a weak link) and a working Cancel, and
+    **upload-before-publish** so a failed upload never leaves a photo-less post pushed over SSE.
+  - **Media no longer outlives the account** (#507, PR #533) — `delete_for_owner` on both `DbMedia` and the
+    test fake, a seventh cascade in `delete_account` ordered before the identity record, the blobs unlinked
+    under `MEDIA_ROOT`, and `media` added to the data export.
+  - **Deleting a post erases its photos** (#544) — the post's own attachments *and* its comments'
+    (a deleted post takes its comments with it). Before this they stayed on the volume and kept being
+    served to any logged-in user, because `_can_view` treats a post/comment target as public forum
+    content without asking whether the post still exists — a silent leak against `MEDIA_MAX_TOTAL_BYTES`
+    and a delete that did not delete. Found by probing the live stack, not the fakes.
+  - **A media-only DM notifies the recipient** (#408, PR #538) — the send path now creates a message for a
+    text-free send, so the existing notification / badge / inbox-row / SSE machinery fires unchanged.
 - [x] **Forum: received-engagement metric** (GUIDELINES §3.3 — "a per-user total in a personal area") —
   `GET /me/engagement` (votes *others* cast on your posts/comments; counts only, no voter identities) +
   a "Community engagement" card on the Profile screen. `forum_received_engagement` in the data layer +

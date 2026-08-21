@@ -16,4 +16,7 @@ EXPOSE 5000
 # threads — actually overlaps CPU-bound inference across cores. Size the pool with AI_QUEUE_WORKERS.
 # --timeout 60 > the queue's AI_PREDICT_TIMEOUT_SECONDS (30): gunicorn's default is also 30, so a
 # /predict that runs to the queue deadline would race a worker SIGKILL and never reach the 504 path.
-CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "1", "--threads", "8", "--timeout", "60", "app:create_app()"]
+# --access-logfile/--error-logfile to stdout+stderr (#546): gunicorn logs neither by default, and
+# app.py logs only the failure paths — so a SUCCESSFUL /predict left no trace on the container that
+# served it, and with `--scale ai=N` nothing said which replica answered. `docker logs ai` now shows it.
+CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "1", "--threads", "8", "--timeout", "60", "--access-logfile", "-", "--error-logfile", "-", "app:create_app()"]

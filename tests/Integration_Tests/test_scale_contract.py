@@ -37,6 +37,23 @@ def scale():
     return _strip_comments((ROOT / "docker-compose.scale.yml").read_text())
 
 
+def _web_command(text):
+    """The `command:` line belonging to the `web` service (not `ai`), comments stripped."""
+    lines = _strip_comments(text).splitlines()
+    service = None
+    for line in lines:
+        stripped = line.strip()
+        if stripped.endswith(":") and not stripped.startswith("-") and len(line) - len(line.lstrip()) == 2:
+            service = stripped[:-1]
+        if service == "web" and stripped.startswith("command:"):
+            return stripped[len("command:"):].strip()
+    raise AssertionError("no web command found")
+
+
+def scale_web_command():
+    return _web_command((ROOT / "docker-compose.scale.yml").read_text())
+
+
 # --------------------------------------------------------------------------- the bench target
 
 
@@ -69,6 +86,38 @@ def test_web_gets_more_than_one_gunicorn_worker_when_scaled(scale):
     """web is I/O-bound (it waits on ai and Mongo), so processes are the right knob there — unlike
     `ai`, which is pinned to one worker because its job store is in-memory."""
     assert '"${WEB_WORKERS:-4}"' in scale
+
+
+def test_the_scale_override_keeps_webs_real_entrypoint_and_tuning():
+    """A `command:` override replaces the WHOLE command, so anything omitted is silently dropped.
+
+    This override once read `app:create_app()` with no worker-class, threads or max-requests — the AI
+    container's entrypoint, pasted under `web`. It BOOTED (web/app.py also defines create_app), so
+    nothing failed; it just quietly ran the scaling profile with:
+      * wsgi.py skipped -> configure_logging() never ran -> no Week-9 console/file logging,
+      * sync workers instead of gthread + the measured 16-thread knee (#324),
+      * no --max-requests recycling (worker memory + per-PID log growth unbounded),
+      * --timeout 60, breaking the ladder (45 web > 33 AI_CLIENT_TIMEOUT > 30 queue).
+    The previous assertions here only checked that `--workers` and the WEB_WORKERS default appeared,
+    which all four of those defects passed.
+    """
+    web = scale_web_command()
+    assert web.endswith('"wsgi:app"]'), (
+        f"the scale override must run web through wsgi.py (logging is configured there), got: {web}")
+    assert '"app:create_app()"' not in web, "that is the AI container's entrypoint, not web's"
+    for flag in ('"--worker-class", "gthread"', '"--threads"', '"--max-requests"'):
+        assert flag in web, f"the scale override dropped {flag} from web's tuned command"
+    assert '"--timeout", "45"' in web, "web's timeout must stay above AI_CLIENT_TIMEOUT (33s)"
+
+
+def test_the_scale_override_only_changes_webs_worker_count():
+    """The override should differ from the base command in exactly one place — the WEB_WORKERS default.
+    Anything else means the two have drifted, which is how the entrypoint defect happened."""
+    base = _web_command((ROOT / "docker-compose.yml").read_text())
+    scaled = scale_web_command()
+    assert base.replace("${WEB_WORKERS:-1}", "${WEB_WORKERS:-4}") == scaled, (
+        "the scale override no longer mirrors the base web command:\n"
+        f"  base   : {base}\n  scaled : {scaled}")
 
 
 def test_web_never_calls_the_replica_unsafe_job_endpoints():

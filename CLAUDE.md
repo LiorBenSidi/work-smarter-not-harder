@@ -33,15 +33,20 @@ keep `main` green (PR-only), and **don't re-do or "polish" the built parts**.
   `inference.predict_one`; `/predict` unchanged, `/jobs` + `/queue/stats` additive; GUIDELINES §2, +5);
   **scaling, measured** ([`docs/SCALING_REPORT.md`](docs/SCALING_REPORT.md) — pool 1→4 = 2.86×,
   `--scale ai=2` = 1.60×, `docker-compose.scale.yml` + `scripts/scaling_benchmark.py`);
-  Forum/DM media + `flask-limiter` on the public routes (#160); the **cross-container test-runner**
+  Forum/DM/**comment** media + `flask-limiter` on the public routes (#160, #407); the **composer rework**
+  (attachment tray with per-file remove, client-side size pre-check, XHR byte progress + stall timeout +
+  Cancel, upload-before-publish — #471/#438/#439); **media erased on account deletion + carried in the data
+  export** (#507); a **media-only DM now notifies the recipient** (#408); the **cross-container test-runner**
   (`docker-compose.test.yml` + `tests/Dockerfile`, CI job `compose-e2e` gating `build`→`deploy`), the
   **fault-isolation** + **locust stress** suites, and the deploy-contract guard tests. See [`PERSON3.md`](PERSON3.md).
 - ℹ️ **Online Forum (§10) status:** posts · comments · anonymity · post **and comment** up/down-votes ·
   **P2P direct messages (text) · live DM notifications (SSE push) · vote notifications · anti-spam messaging
-  rate-limit** are built (Lior), **media attachments + file-size limits** are built (Elad, #160), and the
+  rate-limit** are built (Lior), **media attachments + file-size limits on posts, comments and DMs** are
+  built (Elad, #160 + #407) — a media-only DM notifies the recipient (#408) and uploads are erased on
+  account deletion (#507) — and the
   **received-engagement profile metric** (§3.3 "per-user total in a personal area" — `GET /me/engagement` +
-  a Profile-screen card) is built (Elad; team rule: unassigned items fall to Elad). Still open:
-  fuller cold-seeding (the seed content is Shiri's).
+  a Profile-screen card) is built (Elad; team rule: unassigned items fall to Elad). Cold-seeding is built
+  too (`db/seed.py` + `seed.sh`, Lior), so **§10 has no open item**.
   Rubric: [`docs/GUIDELINES.md`](docs/GUIDELINES.md) §3 (it superseded `FEEDBACK.md` on 8 Jul).
 
 ## ⛔ Workflow — `main` is PR-only (enforced server-side)

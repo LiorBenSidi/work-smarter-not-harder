@@ -64,6 +64,59 @@ monitor (R9).
 - The **live demo** (push a visible change → watch it reach the VM; break a PR test; show the monitor's down→up) is
   performed at grading, per the assignment's acceptance criteria.
 
+## Disk on the VM: what the deploy leaves behind
+
+`IMAGE_TAG` is the commit SHA (never `:latest`), which is what makes a deploy reproducible and a rollback
+one variable away — and it means **every deploy pulls a new image set**. Nothing removed the old ones, so
+the VM accumulated one set per deploy, forever, on the same disk Mongo writes to. Layer sharing keeps the
+incremental cost small while dependencies are unchanged; a `requirements.txt` bump writes a fresh set.
+
+The deploy now runs, only after the health check has passed and the last-good SHA is recorded:
+
+```bash
+docker image prune -af --filter 'until=168h' && df -h / | tail -1
+```
+
+`-a` removes only images **no container references**, so the running stack is never touched, and the
+one-week window keeps recent tags for a fast rollback. A rollback is safe even if its target was pruned:
+it re-pulls from GHCR before starting anything. The `df -h` prints the VM's remaining disk into the deploy
+log, so the trend is visible per deploy rather than discovered when the disk is full.
+
+Ordering matters and is asserted in `test_deploy_contract.py`: pruning *before* the health check could
+delete the image a rollback is about to want.
+
+## Backups — how to actually run them on the VM (#550)
+
+`db/backup.sh` (Lior) dumps every collection to a timestamped gzip archive and prunes anything older than
+`RETENTION_DAYS`. Its header shows a host-side invocation, which **does not work on our VM**: `mongodump` ships
+inside the `mongo:7` image and the host deliberately has no MongoDB tools (measured — `/usr/bin/mongodump` in
+`db`, absent in `web`). Run it through the container instead, writing into the `./backups` bind mount that
+`docker-compose.prod.yml` now gives `db`, so archives live on the VM's disk and survive the next deploy:
+
+```bash
+# on the VM, from ~/app
+docker compose -f docker-compose.prod.yml exec -T db   sh -c 'MONGO_URI="mongodb://localhost:27017/worksmarter" BACKUP_DIR=/backups RETENTION_DAYS=7 bash -s'   < db/backup.sh
+```
+
+Verified end to end against a live stack: all collections dumped, `backup written: /backups/worksmarter-<stamp>.gz`,
+retention pruned. Restore the same way, from inside the container:
+
+```bash
+docker compose -f docker-compose.prod.yml exec -T db   mongorestore --gzip --archive=/backups/worksmarter-<stamp>.gz --uri="mongodb://localhost:27017/worksmarter"
+```
+
+**Scheduling is a VM-side step and is NOT done** — nothing in the repo or the pipeline runs this on a timer, so
+production has no backups until someone installs the cron entry (needs `db/backup.sh` present in `~/app`; the deploy
+ships compose + Caddyfile + `.env` only, so copy the script once with `scp`):
+
+```cron
+# 03:15 UTC daily
+15 3 * * * cd ~/app && docker compose -f docker-compose.prod.yml exec -T db sh -c 'MONGO_URI="mongodb://localhost:27017/worksmarter" BACKUP_DIR=/backups RETENTION_DAYS=7 bash -s' < db/backup.sh >> ~/app/backups/cron.log 2>&1
+```
+
+The archives sit on the same VM as the database, so this protects against a bad migration or an accidental drop —
+not against losing the VM. Off-box copies would need somewhere to put them, which the course does not provide.
+
 ## Beyond the rubric
 
 - **Real transactional email (enhancement, not graded).** The app sends OTP + password-reset mail via Brevo from the

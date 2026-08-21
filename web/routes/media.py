@@ -16,6 +16,8 @@ Serve: an unbound blob is visible to its uploader only; a post/comment attachmen
 """
 import logging
 import os
+import threading
+import time
 import uuid
 
 from flask import Blueprint, current_app, jsonify, request, send_from_directory, session
@@ -23,7 +25,7 @@ from werkzeug.exceptions import NotFound
 
 from ratelimit import limiter
 from routes.auth import login_required
-from services.media_store import stored_name
+from services.media_store import purge_unbound, stored_name
 
 logger = logging.getLogger(__name__)
 
@@ -61,16 +63,46 @@ def _disk_usage(root):
         return 0
 
 
+_sweep_lock = threading.Lock()
+
+
+def _sweep_abandoned_uploads(force=False):
+    """Reclaim never-attached uploads, throttled — the app has no scheduler, so it rides on uploads (#557).
+
+    Same shape as the job queue's lazy reaper: the work happens when traffic arrives, which is exactly
+    when the space is needed. `force` skips the throttle for the one caller that cannot wait — the 507
+    path, where the alternative is telling every user storage is full while the volume holds garbage.
+    """
+    now = time.time()
+    interval = current_app.config.get("MEDIA_SWEEP_INTERVAL_SECONDS", 300)
+    # The clock lives on the APP, not the module: two apps in one process (the test suite runs several)
+    # must not share a throttle, or one app's sweep silently suppresses another's.
+    with _sweep_lock:
+        if not force and now - current_app.config.get("_MEDIA_LAST_SWEEP", 0.0) < interval:
+            return 0, 0
+        current_app.config["_MEDIA_LAST_SWEEP"] = now
+    try:
+        return purge_unbound(_media(), _media_root(),
+                             current_app.config.get("MEDIA_UNBOUND_TTL_SECONDS", 86400))
+    except Exception:
+        # Reclaiming space must never fail an upload that would otherwise succeed.
+        logger.warning("could not sweep abandoned uploads", exc_info=True)
+        return 0, 0
+
+
 def _dm_key(a, b):
     """Canonical (order-independent) conversation id, so both participants resolve the same DM target."""
     return ":".join(sorted([a, b]))
 
 
-def _attachment_ids(data):
-    """Return a list of string media ids from ``{"attachment_ids": [...]}``, else None (invalid)."""
+def _attachment_ids(data, key="attachment_ids"):
+    """Return the list of string ids under ``key``, else None (invalid).
+
+    Shared by the attach routes (``attachment_ids``) and the batch comment read (``comment_ids``): the
+    list-of-strings check is the NoSQL-injection gate for both, since these ids reach a query."""
     if not isinstance(data, dict):
         return None
-    ids = data.get("attachment_ids")
+    ids = data.get(key)
     if not isinstance(ids, list) or not all(isinstance(i, str) for i in ids):
         return None
     return ids
@@ -107,9 +139,14 @@ def upload():
     # Issue #313: bound the volume's TOTAL bytes, not just the per-file cap, so uploads can't fill the
     # VM's disk 10 MB at a time (a full disk wedges Mongo writes + logging). Checked before the write;
     # worst-case overshoot is one file (<= MEDIA_MAX_BYTES) — negligible against the volume-wide cap.
+    _sweep_abandoned_uploads()
     if _disk_usage(_media_root()) >= current_app.config["MEDIA_MAX_TOTAL_BYTES"]:
-        logger.warning("media upload rejected: MEDIA_ROOT is at/over MEDIA_MAX_TOTAL_BYTES")
-        return jsonify(error="media storage is full"), 507
+        # Before refusing everyone, reclaim what is already garbage (#557): the volume can be "full" of
+        # blobs no post, comment or DM points at, and a 507 that leaves them there is permanent.
+        _sweep_abandoned_uploads(force=True)
+        if _disk_usage(_media_root()) >= current_app.config["MEDIA_MAX_TOTAL_BYTES"]:
+            logger.warning("media upload rejected: MEDIA_ROOT is at/over MEDIA_MAX_TOTAL_BYTES")
+            return jsonify(error="media storage is full"), 507
     media_id = uuid.uuid4().hex
     stored = stored_name(media_id, file.mimetype)
     file.save(os.path.join(_media_root(), stored))
@@ -186,6 +223,72 @@ def attach_to_post(post_id):
 @login_required
 def list_post_attachments(post_id):
     return _list("post", post_id)
+
+
+def _comment_key(post_id, comment_id):
+    """Canonical target id for a comment's attachments.
+
+    Scoped by BOTH ids, so a comment's blobs can never be reached through a different post — the same
+    reason ``forum_get_comment`` matches on both. Comment ids are globally unique, so the post id is
+    belt-and-braces rather than load-bearing, but it keeps the stored target self-describing.
+    """
+    return f"{post_id}:{comment_id}"
+
+
+@media_bp.post("/forum/posts/<post_id>/comments/<comment_id>/attachments")
+@login_required
+def attach_to_comment(post_id, comment_id):
+    # TA Online-Forum sub-requirement #2: "Each comment should have a body, and the option to add images
+    # and videos to the comment as well." The store and `_can_view` already understood a "comment" target
+    # (#338) — but nothing ever WROTE one, so that branch was dead code and the feature only LOOKED wired
+    # while four documents claimed it worked (#407).
+    #
+    # Author-gated exactly like attach_to_post: without it any logged-in user could bolt their blob onto
+    # anyone's comment. `get_comment` matches on both ids and returns the real author (anonymity is a
+    # display projection), so it is the right gate even on an anonymous post.
+    comment = _forum().get_comment(post_id, comment_id)
+    if comment is None:
+        return jsonify(error="no such comment"), 404
+    if comment.get("author") != session["username"]:
+        return jsonify(error="only the author can attach media to this comment"), 403
+    return _attach("comment", _comment_key(post_id, comment_id))
+
+
+@media_bp.get("/forum/posts/<post_id>/comments/<comment_id>/attachments")
+@login_required
+def list_comment_attachments(post_id, comment_id):
+    # Readable by any logged-in user, mirroring the post route: the forum is public, and `_can_view`
+    # already treats a "comment" target as forum content.
+    return _list("comment", _comment_key(post_id, comment_id))
+
+
+@media_bp.post("/forum/posts/<post_id>/comments/attachments")
+@login_required
+def list_many_comment_attachments(post_id):
+    """Attachments for MANY comments of one post, in a single request (#407).
+
+    A POST because it carries a list of ids, not because it writes anything — nothing here mutates.
+    The per-comment GET above still exists and is still the simplest thing to reason about, but calling
+    it once per comment made the page issue up to 50 parallel requests (COMMENT_PAGE_DEFAULT) against a
+    browser limit of ~6 connections per origin, so unrelated requests — the forum feed among them —
+    queued behind the burst. Measured on the running app: opening a post with 20 comments produced 20
+    requests; it now produces one.
+
+    Returns ``{"attachments": {comment_id: [...]}}`` keyed by COMMENT id (not the internal target id),
+    so the client never has to know how a comment target is composed.
+    """
+    ids = _attachment_ids(request.get_json(silent=True), key="comment_ids")
+    if ids is None:
+        return jsonify(error="comment_ids must be a list of ids"), 400
+    grouped = _media().list_for_targets("comment", [_comment_key(post_id, c) for c in ids])
+    out = {}
+    for comment_id in ids:
+        recs = grouped.get(_comment_key(post_id, comment_id)) or []
+        if recs:
+            out[comment_id] = [{"id": r["id"], "url": f"/media/{r['id']}", "mime": r["mime"],
+                                "owner": r.get("owner"), "created_at": r.get("created_at", 0)}
+                               for r in sorted(recs, key=lambda r: r.get("created_at", 0))]
+    return jsonify(attachments=out), 200
 
 
 @media_bp.post("/messages/<peer>/attachments")

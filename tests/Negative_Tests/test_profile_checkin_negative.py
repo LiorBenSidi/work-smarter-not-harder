@@ -41,6 +41,12 @@ def checkin_client(make_client, fake_users, fake_profiles, fake_history, monkeyp
     ("weight", 19), ("weight", 501),              # 20-500
     ("training_frequency", -1), ("training_frequency", 15),   # 0-14
     ("training_frequency", 3.5),                  # integer-only
+    # bool-as-number, on the ONE profile field whose range cannot catch it (#434). Python's bool is an
+    # int subclass, so True == 1 — which is INSIDE 0-14. On age/height/weight, True lands outside the
+    # range and is refused by the bound instead, so those cases pass whether or not the explicit bool
+    # guard exists. Proven by mutation: deleting `isinstance(value, bool)` from profile.py left the
+    # whole negative suite green and failed only one unit test. This case restores that cover here.
+    ("training_frequency", True),
     ("gender", ""), ("gender", "x" * 33), ("gender", 7), ("gender", None),
     ("goal", "get-swole"), ("goal", ""), ("goal", 1), ("goal", ["lose"]),
 ])

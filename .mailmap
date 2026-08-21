@@ -1,0 +1,9 @@
+# Canonical author identities for `git shortlog` / `git log` / GitHub's contributor views.
+#
+# Elad committed under two identities — the GitHub noreply address the web UI signs commits with, and the
+# Technion campus address configured on his machine. Without this file `git shortlog -sn` lists them as two
+# people ("Elad Nachalieli" and "eladn"), which both undercounts his contribution and invents a fourth
+# contributor on a three-person project — exactly the number a grader checking per-member commits reads.
+# Mapping is metadata only: no commit is rewritten and no hash changes.
+Elad Nachalieli <129320650+EladNa1@users.noreply.github.com> <nelad@campus.technion.ac.il>
+Elad Nachalieli <129320650+EladNa1@users.noreply.github.com> eladn <nelad@campus.technion.ac.il>

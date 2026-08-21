@@ -94,3 +94,10 @@ class Config:
     # serve read (list_for_target) stays bounded — an authenticated user can't grow a single target's
     # attachment list without limit and amplify every list read of it. Enforced at bind time.
     MEDIA_MAX_ATTACHMENTS_PER_TARGET = _int_env("MEDIA_MAX_ATTACHMENTS_PER_TARGET", 50)
+    # Abandoned-upload reclaim (#557). The composer uploads BEFORE it publishes (#439), so a draft
+    # someone changes their mind about leaves a blob nothing points at; without a sweep those fill the
+    # volume until every upload 507s. Unbound AND older than this is garbage; a draft still open is not.
+    MEDIA_UNBOUND_TTL_SECONDS = _int_env("MEDIA_UNBOUND_TTL_SECONDS", 24 * 60 * 60)
+    # How often a worker may run that sweep. It rides on uploads (no scheduler in the app), so this
+    # stops a burst of uploads from each paying for a delete_many.
+    MEDIA_SWEEP_INTERVAL_SECONDS = _int_env("MEDIA_SWEEP_INTERVAL_SECONDS", 300)
