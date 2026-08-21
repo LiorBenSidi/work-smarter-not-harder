@@ -53,7 +53,7 @@ The model is baked into the Docker image and loaded locally at runtime. No model
 
 ## Exercise catalog
 
-The workout generator (`ai/workout_plan.py`, `ai/exercise_catalog.py`) draws from **98** hand-curated
+The workout generator (`ai/workout_plan.py`, `ai/exercise_catalog.py`) draws from **99** hand-curated
 exercise entries, not a public dataset. This is a deliberate choice, evaluated against the
 alternative rather than assumed.
 
@@ -79,7 +79,7 @@ Every one of the 10 muscle groups has at least 6 exercises (measured directly fr
 
 | Group | Exercises |
 |---|---:|
-| Chest | 14 |
+| Chest | 15 |
 | Shoulders | 13 |
 | Quads | 12 |
 | Back | 11 |
@@ -89,19 +89,19 @@ Every one of the 10 muscle groups has at least 6 exercises (measured directly fr
 | Triceps | 8 |
 | Core | 7 |
 | Calves | 6 |
-| **Total** | **98** |
+| **Total** | **99** |
 
 ### How much of the catalog the generator actually reaches
 
 `generate_workout_days`'s real reach was measured exhaustively rather than estimated: across every
 one of the 127 possible non-empty equipment subsets, all 3 resolved splits, and every
-`training_frequency` from 1 to 14 (5,334 calls total), **49 of the 98 catalog entries are ever
+`training_frequency` from 1 to 14 (5,334 calls total), **50 of the 99 catalog entries are ever
 selected** — the other 49 are structurally unreachable under the generator as it exists today (the
 picker prefers the same exercise for a given muscle-group/pattern/equipment/day-type slot and never
 rotates, so isolation variants and secondary-equipment alternates for an already-covered slot are
 never chosen).
 
-That 49/98 split does not reduce the risk of auditing a swap, and is not read as a reason to trim the
+That 50/99 split does not reduce the risk of auditing a swap, and is not read as a reason to trim the
 catalog to just the reachable half: `is_compound`/`is_isometric` still need the same manual judgment
 per entry regardless of which half happens to be live right now; a dataset swap's license risk is
 independent of exercise count; and the unreached entries are not safe to drop — they exist for

@@ -512,7 +512,7 @@ branch-protected and merges only on green CI.
 
   | Group | Exercises |
   |---|---:|
-  | Chest | 14 |
+  | Chest | 15 |
   | Shoulders | 13 |
   | Quads | 12 |
   | Back | 11 |
@@ -522,7 +522,7 @@ branch-protected and merges only on green CI.
   | Triceps | 8 |
   | Core | 7 |
   | Calves | 6 |
-  | **Total** | **98** |
+  | **Total** | **99** |
 - **Exact readiness categories + final feature set** *(SETTLED — baked into the shipped `model.pkl`:
   features `sleep_hours` · `fatigue` · `soreness` · `training_load`, class labels + ready-threshold in the
   same bundle; the `/predict` contract shapes were pinned all along)*.
