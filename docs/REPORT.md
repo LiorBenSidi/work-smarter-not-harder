@@ -505,6 +505,20 @@ branch-protected and merges only on green CI.
   Still inert end-to-end, for a different reason: no web/db producer exists yet for `features["performed"]`,
   disclosed as a known gap in #528. Team decision (#528, #276) is to disclose rather than build the producer
   before submission; the design is ready at `docs/PERFORMED_VOLUME_SPEC.md` if anyone picks it up.
+- **Recommended training frequency (v2 §3, Beginner tier) — not built; scope stated.** The proposal's
+  beginner output list is *"Calorie target · Beginner workout program · Recommended training frequency"*.
+  The first two ship; the third does not. `training_frequency` is an **input only** — collected in the
+  profile form, validated in `web/routes/profile.py`, and consumed downstream for the calorie activity
+  band (`ai/recommendations.py::_activity_from_frequency`) and for split resolution
+  (`ai/workout_plan.py::resolve_split_preference`). Nothing produces a *recommended* frequency back to the
+  user. Disclosed rather than built (#528), under the guidelines' *"if you want to remove features, let us
+  know beforehand"*.
+- **Beginner / Intermediate / Advanced tiers (v2 §3) — not built; scope stated.** v2 §3 frames the audience
+  as three tiers with different inputs and different outputs. No tier is stored, inferred, or branched on
+  anywhere: the words do not appear in `web/` or `ai/` at all. What shipped instead is a single uniform
+  path whose output scales with the data the user gives — a check-in without recovery metrics still scores,
+  and the F5 planning inputs (equipment, split preference) are optional. The Advanced tier's *"workout
+  program"* input is the same gap as F6's missing producer above (#566, #528). Disclosed rather than built.
 - **F6 + F7 merge** — in scope, not pending: the merge is in the v2 proposal the team sent the TA (28 Jun),
   and the TA's guidelines explicitly permit notified feature changes; the balance rule is built
   (`_program_recommendations`). See `ROADMAP.md` → "Scope decision".
