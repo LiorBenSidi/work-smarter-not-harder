@@ -1,0 +1,191 @@
+<!doctype html>
+<!--
+  The SOURCE for demo.mp4 — the Show Off gallery clip.
+
+  demo.mp4 used to have no committed source, which is the exact situation README.md warns about for
+  the poster: "the first poster.pdf was printed from a poster.html nobody committed, so when the
+  workout plan shipped there was no source to edit." The clip had the same problem — when F5 and the
+  Advanced-tier programme (#566) shipped, the video could not be updated without remaking it from
+  scratch. This file is that source.
+
+  Every slide is a 1920x1080 frame. render-demo.mjs shoots each one and ffmpeg holds each for its
+  `data-secs`, cutting straight between them — which is what the original clip did (frames inside a
+  segment are byte-identical; the cut lands between them).
+
+  The phone screenshots are the SAME poster-assets/ tiles the poster uses, so the clip and the sheet
+  can never drift apart: re-shoot a tile with capture-screenshot.mjs and both pick it up.
+
+  Rebuild:  bash build-demo.sh          (renders the slides, stitches, and reports the duration)
+
+  The gallery rules cap the clip at 20-90s and require it SILENT. build-demo.sh emits no audio track
+  at all rather than a silent one, and build.sh re-checks duration/resolution/silence on the zip.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Work Smarter, Not Harder — gallery clip source</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;700;900&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#060b11; --ink:#eef4f3; --accent:#63e6be; --muted:#93a0b4;
+    --font:"Roboto","Helvetica Neue",Arial,sans-serif;
+  }
+  *{ box-sizing:border-box; margin:0; padding:0; }
+  body{ background:#000; font-family:var(--font); }
+
+  /* Each slide is exactly one video frame. */
+  .slide{
+    width:1920px; height:1080px; position:relative; overflow:hidden;
+    background:var(--bg); color:var(--ink);
+    display:flex; align-items:center; gap:110px; padding:0 130px;
+  }
+  /* the ambient wash the original clip carries: teal from the left, violet down the right */
+  .slide::before,.slide::after{ content:""; position:absolute; z-index:0; pointer-events:none; }
+  .slide::before{ top:-260px; left:-220px; width:1200px; height:1200px; border-radius:50%;
+                  background:radial-gradient(closest-side,rgba(41,168,143,.30),transparent 70%); }
+  .slide::after{ top:-160px; right:-320px; width:1150px; height:1300px; border-radius:50%;
+                 background:radial-gradient(closest-side,rgba(84,74,190,.30),transparent 70%); }
+  .slide > *{ position:relative; z-index:1; }
+
+  /* ---------- the phone ---------- */
+  .phone{ flex:none; width:430px; height:930px; border-radius:46px; padding:10px;
+          background:linear-gradient(160deg,rgba(255,255,255,.16),rgba(255,255,255,.04));
+          box-shadow:0 50px 120px rgba(0,0,0,.62), 0 0 0 1px rgba(255,255,255,.07); }
+  .phone img{ width:100%; height:100%; display:block; border-radius:37px;
+              object-fit:cover; object-position:top; }
+
+  /* ---------- the copy ---------- */
+  .copy{ max-width:1010px; }
+  .eyebrow{ font-size:26px; font-weight:700; letter-spacing:.30em; text-transform:uppercase;
+            color:var(--accent); margin-bottom:26px; }
+  h2{ font-size:82px; font-weight:900; line-height:1.06; letter-spacing:-1.6px; }
+  .sub{ margin-top:30px; font-size:36px; line-height:1.45; color:var(--muted); max-width:930px; }
+  .sub b{ color:var(--ink); font-weight:700; }
+
+  /* ---------- title + outro ---------- */
+  .centre{ justify-content:center; text-align:center; flex-direction:column; gap:0; }
+  .dot{ width:132px; height:132px; border-radius:50%; margin:0 auto 44px;
+        background:radial-gradient(circle at 35% 32%, #9df5d8, #34d3a6 62%, #14a380);
+        box-shadow:0 0 120px rgba(52,211,166,.42); }
+  .centre h1{ font-size:118px; font-weight:900; letter-spacing:-3px; line-height:1.02; }
+  .centre .tag{ margin-top:20px; font-size:44px; font-weight:700; color:var(--accent); }
+  .centre .meta{ margin-top:34px; font-size:28px; color:var(--muted); }
+  .url{ font-size:52px; font-weight:700; color:var(--accent); }
+  .repo{ margin-top:16px; font-size:30px; color:var(--muted); }
+  .qr{ width:230px; height:230px; background:#fff; padding:14px; border-radius:18px; margin:46px auto 0; }
+  .qr img{ width:100%; height:100%; display:block; }
+  .stack{ margin-top:40px; font-size:26px; letter-spacing:.06em; color:var(--muted); }
+</style>
+</head>
+<body>
+
+<!-- 1 ------------------------------------------------------------------ -->
+<section class="slide centre" data-name="01-title" data-secs="4">
+  <div class="dot"></div>
+  <h1>Work Smarter, Not Harder</h1>
+  <div class="tag">An AI training-readiness coach</div>
+  <div class="meta">Technion · Writing Software for Machine Learning · 00950219</div>
+</section>
+
+<!-- 2 ------------------------------------------------------------------ -->
+<section class="slide" data-name="02-accounts" data-secs="6">
+  <div class="phone"><img src="poster-assets/shot-1-login.png" alt=""></div>
+  <div class="copy">
+    <div class="eyebrow">Accounts</div>
+    <h2>Your account,<br>properly guarded</h2>
+    <p class="sub">Sign-up <b>verifies your email</b> before the account exists, and signing in takes
+      a password <b>and a one-time code</b>. Export everything you hold, or delete it all, whenever
+      you like.</p>
+  </div>
+</section>
+
+<!-- 3 ------------------------------------------------------------------ -->
+<section class="slide" data-name="03-readiness" data-secs="6">
+  <div class="phone"><img src="poster-assets/shot-2-readiness.png" alt=""></div>
+  <div class="copy">
+    <div class="eyebrow">Readiness</div>
+    <h2>Know if you're ready&nbsp;— today</h2>
+    <p class="sub">Log five morning metrics and a <b>locally-trained Random Forest</b> calls your
+      state — Ready, Moderate or Rest — with its confidence and a calorie target.</p>
+  </div>
+</section>
+
+<!-- 4 ------------------------------------------------------------------ -->
+<section class="slide" data-name="04-plan" data-secs="6">
+  <div class="phone"><img src="poster-assets/shot-6-plan.png" alt=""></div>
+  <div class="copy">
+    <div class="eyebrow">Workout plan</div>
+    <h2>It becomes a plan<br>you can train</h2>
+    <p class="sub">The split resolves from your week, then every day is filled with <b>real
+      exercises</b>, sets and reps from a 99-exercise catalog — matched to the equipment you actually
+      have.</p>
+  </div>
+</section>
+
+<!-- 5 ------------------------------------------------------------------ -->
+<section class="slide" data-name="05-programme" data-secs="6">
+  <div class="phone"><img src="poster-assets/shot-8-programme.png" alt=""></div>
+  <div class="copy">
+    <div class="eyebrow">Your programme</div>
+    <h2>It checks what<br>you already train</h2>
+    <p class="sub">Enter your <b>weekly sets per muscle group</b> and the coach measures them against
+      balanced-training guidelines, flagging anything under- or over-trained.</p>
+  </div>
+</section>
+
+<!-- 6 ------------------------------------------------------------------ -->
+<section class="slide" data-name="06-profile" data-secs="6">
+  <div class="phone"><img src="poster-assets/shot-7-profile.png" alt=""></div>
+  <div class="copy">
+    <div class="eyebrow">Athlete profile</div>
+    <h2>Tuned to you,<br>not to an average</h2>
+    <p class="sub">Age, height, weight, goal, how often you train and what equipment you own — every
+      one of them changes the <b>calorie target</b> and the <b>plan</b> you get.</p>
+  </div>
+</section>
+
+<!-- 7 ------------------------------------------------------------------ -->
+<section class="slide" data-name="07-history" data-secs="6">
+  <div class="phone"><img src="poster-assets/shot-3-history.png" alt=""></div>
+  <div class="copy">
+    <div class="eyebrow">History</div>
+    <h2>See your trends</h2>
+    <p class="sub">Every check-in is kept and plotted — a <b>readiness trend</b> and a seven-week
+      heatmap, so a bad week is visible instead of remembered.</p>
+  </div>
+</section>
+
+<!-- 8 ------------------------------------------------------------------ -->
+<section class="slide" data-name="08-forum" data-secs="6">
+  <div class="phone"><img src="poster-assets/shot-4-forum.png" alt=""></div>
+  <div class="copy">
+    <div class="eyebrow">Community forum</div>
+    <h2>Train alongside<br>other people</h2>
+    <p class="sub">Posts and comments carry <b>photos and video</b>, both take votes, and you can post
+      <b>anonymously</b> when you would rather not sign your name to it.</p>
+  </div>
+</section>
+
+<!-- 9 ------------------------------------------------------------------ -->
+<section class="slide" data-name="09-messages" data-secs="6">
+  <div class="phone"><img src="poster-assets/shot-5-dms.png" alt=""></div>
+  <div class="copy">
+    <div class="eyebrow">Messages</div>
+    <h2>Message your<br>training partners</h2>
+    <p class="sub">Direct messages with media, delivered <b>in real time</b> — no refresh — and a
+      notification when someone writes to you or votes on your post.</p>
+  </div>
+</section>
+
+<!-- 10 ----------------------------------------------------------------- -->
+<section class="slide centre" data-name="10-outro" data-secs="5">
+  <div class="url">app.worksmarternotharder.dev</div>
+  <div class="repo">github.com/LiorBenSidi/work-smarter-not-harder</div>
+  <div class="qr"><img src="poster-assets/qr.png" alt=""></div>
+  <div class="stack">Python · Flask · scikit-learn · MongoDB · Docker · Azure</div>
+</section>
+
+</body>
+</html>

@@ -25,9 +25,21 @@ and embedded images. Don't recreate that situation: **edit the source and re-ren
 | File | What it is |
 |---|---|
 | `poster.html` + `poster-assets/` | the poster's **source**. Edit this, never the PDF |
+| `demo.html` | the **clip's** source — one `.slide` per segment. Edit this, never the MP4 |
 | `seed-for-screenshots.py` | fills the two gaps `db/seed.py` leaves — check-in history and a DM thread |
 | `capture-screenshot.mjs` | re-takes an app mockup by driving the real UI |
+| `render-demo.mjs` | shoots `demo.html`'s slides to 1920×1080 PNGs |
+| `build-demo.sh` | renders the slides, stitches `demo.mp4`, re-checks the gallery rules |
 | `build.sh` | renders the PDF, rebuilds the zip, validates the result |
+
+**`demo.mp4` had no source until now**, which is the same trap this section opens with. When F5's
+workout plan and the Advanced-tier programme (#566) shipped, the clip could not be updated — only
+remade by hand — so it went on showing four screens while the poster had grown to eight. `demo.html`
+closes that: it reuses the **same `poster-assets/` tiles the poster uses**, so re-shooting a tile
+updates both, and the two can never drift apart.
+
+A segment's screen time lives in its own `data-secs` attribute, beside its content, so changing what
+a slide says and how long it stays are one edit in one file.
 | `metadata.json` | the gallery entry's text |
 
 ### Populating the app first
@@ -102,6 +114,14 @@ lines the grid up instead of stretching its row.
 
 ### Rebuild and check
 
+If you changed the **clip**, rebuild it first — `build.sh` packages `demo.mp4`, it does not render it:
+
+```sh
+bash presentation/showoff/build-demo.sh
+```
+
+Then rebuild the package:
+
 ```sh
 bash presentation/showoff/build.sh
 ```
@@ -109,6 +129,13 @@ bash presentation/showoff/build.sh
 Renders `poster.html` → `poster.pdf` with headless Chrome, rezips, and validates: file list, required
 metadata fields, ~20/~100 word descriptions, one-page A3 geometry, and the video's duration,
 resolution and silence.
+
+One ffmpeg trap worth knowing, since it cost a rebuild: the concat demuxer's `duration` idiom needs
+the final file repeated, and that repeat **replays** the last slide for the same duration again — a
+5s outro ran 10s and a 57s manifest produced a 62s file. `build-demo.sh` therefore encodes one
+segment per slide with an exact `-t` and concatenates those, so the clip's length is exactly the sum
+of the `data-secs` in `demo.html`. It also passes `-nostdin`, without which ffmpeg eats the build
+loop's input and the next slide's path arrives with its leading `/` missing.
 
 The geometry check needs `pdfplumber`. Without it that check **skips rather than fails**, which is
 the one you least want to miss — so point `GPV` at an interpreter that has it:
