@@ -167,7 +167,7 @@ _CATALOG_BY_NAME = {entry["name"]: entry for entry in EXERCISE_CATALOG}
 # that don't reduce to "prefer compound, break ties by declaration order". Full Body, Lower and
 # Legs are untouched and keep using _select_exercise as before.
 _MULTI_EXERCISE_NAMES = {
-    "chest": ["Barbell bench press", "Machine chest press", "Dumbbell flye"],
+    "chest": ["Barbell bench press", "Incline dumbbell press", "Dumbbell flye"],
     "shoulders": ["Barbell overhead press", "Dumbbell front raise", "Dumbbell lateral raise"],
     "back": ["Pull-up", "Lat pulldown", "Seated cable row"],
     "biceps": ["Barbell curl", "Dumbbell hammer curl"],

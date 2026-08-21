@@ -316,7 +316,7 @@ def test_push_day_uses_the_exact_named_exercises_for_chest_shoulders_and_triceps
     assert day["focus"] == "Push"
     names = [exercise["name"] for exercise in day["exercises"]]
     assert names == [
-        "Barbell bench press", "Machine chest press", "Dumbbell flye",
+        "Barbell bench press", "Incline dumbbell press", "Dumbbell flye",
         "Barbell overhead press", "Dumbbell front raise", "Dumbbell lateral raise",
         "Barbell close-grip bench press", "Triceps rope pushdown (Cable)",
         "Plank",
@@ -344,7 +344,7 @@ def test_upper_day_uses_the_exact_named_exercises_for_all_five_groups():
     assert day["focus"] == "Upper"
     names = [exercise["name"] for exercise in day["exercises"]]
     assert names == [
-        "Barbell bench press", "Machine chest press", "Dumbbell flye",
+        "Barbell bench press", "Incline dumbbell press", "Dumbbell flye",
         "Barbell overhead press", "Dumbbell front raise", "Dumbbell lateral raise",
         "Pull-up", "Lat pulldown", "Seated cable row",
         "Barbell curl", "Dumbbell hammer curl",
@@ -391,7 +391,7 @@ def test_every_named_multi_exercise_actually_exists_in_the_catalog():
 
     catalog_names = {entry["name"] for entry in EXERCISE_CATALOG}
     named_exercises = [
-        "Barbell bench press", "Machine chest press", "Dumbbell flye",
+        "Barbell bench press", "Incline dumbbell press", "Dumbbell flye",
         "Barbell overhead press", "Dumbbell front raise", "Dumbbell lateral raise",
         "Pull-up", "Lat pulldown", "Seated cable row",
         "Barbell curl", "Dumbbell hammer curl",
