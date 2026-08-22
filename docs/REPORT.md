@@ -595,6 +595,16 @@ branch-protected and merges only on green CI.
   it with the engine that reads it, and keeps `web`/`db` from ever needing the exercise list —
   only muscle-group aggregates cross the `web`↔`ai` boundary. Deviation from v2 §9, tracked on
   #276.
+- **§5 candidate features vs. the shipped model.** v2 §5: *"The features we expect to feed the
+  model are sleep duration, resting heart rate and how it's drifting from baseline, fatigue and
+  soreness, weekly training frequency, training load, calorie balance, and body-weight trend.
+  We'll finalize that list once we've spent real time with the data."* The shipped model trains
+  on four: `sleep_hours` · `fatigue` · `soreness` · `training_load` — per Shiri, who ran
+  comparative experiments across the candidate feature sets and found these four produced the
+  best results of the combinations tried. `resting_hr` and `training_frequency` are still
+  collected and stored (check-in, profile) and shown in history — just not model inputs. The
+  sentence is an explicit hedge, not a commitment, and per the TA's own notes the model's feature
+  composition isn't a graded axis (`docs/TA-Notes.txt:4`).
 
 ---
 
