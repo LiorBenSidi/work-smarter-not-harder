@@ -1,6 +1,6 @@
 import math
 
-from ai.recommendations import calculate_calories, generate_recommendations
+from ai.recommendations import calculate_calories, calculate_recommended_frequency, generate_recommendations
 
 
 def test_recovery_recommendation_from_current_checkin():
@@ -471,6 +471,65 @@ def test_invalid_training_frequency_does_not_crash():
 
     assert isinstance(calories, int)
     assert calories >= 1200
+
+
+def test_missing_profile_skips_recommended_frequency():
+    assert calculate_recommended_frequency({}) is None
+
+
+def test_zero_or_negative_values_skip_recommended_frequency():
+    invalid_profiles = [
+        {"age": 25, "height": 165, "weight": 0, "goal": "maintain"},
+        {"age": 25, "height": -165, "weight": 60, "goal": "maintain"},
+        {"age": 0, "height": 165, "weight": 60, "goal": "maintain"},
+    ]
+
+    for profile in invalid_profiles:
+        assert calculate_recommended_frequency(profile) is None
+
+
+def test_recommended_frequency_baseline_by_goal():
+    """Under-50 profiles isolate the goal baseline from the age-50 adjustment: gain/lose favor
+    more weekly sessions, maintain and an unrecognized/missing goal both fall back to 4."""
+    base_profile = {"age": 30, "height": 165, "weight": 60}
+
+    assert calculate_recommended_frequency({**base_profile, "goal": "gain"}) == 5
+    assert calculate_recommended_frequency({**base_profile, "goal": "lose"}) == 5
+    assert calculate_recommended_frequency({**base_profile, "goal": "maintain"}) == 4
+    assert calculate_recommended_frequency({**base_profile, "goal": "bulk"}) == 4
+    assert calculate_recommended_frequency(base_profile) == 4
+
+
+def test_recommended_frequency_drops_by_one_at_age_fifty():
+    """Regression guard for the exact boundary: 49 must be unaffected, 50 must be reduced by
+    exactly one -- not two, not a different threshold."""
+    profile = {"height": 165, "weight": 60, "goal": "gain"}
+
+    assert calculate_recommended_frequency({**profile, "age": 49}) == 5
+    assert calculate_recommended_frequency({**profile, "age": 50}) == 4
+
+
+def test_recommended_frequency_stays_within_the_zero_to_seven_contract_range():
+    """The field's contract is 0-7 sessions (docs/PROPOSAL.md §3 -- a real 7-day week). With
+    today's goal/age formula the result only ever lands on 3-5 -- the clamp is a defensive no-op,
+    not something these inputs actually exercise -- but the contract is what callers rely on, so
+    it is asserted directly rather than assumed from the arithmetic."""
+    for age in (1, 50, 120):
+        for goal in ("gain", "lose", "maintain", "unknown"):
+            result = calculate_recommended_frequency({"age": age, "height": 165, "weight": 60, "goal": goal})
+            assert 0 <= result <= 7
+
+
+def test_recommended_frequency_does_not_echo_the_profiles_training_frequency():
+    """The one hard rule from the #528 contract: a recommendation that just returned the user's
+    own training_frequency input would be indistinguishable from that input. The function never
+    reads training_frequency at all, so this profile proves the two diverge in a real case."""
+    profile = {"age": 30, "height": 165, "weight": 60, "goal": "maintain", "training_frequency": 6}
+
+    result = calculate_recommended_frequency(profile)
+
+    assert result == 4
+    assert result != profile["training_frequency"]
 
 
 def test_invalid_optional_history_and_performed_are_ignored():

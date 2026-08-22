@@ -20,9 +20,9 @@ import numpy as np
 import pandas as pd
 
 try:
-    from recommendations import calculate_calories, generate_recommendations
+    from recommendations import calculate_calories, calculate_recommended_frequency, generate_recommendations
 except ImportError:
-    from ai.recommendations import calculate_calories, generate_recommendations
+    from ai.recommendations import calculate_calories, calculate_recommended_frequency, generate_recommendations
 
 try:
     from workout_plan import generate_workout_days, resolve_split_preference
@@ -137,6 +137,7 @@ def predict_one(features):
     state = _choose_state(probabilities)
     recommendations = generate_recommendations(state, features)
     calories = calculate_calories(features)
+    recommended_frequency = calculate_recommended_frequency(features)
 
     safe_features = features if isinstance(features, dict) else {}
     plan = resolve_split_preference(
@@ -164,5 +165,7 @@ def predict_one(features):
     }
     if calories is not None:
         result["calories"] = calories
+    if recommended_frequency is not None:
+        result["recommended_frequency"] = recommended_frequency
 
     return result
