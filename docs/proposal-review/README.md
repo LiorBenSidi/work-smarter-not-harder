@@ -2,13 +2,13 @@
 
 The documents the graded build is measured against, kept here so [#596](https://github.com/LiorBenSidi/work-smarter-not-harder/issues/596) can link to them instead of naming files that live only in a chat thread.
 
-The 80-point block is graded as *"a working, localhost web application that implements your proposed idea. It should include everything mentioned in your proposal. **EVERYTHING** (except the stretch goals). If you want to remove some features, let us know beforehand."* — so the proposal is not background reading, it is the specification.
+The build block — **75 points** under the TA's guidelines ([`04-ta-guidelines.pdf`](04-ta-guidelines.pdf), 8 Jul), which supersede the 80/10/10 split in Noam's earlier feedback — is graded as *"a working, localhost web application that implements your proposed idea. It should include everything mentioned in your proposal. **EVERYTHING** (except the stretch goals). If you want to remove some features, let us know beforehand."* — so the proposal is not background reading, it is the specification.
 
 | File | What it is |
 |---|---|
 | [`01-original-proposal.md`](01-original-proposal.md) | the proposal submitted in Week 7, graded 100/100 |
 | [`02-revised-proposal.md`](02-revised-proposal.md) | the revision sent to Noam on 28 Jun. Its first block lists every change vs. the original |
-| [`03-noam-feedback-and-guidelines.md`](03-noam-feedback-and-guidelines.md) | Noam's feedback **and** the graded guidelines — the 80/10/10 split, the −5 penalties, the 8 forum sub-features, the CI/CD wording |
+| [`03-noam-feedback-and-guidelines.md`](03-noam-feedback-and-guidelines.md) | Noam's first-round feedback (25 Jun) — the −5 penalties, the 8 forum sub-features, the CI/CD wording. Its **80/10/10 split is superseded** by the TA's 75 + 5 + 10 + 10 in `04-ta-guidelines.pdf`. |
 | [`04-ta-guidelines.pdf`](04-ta-guidelines.pdf) | the guidelines PDF the TA sent on 8 Jul |
 | [`email-1-revised-proposal-sent-28jun.png`](email-1-revised-proposal-sent-28jun.png) | the mail that sent the revision, showing which three files went with it |
 | [`email-2-ta-guidelines-reply-08jul.png`](email-2-ta-guidelines-reply-08jul.png) | the TA's reply attaching the guidelines PDF |
