@@ -131,10 +131,11 @@ def dashboard():
     # AI value would otherwise serialise as an invalid-JSON `Infinity`/`NaN` token). Absent/garbage -> null.
     calories = prediction.get("calories")
     # PROPOSAL-v2 §3's Beginner output (#528 item 1), relayed under the same finite-number guard as
-    # calories and coerced to a whole session count -- a fractional or out-of-range value from ai is
-    # not a week anyone can train, so it is dropped rather than rendered.
+    # calories and coerced to a whole session count. The accepted range is the ai contract's own 0-7
+    # (#528, `calculate_recommended_frequency`): 0 is a deload week, which is advice worth showing, not
+    # an absent value. Anything outside that range is not a week anyone can train, so it is dropped.
     frequency = prediction.get("recommended_frequency")
-    recommended_frequency = int(frequency) if _finite_number(frequency) and 1 <= frequency <= 7 else None
+    recommended_frequency = int(frequency) if _finite_number(frequency) and 0 <= frequency <= 7 else None
     # The timestamp of the entry this score came from. Readiness is scored from the LATEST check-in, which
     # is only *today's* when the athlete checked in today — so the card can name the day it actually scored
     # instead of always claiming "today's check-in" (#450). Reporting it from here ties the label to the

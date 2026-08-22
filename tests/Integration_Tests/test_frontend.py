@@ -1400,6 +1400,8 @@ def test_the_dashboard_renders_the_recommended_frequency_beside_the_calorie_targ
     assert "d.recommended_frequency != null" in html, \
         "the frequency pill must be gated on presence — `null` would render as the word null"
     assert "sessions/week" in html, "the pill must name the unit; a bare number is not advice"
+    assert "a rest week" in html, \
+        "0 is inside ai's 0-7 range and must render as a deload week, not as \"0 sessions/week\""
     assert "Daily target" in html, "the calorie pill must survive beside it — both are §3 outputs"
 
 

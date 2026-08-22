@@ -45,23 +45,33 @@ BASE = {"age": 30, "gender": "male", "height": 180, "weight": 80, "goal": "maint
 
 # --------------------------------------------------------------- item 1: the frequency relay
 
-def test_the_recommended_frequency_reaches_the_client(dash_client, monkeypatch):
-    """§3 lists it as a Beginner output, so it has to arrive in the payload the dashboard renders."""
+@pytest.mark.parametrize("value", [0, 1, 4, 7])
+def test_the_recommended_frequency_reaches_the_client(dash_client, monkeypatch, value):
+    """§3 lists it as a Beginner output, so it has to arrive in the payload the dashboard renders.
+
+    Swept across the ai contract's whole stated range rather than one value, because both ends are
+    where a relay guard goes wrong: `0` is a deload week and was previously dropped as if absent
+    (caught in review on #590), and `7` is the last trainable week before the guard should reject.
+    """
     _login(dash_client)
     dash_client.post("/profile", json=BASE)
     _checkin(dash_client)
-    _set_predict(monkeypatch, _prediction(recommended_frequency=4))
-    assert dash_client.get("/dashboard").get_json()["recommended_frequency"] == 4
+    _set_predict(monkeypatch, _prediction(recommended_frequency=value))
+    assert dash_client.get("/dashboard").get_json()["recommended_frequency"] == value
 
 
 @pytest.mark.parametrize("bad", [
     float("nan"), float("inf"), float("-inf"),   # would serialise as invalid-JSON tokens
-    0, 8, 14, -3,                                # not a trainable week
+    8, 14, -3,                                   # outside the ai contract's 0-7 range
     "4", None, True, [4], {"sessions": 4},       # wrong type (bool is an int subclass -- excluded)
 ])
 def test_a_frequency_the_web_tier_cannot_stand_behind_is_dropped_not_rendered(dash_client, monkeypatch, bad):
-    """The relay is a guard, not a pipe. A NaN would reach the browser as invalid JSON, and a 0- or
-    14-session week is not something to show an athlete, so both become null rather than output."""
+    """The relay is a guard, not a pipe. A NaN would reach the browser as invalid JSON and a 14-session
+    week is not a week anyone can train, so both become null rather than output.
+
+    `0` is deliberately NOT here: it is inside the ai contract's 0-7 range (a deload week), and dropping
+    it silently was the same class of bug as #582/#583 -- a real zero read as absent. It is asserted as
+    a *passing* value above instead."""
     _login(dash_client)
     dash_client.post("/profile", json=BASE)
     _checkin(dash_client)
