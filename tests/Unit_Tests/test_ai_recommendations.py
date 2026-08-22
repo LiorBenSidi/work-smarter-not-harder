@@ -181,6 +181,62 @@ def test_prescribed_program_alone_no_longer_fires_the_volume_recommendation():
     ]
 
 
+def test_a_muscle_group_logged_at_exactly_zero_sets_is_flagged_as_low():
+    """Regression guard: `elif 0 < sets < 6` used to exclude exactly 0 from the low-volume band,
+    so a muscle tracked and trained for nothing produced no message at all -- the same blind spot
+    as never logging it. 0 is a real, meaningful value here, not an absence."""
+    result = generate_recommendations(
+        "Ready",
+        {"performed": [{"muscle_group": "calves", "sets": 0}, {"muscle_group": "chest", "sets": 10}]},
+    )
+    assert any("calves volume is low" in item.lower() for item in result)
+
+
+def test_chest_at_twelve_back_at_zero_fires_both_the_low_and_ratio_messages():
+    """The exact live scenario this pair of fixes was written for: one side trained, the other at
+    a real, logged zero -- the most extreme pressing:pulling imbalance possible. Both the
+    per-muscle low-volume message and the ratio message must fire; neither silently skips zero."""
+    result = generate_recommendations(
+        "Ready",
+        {"performed": [{"muscle_group": "chest", "sets": 12}, {"muscle_group": "back", "sets": 0},
+                       {"muscle_group": "shoulders", "sets": 9}]},
+    )
+    joined = " ".join(result).lower()
+    assert "back volume is low" in joined
+    assert "pressing volume is much higher than pulling volume" in joined
+
+
+def test_back_at_zero_fires_the_ratio_message_without_a_zero_division_crash():
+    """`if chest and back:` used truthiness, so back == 0 (falsy) silently skipped the ratio
+    check entirely -- exactly the case it exists to catch. Division by the literal 0 denominator
+    must also not raise."""
+    result = generate_recommendations(
+        "Ready",
+        {"performed": [{"muscle_group": "chest", "sets": 8}, {"muscle_group": "back", "sets": 0}]},
+    )
+    assert any("pressing volume is much higher than pulling volume" in item.lower() for item in result)
+
+
+def test_chest_at_zero_fires_the_opposite_ratio_message():
+    result = generate_recommendations(
+        "Ready",
+        {"performed": [{"muscle_group": "chest", "sets": 0}, {"muscle_group": "back", "sets": 8}]},
+    )
+    assert any("pulling volume is much higher than pressing volume" in item.lower() for item in result)
+
+
+def test_chest_and_back_both_at_zero_does_not_fire_a_ratio_message():
+    """0:0 is not an imbalance -- neither side is over- or under-worked relative to the other --
+    so the ratio check must stay silent even though both individually read as low volume."""
+    result = generate_recommendations(
+        "Ready",
+        {"performed": [{"muscle_group": "chest", "sets": 0}, {"muscle_group": "back", "sets": 0}]},
+    )
+    joined = " ".join(result).lower()
+    assert "pressing volume" not in joined
+    assert "pulling volume" not in joined
+
+
 def test_low_volume_ties_break_by_severity_not_alphabetical_order():
     """Regression guard: back=4, calves=2 and core=3 all score the same base "low volume"
     priority, so the tie used to break on `sorted(volumes.items())`'s alphabetical order --

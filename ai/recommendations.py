@@ -256,18 +256,32 @@ def _program_recommendations(performed: Any) -> list[tuple[float, str]]:
             # the next real score above this band (79) or collide with anything else in use.
             severity = min((sets - 20) / 40, 1.0) * 0.9
             items.append((76 + severity, f"Weekly {muscle} volume is high; consider reducing sets or spreading them across sessions."))
-        elif 0 < sets < 6:
+        elif sets < 6:
+            # sets is already known >= 0 (the parsing loop above only ever admits non-negative
+            # values) -- an EXCLUSIVE `0 < sets` here silently dropped a muscle logged at exactly
+            # 0, the single clearest "low" case there is: tracked, and trained for nothing.
             severity = ((6 - sets) / 6) * 0.9
             items.append((58 + severity, f"Weekly {muscle} volume is low; consider adding gradual volume if it matches your goal."))
 
     chest = volumes.get("chest")
     back = volumes.get("back")
-    if chest and back:
-        ratio = chest / back
-        if ratio > 1.5:
+    # `is not None`, not truthiness: both are logged-volume numbers, and 0 is a real, meaningful
+    # value here (the muscle was tracked and trained for zero sets) -- `if chest and back:` would
+    # silently skip the single most extreme imbalance this check exists to catch (one side at 0
+    # while the other is trained). Division by exactly 0 is handled explicitly rather than left to
+    # raise, and 0:0 is not an imbalance (neither side is over- or under-worked relative to the
+    # other) so it is deliberately not flagged.
+    if chest is not None and back is not None and (chest or back):
+        if back == 0:
             items.append((73, "Pressing volume is much higher than pulling volume; add back work or reduce chest volume."))
-        elif ratio < 0.67:
+        elif chest == 0:
             items.append((73, "Pulling volume is much higher than pressing volume; review upper-body balance."))
+        else:
+            ratio = chest / back
+            if ratio > 1.5:
+                items.append((73, "Pressing volume is much higher than pulling volume; add back work or reduce chest volume."))
+            elif ratio < 0.67:
+                items.append((73, "Pulling volume is much higher than pressing volume; review upper-body balance."))
 
     return items
 
