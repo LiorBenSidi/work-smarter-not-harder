@@ -522,16 +522,15 @@ branch-protected and merges only on green CI.
   "Option 1" (muscle-group level, so `web` never needs `ai/exercise_catalog.py`'s exercise list and the two
   containers stay decoupled). This closes **#528 item 2** — the Advanced tier's "provide your workout
   program", which the v2 proposal §3 commits to — so it is no longer a disclosed gap but a shipped feature.
-- **Recommended training frequency (v2 §3, Beginner tier) — web half built; the producing half sits in
-  the AI lane.** The proposal's beginner output list is *"Calorie target · Beginner workout program ·
-  Recommended training frequency"*. The first two ship. For the third, the **web tier is ready**:
-  `web/routes/dashboard.py` relays a `recommended_frequency` field from `/predict` under the same
-  finite-number guard as `calories`, drops any value outside a trainable week, and the dashboard renders
-  it as a pill beside the calorie target — all covered by `test_dashboard_tier_and_frequency`.
-  **The value itself is produced by the recommendation engine, which REPORT §6 places in the AI lane**, so
-  it is Shiri's half to write; the field is contracted on #528 and the web side renders nothing until it
-  arrives. The one rule the contract pins: it must not echo the athlete's own `training_frequency`, since
-  a §3 Beginner supplies none. Previously disclosed as a stated gap; now being implemented instead (#528).
+- **Recommended training frequency (v2 §3, Beginner tier) — built end-to-end.** The proposal's
+  beginner output list is *"Calorie target · Beginner workout program · Recommended training
+  frequency"* — all three now ship. `ai/recommendations.py::calculate_recommended_frequency`
+  produces the value (#591); `web/routes/dashboard.py` relays it from `/predict` under the same
+  finite-number guard as `calories`, drops any value outside a trainable week, and the dashboard
+  renders it as a pill beside the calorie target. The one rule the contract pins — it must not
+  echo the athlete's own `training_frequency`, since a §3 Beginner supplies none — is enforced on
+  both sides and covered by `test_dashboard_tier_and_frequency` (web) and 7 functions in
+  `test_ai_recommendations.py` (ai). Previously a disclosed gap; closed by #590 + #591.
 - **Beginner / Intermediate / Advanced tiers (v2 §3) — built, as a derivation rather than a gate.** v2 §3
   frames the audience as three tiers with different inputs and different outputs. The app already behaved
   that way — enter a weekly programme and the balance analysis fires, leave it out and it does not — but no
