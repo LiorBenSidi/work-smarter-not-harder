@@ -542,6 +542,17 @@ branch-protected and merges only on green CI.
   **nothing is gated on it** — every output stays available to every user, which
   `test_the_tier_gates_nothing_a_lower_tier_would_otherwise_receive` asserts directly. A "beginner" label
   withholds nothing; it explains what adding a programme would unlock (#528).
+- **Athlete tier (v2 §3) — built and live; its inputs are named differently than §3 words them.**
+  `derive_tier` (`web/routes/profile.py:170-177`) reads the tier off the profile on every
+  `/dashboard` request: **advanced** when the athlete has entered a weekly training programme,
+  **intermediate** when they have set equipment or a split preference, **beginner** otherwise. It
+  is derived, never stored, so it updates the moment they add a field, and nothing is gated on it —
+  every output stays available to every tier. The criteria track behaviour rather than paperwork:
+  the programme is the one input that unlocks a genuinely different output (the muscle-group
+  balance analysis), so it is the one that promotes. §3 sorts the same three tiers by slightly
+  different fields — training frequency is required of everyone here rather than marking the
+  intermediate step (`:143`) — so the ladder is the one the proposal describes, keyed to the
+  optional inputs the athlete actually supplies (#528 item 3).
 - **F6 + F7 merge** — in scope, not pending: the merge is in the v2 proposal the team sent the TA (28 Jun),
   and the TA's guidelines explicitly permit notified feature changes; the balance rule is built
   (`_program_recommendations`). See `ROADMAP.md` → "Scope decision".
