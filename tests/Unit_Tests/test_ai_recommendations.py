@@ -181,6 +181,122 @@ def test_prescribed_program_alone_no_longer_fires_the_volume_recommendation():
     ]
 
 
+def test_a_muscle_group_logged_at_exactly_zero_sets_is_flagged_as_low():
+    """Regression guard: `elif 0 < sets < 6` used to exclude exactly 0 from the low-volume band,
+    so a muscle tracked and trained for nothing produced no message at all -- the same blind spot
+    as never logging it. 0 is a real, meaningful value here, not an absence."""
+    result = generate_recommendations(
+        "Ready",
+        {"performed": [{"muscle_group": "calves", "sets": 0}, {"muscle_group": "chest", "sets": 10}]},
+    )
+    assert any("calves volume is low" in item.lower() for item in result)
+
+
+def test_chest_at_twelve_back_at_zero_fires_both_the_low_and_ratio_messages():
+    """The exact live scenario this pair of fixes was written for: one side trained, the other at
+    a real, logged zero -- the most extreme pressing:pulling imbalance possible. Both the
+    per-muscle low-volume message and the ratio message must fire; neither silently skips zero."""
+    result = generate_recommendations(
+        "Ready",
+        {"performed": [{"muscle_group": "chest", "sets": 12}, {"muscle_group": "back", "sets": 0},
+                       {"muscle_group": "shoulders", "sets": 9}]},
+    )
+    joined = " ".join(result).lower()
+    assert "back volume is low" in joined
+    assert "pressing volume is much higher than pulling volume" in joined
+
+
+def test_back_at_zero_fires_the_ratio_message_without_a_zero_division_crash():
+    """`if chest and back:` used truthiness, so back == 0 (falsy) silently skipped the ratio
+    check entirely -- exactly the case it exists to catch. Division by the literal 0 denominator
+    must also not raise."""
+    result = generate_recommendations(
+        "Ready",
+        {"performed": [{"muscle_group": "chest", "sets": 8}, {"muscle_group": "back", "sets": 0}]},
+    )
+    assert any("pressing volume is much higher than pulling volume" in item.lower() for item in result)
+
+
+def test_chest_at_zero_fires_the_opposite_ratio_message():
+    result = generate_recommendations(
+        "Ready",
+        {"performed": [{"muscle_group": "chest", "sets": 0}, {"muscle_group": "back", "sets": 8}]},
+    )
+    assert any("pulling volume is much higher than pressing volume" in item.lower() for item in result)
+
+
+def test_chest_and_back_both_at_zero_does_not_fire_a_ratio_message():
+    """0:0 is not an imbalance -- neither side is over- or under-worked relative to the other --
+    so the ratio check must stay silent even though both individually read as low volume."""
+    result = generate_recommendations(
+        "Ready",
+        {"performed": [{"muscle_group": "chest", "sets": 0}, {"muscle_group": "back", "sets": 0}]},
+    )
+    joined = " ".join(result).lower()
+    assert "pressing volume" not in joined
+    assert "pulling volume" not in joined
+
+
+def test_low_volume_ties_break_by_severity_not_alphabetical_order():
+    """Regression guard: back=4, calves=2 and core=3 all score the same base "low volume"
+    priority, so the tie used to break on `sorted(volumes.items())`'s alphabetical order --
+    an accident of muscle-group naming, not a judgement about which is more under-trained.
+    calves (furthest from the 6-set boundary) must now rank first, core second, back last."""
+    from ai.recommendations import _program_recommendations
+
+    items = _program_recommendations([
+        {"muscle_group": "back", "sets": 4},
+        {"muscle_group": "calves", "sets": 2},
+        {"muscle_group": "core", "sets": 3},
+    ])
+    ordered = [message for _, message in sorted(items, reverse=True)]
+    assert ordered == [
+        "Weekly calves volume is low; consider adding gradual volume if it matches your goal.",
+        "Weekly core volume is low; consider adding gradual volume if it matches your goal.",
+        "Weekly back volume is low; consider adding gradual volume if it matches your goal.",
+    ]
+
+
+def test_high_volume_ties_also_break_by_severity():
+    """Same fix, the over-20 side: the muscle further past the cap is genuinely more urgent,
+    so it must outrank one just barely over 20, regardless of alphabetical order."""
+    from ai.recommendations import _program_recommendations
+
+    items = _program_recommendations([
+        {"muscle_group": "quads", "sets": 22},
+        {"muscle_group": "chest", "sets": 40},
+    ])
+    ordered = [message for _, message in sorted(items, reverse=True)]
+    assert ordered == [
+        "Weekly chest volume is high; consider reducing sets or spreading them across sessions.",
+        "Weekly quads volume is high; consider reducing sets or spreading them across sessions.",
+    ]
+
+
+def test_the_exact_reported_scenario_now_squeezes_out_back_not_core():
+    """The full live-tested case: with the alphabetical tie-break, back and calves won the
+    5-item cap and core was squeezed out -- an accident of "back" and "calves" sorting before
+    "core". By severity, calves (furthest from the boundary) and core (next furthest) both
+    outrank back (closest to the boundary, least severe), so back is squeezed out instead."""
+    recs = generate_recommendations(
+        "Rest",
+        {
+            "goal": "lose",
+            "performed": [
+                {"muscle_group": "chest", "sets": 25}, {"muscle_group": "back", "sets": 4},
+                {"muscle_group": "shoulders", "sets": 9}, {"muscle_group": "biceps", "sets": 6},
+                {"muscle_group": "triceps", "sets": 6}, {"muscle_group": "quads", "sets": 6},
+                {"muscle_group": "hamstrings", "sets": 6}, {"muscle_group": "glutes", "sets": 6},
+                {"muscle_group": "calves", "sets": 2}, {"muscle_group": "core", "sets": 3},
+            ],
+        },
+    )
+    joined = " ".join(recs).lower()
+    assert "calves volume is low" in joined
+    assert "core volume is low" in joined
+    assert "back volume is low" not in joined  # squeezed out now, not core
+
+
 def test_calories_support_web_profile_field_names():
     calories = calculate_calories(
         {
