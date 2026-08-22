@@ -34,18 +34,24 @@ bandit -r . -q -x ./tests,./.venv,./venv,./env   # exclude tests + any in-repo v
 # there is no way to know a teammate has them on. `test_docs_contract` in CI is what actually holds
 # the line for everyone. This just saves you a red PR and a second push.
 if git diff --cached --name-only | grep -qE '^(tests/|README\.md$|docs/REPORT\.md$|docs/SUBMISSION\.md$)'; then
+  # Same interpreter choice as pre-push: `python` first, `python3` only as the fallback. Git Bash on
+  # Windows commonly ships `python` and no `python3` at all, so assuming `python3` would silently
+  # skip this check for anyone on Windows.
+  PY=python
+  command -v python >/dev/null 2>&1 || PY=python3
+
   echo "[pre-commit 3/3] suite counts..."
-  if command -v python3 >/dev/null 2>&1 && [ -f tools/sync_counts.py ]; then
-    if ! python3 tools/sync_counts.py --check; then
+  if command -v "$PY" >/dev/null 2>&1 && [ -f scripts/sync_counts.py ]; then
+    if ! "$PY" scripts/sync_counts.py --check; then
       echo ""
       echo "pre-commit FAILED: the graded docs state a suite size the repo no longer produces."
       echo "  These numbers are GENERATED, not typed. Do not hand-edit them:"
-      echo "    python3 tools/sync_counts.py && git add README.md docs/REPORT.md docs/SUBMISSION.md"
+      echo "    $PY scripts/sync_counts.py && git add README.md docs/REPORT.md docs/SUBMISSION.md"
       echo "  Emergency bypass: git commit --no-verify   (CI still gates the PR)"
       exit 1
     fi
   else
-    echo "  (skipped: python3 or tools/sync_counts.py unavailable)"
+    echo "  (skipped: no python interpreter, or scripts/sync_counts.py missing)"
   fi
 fi
 

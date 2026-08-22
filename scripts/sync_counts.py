@@ -11,8 +11,8 @@ each hit it on the same day).
 This tool is the other half of that guard: the guard says the numbers are wrong, this makes them
 right. It measures exactly the way the guard measures, so the two can never disagree.
 
-    python tools/sync_counts.py            # rewrite the numbers in place
-    python tools/sync_counts.py --check    # exit 1 if any are stale, change nothing
+    python scripts/sync_counts.py            # rewrite the numbers in place
+    python scripts/sync_counts.py --check    # exit 1 if any are stale, change nothing
 
 **It only ever replaces digits.** Each site is matched by a regex anchored on the surrounding words,
 and only that group's span is substituted -- never the sentence around it. The claim is testable

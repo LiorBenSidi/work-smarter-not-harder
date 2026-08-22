@@ -21,7 +21,7 @@ ROOT = Path(__file__).resolve().parents[2]
 # the fix, and the obvious response -- hand-editing the figure -- is the habit that produced the drift
 # in the first place. These numbers are generated; the message has to say so where it is read.
 FIX = ("\n\nThese numbers are GENERATED, not typed. Do not hand-edit them:\n"
-       "    python3 tools/sync_counts.py && git add README.md docs/REPORT.md docs/SUBMISSION.md")
+       "    python scripts/sync_counts.py && git add README.md docs/REPORT.md docs/SUBMISSION.md")
 
 CLAIMS = [
     ("docs/REPORT.md", r"\*\*Suite at this snapshot:\*\* \*\*(\d+) checks"),
@@ -161,3 +161,38 @@ def test_the_reports_per_type_prose_agrees_with_its_own_totals_line():
         if int(found.group(1)) != actual:
             wrong.append(f"§4 says {label} {found.group(1)}, tests/{directory} collects {actual}")
     assert not wrong, "REPORT.md §4's per-type prose is behind the suite:\n  " + "\n  ".join(wrong) + FIX
+
+# --------------------------------------------------------------------- the generator's own anchors
+
+
+def test_the_generator_still_recognises_every_sentence_it_maintains():
+    """`scripts/sync_counts.py` writes these numbers; the guards above only check the result.
+
+    Three of the sites it maintains are ones no guard above asserts the existence of -- "the two
+    supporting directories complete the N", SUBMISSION's "current — **N tests**", and the
+    `pytest -q` comment. Reword any of those and the generator silently stops maintaining it: the
+    number then rots with nothing watching, which is exactly how docs/DEMO_RUNBOOK.md reached 1412
+    against a real 1461.
+
+    A generator maintaining nothing looks identical to one with nothing to do, so this asserts the
+    difference. `--check` exits 2 when a required anchor has moved. Read-only -- it reports, it does
+    not write.
+    """
+    proc = subprocess.run(
+        [sys.executable, "scripts/sync_counts.py", "--check"],
+        cwd=ROOT, capture_output=True, text=True,
+    )
+    assert proc.returncode != 2, (
+        "scripts/sync_counts.py can no longer find a sentence it is supposed to keep current, so a "
+        "documented count is now unmaintained. Re-anchor it in that script's SITES/SPLIT_SITES.\n"
+        + proc.stdout
+    )
+    # Exit 1 is the ordinary "stale" case, but the script also exits 1 when collection itself fails,
+    # when a tests/ directory exists that TYPE_DIRS does not name, or on any bug in it -- and those
+    # report through stderr. Showing both streams means the failure explains itself instead of
+    # advising a command that would not help.
+    assert proc.returncode == 0, (
+        f"scripts/sync_counts.py --check failed (exit {proc.returncode}). If the counts are simply "
+        "stale, regenerate them; if the output below says otherwise, fix that instead.\n"
+        f"--- stdout ---\n{proc.stdout}\n--- stderr ---\n{proc.stderr}"
+    )

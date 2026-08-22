@@ -40,10 +40,10 @@ pip install -r requirements-dev.txt        # pinned ruff + bandit + pytest
 |---|---|---|
 | `git commit` | **ruff** (lint + **no-`print()`** rule) · **bandit** (security) | fast — catches issues before they're even committed |
 | `git push` | **pytest** (`tests/`) | guards what leaves your machine, without slowing every commit |
-| `git commit` *(if it touches `tests/` or a graded doc)* | **`tools/sync_counts.py --check`** — the documented suite size still matches reality | a stale count is a red PR and a second push |
+| `git commit` *(if it touches `tests/` or a graded doc)* | **`scripts/sync_counts.py --check`** — the documented suite size still matches reality | a stale count is a red PR and a second push |
 
 - **No `print()`** in committed code — use `logging` (course L3: print is slow; L8.1: raise errors, not print). A deliberate one-off needs `# noqa: T201` on that line.
-- **Never hand-edit a suite count.** The numbers in `README.md`, `docs/REPORT.md` and `docs/SUBMISSION.md` are generated — after adding or removing a test run `python3 tools/sync_counts.py` and stage the three files. It only ever replaces digits at anchored sites, never prose. Don't state a count anywhere else: unguarded copies rot, and each one is another line two branches can collide on.
+- **Never hand-edit a suite count.** The numbers in `README.md`, `docs/REPORT.md` and `docs/SUBMISSION.md` are generated — after adding or removing a test run `python scripts/sync_counts.py` and stage the three files. It only ever replaces digits at anchored sites, never prose. (Use whichever interpreter your venv exposes — the hooks try `python` first, then `python3`, because Git Bash on Windows often has no `python3`.) Don't state a count anywhere else: unguarded copies rot, and each one is another line two branches can collide on.
 - The hooks are a **safety net, not the authority**: CI re-runs everything and `main` is PR-only. Real emergency bypass — `git commit --no-verify` / `git push --no-verify` — CI still gates the PR.
 
 ## Rules
