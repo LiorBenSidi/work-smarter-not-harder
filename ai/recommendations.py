@@ -215,7 +215,7 @@ def _history_recommendations(history: Any) -> list[tuple[int, str]]:
     return items
 
 
-def _program_recommendations(performed: Any) -> list[tuple[int, str]]:
+def _program_recommendations(performed: Any) -> list[tuple[float, str]]:
     """Analyze actual logged muscle-group weekly volume when present.
 
     Shape-agnostic (works on any volume distribution it's handed): the name predates this
@@ -247,12 +247,18 @@ def _program_recommendations(performed: Any) -> list[tuple[int, str]]:
     if not volumes:
         return []
 
-    items: list[tuple[int, str]] = []
+    items: list[tuple[float, str]] = []
     for muscle, sets in sorted(volumes.items()):
         if sets > 20:
-            items.append((76, f"Weekly {muscle} volume is high; consider reducing sets or spreading them across sessions."))
+            # Ties within the same priority band break by severity, not by which muscle group's
+            # name happens to sort first alphabetically -- further past the threshold is
+            # genuinely more urgent. Bounded to (0, 0.9): a tie-break addition can never reach
+            # the next real score above this band (79) or collide with anything else in use.
+            severity = min((sets - 20) / 40, 1.0) * 0.9
+            items.append((76 + severity, f"Weekly {muscle} volume is high; consider reducing sets or spreading them across sessions."))
         elif 0 < sets < 6:
-            items.append((58, f"Weekly {muscle} volume is low; consider adding gradual volume if it matches your goal."))
+            severity = ((6 - sets) / 6) * 0.9
+            items.append((58 + severity, f"Weekly {muscle} volume is low; consider adding gradual volume if it matches your goal."))
 
     chest = volumes.get("chest")
     back = volumes.get("back")

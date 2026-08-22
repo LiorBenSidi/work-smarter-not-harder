@@ -181,6 +181,66 @@ def test_prescribed_program_alone_no_longer_fires_the_volume_recommendation():
     ]
 
 
+def test_low_volume_ties_break_by_severity_not_alphabetical_order():
+    """Regression guard: back=4, calves=2 and core=3 all score the same base "low volume"
+    priority, so the tie used to break on `sorted(volumes.items())`'s alphabetical order --
+    an accident of muscle-group naming, not a judgement about which is more under-trained.
+    calves (furthest from the 6-set boundary) must now rank first, core second, back last."""
+    from ai.recommendations import _program_recommendations
+
+    items = _program_recommendations([
+        {"muscle_group": "back", "sets": 4},
+        {"muscle_group": "calves", "sets": 2},
+        {"muscle_group": "core", "sets": 3},
+    ])
+    ordered = [message for _, message in sorted(items, reverse=True)]
+    assert ordered == [
+        "Weekly calves volume is low; consider adding gradual volume if it matches your goal.",
+        "Weekly core volume is low; consider adding gradual volume if it matches your goal.",
+        "Weekly back volume is low; consider adding gradual volume if it matches your goal.",
+    ]
+
+
+def test_high_volume_ties_also_break_by_severity():
+    """Same fix, the over-20 side: the muscle further past the cap is genuinely more urgent,
+    so it must outrank one just barely over 20, regardless of alphabetical order."""
+    from ai.recommendations import _program_recommendations
+
+    items = _program_recommendations([
+        {"muscle_group": "quads", "sets": 22},
+        {"muscle_group": "chest", "sets": 40},
+    ])
+    ordered = [message for _, message in sorted(items, reverse=True)]
+    assert ordered == [
+        "Weekly chest volume is high; consider reducing sets or spreading them across sessions.",
+        "Weekly quads volume is high; consider reducing sets or spreading them across sessions.",
+    ]
+
+
+def test_the_exact_reported_scenario_now_squeezes_out_back_not_core():
+    """The full live-tested case: with the alphabetical tie-break, back and calves won the
+    5-item cap and core was squeezed out -- an accident of "back" and "calves" sorting before
+    "core". By severity, calves (furthest from the boundary) and core (next furthest) both
+    outrank back (closest to the boundary, least severe), so back is squeezed out instead."""
+    recs = generate_recommendations(
+        "Rest",
+        {
+            "goal": "lose",
+            "performed": [
+                {"muscle_group": "chest", "sets": 25}, {"muscle_group": "back", "sets": 4},
+                {"muscle_group": "shoulders", "sets": 9}, {"muscle_group": "biceps", "sets": 6},
+                {"muscle_group": "triceps", "sets": 6}, {"muscle_group": "quads", "sets": 6},
+                {"muscle_group": "hamstrings", "sets": 6}, {"muscle_group": "glutes", "sets": 6},
+                {"muscle_group": "calves", "sets": 2}, {"muscle_group": "core", "sets": 3},
+            ],
+        },
+    )
+    joined = " ".join(recs).lower()
+    assert "calves volume is low" in joined
+    assert "core volume is low" in joined
+    assert "back volume is low" not in joined  # squeezed out now, not core
+
+
 def test_calories_support_web_profile_field_names():
     calories = calculate_calories(
         {
