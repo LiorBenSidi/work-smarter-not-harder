@@ -17,6 +17,12 @@ ROOT = Path(__file__).resolve().parents[2]
 # Each entry: the file, and a regex whose first group is the collected-case count it claims. Anchored on
 # the surrounding words so a different number in the same file (a percentage, a year, a section count)
 # can never be picked up by accident.
+# Appended to every staleness failure below. Without it the message names the wrong number but not
+# the fix, and the obvious response -- hand-editing the figure -- is the habit that produced the drift
+# in the first place. These numbers are generated; the message has to say so where it is read.
+FIX = ("\n\nThese numbers are GENERATED, not typed. Do not hand-edit them:\n"
+       "    python3 tools/sync_counts.py && git add README.md docs/REPORT.md docs/SUBMISSION.md")
+
 CLAIMS = [
     ("docs/REPORT.md", r"\*\*Suite at this snapshot:\*\* \*\*(\d+) checks"),
     ("docs/REPORT.md", r"\*\*(\d+) automated checks across the seven"),
@@ -50,7 +56,7 @@ def test_the_graded_documents_state_the_suite_size_the_repo_actually_has():
         claimed = int(found.group(1))
         if claimed != actual:
             wrong.append(f"{rel} says {claimed}, the suite collects {actual}")
-    assert not wrong, "the graded docs are behind the suite:\n  " + "\n  ".join(wrong)
+    assert not wrong, "the graded docs are behind the suite:\n  " + "\n  ".join(wrong) + FIX
 
 
 # Each entry: where the split is written, and a regex giving (passed, skipped). Both environments are
@@ -80,7 +86,7 @@ def test_every_pass_skip_split_in_the_docs_adds_up_to_the_suite():
         passed, skipped = int(found.group(1)), int(found.group(2))
         if passed + skipped != actual:
             wrong.append(f"{rel}: {passed} pass + {skipped} skip = {passed + skipped}, but the suite collects {actual}")
-    assert not wrong, "a stated split cannot be produced by this suite:\n  " + "\n  ".join(wrong)
+    assert not wrong, "a stated split cannot be produced by this suite:\n  " + "\n  ".join(wrong) + FIX
 
 
 def test_the_report_states_the_number_of_test_functions_it_can_count():
@@ -100,7 +106,7 @@ def test_the_report_states_the_number_of_test_functions_it_can_count():
     found = re.search(r"come from \*\*(\d+) test\nfunctions\*\*", text)
     assert found, "REPORT.md no longer states a test-function count — update this guard with it"
     claimed = int(found.group(1))
-    assert claimed == written, f"docs/REPORT.md says {claimed} test functions; tests/ defines {written}"
+    assert claimed == written, f"docs/REPORT.md says {claimed} test functions; tests/ defines {written}" + FIX
 
 
 # --------------------------------------------------------------------- per-type counts (#527)
@@ -139,7 +145,7 @@ def test_the_reports_per_type_totals_line_matches_the_suite():
         actual = _collected_in(directory)
         if int(found.group(1)) != actual:
             wrong.append(f"§3 says {label} {found.group(1)}, tests/{directory} collects {actual}")
-    assert not wrong, "REPORT.md §3's per-type totals are behind the suite:\n  " + "\n  ".join(wrong)
+    assert not wrong, "REPORT.md §3's per-type totals are behind the suite:\n  " + "\n  ".join(wrong) + FIX
 
 
 def test_the_reports_per_type_prose_agrees_with_its_own_totals_line():
@@ -154,4 +160,4 @@ def test_the_reports_per_type_prose_agrees_with_its_own_totals_line():
         actual = _collected_in(directory)
         if int(found.group(1)) != actual:
             wrong.append(f"§4 says {label} {found.group(1)}, tests/{directory} collects {actual}")
-    assert not wrong, "REPORT.md §4's per-type prose is behind the suite:\n  " + "\n  ".join(wrong)
+    assert not wrong, "REPORT.md §4's per-type prose is behind the suite:\n  " + "\n  ".join(wrong) + FIX

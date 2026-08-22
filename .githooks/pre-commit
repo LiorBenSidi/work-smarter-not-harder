@@ -21,10 +21,32 @@ if [ -n "$missing" ]; then
   exit 1
 fi
 
-echo "[pre-commit 1/2] ruff (lint + no-print)..."
+echo "[pre-commit 1/3] ruff (lint + no-print)..."
 ruff check .
 
-echo "[pre-commit 2/2] bandit (security)..."
+echo "[pre-commit 2/3] bandit (security)..."
 bandit -r . -q -x ./tests,./.venv,./venv,./env   # exclude tests + any in-repo venv (bandit ignores .gitignore; keeps local == CI)
+
+# Suite counts. Only when this commit touches the suite or the documents that state its size -- an
+# unrelated commit should not pay for eight pytest collections.
+#
+# This hook is a convenience, NOT the gate: hooks are opt-in per clone (scripts/setup-hooks.sh), so
+# there is no way to know a teammate has them on. `test_docs_contract` in CI is what actually holds
+# the line for everyone. This just saves you a red PR and a second push.
+if git diff --cached --name-only | grep -qE '^(tests/|README\.md$|docs/REPORT\.md$|docs/SUBMISSION\.md$)'; then
+  echo "[pre-commit 3/3] suite counts..."
+  if command -v python3 >/dev/null 2>&1 && [ -f tools/sync_counts.py ]; then
+    if ! python3 tools/sync_counts.py --check; then
+      echo ""
+      echo "pre-commit FAILED: the graded docs state a suite size the repo no longer produces."
+      echo "  These numbers are GENERATED, not typed. Do not hand-edit them:"
+      echo "    python3 tools/sync_counts.py && git add README.md docs/REPORT.md docs/SUBMISSION.md"
+      echo "  Emergency bypass: git commit --no-verify   (CI still gates the PR)"
+      exit 1
+    fi
+  else
+    echo "  (skipped: python3 or tools/sync_counts.py unavailable)"
+  fi
+fi
 
 echo "[pre-commit] OK"
