@@ -528,9 +528,21 @@ branch-protected and merges only on green CI.
   produces the value (#591); `web/routes/dashboard.py` relays it from `/predict` under the same
   finite-number guard as `calories`, drops any value outside a trainable week, and the dashboard
   renders it as a pill beside the calorie target. The one rule the contract pins — it must not
-  echo the athlete's own `training_frequency`, since a §3 Beginner supplies none — is enforced on
+  echo the athlete's own `training_frequency`; the function never reads that field, deriving from
+  goal and age instead, so the recommendation stays independent of the input even where the two
+  coincide — is enforced on
   both sides and covered by `test_dashboard_tier_and_frequency` (web) and 7 functions in
   `test_ai_recommendations.py` (ai). Previously a disclosed gap; closed by #590 + #591.
+- **§3's beginner input list is one field short of what the profile requires.** v2 §3 says
+  beginners *"give us the basics — age, gender, height, weight, and their goal"*. The build also
+  requires `training_frequency` (`web/routes/profile.py:143`), so a profile submitted with exactly
+  the five fields §3 names is rejected with a 400. It is load-bearing for two of the three outputs
+  §3 promises beginners: the workout generator resolves the split and the number of training days
+  from it (`ai/workout_plan.py::resolve_split_preference`, `::day_focus_sequence`), and the calorie
+  target derives its activity factor from it (`ai/recommendations.py::_activity_from_frequency`).
+  The effect is that the base profile is six fields rather than five — nothing is withheld, and the
+  third output, the recommended frequency itself, is the one thing that deliberately ignores it
+  (#528 item 1, raised by Shiri on #596).
 - **Athlete tier (v2 §3) — built and live; its inputs are named differently than §3 words them.**
   `derive_tier` (`web/routes/profile.py:170-177`) reads the tier off the profile on every
   `/dashboard` request: **advanced** when the athlete has entered a weekly training programme,
