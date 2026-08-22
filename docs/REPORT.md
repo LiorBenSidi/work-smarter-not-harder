@@ -18,7 +18,7 @@
 > The 23th of August, 2026"*; the course later granted an extension on Moodle to **30 Aug 2026**
 > (submission box *"Actual Submission - Extention until 30.08"*), which is the date this report uses.
 >
-> **Last updated:** 2026-08-21 · **Suite at this snapshot:** **1447 checks, 1403 passing / 44 environment-gated**
+> **Last updated:** 2026-08-21 · **Suite at this snapshot:** **1463 checks, 1419 passing / 44 environment-gated**
 > (+ 20 browser e2e scenarios)
 > (`python -m pytest tests/ -q`; the env-gated ones run in CI's `compose-e2e` job against the live containers).
 > Since the 07-12 snapshot (783 tests): **Shiri's Random Forest landed** — a real `ai/model/model.pkl` +
@@ -217,6 +217,7 @@ Columns are the test-type dirs under `tests/`. Cells name representative file(s)
 | **F3 Readiness (web path)** | `test_checkin_validation` (23) · `test_ai_client` (13) | `test_checkin_flow` (13) · `test_web_ai` (4) | in `test_profile_checkin_negative` (60) | `test_e2e` leg | — | — |
 | **F3 Readiness (model — Shiri)** | `test_ai_inference` (20) · `test_ai_recommendations` (19) · `test_ai_binning` (21) | `test_ai_queue_api` (27, loads the real `model.pkl`) | — | — | — | — |
 | **F4 Calorie** | `test_calories` (14) | via `test_checkin_flow` / `test_dashboard_flow` | — | — | — | — |
+| **F10 Recommended training frequency** (v2 §3, Beginner output) — *web half* | — | `test_dashboard_tier_and_frequency` (13) — the relay, its finite/range guard, an `ai` that omits the field, and that what is shown is never the athlete's own `training_frequency` reflected back | in `test_dashboard_tier_and_frequency` (the 10 malformed-value cases) | — | — | — |
 | **F11 Beginner / Intermediate / Advanced tiers** (v2 §3) | `test_profile_tier` (16) | `test_dashboard_tier_and_frequency` (11) — reported before the first check-in, survives an ai outage, and **gates no output a lower tier would otherwise receive** | — | — | — | — |
 | **F5 Workout generator** | `test_workout_plan` (121) · `test_exercise_catalog` (13) | `test_dashboard_flow` (23) — `test_dashboard_relays_a_resolved_workout_plan`, the plan surviving the ai -> web relay verbatim | — | — | — | — |
 | **F6 Program balance (Advanced-tier input)** | `test_ai_client` (13) — the `training_program` -> `performed` translation | `test_web_ai` (4) — the web->ai seam, including web's real payload run through ai's real engine · `test_profile_flow` (9) | `test_training_program_negative` (19) | — | (profile wall) | — |
@@ -239,19 +240,19 @@ Columns are the test-type dirs under `tests/`. Cells name representative file(s)
 | **Fault tolerance / isolation** | — | — | — | `test_fault_isolation` (2) · Full-System `test_parts_in_isolation` (12) | — | — |
 | **Whole-system journey** | — | — | — | `test_e2e` (1) · Full-System `test_everything_together_sync` (15) | — | — |
 
-**Totals by type (full suite, `pytest --collect-only`):** Unit **624** · Integration **505** · Negative **177** ·
-System **14** · Full-System **27** · Security **88** · Stress **12** → **1447 automated checks across the seven
+**Totals by type (full suite, `pytest --collect-only`):** Unit **624** · Integration **521** · Negative **177** ·
+System **14** · Full-System **27** · Security **88** · Stress **12** → **1463 automated checks across the seven
 pytest suites**, plus **20 browser end-to-end scenarios** driven separately (`tests/E2E_Tests/`, run in CI as
 the *e2e (browser · desktop + mobile)* job — not counted in the pytest total). This matches the header count.
 
-Read the total as *checks*, not as hand-written test functions: 1447 collected cases come from **1055 test
+Read the total as *checks*, not as hand-written test functions: 1463 collected cases come from **1060 test
 functions** (measured with `grep -c "^def test_"` across `tests/`), the remainder being parametrised cases (one `@parametrize` over 11 malformed payloads is 11
 collected cases, not 11 tests written). The suite is deliberately weighted toward the layers where a
 regression is cheapest to catch — unit and negative input walls — rather than toward volume.
 
-**Pass / skip:** the pre-07-12 snapshot was **747 pass, 36 skip in ~47 s**; the current suite is **1403 pass,
+**Pass / skip:** the pre-07-12 snapshot was **747 pass, 36 skip in ~47 s**; the current suite is **1419 pass,
 44 skip** (`python -m pytest tests/ -q`); in CI, where the `mongo:7` service is present, the same
-suite is **1429 pass, 18 skip**. All **44** local skips are env-gated and *not broken* — they run the
+suite is **1445 pass, 18 skip**. All **44** local skips are env-gated and *not broken* — they run the
 moment their dependency is present:
 
 - `test_db_mongo` (22) — the real-Mongo integration suite; skips without `TEST_MONGO_URI`, and **runs in CI**
@@ -285,7 +286,7 @@ machine (env vars, no local paths), and are exercised by CI on every PR. A run t
   fake), the logging configuration, and app config. Heavily parametrized on boundary and adversarial inputs
   (e.g. profile validation rejects injection objects, bools-as-numbers, and out-of-range values across every
   field).
-- **Integration (505)** — components wired together through the Flask test client: the auth flow, profile
+- **Integration (521)** — components wired together through the Flask test client: the auth flow, profile
   round-trip, check-in → `ai /predict` → persist, dashboard, history, and the full forum lifecycle. Two
   boundary suites are notable: `test_web_ai` stubs the `web → ai` HTTP seam with a contract-shaped response
   and asserts the dashboard surfaces it (and degrades to `ai_status: unavailable` when `ai` returns
@@ -301,7 +302,7 @@ machine (env vars, no local paths), and are exercised by CI on every PR. A run t
   (`test_csrf`), NoSQL-injection-safe queries (`test_profile`, `test_forum`), ownership enforcement on
   forum edit/delete (403), auth-gating of dashboard/history, and response-hardening (`test_web_hardening`).
 
-The two supporting directories complete the 1447: **Negative (177)** — adversarial and malformed input across
+The two supporting directories complete the 1463: **Negative (177)** — adversarial and malformed input across
 auth, profile, check-in, forum and media — and **Full-System (27)** — whole-stack journeys in-process, plus the
 parts-in-isolation suite. The per-type figures here are the same ones tabulated in §3; both are
 `pytest --collect-only` counts, not estimates.
@@ -499,7 +500,7 @@ between planes (§1). Full detail in [`COLLABORATORS.md`](../COLLABORATORS.md) a
 cp .env.example .env
 docker compose up --build          # 3 containers; only web is published
 # → http://localhost:8000/health   → then register, set a profile, check in, see the dashboard
-pytest -q                          # 1403 pass / 44 env-gated skip
+pytest -q                          # 1419 pass / 44 env-gated skip
 ```
 
 CI reproduces the gate on every PR (ruff → bandit → pytest + a `mongo:7` service). `main` is
@@ -521,14 +522,16 @@ branch-protected and merges only on green CI.
   "Option 1" (muscle-group level, so `web` never needs `ai/exercise_catalog.py`'s exercise list and the two
   containers stay decoupled). This closes **#528 item 2** — the Advanced tier's "provide your workout
   program", which the v2 proposal §3 commits to — so it is no longer a disclosed gap but a shipped feature.
-- **Recommended training frequency (v2 §3, Beginner tier) — not built; scope stated.** The proposal's
-  beginner output list is *"Calorie target · Beginner workout program · Recommended training frequency"*.
-  The first two ship; the third does not. `training_frequency` is an **input only** — collected in the
-  profile form, validated in `web/routes/profile.py`, and consumed downstream for the calorie activity
-  band (`ai/recommendations.py::_activity_from_frequency`) and for split resolution
-  (`ai/workout_plan.py::resolve_split_preference`). Nothing produces a *recommended* frequency back to the
-  user. Disclosed rather than built (#528), under the guidelines' *"if you want to remove features, let us
-  know beforehand"*.
+- **Recommended training frequency (v2 §3, Beginner tier) — web half built; the producing half sits in
+  the AI lane.** The proposal's beginner output list is *"Calorie target · Beginner workout program ·
+  Recommended training frequency"*. The first two ship. For the third, the **web tier is ready**:
+  `web/routes/dashboard.py` relays a `recommended_frequency` field from `/predict` under the same
+  finite-number guard as `calories`, drops any value outside a trainable week, and the dashboard renders
+  it as a pill beside the calorie target — all covered by `test_dashboard_tier_and_frequency`.
+  **The value itself is produced by the recommendation engine, which REPORT §6 places in the AI lane**, so
+  it is Shiri's half to write; the field is contracted on #528 and the web side renders nothing until it
+  arrives. The one rule the contract pins: it must not echo the athlete's own `training_frequency`, since
+  a §3 Beginner supplies none. Previously disclosed as a stated gap; now being implemented instead (#528).
 - **Beginner / Intermediate / Advanced tiers (v2 §3) — built, as a derivation rather than a gate.** v2 §3
   frames the audience as three tiers with different inputs and different outputs. The app already behaved
   that way — enter a weekly programme and the balance analysis fires, leave it out and it does not — but no

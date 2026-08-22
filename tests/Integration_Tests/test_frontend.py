@@ -1387,6 +1387,22 @@ def test_the_programme_composer_sends_an_explicit_zero_and_omits_a_blank(client)
         "a blank box parses to NaN and must still be omitted, or unanswered groups arrive as 0"
 
 
+def test_the_dashboard_renders_the_recommended_frequency_beside_the_calorie_target(client):
+    """PROPOSAL-v2 §3 lists the Beginner's outputs together — "Calorie target · Beginner workout
+    program · Recommended training frequency" — and two of the three are pills on one line (#528
+    item 1).
+
+    Asserted in the served HTML because the value is produced by `ai` and merely relayed: a route
+    test proves the field arrives, and only this proves anything renders it. Without a render the
+    field is in the payload and invisible, which is how #583 stayed alive with both planes green.
+    """
+    html = client.get("/").get_data(as_text=True)
+    assert "d.recommended_frequency != null" in html, \
+        "the frequency pill must be gated on presence — `null` would render as the word null"
+    assert "sessions/week" in html, "the pill must name the unit; a bare number is not advice"
+    assert "Daily target" in html, "the calorie pill must survive beside it — both are §3 outputs"
+
+
 def test_the_dashboard_names_the_tier_without_gating_anything_on_it(client):
     """#528 item 3. §3's three tiers already exist as behaviour — enter a programme and the balance
     analysis fires — but were never named, so the structure the proposal promises was invisible.
