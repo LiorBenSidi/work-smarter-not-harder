@@ -11,6 +11,7 @@ import math
 from flask import Blueprint, current_app, jsonify, session
 
 from routes.auth import login_required
+from routes.profile import derive_tier
 from services import ai_client
 from services.db import HISTORY_VIEW_CAP
 
@@ -85,7 +86,10 @@ def dashboard():
     metrics = latest.get("metrics") if isinstance(latest, dict) else None
     if not isinstance(metrics, dict) or not metrics:
         # No check-in yet -> nothing to score. Prompt one, and flag a missing profile too (for calories).
+        # tier is derived from the profile alone, so it is reported even with no check-in yet --
+        # a brand-new athlete should still see which tier they are in and what the next one adds.
         return jsonify(profile=profile, readiness=None, calories=None, ai_status="skipped",
+                       tier=derive_tier(profile),
                        needs_checkin=True, needs_profile=profile is None), 200
 
     # Recent history unlocks the AI's trend-aware recommendations (a 3x Rest streak -> "schedule a
@@ -109,6 +113,7 @@ def dashboard():
     if not isinstance(prediction, dict):
         # ai unreachable (None) or a malformed non-object response -> degrade gracefully, never crash
         return jsonify(profile=profile, readiness=None, calories=None, plan=None,
+                       tier=derive_tier(profile),          # profile-only, so it survives an ai outage
                        ai_status="unavailable", needs_profile=profile is None), 200
 
     recs = prediction.get("recommendations")
@@ -132,6 +137,7 @@ def dashboard():
     scored_at = latest.get("timestamp") if isinstance(latest, dict) else None
     return jsonify(profile=profile, readiness=readiness,
                    calories=calories if _finite_number(calories) else None,
+                   tier=derive_tier(profile),
                    # F5's workout plan, relayed as-is once validated (#410). The card is rendered client-side;
                    # the dashboard is only the courier, so the shape stays the ai container's contract.
                    plan=_workout_plan(prediction.get("plan")),
