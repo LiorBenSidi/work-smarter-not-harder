@@ -2664,6 +2664,18 @@
       }
       if (d.calories != null) html += '<p style="margin-top:16px;text-align:center"><span class="pill">Daily target · ' + escapeHtml(d.calories) + ' kcal</span></p>';
       else if (d.readiness && d.needs_profile) html += '<p class="muted" style="margin-top:14px;text-align:center;font-size:12px">Set up your profile to get a daily calorie target.</p>';
+      // The tier the athlete is currently in, and what the next one adds (#528 item 3). Named, never
+      // gated: every output stays available to everyone, so this explains rather than restricts.
+      if (d.tier) {
+        const NEXT = {
+          beginner: "Add your equipment or a preferred split to tailor the programme.",
+          intermediate: "Add your weekly programme in Profile to unlock muscle-group balance analysis.",
+          advanced: "Full analysis unlocked — your weekly programme is being checked for balance.",
+        };
+        html += '<p class="muted" style="margin-top:10px;text-align:center;font-size:12px">'
+          + '<strong>' + escapeHtml(d.tier.charAt(0).toUpperCase() + d.tier.slice(1)) + '</strong> · '
+          + escapeHtml(NEXT[d.tier] || "") + '</p>';
+      }
       // The plan sits BELOW readiness and calories: today's verdict is the reason to open the app, the
       // week's programme is what you act on once you have it (proposal v2 §7 Feature 7).
       html += planHtml(d.plan);

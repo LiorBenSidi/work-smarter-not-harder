@@ -152,6 +152,31 @@ def validate_profile(data):
     return clean
 
 
+def derive_tier(profile):
+    """Return "beginner" | "intermediate" | "advanced" for a stored profile, or None when there is none.
+
+    PROPOSAL-v2 §3 frames the audience as three tiers that provide different things and get different
+    things back. The app already *behaves* that way -- enter a weekly programme and the balance
+    analysis fires, leave it out and it does not -- but the tier itself was never named anywhere, so
+    the structure the proposal promises was invisible (#528 item 3).
+
+    Derived, never stored: it is a reading of what the athlete has actually filled in, so it updates
+    the moment they add a field and can never drift out of sync with the profile it describes.
+    Nothing is gated on it -- every output remains available to everyone -- so a "beginner" label
+    withholds nothing; it names what is already true and what adding a programme would unlock.
+    """
+    if not isinstance(profile, dict):
+        return None
+    if profile.get("training_program"):
+        # The Advanced tier's own "provide your workout program" input (#566) -- the only field that
+        # unlocks a genuinely different output (the muscle-group balance analysis).
+        return "advanced"
+    if profile.get("equipment") or profile.get("split_preference"):
+        # Optional planning inputs: they shape the generated programme without unlocking a new output.
+        return "intermediate"
+    return "beginner"
+
+
 def _profiles():
     return current_app.config["PROFILES"]
 

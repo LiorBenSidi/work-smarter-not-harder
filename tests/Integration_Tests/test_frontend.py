@@ -1385,3 +1385,19 @@ def test_the_programme_composer_sends_an_explicit_zero_and_omits_a_blank(client)
     assert "sets > 0" not in builder, "the `> 0` filter is the #583 defect; it must not come back"
     assert "Number.isFinite(sets)" in builder, \
         "a blank box parses to NaN and must still be omitted, or unanswered groups arrive as 0"
+
+
+def test_the_dashboard_names_the_tier_without_gating_anything_on_it(client):
+    """#528 item 3. §3's three tiers already exist as behaviour — enter a programme and the balance
+    analysis fires — but were never named, so the structure the proposal promises was invisible.
+
+    The second half of the name matters more than the first: the render must EXPLAIN what the next
+    tier adds, never hide an output. If a tier label ever becomes a condition around readiness,
+    calories or the plan, this test is the wrong one to change.
+    """
+    html = client.get("/").get_data(as_text=True)
+    assert "if (d.tier)" in html, "no tier, no line — a user with no profile is not mislabelled"
+    for tier in ("beginner", "intermediate", "advanced"):
+        assert tier + ":" in html, f"the {tier} tier needs its own next-step copy"
+    assert "unlock muscle-group balance analysis" in html, \
+        "the intermediate copy must name what a programme actually buys, or the label is decoration"
