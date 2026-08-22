@@ -130,6 +130,12 @@ def dashboard():
     # calories is passed straight to the client too, so it gets the same finite-number guard (a non-finite
     # AI value would otherwise serialise as an invalid-JSON `Infinity`/`NaN` token). Absent/garbage -> null.
     calories = prediction.get("calories")
+    # PROPOSAL-v2 §3's Beginner output (#528 item 1), relayed under the same finite-number guard as
+    # calories and coerced to a whole session count. The accepted range is the ai contract's own 0-7
+    # (#528, `calculate_recommended_frequency`): 0 is a deload week, which is advice worth showing, not
+    # an absent value. Anything outside that range is not a week anyone can train, so it is dropped.
+    frequency = prediction.get("recommended_frequency")
+    recommended_frequency = int(frequency) if _finite_number(frequency) and 0 <= frequency <= 7 else None
     # The timestamp of the entry this score came from. Readiness is scored from the LATEST check-in, which
     # is only *today's* when the athlete checked in today — so the card can name the day it actually scored
     # instead of always claiming "today's check-in" (#450). Reporting it from here ties the label to the
@@ -137,6 +143,7 @@ def dashboard():
     scored_at = latest.get("timestamp") if isinstance(latest, dict) else None
     return jsonify(profile=profile, readiness=readiness,
                    calories=calories if _finite_number(calories) else None,
+                   recommended_frequency=recommended_frequency,
                    tier=derive_tier(profile),
                    # F5's workout plan, relayed as-is once validated (#410). The card is rendered client-side;
                    # the dashboard is only the courier, so the shape stays the ai container's contract.
