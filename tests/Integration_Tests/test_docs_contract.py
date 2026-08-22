@@ -1,7 +1,8 @@
 """The graded documents have to describe the suite that actually exists. OWNER: Lior.
 
-Every suite size in REPORT.md, README.md and SUBMISSION.md is hand-written, so any change to the tests
-silently invalidates them — and nothing in the repo noticed. The numbers are what a reviewer checks
+The suite size is hand-written, so any change to the tests silently invalidates it — and nothing in the
+repo noticed. It is stated in exactly one place, `docs/REPORT.md`: README and SUBMISSION point there
+rather than repeating it, so there is one number to keep true instead of several to keep in step. The numbers are what a reviewer checks
 first, and a report that claims a count the repo cannot produce undermines every other claim in it.
 
 This does not police prose. It reads the one number each document states as the suite's size and
@@ -21,8 +22,6 @@ CLAIMS = [
     ("docs/REPORT.md", r"\*\*Suite at this snapshot:\*\* \*\*(\d+) checks"),
     ("docs/REPORT.md", r"\*\*(\d+) automated checks across the seven"),
     ("docs/REPORT.md", r"(\d+) collected cases come from"),
-    ("README.md", r"Suite: \*\*(\d+) collected\*\*"),
-    ("docs/SUBMISSION.md", r"`REPORT\.md`, (\d+) tests"),
 ]
 
 
@@ -59,8 +58,6 @@ def test_the_graded_documents_state_the_suite_size_the_repo_actually_has():
 SPLITS = [
     ("docs/REPORT.md", r"the current suite is \*\*(\d+) pass,\n(\d+) skip"),
     ("docs/REPORT.md", r"suite is \*\*(\d+) pass, (\d+) skip\*\*"),
-    ("README.md", r"Suite: \*\*\d+ collected\*\* \((\d+) pass / (\d+) environment-gated\)"),
-    ("docs/SUBMISSION.md", r"\((\d+) pass / (\d+) env-gated in CI\)"),
 ]
 
 
