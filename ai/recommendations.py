@@ -215,7 +215,7 @@ def _history_recommendations(history: Any) -> list[tuple[int, str]]:
     return items
 
 
-def _program_recommendations(performed: Any) -> list[tuple[int, str]]:
+def _program_recommendations(performed: Any) -> list[tuple[float, str]]:
     """Analyze actual logged muscle-group weekly volume when present.
 
     Shape-agnostic (works on any volume distribution it's handed): the name predates this
@@ -247,21 +247,41 @@ def _program_recommendations(performed: Any) -> list[tuple[int, str]]:
     if not volumes:
         return []
 
-    items: list[tuple[int, str]] = []
+    items: list[tuple[float, str]] = []
     for muscle, sets in sorted(volumes.items()):
         if sets > 20:
-            items.append((76, f"Weekly {muscle} volume is high; consider reducing sets or spreading them across sessions."))
-        elif 0 < sets < 6:
-            items.append((58, f"Weekly {muscle} volume is low; consider adding gradual volume if it matches your goal."))
+            # Ties within the same priority band break by severity, not by which muscle group's
+            # name happens to sort first alphabetically -- further past the threshold is
+            # genuinely more urgent. Bounded to (0, 0.9): a tie-break addition can never reach
+            # the next real score above this band (79) or collide with anything else in use.
+            severity = min((sets - 20) / 40, 1.0) * 0.9
+            items.append((76 + severity, f"Weekly {muscle} volume is high; consider reducing sets or spreading them across sessions."))
+        elif sets < 6:
+            # sets is already known >= 0 (the parsing loop above only ever admits non-negative
+            # values) -- an EXCLUSIVE `0 < sets` here silently dropped a muscle logged at exactly
+            # 0, the single clearest "low" case there is: tracked, and trained for nothing.
+            severity = ((6 - sets) / 6) * 0.9
+            items.append((58 + severity, f"Weekly {muscle} volume is low; consider adding gradual volume if it matches your goal."))
 
     chest = volumes.get("chest")
     back = volumes.get("back")
-    if chest and back:
-        ratio = chest / back
-        if ratio > 1.5:
+    # `is not None`, not truthiness: both are logged-volume numbers, and 0 is a real, meaningful
+    # value here (the muscle was tracked and trained for zero sets) -- `if chest and back:` would
+    # silently skip the single most extreme imbalance this check exists to catch (one side at 0
+    # while the other is trained). Division by exactly 0 is handled explicitly rather than left to
+    # raise, and 0:0 is not an imbalance (neither side is over- or under-worked relative to the
+    # other) so it is deliberately not flagged.
+    if chest is not None and back is not None and (chest or back):
+        if back == 0:
             items.append((73, "Pressing volume is much higher than pulling volume; add back work or reduce chest volume."))
-        elif ratio < 0.67:
+        elif chest == 0:
             items.append((73, "Pulling volume is much higher than pressing volume; review upper-body balance."))
+        else:
+            ratio = chest / back
+            if ratio > 1.5:
+                items.append((73, "Pressing volume is much higher than pulling volume; add back work or reduce chest volume."))
+            elif ratio < 0.67:
+                items.append((73, "Pulling volume is much higher than pressing volume; review upper-body balance."))
 
     return items
 
