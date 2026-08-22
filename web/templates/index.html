@@ -1734,9 +1734,20 @@
       if (opts && opts.instant) {
         swap();
       } else if (!reducedMotion() && typeof document.startViewTransition === "function" && !SKIP_VIEW_TRANSITION) {
-        // .finished rejects with AbortError whenever a transition is skipped (a second switch interrupts
-        // it, or the document opts out) — unhandled, that surfaces as a page error, so it is absorbed here.
-        document.startViewTransition(swap).finished.catch(() => {});   // native cross-fade
+        // A ViewTransition exposes THREE independently-rejecting promises, and this line caught the wrong
+        // one. Measured on Chrome, on localhost and on production (#587): when a second switch interrupts
+        // the first, `.ready` REJECTS with InvalidStateError while `.finished` and `.updateCallbackDone`
+        // both RESOLVE -- the opposite of what the comment here used to assume. So the catch absorbed the
+        // promise that never rejects and left the one that does unhandled, printing
+        // `Uncaught (in promise) InvalidStateError` into the console of the graded app.
+        //
+        // Optional chaining rather than a bare `.catch`: a partial implementation could expose
+        // startViewTransition without all three promises, and `undefined?.catch` is a no-op where
+        // `undefined.catch` is a TypeError. A cosmetic console line is not worth risking a real one.
+        const _vt = document.startViewTransition(swap);   // native cross-fade
+        _vt.ready?.catch(() => {});
+        _vt.finished?.catch(() => {});
+        _vt.updateCallbackDone?.catch(() => {});
       } else {
         swap();
         const _screen = document.getElementById("screen-" + name);
