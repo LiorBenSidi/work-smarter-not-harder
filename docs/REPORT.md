@@ -577,6 +577,12 @@ branch-protected and merges only on green CI.
   out of the transition, which is what shipped (#469), and **11.6** on a real tap afterwards, the residue being
   the tab highlight moving. Every other browser keeps the cross-fade. Restoring it on iOS means giving up the
   nav material there, which is the more visible of the two.
+- **Not owed — v2 §14 Future Work and Stretch Goals.** Collaborative-filtering personalization
+  ("planned as future work, not part of the core deliverable"), smartwatch integration (Fitbit /
+  Garmin / Apple Health / Strava), progress graphs, an exercise video library, an injury-prevention
+  module, and personalized progression recommendations. None of these is a gap. Collaborative
+  filtering is worth naming specifically: it sat in §4 Cold Start in the original proposal, so
+  anyone diffing the two documents will see it move — v2 moved it deliberately, to §14.
 
 ---
 
