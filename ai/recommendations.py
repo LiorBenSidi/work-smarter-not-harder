@@ -108,6 +108,48 @@ def calculate_calories(features: Any) -> int | None:
     return int(round(numeric)) if numeric is not None else None
 
 
+def calculate_recommended_frequency(features: Any) -> int | None:
+    """Return a recommended weekly training frequency (0-7 sessions) for a complete valid
+    profile, else None -- the same "no profile yet" gate `calculate_calories` uses.
+
+    Deliberately does not read `training_frequency`: this is the athlete's own input, and a
+    recommendation that echoed it back would be indistinguishable from the input it is meant to
+    advise on. Derived from goal and age instead, per the proposal's Beginner-tier field (a
+    Beginner supplies no frequency at all).
+    """
+    if not isinstance(features, dict):
+        return None
+
+    weight = _finite_number(
+        features.get("weight", features.get("weight_kg"))
+    )
+    height = _finite_number(
+        features.get("height", features.get("height_cm"))
+    )
+    age = _finite_number(features.get("age"))
+
+    if (
+        weight is None
+        or height is None
+        or age is None
+        or weight <= 0
+        or height <= 0
+        or age <= 0
+    ):
+        return None
+
+    goal = str(features.get("goal", "maintain")).strip().lower()
+    frequency = {
+        "gain": 5,
+        "lose": 5,
+    }.get(goal, 4)
+
+    if age >= 50:
+        frequency -= 1
+
+    return max(0, min(7, frequency))
+
+
 def _current_recovery_recommendations(state: str, features: dict[str, Any]) -> list[tuple[int, str]]:
     """Return prioritized recommendations from today's check-in."""
     sleep = _finite_number(features.get("sleep_hours"))
