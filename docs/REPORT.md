@@ -508,31 +508,13 @@ branch-protected and merges only on green CI.
 
 ---
 
-## 8. Open items (tracked; not blockers for the built planes)
+## 8. Proposal vs. build — every difference, and why
 
-- **F5 — workout generator (Shiri)** — required by the v2 proposal. **AI generation built and wired into
-  `/predict`**: `resolve_split_preference` + `generate_workout_days` produce a real plan (goal + days +
-  equipment + split → plan from the program catalog) on every live prediction. **Dashboard relay done too**:
-  `GET /dashboard` relays the plan and the card renders it (#410, closed). No swap (TA-confirmed). Tracked in #276.
-  F6's shape fix merged (PR #529): `_program_recommendations` now reads `features["performed"]` (actual
-  logged training volume) instead of prescribed `program` data — the analysis can genuinely fire now.
-  **And it now does.** #566 built the web/db producer that had never existed: the Advanced tier enters its
-  own programme on the profile as weekly sets per muscle group, and `services/ai_client.build_features`
-  translates it to `features["performed"]` on every prediction. Built to `docs/PERFORMED_VOLUME_SPEC.md`
-  "Option 1" (muscle-group level, so `web` never needs `ai/exercise_catalog.py`'s exercise list and the two
-  containers stay decoupled). This closes **#528 item 2** — the Advanced tier's "provide your workout
-  program", which the v2 proposal §3 commits to — so it is no longer a disclosed gap but a shipped feature.
-- **Recommended training frequency (v2 §3, Beginner tier) — built end-to-end.** The proposal's
-  beginner output list is *"Calorie target · Beginner workout program · Recommended training
-  frequency"* — all three now ship. `ai/recommendations.py::calculate_recommended_frequency`
-  produces the value (#591); `web/routes/dashboard.py` relays it from `/predict` under the same
-  finite-number guard as `calories`, drops any value outside a trainable week, and the dashboard
-  renders it as a pill beside the calorie target. The one rule the contract pins — it must not
-  echo the athlete's own `training_frequency`; the function never reads that field, deriving from
-  goal and age instead, so the recommendation stays independent of the input even where the two
-  coincide — is enforced on
-  both sides and covered by `test_dashboard_tier_and_frequency` (web) and 7 functions in
-  `test_ai_recommendations.py` (ai). Previously a disclosed gap; closed by #590 + #591.
+Every feature in v2 §7 is built and live (§2). What follows is the complete list of places where the
+implementation differs from the proposal's wording — five differences and one clarification, none of
+them a missing capability. Two were settled in advance: the hand-curated catalog was approved by the
+TA, and §5 explicitly left its feature list open.
+
 - **§3's beginner input list is one field short of what the profile requires.** v2 §3 says
   beginners *"give us the basics — age, gender, height, weight, and their goal"*. The build also
   requires `training_frequency` (`web/routes/profile.py:143`), so a profile submitted with exactly
@@ -556,9 +538,6 @@ branch-protected and merges only on green CI.
   the same three tiers by slightly different fields — training frequency is required of everyone
   here rather than marking the intermediate step (`:143`) — so the ladder is the one the proposal
   describes, keyed to the optional inputs the athlete actually supplies (#528 item 3).
-- **F6 + F7 merge** — in scope, not pending: the merge is in the v2 proposal the team sent the TA (28 Jun),
-  and the TA's guidelines explicitly permit notified feature changes; the balance rule is built
-  (`_program_recommendations`). See `ROADMAP.md` → "Scope decision".
 - **Exercise catalog (F5/F6)** — hand-curated, not derived from a public dataset (evaluated and rejected;
   see `ai/README.md` → "Exercise catalog" for the four datasets researched and why none replaced it).
   Every muscle group has at least 6 exercises, measured directly from `EXERCISE_CATALOG`:
@@ -576,20 +555,6 @@ branch-protected and merges only on green CI.
   | Core | 7 |
   | Calves | 6 |
   | **Total** | **99** |
-- **Exact readiness categories + final feature set** *(SETTLED — baked into the shipped `model.pkl`:
-  features `sleep_hours` · `fatigue` · `soreness` · `training_load`, class labels + ready-threshold in the
-  same bundle; the `/predict` contract shapes were pinned all along)*.
-- **Deploy ordering** and the **forum real-time transport** *(both SETTLED — live on Azure over HTTPS since
-  8 Jul with redeploy-on-merge, and the real-time layer shipped as SSE (`/events`, `event: forum`) — ✅ in §2)*.
-- **No screen-switch cross-fade on iOS Safari** — a deliberate platform difference, not an oversight, and it
-  stays. WebKit does not keep a live backdrop for an element captured into a view transition, so the floating
-  nav's `backdrop-filter` had nothing to sample and the pill went opaque for the length of the animation.
-  Measured on an iPhone 16e (iOS 26.2) from a 30 fps recording of the real 0.3 s switch, peak change in the
-  pill (lower is better): **21.1** with the bug · **22.7** with the glass removed entirely · **22.9** with a
-  `view-transition-name` on the nav — i.e. no better than having no glass at all · **8.8** opting the document
-  out of the transition, which is what shipped (#469), and **11.6** on a real tap afterwards, the residue being
-  the tab highlight moving. Every other browser keeps the cross-fade. Restoring it on iOS means giving up the
-  nav material there, which is the more visible of the two.
 - **Not owed — v2 §14 Future Work and Stretch Goals.** Collaborative-filtering personalization
   ("planned as future work, not part of the core deliverable"), smartwatch integration (Fitbit /
   Garmin / Apple Health / Strava), progress graphs, an exercise video library, an injury-prevention
