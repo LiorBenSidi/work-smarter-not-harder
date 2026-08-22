@@ -2662,7 +2662,15 @@
         html += confidenceHtml(d.readiness.proba);
         html += "</div>";
       }
-      if (d.calories != null) html += '<p style="margin-top:16px;text-align:center"><span class="pill">Daily target · ' + escapeHtml(d.calories) + ' kcal</span></p>';
+      // PROPOSAL-v2 §3's Beginner outputs sit together on one line: "Calorie target · Beginner workout
+      // program · Recommended training frequency". Two of the three are pills here; the third is the
+      // plan card below. Both pills are omitted rather than shown empty when ai cannot supply them.
+      const pills = [];
+      if (d.calories != null) pills.push('<span class="pill">Daily target · ' + escapeHtml(d.calories) + ' kcal</span>');
+      // 0 is a legitimate value in ai's 0-7 contract -- a deload week -- so it is named rather than
+      // printed as "0 sessions/week", which reads as a broken number instead of as advice (#590).
+      if (d.recommended_frequency != null) pills.push('<span class="pill">Suggested · ' + (d.recommended_frequency === 0 ? 'a rest week' : escapeHtml(d.recommended_frequency) + ' sessions/week') + '</span>');
+      if (pills.length) html += '<p style="margin-top:16px;text-align:center;display:flex;gap:8px;justify-content:center;flex-wrap:wrap">' + pills.join("") + '</p>';
       else if (d.readiness && d.needs_profile) html += '<p class="muted" style="margin-top:14px;text-align:center;font-size:12px">Set up your profile to get a daily calorie target.</p>';
       // The tier the athlete is currently in, and what the next one adds (#528 item 3). Named, never
       // gated: every output stays available to everyone, so this explains rather than restricts.
