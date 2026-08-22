@@ -2,10 +2,10 @@
 
 **Course:** Writing Software for Machine Learning (00950219), Technion — Spring 2026
 **Team:** Shiri Haboob · Lior Ben Sidi · Elad Nachalieli
-**Repository:** `LiorBenSidi/work-smarter-not-harder` · **Due:** 30 Aug 2026
-**Live site:** <https://app.worksmarternotharder.dev> — deployed from green `main` by the CI/CD pipeline; `/ready` gates every deploy.
+**Repository:** `LiorBenSidi/work-smarter-not-harder` · **Live site:** <https://app.worksmarternotharder.dev>
+· **Due:** 30 Aug 2026, 23:59
 
-> This is the living project report — the final deliverable required by the guidelines: an explanation of
+> This is the living project report — the 30.08 deliverable required by the guidelines: an explanation of
 > the app, a **feature × tests matrix drawn from the real suite**, and a **risk assessment**. It is kept
 > in-repo and updated as the build progresses. Spec sources: the **revised proposal of 28 Jun** — the version
 > the TA responded to, mirrored in-repo as [`PROPOSAL-v2.md`](PROPOSAL-v2.md) (**the contract**); the original
@@ -18,7 +18,7 @@
 > The 23th of August, 2026"*; the course later granted an extension on Moodle to **30 Aug 2026**
 > (submission box *"Actual Submission - Extention until 30.08"*), which is the date this report uses.
 >
-> **Last updated:** 2026-08-22 · **Suite at this snapshot:** **1421 checks, 1377 passing / 44 environment-gated**
+> **Last updated:** 2026-08-22 · **Suite at this snapshot:** **1426 checks, 1382 passing / 44 environment-gated**
 > (+ 20 browser e2e scenarios)
 > (`python -m pytest tests/ -q`; the env-gated ones run in CI's `compose-e2e` job against the live containers).
 > Since the 07-12 snapshot (783 tests): **Shiri's Random Forest landed** — a real `ai/model/model.pkl` +
@@ -151,7 +151,10 @@ documents keyed by `post_id`, so a hot thread can't grow a post toward Mongo's 1
 
 `$jsonSchema` validators cover `users`, `profiles`, `analysis_history`, `forum_posts`, `messages` and
 `notifications`; `forum_comments`, `meta` and `media` carry none. **Not built:** the proposal's `programs`
-collection (v2 §9), which holds the catalog the workout generator draws on — it lands with **F5** (#276).
+collection (v2 §9), which was to hold the catalog the workout generator draws on. **F5 shipped without
+it** — the catalog lives as code in `ai/exercise_catalog.py` (99 exercises), which versions it with the
+engine that reads it and keeps it out of the `web`/`db` seam entirely. A deliberate deviation from v2 §9,
+not an omission (#276).
 
 ---
 
@@ -193,7 +196,9 @@ not a per-line credit — see §6.
 CI gate are complete and **proven end-to-end** (a real `web → ai → db` request path, the real-Mongo integration
 suite, and in-container logging all verified live); the calorie engine is built + unit-tested and its value is now live in `/predict`, the Random Forest model
 has landed (real `ai/model/model.pkl` + `inference.py`), and the deploy / real-time / scale plane are
-complete — the remaining work is integration + hardening toward the 30 Aug submission.
+complete. All eight of the proposal's §7 Main Features are built (§2); what remains before the **30 Aug**
+submission is the hand-in itself — the demo video and grader access to the repository — plus continued
+hardening. The proposal commitments we did *not* build are disclosed in §8 rather than left implicit.
 
 ---
 
@@ -208,23 +213,23 @@ Columns are the test-type dirs under `tests/`. Cells name representative file(s)
 | Feature / component | Unit | Integration | Negative | System / Full-System | Security | Stress |
 |---|---|---|---|---|---|---|
 | **F1 Accounts / Auth** | `test_auth_validation` (25) · `test_email` (18) | `test_auth_flow` (13) · `test_login_otp` (16) · `test_password_reset` (12) · `test_register_verify` (11) · `test_account_*` (29) · `test_login_otp_reuse` (8) · `test_otp_resend` (4) · `test_email_smtp_delivery` (2) | `test_auth_negative` (33) | `test_e2e` leg | `test_auth` (10) · `test_csrf` (6) · `test_debug_email_override` (7) | — |
-| **F2 Profile** | `test_profile_validation` (77) | `test_profile_flow` (9) · `test_identity_display` (3) | in `test_profile_checkin_negative` (59) | `test_e2e` leg | `test_profile` (1) | — |
-| **F3 Readiness (web path)** | `test_checkin_validation` (23) · `test_ai_client` (13) | `test_checkin_flow` (13) · `test_web_ai` (4) | in `test_profile_checkin_negative` (59) | `test_e2e` leg | — | — |
-| **F3 Readiness (model — Shiri)** | `test_ai_inference` (16) · `test_ai_recommendations` (19) · `test_ai_binning` (21) | `test_ai_queue_api` (27, loads the real `model.pkl`) | — | — | — | — |
+| **F2 Profile** | `test_profile_validation` (77) | `test_profile_flow` (9) · `test_identity_display` (3) | in `test_profile_checkin_negative` (60) | `test_e2e` leg | `test_profile` (1) | — |
+| **F3 Readiness (web path)** | `test_checkin_validation` (23) · `test_ai_client` (13) | `test_checkin_flow` (13) · `test_web_ai` (4) | in `test_profile_checkin_negative` (60) | `test_e2e` leg | — | — |
+| **F3 Readiness (model — Shiri)** | `test_ai_inference` (20) · `test_ai_recommendations` (19) · `test_ai_binning` (21) | `test_ai_queue_api` (27, loads the real `model.pkl`) | — | — | — | — |
 | **F4 Calorie** | `test_calories` (14) | via `test_checkin_flow` / `test_dashboard_flow` | — | — | — | — |
 | **F5 Workout generator** | `test_workout_plan` (121) · `test_exercise_catalog` (13) | `test_dashboard_flow` (23) — `test_dashboard_relays_a_resolved_workout_plan`, the plan surviving the ai -> web relay verbatim | — | — | — | — |
 | **F6 Program balance (Advanced-tier input)** | `test_ai_client` (13) — the `training_program` -> `performed` translation | `test_web_ai` (4) — the web->ai seam, including web's real payload run through ai's real engine · `test_profile_flow` (9) | `test_training_program_negative` (19) | — | (profile wall) | — |
-| **F7 Action plan / recommendations** | (engine covered by the F3-model unit tests) | `test_web_ai` (4) · `test_dashboard_flow` (13) | — | `test_e2e` leg | — | — |
-| **F8 Dashboard** | — | `test_dashboard_flow` (13) | — | `test_e2e` leg | `test_dashboard` (1) | — |
+| **F7 Action plan / recommendations** | (engine covered by the F3-model unit tests) | `test_web_ai` (4) · `test_dashboard_flow` (23) | — | `test_e2e` leg | — | — |
+| **F8 Dashboard** | — | `test_dashboard_flow` (23) | — | `test_e2e` leg | `test_dashboard` (1) | — |
 | **F9 History** | — | `test_history_flow` (4) | — | `test_e2e` leg | `test_history` (1) | — |
 | **Online Forum (CRUD/UI, votes)** | `test_forum_validation` (16) | `test_forum_flow` (19) · `test_comment_votes` (7) | `test_forum_negative` (35) | `test_e2e` leg | `test_forum` (3) | in `test_load` (forum flood) |
 | **Forum real-time (DM · notifications · SSE)** | `test_messages_db` (18) | `test_messages` (28) · `test_forum_notifications` (10) | in `test_messages_media_negative` (30) | — | `test_messages_privacy` (4) | — |
 | **Forum engagement metric (Elad)** | `test_db_engagement` (7) | `test_engagement` (7) | — | — | — | — |
-| **Media (Elad)** | `test_media_store` (3) | `test_media` (8) · `test_frontend_media_composer` (18) · `test_elad_lane_journey` (4) | `test_messages_media_negative` (30) | `test_elad_lane_live` (1, live HTTP incl. 10 MB cap) | `test_media_limits` (11) | — |
-| **AI job-queue +5 (Elad)** | `test_jobqueue` (40) · `test_bench` (18) | `test_ai_queue_contract` (21) | — | `test_ai_queue_live` (10) | `test_ai_queue` (28) | `test_pool_scaling` (2) · `test_queue_backpressure` (6) |
-| **Deploy / scale (Elad)** | — | `test_deploy_contract` (24) · `test_scale_contract` (9) · `test_pin_contract` (4) | — | — | — | — |
+| **Media (Elad)** | `test_media_store` (8) | `test_media` (39) · `test_frontend_media_composer` (18) · `test_elad_lane_journey` (4) | `test_messages_media_negative` (30) | `test_elad_lane_live` (1, live HTTP incl. 10 MB cap) | `test_media_limits` (11) | — |
+| **AI job-queue +5 (Elad)** | `test_jobqueue` (40) · `test_bench` (18) | `test_ai_queue_contract` (22) | — | `test_ai_queue_live` (10) | `test_ai_queue` (28) | `test_pool_scaling` (2) · `test_queue_backpressure` (6) |
+| **Deploy / scale (Elad)** | — | `test_deploy_contract` (32) · `test_scale_contract` (11) · `test_pin_contract` (4) | — | — | — | — |
 | **Rate-limiting / anti-spam (Elad)** | — | — | — | — | `test_rate_limit` (9) | in `test_load` |
-| **Data layer (`db.py` + Mongo)** | `test_db` (67) · `test_backup_script` (2) · `test_seed` (8) | `test_db_mongo` (22, real Mongo) · `test_real_mongo_guard` (7) | — | — | (injection-safe queries) | — |
+| **Data layer (`db.py` + Mongo)** | `test_db` (67) · `test_backup_script` (2) · `test_seed` (8) · `test_seed_script` (2, the seeding wrapper's docker invocation — #580) | `test_db_mongo` (22, real Mongo) · `test_real_mongo_guard` (7) | — | — | (injection-safe queries) | — |
 | **Frontend (SPA / CSRF / a11y / mobile)** | `test_frontend_mobile_guards` (15) | `test_frontend` (39) | — | `test_e2e` leg | `test_csrf` (6) · `test_web_hardening` (4) · `test_review_hardening` (3) | — |
 | **Observability (logging)** | `test_logging_config` (21) | — | — | — | (access-log path escaping) | — |
 | **App config / debug flag / secret** | `test_config` (16) · `test_scaffold` (4) | — | — | — | (no `.env` tracked) | — |
@@ -233,28 +238,28 @@ Columns are the test-type dirs under `tests/`. Cells name representative file(s)
 | **Fault tolerance / isolation** | — | — | — | `test_fault_isolation` (2) · Full-System `test_parts_in_isolation` (12) | — | — |
 | **Whole-system journey** | — | — | — | `test_e2e` (1) · Full-System `test_everything_together_sync` (15) | — | — |
 
-**Totals by type (full suite, `pytest --collect-only`):** Unit **609** · Integration **494** · Negative **177** ·
-System **14** · Full-System **27** · Security **88** · Stress **12** → **1421 automated checks across the seven
+**Totals by type (full suite, `pytest --collect-only`):** Unit **613** · Integration **495** · Negative **177** ·
+System **14** · Full-System **27** · Security **88** · Stress **12** → **1426 automated checks across the seven
 pytest suites**, plus **20 browser end-to-end scenarios** driven separately (`tests/E2E_Tests/`, run in CI as
 the *e2e (browser · desktop + mobile)* job — not counted in the pytest total). This matches the header count.
 
-Read the total as *checks*, not as hand-written test functions: 1421 collected cases come from **1040 test
+Read the total as *checks*, not as hand-written test functions: 1426 collected cases come from **1045 test
 functions** (measured with `grep -c "^def test_"` across `tests/`), the remainder being parametrised cases (one `@parametrize` over 11 malformed payloads is 11
 collected cases, not 11 tests written). The suite is deliberately weighted toward the layers where a
 regression is cheapest to catch — unit and negative input walls — rather than toward volume.
 
-**Pass / skip:** the pre-07-12 snapshot was **747 pass, 36 skip in ~47 s**; the current suite is **1377 pass,
+**Pass / skip:** the pre-07-12 snapshot was **747 pass, 36 skip in ~47 s**; the current suite is **1382 pass,
 44 skip** (`python -m pytest tests/ -q`); in CI, where the `mongo:7` service is present, the same
-suite is **1403 pass, 18 skip**. All **44** local skips are env-gated and *not broken* — they run the
+suite is **1408 pass, 18 skip**. All **44** local skips are env-gated and *not broken* — they run the
 moment their dependency is present:
 
-- `test_db_mongo` (21) — the real-Mongo integration suite; skips without `TEST_MONGO_URI`, and **runs in CI**
+- `test_db_mongo` (22) — the real-Mongo integration suite; skips without `TEST_MONGO_URI`, and **runs in CI**
   against a `mongo:7` service on every PR.
 - `test_seed_mongo` (4) — the real-Mongo cold-seed test; same `TEST_MONGO_URI` gate, also **runs in CI**.
 - `test_ai_queue_live` (10) — the live AI-queue behaviour (bounded queue + process pool over HTTP); runs when
   `AI_BASE_URL` points at the running `ai` container, as CI's `compose-e2e` job does.
 - `test_load` (4) — the live-stack stress burst; runs when `E2E_BASE_URL` points at a live stack.
-- `test_e2e` + `test_elad_lane_live` (2) — full-stack system journeys; run against a live stack (`E2E_BASE_URL`).
+- `test_e2e` + `test_elad_lane_live` (1) — full-stack system journeys; run against a live stack (`E2E_BASE_URL`).
 - `test_fault_isolation` (2) — destructive container-stop resilience checks; run with `FAULT_TEST=1`.
 
 With the live stack up (`TEST_MONGO_URI` + `AI_BASE_URL` + `E2E_BASE_URL` set), the real-Mongo, live-AI-queue,
@@ -274,12 +279,12 @@ The five canonical types live under `tests/{Unit,Integration,System,Stress,Secur
 `Negative_Tests/` for adversarial-input coverage and `Full_System_Tests/` for whole-stack journeys), run on any
 machine (env vars, no local paths), and are exercised by CI on every PR. A run that collects **0 tests fails** the gate.
 
-- **Unit (609)** — pure functions and single components in isolation: input validators (auth / profile /
+- **Unit (613)** — pure functions and single components in isolation: input validators (auth / profile /
   check-in / forum), the calorie formula, the `db.py` CRUD and Mongo-internals logic (against an in-memory
   fake), the logging configuration, and app config. Heavily parametrized on boundary and adversarial inputs
   (e.g. profile validation rejects injection objects, bools-as-numbers, and out-of-range values across every
   field).
-- **Integration (494)** — components wired together through the Flask test client: the auth flow, profile
+- **Integration (495)** — components wired together through the Flask test client: the auth flow, profile
   round-trip, check-in → `ai /predict` → persist, dashboard, history, and the full forum lifecycle. Two
   boundary suites are notable: `test_web_ai` stubs the `web → ai` HTTP seam with a contract-shaped response
   and asserts the dashboard surfaces it (and degrades to `ai_status: unavailable` when `ai` returns
@@ -295,7 +300,7 @@ machine (env vars, no local paths), and are exercised by CI on every PR. A run t
   (`test_csrf`), NoSQL-injection-safe queries (`test_profile`, `test_forum`), ownership enforcement on
   forum edit/delete (403), auth-gating of dashboard/history, and response-hardening (`test_web_hardening`).
 
-The two supporting directories complete the 1421: **Negative (177)** — adversarial and malformed input across
+The two supporting directories complete the 1426: **Negative (177)** — adversarial and malformed input across
 auth, profile, check-in, forum and media — and **Full-System (27)** — whole-stack journeys in-process, plus the
 parts-in-isolation suite. The per-type figures here are the same ones tabulated in §3; both are
 `pytest --collect-only` counts, not estimates.
@@ -493,7 +498,7 @@ between planes (§1). Full detail in [`COLLABORATORS.md`](../COLLABORATORS.md) a
 cp .env.example .env
 docker compose up --build          # 3 containers; only web is published
 # → http://localhost:8000/health   → then register, set a profile, check in, see the dashboard
-pytest -q                          # 1372 pass / 44 env-gated skip
+pytest -q                          # 1382 pass / 44 env-gated skip
 ```
 
 CI reproduces the gate on every PR (ruff → bandit → pytest + a `mongo:7` service). `main` is

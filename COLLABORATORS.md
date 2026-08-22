@@ -48,7 +48,7 @@ your repo root, and `docker compose up --build`. It's gitignored — never commi
 1. **Kickoff** — confirm the split, run the stack, claim your PERSON file.
 2. **Contract change** — anyone touching a shared contract (above) flags it in the PR + the group chat.
 3. **Pre-demo** (before 16 Jul) — integrate; the MVP runs end-to-end.
-4. **Pre-submit** (before 23 Aug) — freeze, full test suite, report + video.
+4. **Pre-submit** (before **30 Aug**, 23:59) — freeze, full test suite, report + video.
 
 ## Plan & rubric
 Phased build plan: [`docs/ROADMAP.md`](docs/ROADMAP.md). Grading rubric (75 + 5 (Job Queue) + 10 + 10): [`docs/GUIDELINES.md`](docs/GUIDELINES.md) (supersedes [`docs/FEEDBACK.md`](docs/FEEDBACK.md)).

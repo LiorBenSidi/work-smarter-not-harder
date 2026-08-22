@@ -123,8 +123,10 @@ skip without their dependency and run the moment it exists (they are not unwritt
 # the cross-container harness: boots web+db+ai + a test-runner container, exits with the runner's code
 docker compose -f docker-compose.yml -f docker-compose.test.yml up --build --exit-code-from tests
 
-TEST_MONGO_URI=mongodb://localhost:27017 pytest tests/Integration_Tests/test_db_mongo.py  # real Mongo
-E2E_BASE_URL=http://localhost:8000       pytest tests/System_Tests                        # live stack
+# Both need a reachable service, and `db`/`ai` publish no host port (only `web` is exposed), so from
+# the host these degrade to clean SKIPS — the harness above is what actually runs them.
+TEST_MONGO_URI=mongodb://localhost:27017/worksmarter_test pytest tests/Integration_Tests/test_db_mongo.py
+E2E_BASE_URL=http://localhost:8000                        pytest tests/System_Tests
 ```
 `AI_BASE_URL` un-skips the live job-queue suite (real worker processes, concurrent `/predict`, a burst shedding
 with 503). The harness above sets it to `http://ai:5000` **inside** the compose network — `ai` publishes no host
@@ -240,17 +242,19 @@ auto-deploying every green `main` to Azure over HTTPS. The **Random Forest** beh
 too (`ai/model/model.pkl`, baked into the image). The **forum cold-seed** is built too — a deliberate
 demo/review tool (`db/seed.py`: fake clients + posts + comments + likes); a fresh database is left
 **empty by design** (a real deployment starts empty), so run the seed when you want a populated app to
-show. Suite: **1421 collected** (1377 pass / 44 environment-gated), green in CI (real-Mongo IT runs on the `mongo:7` service).
+show. Suite: **1426 collected** (1382 pass / 44 environment-gated), green in CI (real-Mongo IT runs on the `mongo:7` service).
 
 **Remaining:** tracked live in the [Issues tab](https://github.com/LiorBenSidi/work-smarter-not-harder/issues).
-The graded gaps that block the submission are **closed** — F5's dashboard display (#410), comment media
-(#407) and the media-only DM notification (#408) all shipped. What is still open is documentation and
-polish: the report's per-type counts (#527), the proposal features we did not build and must disclose
-(#528), the streak badge below 380px (#525), the AI model backlog (#276), and the submission-tracking
-issues (#374 · #400 · #434 · #531). Risk assessment and the honest
+The graded gaps that block the submission are **closed** — F5's dashboard display (#410), F6's Advanced-tier
+programme input (#566), comment media (#407) and the media-only DM notification (#408) all shipped, as did
+the report's per-type counts (#527) and the streak badge below 380px (#525). **No build work is outstanding.**
+What is still open is disclosure and review: the proposal commitments we did not build and must disclose
+(#528), the AI model backlog (#276), platform verification on Windows (#580), an E2E-reliability review
+(#568), and the submission-tracking issues (#374 · #400 · #434 · #531). Risk assessment and the honest
 "what we did *not* mitigate" list: [`docs/REPORT.md`](docs/REPORT.md) §5.
 
 **Reviewing / grading this?** Start with [`docs/REVIEWER_NOTES.md`](docs/REVIEWER_NOTES.md) — how to run + log in
 locally (no mailbox needed), and a known-limitations / by-design table so a documented constraint isn't logged as a bug.
 
-Final project due **23 Aug 2026** (demo Week 12, present 16 July).
+Final project due **Sun 30 Aug 2026, 23:59** (extended from 23 Aug; demo Week 12, presented 16 July).
+Live site: <https://app.worksmarternotharder.dev>

@@ -25,10 +25,22 @@ and embedded images. Don't recreate that situation: **edit the source and re-ren
 | File | What it is |
 |---|---|
 | `poster.html` + `poster-assets/` | the poster's **source**. Edit this, never the PDF |
+| `demo.html` | the **clip's** source — one `.slide` per segment. Edit this, never the MP4 |
 | `seed-for-screenshots.py` | fills the two gaps `db/seed.py` leaves — check-in history and a DM thread |
 | `capture-screenshot.mjs` | re-takes an app mockup by driving the real UI |
+| `render-demo.mjs` | shoots `demo.html`'s slides to 1920×1080 PNGs |
+| `build-demo.sh` | renders the slides, stitches `demo.mp4`, re-checks the gallery rules |
 | `build.sh` | renders the PDF, rebuilds the zip, validates the result |
 | `metadata.json` | the gallery entry's text |
+
+**`demo.mp4` had no source until now**, which is the same trap this section opens with. When F5's
+workout plan and the Advanced-tier programme (#566) shipped, the clip could not be updated — only
+remade by hand — so it went on showing four screens while the poster had grown to eight. `demo.html`
+closes that: it reuses the **same `poster-assets/` tiles the poster uses**, so re-shooting a tile
+updates both, and the two can never drift apart.
+
+A segment's screen time lives in its own `data-secs` attribute, beside its content, so changing what
+a slide says and how long it stays are one edit in one file.
 
 ### Populating the app first
 
@@ -38,6 +50,7 @@ only, so run both:
 
 ```sh
 ./seed.sh                                    # users + forum posts/comments (existing tool)
+MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' \
 docker compose run --rm -v "$PWD:/repo" \
   -e MONGO_URI="mongodb://db:27017/worksmarter" \
   --entrypoint sh web -c 'exec python /repo/presentation/showoff/seed-for-screenshots.py'
@@ -70,24 +83,45 @@ Then shoot the screen you need:
 
 ```sh
 node presentation/showoff/capture-screenshot.mjs presentation/showoff/poster-assets/shot-6-plan.png
-node presentation/showoff/capture-screenshot.mjs presentation/showoff/poster-assets/shot-7-profile.png profile
+node presentation/showoff/capture-screenshot.mjs presentation/showoff/poster-assets/shot-7-profile.png   profile
+node presentation/showoff/capture-screenshot.mjs presentation/showoff/poster-assets/shot-8-programme.png programme
 ```
 
 It registers a throwaway account and fills a profile — including the Advanced-tier weekly programme
 (#566) — then either files a check-in and shoots the plan card, or shoots the profile card directly.
-Both run at the same mobile viewport as the other tiles. For a screen it does not cover yet, add a
-branch next to the `profile` one; the harness API is in
+All three run at the same mobile viewport as the other tiles. For a screen it does not cover yet, add
+a branch next to the `profile` one; the harness API is in
 [`tests/E2E_Tests/lib/cdp.mjs`](../../tests/E2E_Tests/lib/cdp.mjs).
 
+**Why `profile` and `programme` are two tiles of one screen.** The profile card is ~2597 CSS px tall,
+and a tile prints only its **top ~737** — the poster crops to `aspect-ratio: 741/1400` from the top.
+Card-top through programme-bottom spans ~2223 px, so fitting both would take roughly a 0.33× zoom:
+about 4px type. Two tiles cost nothing, because at seven the four-column grid left row two holding
+three with a gap; the eighth fills it without adding a row or a millimetre of sheet.
+
+The `programme` branch does not pick its scroll offset by eye — it sweeps candidate offsets and keeps
+the one that lands the most muscle groups on the **printed** band while keeping the section heading
+visible and the equipment chips fully clear of the sticky header. It then prints how many groups
+survived the crop, because measuring against the viewport instead of the printed band is exactly how
+#566 ended up cropped off the sheet in the first place.
+
 **Which tiles actually go stale:** work out which screens a change touched rather than re-shooting
-all seven. `git log <last-shot>..HEAD -- web/ ai/` and then checking the hunk line numbers against
+all eight. `git log <last-shot>..HEAD -- web/ ai/` and then checking the hunk line numbers against
 the template is enough — an `ai/` change to exercise selection dates `shot-6-plan`, a profile-form
-change dates `shot-7-profile`, and neither touches the other five.
+change dates `shot-7-profile` and `shot-8-programme`, and neither touches the other five.
 
 Tiles are cropped to a shared aspect ratio in CSS, so a shot taken at a different viewport still
 lines the grid up instead of stretching its row.
 
 ### Rebuild and check
+
+If you changed the **clip**, rebuild it first — `build.sh` packages `demo.mp4`, it does not render it:
+
+```sh
+bash presentation/showoff/build-demo.sh
+```
+
+Then rebuild the package:
 
 ```sh
 bash presentation/showoff/build.sh
@@ -96,6 +130,13 @@ bash presentation/showoff/build.sh
 Renders `poster.html` → `poster.pdf` with headless Chrome, rezips, and validates: file list, required
 metadata fields, ~20/~100 word descriptions, one-page A3 geometry, and the video's duration,
 resolution and silence.
+
+One ffmpeg trap worth knowing, since it cost a rebuild: the concat demuxer's `duration` idiom needs
+the final file repeated, and that repeat **replays** the last slide for the same duration again — a
+5s outro ran 10s and a 57s manifest produced a 62s file. `build-demo.sh` therefore encodes one
+segment per slide with an exact `-t` and concatenates those, so the clip's length is exactly the sum
+of the `data-secs` in `demo.html`. It also passes `-nostdin`, without which ffmpeg eats the build
+loop's input and the next slide's path arrives with its leading `/` missing.
 
 The geometry check needs `pdfplumber`. Without it that check **skips rather than fails**, which is
 the one you least want to miss — so point `GPV` at an interpreter that has it:
@@ -127,8 +168,9 @@ omitted and the live site stays reachable through `links`.
 
 ## Writing the copy so it survives
 
-The text names **no counts and no vendors**, on purpose. The exercise catalog went 87 → 98
-mid-project and is still growing; naming a number would have dated the poster within a week. Same
+The text names **no counts and no vendors**, on purpose. The exercise catalog grew several times
+mid-project and may grow again; naming a number would have dated the poster within a week — and would
+have made a routine catalog edit a reason to re-render and re-upload the zip. Same
 reasoning retired "Brevo" and "name.com" — the app is provider-agnostic (`SMTP_HOST` is an env var),
 so naming whichever provider we happen to use makes the poster wrong the day someone switches.
 

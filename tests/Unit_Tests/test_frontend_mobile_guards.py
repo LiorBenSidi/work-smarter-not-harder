@@ -220,3 +220,36 @@ def test_identifier_inputs_suppress_phone_autocapitalisation():
             f'#{input_id} must declare autocapitalize="none" — {why}'
         assert 'autocorrect="off"' in markup, \
             f'#{input_id} must declare autocorrect="off" — an identifier has to arrive exactly as typed'
+
+
+# ---- the streak badge keeps a readable label at the narrowest breakpoint (#525) ----
+def test_every_streak_badge_branch_keeps_text_the_narrow_breakpoint_does_not_hide():
+    """Each branch that fills #streak-badge must leave at least one span the narrow media query keeps.
+
+    The badge is a `role="status"` live region and its only other child is an `aria-hidden` icon, so a
+    branch built solely from a class that `@media (max-width:380px)` sets to `display:none` renders a
+    bare glyph AND announces nothing — the assistive tree has no text node left to read.
+
+    Both halves are read out of the file rather than written down here: the hidden classes come from
+    the stylesheet, the branches from `renderStreak`. Add a rule that hides another class, or a branch
+    that uses only hidden ones, and this fails without anyone remembering to update it. It asserts the
+    invariant, not the wording — renaming the copy keeps it green, which is the point.
+    """
+    blocks = re.findall(r"@media\s*\(\s*max-width:\s*380px\s*\)\s*\{(.*?)\}\s*\n", INDEX, re.S)
+    assert blocks, "the 380px media query is gone — this guard no longer describes the stylesheet"
+    hidden = {c for b in blocks
+              for c in re.findall(r"\.([\w-]+)\s*\{[^}]*display\s*:\s*none", b)}
+    assert hidden, "the 380px queries hide nothing — parsed empty, so every check below would be vacuous"
+
+    body = re.search(r"function renderStreak\s*\(.*?\n    \}\n", INDEX, re.S)
+    assert body, "renderStreak not found — the badge moved and this guard needs re-pointing"
+    branches = re.findall(r"el\.innerHTML\s*=\s*(.+?);\s*\n", body.group(0), re.S)
+    assert branches, "no innerHTML branches parsed out of renderStreak — vacuous otherwise"
+
+    for branch in branches:
+        classes = set(re.findall(r'class="([\w-]+)"', branch))
+        assert classes, f"a branch renders no labelled span at all: {branch.strip()[:80]}"
+        assert classes - hidden, (
+            f"this branch renders only classes the 380px query hides ({sorted(classes & hidden)}), "
+            f"leaving the badge as an aria-hidden icon with no readable text: {branch.strip()[:90]}"
+        )

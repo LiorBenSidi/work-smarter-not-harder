@@ -233,11 +233,23 @@ def test_an_explicit_null_training_program_is_treated_as_not_supplied(validate):
     assert "training_program" not in validate({**_ok(), "training_program": None})
 
 
-def test_a_zero_set_group_is_dropped_not_stored(validate):
-    """Not training a group and training it for zero sets are the same statement; storing the zero
-    would make the balance analysis read calves as trained-but-empty and flag a phantom imbalance."""
-    out = validate({**_ok(), "training_program": {"chest": 10, "calves": 0}})
-    assert out["training_program"] == {"chest": 10}
+def test_a_zero_set_group_is_stored_so_the_balance_check_can_see_it(validate):
+    """An explicit 0 must reach the store: 0-vs-12 is the most extreme pressing:pulling imbalance the
+    chest:back check exists to catch, and dropping it here means that case never reaches `ai` at all.
+
+    This asserts the opposite of what it used to (#583). The old rule read 0 as "I don't train it",
+    but the form now says that in its own words -- "Leave a group blank if you don't train it" -- and a
+    blank never reaches the server, so 0 is free to mean the number zero."""
+    out = validate({**_ok(), "training_program": {"chest": 12, "back": 0}})
+    assert out["training_program"] == {"chest": 12, "back": 0}
+
+
+def test_a_group_left_blank_is_absent_rather_than_zero(validate):
+    """The blank/zero distinction is the whole basis for storing zeros, so it needs its own guard: an
+    omitted group must stay omitted, not arrive as 0 and earn "volume is low" advice nobody asked for."""
+    out = validate({**_ok(), "training_program": {"chest": 12}})
+    assert out["training_program"] == {"chest": 12}
+    assert "back" not in out["training_program"]
 
 
 @pytest.mark.parametrize("bad", [[], "chest", 5, [("chest", 3)]])

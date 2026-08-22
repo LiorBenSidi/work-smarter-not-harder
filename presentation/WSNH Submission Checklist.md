@@ -15,7 +15,7 @@
 |---|---|
 | **Thu 16 Jul** | **Presentation — 5 minutes (mandatory).** 24 projects; **we're slot 8 @ 9:15**. Class vote *during* the presentations — **7-place bonus:** 1st **+10** · 2nd **+7** · 3rd **+5** · 4th **+4** · 5th **+3** · 6th **+2** · 7th **+1** (on the final-project grade). |
 | **~Week 12** | **Working demo** to the TA (the live app / demo video). |
-| **23 Aug** | **Final submission** — the complete project. |
+| **Sun 30 Aug, 23:59** | **Final submission** — the complete project (extended from 23 Aug). Poster box closes at the same instant; Noam *asks* for it by 25 Aug. |
 
 **Penalties:** −5 per bug found · −5 per week late. So ship on time and land the fixes below.
 
@@ -31,7 +31,7 @@
       (`db/seed.py`: fake clients + posts + comments + likes — a deliberate demo/review tool; see below).
 - [x] **Azure deploy + CI/CD (+10)** — live over HTTPS, auto-deploy + rollback. ✅ built & live.
 - [x] **Report** — `docs/REPORT.md` (app overview · features×tests matrix · risk assessment). ✅ current
-      (1347 tests). Submitted as the in-repo `.md` — the guidelines take a repo link, not a PDF.
+      (1426 tests). Submitted as the in-repo `.md` — the guidelines take a repo link, not a PDF.
 - [ ] **Demo video** — record from `WSNH Demo Video Script.md`; name `VID_<id1>_<id2>_<id3>.mp4`.
 - [x] **Presentation** — *its slot was **Thu 16 Jul** and has passed; this is no longer pre-23-Aug work.* Deck: **`WSNH Presentation (Canva).pptx/.pdf`** (8-slide light/projector deck, design `DAHO6FXsV5o`) + **`WSNH Speaker Script (8-slide Canva).md`** (word-for-word, 2 handoffs); rehearse to 5:00. *(`WSNH Presentation.pptx` + `WSNH Speaker Notes and QA.md` are the retired 11/12-slide versions — Q&A bank in the latter is still useful.)*
 
@@ -53,7 +53,7 @@
       (`docs/SCALING_REPORT.md`).
 
 **Verify (should already be true):**
-- [x] Suite green — **1347 collected** (real-Mongo IT runs on the `mongo:7` CI service); `main` green.
+- [x] Suite green — **1426 collected** (real-Mongo IT runs on the `mongo:7` CI service); `main` green.
 - [x] Live URL serves over HTTPS; auto-deploy + rollback working.
 - [x] No committed secrets; only `web` exposed; auth/CSRF/injection defenses in place (TA-reviewed clean).
 - [x] Docs reconciled to reality (counts, ownership, deploy gate, data model).
