@@ -225,10 +225,11 @@ def test_test_stack_forces_testing_mode(test_stack):
 # --------------------------------------------------------------------------- the CI/CD pipeline shape
 
 def test_tests_gate_the_image_build(ci):
-    # R2.2: a red test run must never produce a pushed image. The build additionally waits on the
-    # cross-container compose run, so a broken web<->ai<->db wire path can't reach GHCR either.
-    assert "needs: [checks, compose-e2e]" in ci, \
-        "the build job must depend on BOTH the unit/integration gate and the cross-container run"
+    # R2.2: a red test run must never produce a pushed image. The build waits on all three test
+    # stages -- the in-process suite, the cross-container compose run (so a broken web<->ai<->db wire
+    # path can't reach GHCR), and the browser suite (so a red user journey can't either).
+    assert "needs: [checks, compose-e2e, e2e-browser]" in ci, \
+        "the build job must depend on every test stage: checks, compose-e2e AND e2e-browser"
 
 
 def test_the_build_gates_the_deploy(ci):

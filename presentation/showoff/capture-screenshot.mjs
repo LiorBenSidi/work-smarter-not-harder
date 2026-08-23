@@ -212,7 +212,13 @@ if (hasPlan) {
   // land the card's top edge just under the sticky header, so nothing is clipped mid-line
   await b.pageExec(`(() => {
     const d = document.querySelector(".plan-day"); if (d) d.open = true;
-    const p = document.querySelector(".plan"); if (!p) return false;
+    // Anchor on the pills row, not the plan card. The recommended-frequency pill and the tier line
+    // sit between CONFIDENCE and the plan, and shot-2 crops above them -- anchoring on the plan card
+    // left both off the printed sheet entirely. Measured at 390 wide: pills 74px + tier 36px still
+    // leaves ~594px of the 737px band, which carries the heading, Day 1 and ~7 exercises. Falls back
+    // to the plan card when there are no pills (a profile with no calorie target).
+    const pill = document.querySelector(".pill");
+    const p = (pill && pill.parentElement) || document.querySelector(".plan"); if (!p) return false;
     const hdr = document.querySelector("header, .appbar, .topbar");
     const hh = hdr ? hdr.getBoundingClientRect().height : 0;
     const y = p.getBoundingClientRect().top + window.scrollY - hh - 14;

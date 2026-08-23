@@ -38,7 +38,18 @@ export class Browser {
       "--headless=new", `--remote-debugging-port=${this.port}`, `--user-data-dir=${this.userDir}`,
       "--no-first-run", "--no-default-browser-check", "--disable-gpu", "--hide-scrollbars",
       "--no-sandbox", "--disable-dev-shm-usage",   // required on CI runners; harmless locally
-    ], { stdio: "ignore" });
+    ], { stdio: ["ignore", "ignore", "pipe"] });
+
+    // Keep the tail of Chrome's stderr and note how it died. Without this a browser that never starts
+    // is indistinguishable from one that is merely slow: both end as "no target" after the full poll,
+    // with nothing to say why. The listener also drains the pipe and handles a spawn `error` (a missing
+    // binary otherwise raises an unhandled 'error' event and takes the whole run down).
+    let stderr = "";
+    this._proc.stderr.setEncoding("utf8");
+    this._proc.stderr.on("data", (d) => { stderr = (stderr + d).slice(-2000); });
+    let exit = null;
+    this._proc.on("exit", (code, signal) => { exit = { code, signal }; });
+    this._proc.on("error", (err) => { exit = { code: null, signal: null, err: err.message }; });
 
     let target;
     for (let i = 0; i < 80; i++) {
@@ -47,9 +58,16 @@ export class Browser {
         target = list.find((t) => t.type === "page");
         if (target) break;
       } catch { /* chrome not up yet */ }
+      if (exit) break;   // chrome is gone; no amount of further waiting produces a target
       await sleep(250);
     }
-    if (!target) throw new Error("Chrome DevTools target never appeared");
+    if (!target) {
+      try { this._proc.kill("SIGKILL"); } catch { /* already gone */ }
+      const how = exit
+        ? `Chrome exited (code=${exit.code}, signal=${exit.signal}${exit.err ? `, ${exit.err}` : ""})`
+        : "Chrome is still running but never exposed a DevTools target";
+      throw new Error(`${how}. stderr tail:\n${stderr.trim() || "(empty)"}`);
+    }
 
     this._ws = new WebSocket(target.webSocketDebuggerUrl);
     await new Promise((res, rej) => { this._ws.onopen = res; this._ws.onerror = rej; });
