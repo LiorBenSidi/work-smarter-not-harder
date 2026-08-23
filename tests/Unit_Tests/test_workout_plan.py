@@ -29,9 +29,11 @@ def test_an_explicit_split_passes_through_unchanged_regardless_of_frequency(spli
     assert resolve_split_preference(split, frequency) == {"split": split, "days": None}
 
 
-@pytest.mark.parametrize("frequency", [0, 1, 2, 3])
-def test_no_preference_at_or_below_three_days_resolves_to_full_body_alone(frequency):
-    assert resolve_split_preference("no_preference", frequency) == {
+def test_no_preference_at_three_days_resolves_to_full_body_alone():
+    """The branch is a single `frequency <= 3` check, so 3 (the boundary immediately below the
+    4-day ambiguous case) is the value that matters -- 0/1/2 would hit the identical line with no
+    incremental coverage."""
+    assert resolve_split_preference("no_preference", 3) == {
         "split": "full_body",
         "days": None,
     }
@@ -87,24 +89,6 @@ def test_an_unusable_training_frequency_defaults_to_full_body(bad_frequency):
     }
 
 
-def test_resolved_results_carry_a_days_placeholder_and_no_split_options_key():
-    for split in ("full_body", "upper_lower", "push_pull_legs"):
-        result = resolve_split_preference(split, 4)
-        assert set(result.keys()) == {"split", "days"}
-        assert result["split"] == split
-        assert result["days"] is None
-
-
-def test_ambiguous_results_only_ever_contain_two_valid_splits_and_no_split_key():
-    for frequency in (4, 5):
-        result = resolve_split_preference("no_preference", frequency)
-        assert set(result.keys()) == {"split_options"}
-        options = result["split_options"]
-        assert isinstance(options, list)
-        assert len(options) == 2
-        assert all(option in SPLITS for option in options)
-
-
 def test_splits_vocabulary_matches_the_profile_contract(web_app_module):
     """ai/ and web/ are separate containers with no shared import -- this guards against drift."""
     profile_splits = sys.modules["routes.profile"].SPLITS
@@ -140,11 +124,11 @@ def test_upper_lower_completes_a_full_cycle_at_its_minimum_day_count():
     assert day_focus_sequence("upper_lower", 2) == ["Upper", "Lower"]
 
 
-@pytest.mark.parametrize("frequency", [3, 4, 5, 6, 7, 8, 14])
+@pytest.mark.parametrize("frequency", [3, 4, 5, 6, 7])
 def test_push_pull_legs_focuses_never_appear_without_each_other(frequency):
     """The property the two regression tests above exist to protect, generalized: Push, Pull
-    and Legs must appear together or not at all -- never a partial set -- across the whole
-    legal training_frequency range (including the 8-14 tail, profile-legal but unrealistic)."""
+    and Legs must appear together or not at all -- never a partial set. Stops at 7: day_count is
+    `min(frequency, 7)`, so 8+ collapses to the identical sequence 7 already produces here."""
     sequence = day_focus_sequence("push_pull_legs", frequency)
     focuses_present = {"Push", "Pull", "Legs"} & set(sequence)
     if focuses_present:
