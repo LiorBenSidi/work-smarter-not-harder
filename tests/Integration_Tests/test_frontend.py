@@ -135,10 +135,15 @@ def test_history_markup_and_handlers_are_served(client):
     # (or starting the gesture on the backdrop) the scroll chains through and the History list visibly moves
     # under the blur. Both full-screen dialogs (this modal + the media lightbox) share one ref-counted lock.
     assert "function lockPageScroll()" in html and "function unlockPageScroll()" in html
-    assert 'document.documentElement.style.overflow = "hidden"' in html          # the lock actually locks...
-    assert 'document.body.style.overflowY = "hidden"' in html                    # ...on BOTH elements — the body is the
-                                                                                 # real scroll container (121px crept
-                                                                                 # through an html-only lock, measured)
+    assert 'document.body.style.overflowY = "hidden"' in html                    # the lock actually locks...
+    # ...on the BODY ALONE. <html> must stay untouched: it sets no overflow of its own, so the UA propagates
+    # body's overflow to the viewport while body itself stays a non-scrolling box — the page locks AND the
+    # sticky header still resolves against the viewport. Locking <html> instead STOPS that propagation: body
+    # (overflow-x:hidden -> used `hidden auto`) becomes the scroll container and the sticky header drops to
+    # scrollY px above the fold, taking the account menu off-screen with it (#608 — header top measured at
+    # exactly -scrollY at every offset, both viewports). That is also what the earlier "creep through an
+    # html-only lock" really was: body scrolling, not the page. Locking body alone is what fixes #422.
+    assert "document.documentElement.style.overflow" not in html                 # ...and never on <html> (#608)
     # both dialogs go through the shared openModal/closeModal, which lock, trap Tab and restore focus (#430)
     assert 'openModal($("history-detail"), $("hdetail-close"));' in html         # locked + focused on a real open
     assert "if (el) closeModal(el);" in html                                     # ...and released on a real close
