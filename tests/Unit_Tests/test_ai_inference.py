@@ -233,8 +233,12 @@ def test_ready_is_selected_when_it_reaches_threshold(
     inference_module,
     monkeypatch,
 ):
-    """Ready may be selected when it is highest and reaches the threshold."""
-    monkeypatch.setattr(inference_module, "_READY_THRESHOLD", 0.58)
+    """Ready may be selected when it is highest and reaches the threshold.
+
+    The threshold is set to exactly match Ready's probability (0.65), not a value it clears with
+    room to spare -- 0.58 left this test never touching the boundary its own name claims to test
+    (mutation-verified: flipping `>=` to `>` in `_choose_state` left the whole suite green)."""
+    monkeypatch.setattr(inference_module, "_READY_THRESHOLD", 0.65)
 
     probabilities = [
         0.10,  # Rest
