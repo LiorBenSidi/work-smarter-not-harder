@@ -114,8 +114,9 @@ def calculate_recommended_frequency(features: Any) -> int | None:
 
     Deliberately does not read `training_frequency`: this is the athlete's own input, and a
     recommendation that echoed it back would be indistinguishable from the input it is meant to
-    advise on. Derived from goal and age instead, per the proposal's Beginner-tier field (a
-    Beginner supplies no frequency at all).
+    advise on. Derived from goal and age instead -- `training_frequency` is currently a required
+    profile field for every user, not an optional one, so this function's own choice not to read
+    it is what keeps `recommended_frequency` from just restating that input.
     """
     if not isinstance(features, dict):
         return None
