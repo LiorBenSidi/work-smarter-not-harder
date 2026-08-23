@@ -27,9 +27,21 @@ import pickle
 import re
 import threading
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
+from multiprocessing import get_context
 from pathlib import Path
 
 import pytest
+
+
+def _spawn_pool(workers):
+    """A ProcessPoolExecutor that starts its workers with SPAWN, not the Linux default FORK (#605).
+
+    The suite runs pytest multi-threaded; fork() copies a held lock into a worker, which can wedge,
+    and ProcessPoolExecutor's atexit reaper joins that worker with NO timeout -> the interpreter hangs
+    for up to the 6h CI ceiling. SPAWN starts a fresh interpreter (no inherited locks), so the pool
+    joins cleanly. Injected only in the tests that create a REAL process pool; production keeps its
+    fork default (deliberately unchanged before submission -- see #605)."""
+    return lambda: ProcessPoolExecutor(max_workers=workers, mp_context=get_context("spawn"))
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -309,7 +321,11 @@ def test_a_worker_that_dies_does_not_wedge_the_queue(jobqueue_module, dying_targ
     callbacks run on ordinary threads) is blind to it. Hence a real process, really dying.
     """
     monkeypatch.setenv("AI_WORKER_TARGET", f"{dying_target}:suicide")
-    queue = jobqueue_module.JobQueue(workers=1, max_pending=8)
+    # Real process pool via SPAWN (#605): this test's whole point is a worker that really dies, so it
+    # cannot use a thread pool -- and a forked pool here is exactly what leaks to interpreter exit when
+    # its bounded teardown (closer.join(15) below) times out. The fixture already prepends `ai/` so the
+    # spawned child re-imports the target.
+    queue = jobqueue_module.JobQueue(workers=1, max_pending=8, executor_factory=_spawn_pool(1))
     queue.start()
     try:
         job_id = queue.submit({"sleep_hours": 8})
