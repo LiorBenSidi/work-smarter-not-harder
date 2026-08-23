@@ -17,7 +17,10 @@ def test_recovery_recommendation_from_current_checkin():
 
     assert result
     assert len(result) <= 5
-    assert "sleep" in result[0].lower() or "fatigue" in result[0].lower()
+    # Deterministic given these inputs: sleep_hours=4 (<5) scores 100, strictly above every other
+    # candidate here (fatigue=9 scores 98, training_load=9 scores 92, soreness=8 scores 79) -- an
+    # "or" over the top two would still pass if their priority values were ever swapped.
+    assert result[0] == "Prioritize recovery and additional sleep before a demanding session."
 
 
 def test_partial_input_still_returns_only_state_recommendation():
@@ -133,7 +136,9 @@ def test_performed_volume_supports_weekly_sets_mapping():
     )
 
     assert any("Pressing volume" in item for item in result)
-    assert any("legs" in item.lower() for item in result)
+    # legs=4 sets is in the low-volume band (<6) -- checking for "legs" alone would still pass if
+    # the message wrongly said "high" instead of "low".
+    assert any("legs volume is low" in item.lower() for item in result)
 
 
 def test_performed_volume_supports_flat_list_mapping_and_fires_on_realistic_imbalance():
