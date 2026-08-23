@@ -572,7 +572,8 @@ TA, and §5 explicitly left its feature list open.
   missing; the generator itself is fully built and live. Keeping the catalog as code also versions
   it with the engine that reads it, and keeps `web`/`db` from ever needing the exercise list —
   only muscle-group aggregates cross the `web`↔`ai` boundary. Deviation from v2 §9, tracked on
-  #276.
+  #276, and notified to the TA directly (23 Aug) so the departure from §9's four-collection data
+  model is on record rather than inferred from the code.
 - **§5 candidate features vs. the shipped model.** v2 §5: *"The features we expect to feed the
   model are sleep duration, resting heart rate and how it's drifting from baseline, fatigue and
   soreness, weekly training frequency, training load, calorie balance, and body-weight trend.
