@@ -85,6 +85,9 @@ jobs:
   # ---------------------------------------------------------------------------
   compose-e2e:
     name: cross-container stack (test-runner)
+    # Fail-closed cap, same reasoning as `checks`: a wedged browser/stack job would otherwise
+    # hold a runner for the 6-hour default. A green run is well under 10 minutes.
+    timeout-minutes: 20
     needs: checks                       # don't spend 3 minutes booting Docker if the fast suite is red
     if: vars.RUN_CI != 'false' && github.event_name != 'workflow_dispatch'   # the manual run is for the stress job below
     runs-on: ubuntu-latest
@@ -116,6 +119,9 @@ jobs:
   # ---------------------------------------------------------------------------
   e2e-browser:
     name: e2e (browser · desktop + mobile)
+    # Fail-closed cap, same reasoning as `checks`: a wedged browser/stack job would otherwise
+    # hold a runner for the 6-hour default. A green run is well under 10 minutes.
+    timeout-minutes: 20
     needs: checks
     if: vars.RUN_CI != 'false' && github.event_name != 'workflow_dispatch'
     runs-on: ubuntu-latest
@@ -173,8 +179,9 @@ jobs:
   build:
     name: build & push image (GHCR)
     # R2.2: a failed test build never proceeds to build/push/deploy — and neither does a stack whose
-    # cross-container path is broken (compose-e2e), which unit tests with injected fakes cannot catch.
-    needs: [checks, compose-e2e]
+    # cross-container path is broken (compose-e2e), which unit tests with injected fakes cannot catch,
+    # nor one whose browser journeys are red (e2e-browser): all three test stages gate publication.
+    needs: [checks, compose-e2e, e2e-browser]
     if: vars.RUN_CI != 'false' && github.event_name == 'push' && github.ref == 'refs/heads/main'   # R1.3: a PR never reaches here
     runs-on: ubuntu-latest
     permissions:

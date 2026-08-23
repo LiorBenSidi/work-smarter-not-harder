@@ -412,14 +412,17 @@ Naming these is part of the assessment; an unlisted risk is an unnoticed one.
   process, and replicas of `web` on the one VM add no availability — the VM is still the thing that dies.
 * **Tail latency across `ai` replicas.** Docker's DNS round-robin balances connections, not work, so p95
   barely improves with replicas. A real load balancer is not warranted for one VM.
-* **A red browser-e2e job does not block the deploy.** `build` declares `needs: [checks, compose-e2e]`, so the
-  headless-Chrome suite is reported but not gating — and on three green deploys it was red
+* **A red browser-e2e job blocks the deploy.** `build` declares
+  `needs: [checks, compose-e2e, e2e-browser]`, so every test stage gates publication (R2.2). This reverses an
+  earlier decision to leave the browser job non-gating because it was the pipeline's flakiest stage — three
+  deploys went green while it was red
   ([29497159256](https://github.com/LiorBenSidi/work-smarter-not-harder/actions/runs/29497159256),
   [29492804611](https://github.com/LiorBenSidi/work-smarter-not-harder/actions/runs/29492804611),
-  [29275869078](https://github.com/LiorBenSidi/work-smarter-not-harder/actions/runs/29275869078)). It is the
-  pipeline's one flaky stage (headless timing around media upload), and gating production on a flaky job trades
-  a real failure mode — deploys blocked by test infrastructure, at the exact moment a fix needs to ship — for a
-  hypothetical one. Its functional coverage is duplicated over real HTTP in `compose-e2e`, which *does* gate.
+  [29275869078](https://github.com/LiorBenSidi/work-smarter-not-harder/actions/runs/29275869078)). That trade-off was
+  defensible, but it does not satisfy R2.2, which is literal: a failed test stage must not proceed to build,
+  push or deploy. The cost is roughly five minutes added to a push, since the browser suite is now on the
+  critical path. Launch failures are also no longer silent — Chrome's exit code and the tail of its stderr are
+  reported, where a browser that died on startup and one that was merely slow used to produce the same message.
   The residual risk is stated rather than hidden: **a front-end regression only the browser job can see would
   reach prod.** Evidence and reasoning: [`CICD_REPORT.md`](CICD_REPORT.md) § Evidence.
 
