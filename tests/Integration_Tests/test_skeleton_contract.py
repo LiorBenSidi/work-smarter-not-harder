@@ -59,18 +59,26 @@ def test_ai_predict_returns_the_contract_shape():
     """The prediction endpoint returns the three fields the web service reads, checked by exercising the real app rather than by reading its source.
 
     This is the seam between two containers, so a silent shape change here breaks the app without either side failing its own tests.
+
+    `create_app()` starts a real job queue with a real process pool, so the test shuts it down when
+    it is done: the workers are reaped here, deterministically, instead of at interpreter exit.
     """
     pytest.importorskip("flask")
     spec = importlib.util.spec_from_file_location("ai_app_under_test", str(ROOT / "ai" / "app.py"))
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
 
-    client = module.create_app().test_client()
-    # the four readiness fields the model requires, each in range (ai/app.py's /predict validator)
-    resp = client.post("/predict", json={"features": {"sleep_hours": 8, "fatigue": 2,
-                                                      "soreness": 1, "training_load": 100}})
-    assert resp.status_code == 200
-    body = resp.get_json()
+    app = module.create_app()
+    try:
+        client = app.test_client()
+        # the four readiness fields the model requires, each in range (ai/app.py's /predict validator)
+        resp = client.post("/predict", json={"features": {"sleep_hours": 8, "fatigue": 2,
+                                                          "soreness": 1, "training_load": 100}})
+        assert resp.status_code == 200
+        body = resp.get_json()
+    finally:
+        app.config["JOB_QUEUE"].shutdown(wait=True)
+
     assert isinstance(body["state"], str), "state must be a category string"
     assert isinstance(body["proba"], dict), "proba must be a {category: float} object"
     assert isinstance(body["recommendations"], list), "recommendations must be a list of items"
