@@ -15,9 +15,19 @@ would be a lie rather than a failure.
 import os
 import sys
 import time
+from concurrent.futures import ProcessPoolExecutor
+from multiprocessing import get_context
 from pathlib import Path
 
 import pytest
+
+
+def _spawn_pool(workers):
+    """A real process pool started with SPAWN, not the Linux default FORK (#605). Forking these pools
+    from the multi-threaded pytest process can wedge a worker whose atexit join never times out, hanging
+    CI for up to 6h; spawn starts a clean interpreter and joins fine. Production keeps its fork default
+    (unchanged before submission -- see #605)."""
+    return lambda: ProcessPoolExecutor(max_workers=workers, mp_context=get_context("spawn"))
 
 # The worker processes resolve `bench:cpu_burn` by importing `bench`. `multiprocessing`'s spawn start
 # method hands the child a copy of the parent's sys.path, so `ai/` has to be on it here — the
@@ -38,7 +48,8 @@ JOBS = 8
 
 def _elapsed_with_pool(jobqueue_module, workers):
     """Submit JOBS identical CPU-bound jobs through a real process pool; return wall time."""
-    queue = jobqueue_module.JobQueue(workers=workers, max_pending=JOBS * 2)
+    queue = jobqueue_module.JobQueue(workers=workers, max_pending=JOBS * 2,
+                                     executor_factory=_spawn_pool(workers))
     queue.target = "bench:cpu_burn"
     queue.start()
     try:
@@ -81,7 +92,7 @@ def test_a_four_worker_process_pool_beats_a_one_worker_pool_on_cpu_bound_work(jo
 
 def test_the_pool_returns_correct_results_under_parallel_load(jobqueue_module):
     """Parallelism must not corrupt answers: every job gets its own, matching its own input."""
-    queue = jobqueue_module.JobQueue(workers=4, max_pending=32)
+    queue = jobqueue_module.JobQueue(workers=4, max_pending=32, executor_factory=_spawn_pool(4))
     queue.target = "bench:cpu_burn"
     queue.start()
     try:
