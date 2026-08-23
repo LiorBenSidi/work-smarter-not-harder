@@ -172,21 +172,25 @@ says nothing about the test gate. These two prove the `needs:` chain.
 
 The second run is the one worth pointing at: the fast suite was **green**, and the deploy was still blocked —
 by `compose-e2e`, the cross-container harness. That is exactly why `build` declares
-`needs: [checks, compose-e2e]` rather than `needs: checks` alone. Unit tests run against injected in-memory
+`needs: [checks, compose-e2e, e2e-browser]` rather than `needs: checks` alone. Unit tests run against injected in-memory
 fakes and cannot see a broken `web → ai → db` wiring; the harness boots the real three containers and can. No
 image was pushed and the VM was never contacted in either run.
 
-**What the gate deliberately does *not* block: `e2e-browser`.** `build` needs `checks` and `compose-e2e` only,
-so a red browser-e2e job does **not** stop a deploy — and three times it did not
+**The gate covers `e2e-browser` too.** `build` needs `checks`, `compose-e2e` **and** `e2e-browser`, so a red
+browser suite stops the image being built, pushed or deployed (R2.2). This was not always so: the browser job
+was deliberately left out as the pipeline's flakiest stage, and three deploys went green while it was red
 ([29497159256](https://github.com/LiorBenSidi/work-smarter-not-harder/actions/runs/29497159256),
 [29492804611](https://github.com/LiorBenSidi/work-smarter-not-harder/actions/runs/29492804611),
 [29275869078](https://github.com/LiorBenSidi/work-smarter-not-harder/actions/runs/29275869078): browser e2e red,
-`build` + `deploy` both green). This is a **known trade-off, not an oversight**: the headless-Chrome job is the
-only flaky stage in the pipeline (see the media-upload timing fixes on 13–14 Jul), and gating production on a
-flaky job trades a real failure mode (deploys blocked by test infrastructure) for a hypothetical one. The
-functional coverage it would have caught is duplicated over real HTTP in `compose-e2e`, which *does* gate. The
-cost is honest and stated: **a genuine front-end regression that only the browser job can see would reach
-prod.** Tracked as an accepted risk in [`REPORT.md`](REPORT.md) §5.5.
+`build` + `deploy` both green). The reasoning was that gating production on a flaky job trades a real failure
+mode — deploys blocked by test infrastructure — for a hypothetical one. R2.2 settles it the other way: a failed
+test stage must not proceed to build, push or deploy, whatever the stage's history. Gating adds roughly five
+minutes to a push, since the browser suite now sits on the critical path.
+
+Separately, a launch failure used to be undiagnosable: Chrome's stderr was discarded and nothing watched the
+process, so a browser that died on startup and one that was merely slow both ended as the same message after a
+twenty-second poll. The launch now reports the exit code with the tail of stderr and stops polling once the
+process is gone.
 
 **A deploy that failed for a non-pipeline reason** —
 [run 29630794935](https://github.com/LiorBenSidi/work-smarter-not-harder/actions/runs/29630794935) · `main` · 2026-07-18 04:40 UTC.

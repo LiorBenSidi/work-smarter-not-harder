@@ -160,7 +160,8 @@ push    ─▶ 5. deploy      ssh → VM: docker compose pull && up -d  (VM pull
 push    ─▶ 6. verify      curl --fail https://<FQDN>/ready  ← fails the run + auto-rolls-back if unhealthy
 manual  ─▶    stress      locust, on demand (needs a live stack; never a merge gate)
 ```
-Both `checks` **and** `compose-e2e` gate the build, so a broken `web → ai → db` wire path can never reach GHCR
+`checks`, `compose-e2e` **and** `e2e-browser` all gate the build, so neither a broken `web → ai → db` wire path
+nor a red browser journey can reach GHCR
 or the VM. The `stress` job is `workflow_dispatch`-only — run it with `gh workflow run ci.yml --ref main`.
 Caddy (in [`docker-compose.prod.yml`](docker-compose.prod.yml)) terminates TLS with an auto-renewing Let's Encrypt
 certificate and redirects HTTP→HTTPS; the VM runs the prod compose, which **pulls** the GHCR images rather than building.
