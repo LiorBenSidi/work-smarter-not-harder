@@ -2940,14 +2940,19 @@
     let pageScrollLocks = 0;
     function lockPageScroll() {
       if (++pageScrollLocks !== 1) return;
-      // BOTH elements: this page's real scroll container is the BODY (stylesheet overflow-y auto), so
-      // hiding only <html> still let the list creep ~120px under the modal — measured live before this.
-      document.documentElement.style.overflow = "hidden";
+      // BODY ONLY — never <html>. <html> sets no overflow of its own, so the UA propagates BODY's overflow
+      // to the viewport while body itself stays a normal, non-scrolling box: hiding body here locks the page
+      // (trusted wheel at scrollY 3000: 3000 -> 3000 locked, 3000 -> 3960 unlocked, both viewports) AND the
+      // sticky header keeps resolving against the viewport. Setting overflow on <html> instead STOPS that
+      // propagation — body (overflow-x:hidden -> used `hidden auto`) becomes the scroll container, so the
+      // sticky header snaps to its static position scrollY px above the fold and the account menu rides
+      // off-screen with it (#608: header top was exactly -scrollY at every offset once the menu opened).
+      // Same reason the list "crept" under the modal in #422 when only <html> was hidden: that creep WAS
+      // body scrolling, not the page — hiding body alone is what actually fixes it.
       document.body.style.overflowY = "hidden";
     }
     function unlockPageScroll() {
       if (pageScrollLocks > 0 && --pageScrollLocks === 0) {
-        document.documentElement.style.overflow = "";
         document.body.style.overflowY = "";
       }
     }
