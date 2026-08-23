@@ -1,17 +1,46 @@
 {
   "title": "Work Smarter, Not Harder",
   "short_description": "An AI sports-coaching platform: log recovery metrics and get a Random Forest readiness call, a workout plan and calorie target.",
-  "long_description_md": "**Work Smarter, Not Harder** turns daily recovery metrics into coaching decisions. Athletes log sleep, fatigue, soreness and training load, and a **locally-trained Random Forest** classifies training readiness as *Ready*, *Moderate*, or *Rest*.\n\nA recommendation engine turns that into an action plan: what to train, what to fix first, how many calories to eat, and whether to push, maintain, or deload. A built-in **community forum** adds posts, votes, and real-time messaging.\n\nIt runs as **three Docker containers** (Flask · MongoDB · AI inference), only the web tier exposed, and ships with CI/CD, tests across all five test types, and a live HTTPS deployment on Azure.",
+  "long_description_md": "**Work Smarter, Not Harder** turns daily recovery metrics into coaching decisions. Athletes log sleep, fatigue, soreness and training load, and a **locally-trained Random Forest** classifies training readiness as *Ready*, *Moderate*, or *Rest*.\n\nA recommendation engine turns that into an action plan: what to train, what to fix first, how many calories to eat, a **recommended weekly training frequency**, and whether to push, maintain, or deload — scaled to a **beginner, intermediate or advanced tier** derived from the athlete's own profile. A built-in **community forum** adds posts, votes, and real-time messaging.\n\nIt runs as **three Docker containers** (Flask · MongoDB · AI inference), only the web tier exposed, and ships with CI/CD, tests across all five test types, and a live HTTPS deployment on Azure.",
   "team": [
-    { "name": "Lior Ben Sidi" },
-    { "name": "Shiri Haboob" },
-    { "name": "Elad Nachalieli" }
+    {
+      "name": "Lior Ben Sidi"
+    },
+    {
+      "name": "Shiri Haboob"
+    },
+    {
+      "name": "Elad Nachalieli"
+    }
   ],
-  "tags": ["AI", "machine-learning", "fitness", "sports-science", "full-stack", "docker"],
-  "tech_stack": ["Python", "Flask", "scikit-learn", "MongoDB", "Docker", "Docker Compose", "GitHub Actions", "Azure", "Caddy"],
-  "poster": { "type": "pdf" },
+  "tags": [
+    "machine-learning",
+    "fitness",
+    "sports-science",
+    "full-stack",
+    "docker"
+  ],
+  "tech_stack": [
+    "Python",
+    "Flask",
+    "scikit-learn",
+    "MongoDB",
+    "Docker",
+    "Docker Compose",
+    "GitHub Actions",
+    "Azure",
+    "Caddy",
+    "Brevo",
+    "Name.com"
+  ],
+  "poster": {
+    "type": "pdf"
+  },
   "repo_url": "https://github.com/LiorBenSidi/work-smarter-not-harder",
   "links": [
-    { "label": "Live App", "url": "https://app.worksmarternotharder.dev" }
+    {
+      "label": "Live App",
+      "url": "https://app.worksmarternotharder.dev"
+    }
   ]
 }
