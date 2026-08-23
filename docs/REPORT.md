@@ -508,44 +508,36 @@ branch-protected and merges only on green CI.
 
 ---
 
-## 8. Open items (tracked; not blockers for the built planes)
+## 8. Proposal vs. build — every difference, and why
 
-- **F5 — workout generator (Shiri)** — required by the v2 proposal. **AI generation built and wired into
-  `/predict`**: `resolve_split_preference` + `generate_workout_days` produce a real plan (goal + days +
-  equipment + split → plan from the program catalog) on every live prediction. **Dashboard relay done too**:
-  `GET /dashboard` relays the plan and the card renders it (#410, closed). No swap (TA-confirmed). Tracked in #276.
-  F6's shape fix merged (PR #529): `_program_recommendations` now reads `features["performed"]` (actual
-  logged training volume) instead of prescribed `program` data — the analysis can genuinely fire now.
-  **And it now does.** #566 built the web/db producer that had never existed: the Advanced tier enters its
-  own programme on the profile as weekly sets per muscle group, and `services/ai_client.build_features`
-  translates it to `features["performed"]` on every prediction. Built to `docs/PERFORMED_VOLUME_SPEC.md`
-  "Option 1" (muscle-group level, so `web` never needs `ai/exercise_catalog.py`'s exercise list and the two
-  containers stay decoupled). This closes **#528 item 2** — the Advanced tier's "provide your workout
-  program", which the v2 proposal §3 commits to — so it is no longer a disclosed gap but a shipped feature.
-- **Recommended training frequency (v2 §3, Beginner tier) — web half built; the producing half sits in
-  the AI lane.** The proposal's beginner output list is *"Calorie target · Beginner workout program ·
-  Recommended training frequency"*. The first two ship. For the third, the **web tier is ready**:
-  `web/routes/dashboard.py` relays a `recommended_frequency` field from `/predict` under the same
-  finite-number guard as `calories`, drops any value outside a trainable week, and the dashboard renders
-  it as a pill beside the calorie target — all covered by `test_dashboard_tier_and_frequency`.
-  **The value itself is produced by the recommendation engine, which REPORT §6 places in the AI lane**, so
-  it is Shiri's half to write; the field is contracted on #528 and the web side renders nothing until it
-  arrives. The one rule the contract pins: it must not echo the athlete's own `training_frequency`, since
-  a §3 Beginner supplies none. Previously disclosed as a stated gap; now being implemented instead (#528).
-- **Beginner / Intermediate / Advanced tiers (v2 §3) — built, as a derivation rather than a gate.** v2 §3
-  frames the audience as three tiers with different inputs and different outputs. The app already behaved
-  that way — enter a weekly programme and the balance analysis fires, leave it out and it does not — but no
-  tier was named anywhere, so the structure the proposal promises was invisible.
-  `web/routes/profile.py::derive_tier` now reads it off the profile (**advanced** = a training programme is
-  present · **intermediate** = equipment or a split preference · **beginner** = the minimum profile), the
-  dashboard reports it on all three response paths including an `ai` outage, and the UI names the tier and
-  what the next one adds. **Derived, never stored**, so it cannot drift from the profile it describes, and
-  **nothing is gated on it** — every output stays available to every user, which
-  `test_the_tier_gates_nothing_a_lower_tier_would_otherwise_receive` asserts directly. A "beginner" label
-  withholds nothing; it explains what adding a programme would unlock (#528).
-- **F6 + F7 merge** — in scope, not pending: the merge is in the v2 proposal the team sent the TA (28 Jun),
-  and the TA's guidelines explicitly permit notified feature changes; the balance rule is built
-  (`_program_recommendations`). See `ROADMAP.md` → "Scope decision".
+Every feature in v2 §7 is built and live (§2). What follows is the complete list of places where the
+implementation differs from the proposal's wording — five differences and one clarification, none of
+them a missing capability. Two were settled in advance: the hand-curated catalog was approved by the
+TA, and §5 explicitly left its feature list open.
+
+- **§3's beginner input list is one field short of what the profile requires.** v2 §3 says
+  beginners *"give us the basics — age, gender, height, weight, and their goal"*. The build also
+  requires `training_frequency` (`web/routes/profile.py:143`), so a profile submitted with exactly
+  the five fields §3 names is rejected with a 400. It is load-bearing for two of the three outputs
+  §3 promises beginners: the workout generator resolves the split and the number of training days
+  from it (`ai/workout_plan.py::resolve_split_preference`, `::day_focus_sequence`), and the calorie
+  target derives its activity factor from it (`ai/recommendations.py::_activity_from_frequency`).
+  The effect is that the base profile is six fields rather than five — nothing is withheld, and the
+  third output, the recommended frequency itself, is the one thing that deliberately ignores it
+  (#528 item 1, raised by Shiri on #596).
+- **Athlete tier (v2 §3) — built and live; its inputs are named differently than §3 words them.**
+  `derive_tier` (`web/routes/profile.py:170-177`) reads the tier off the profile on every
+  `/dashboard` request: **advanced** when the athlete has entered a weekly training programme,
+  **intermediate** when they have set equipment or a split preference, **beginner** otherwise —
+  reported on all three response paths including an `ai` outage, and the UI names the tier and what
+  the next one adds. It is derived, never stored, so it updates the moment they add a field, and
+  nothing is gated on it — every output stays available to every tier, which
+  `test_the_tier_gates_nothing_a_lower_tier_would_otherwise_receive` asserts directly. The criteria
+  track behaviour rather than paperwork: the programme is the one input that unlocks a genuinely
+  different output (the muscle-group balance analysis), so it is the one that promotes. §3 sorts
+  the same three tiers by slightly different fields — training frequency is required of everyone
+  here rather than marking the intermediate step (`:143`) — so the ladder is the one the proposal
+  describes, keyed to the optional inputs the athlete actually supplies (#528 item 3).
 - **Exercise catalog (F5/F6)** — hand-curated, not derived from a public dataset (evaluated and rejected;
   see `ai/README.md` → "Exercise catalog" for the four datasets researched and why none replaced it).
   Every muscle group has at least 6 exercises, measured directly from `EXERCISE_CATALOG`:
@@ -563,20 +555,35 @@ branch-protected and merges only on green CI.
   | Core | 7 |
   | Calves | 6 |
   | **Total** | **99** |
-- **Exact readiness categories + final feature set** *(SETTLED — baked into the shipped `model.pkl`:
-  features `sleep_hours` · `fatigue` · `soreness` · `training_load`, class labels + ready-threshold in the
-  same bundle; the `/predict` contract shapes were pinned all along)*.
-- **Deploy ordering** and the **forum real-time transport** *(both SETTLED — live on Azure over HTTPS since
-  8 Jul with redeploy-on-merge, and the real-time layer shipped as SSE (`/events`, `event: forum`) — ✅ in §2)*.
-- **No screen-switch cross-fade on iOS Safari** — a deliberate platform difference, not an oversight, and it
-  stays. WebKit does not keep a live backdrop for an element captured into a view transition, so the floating
-  nav's `backdrop-filter` had nothing to sample and the pill went opaque for the length of the animation.
-  Measured on an iPhone 16e (iOS 26.2) from a 30 fps recording of the real 0.3 s switch, peak change in the
-  pill (lower is better): **21.1** with the bug · **22.7** with the glass removed entirely · **22.9** with a
-  `view-transition-name` on the nav — i.e. no better than having no glass at all · **8.8** opting the document
-  out of the transition, which is what shipped (#469), and **11.6** on a real tap afterwards, the residue being
-  the tab highlight moving. Every other browser keeps the cross-fade. Restoring it on iOS means giving up the
-  nav material there, which is the more visible of the two.
+- **Not owed — v2 §14 Future Work and Stretch Goals.** Collaborative-filtering personalization
+  ("planned as future work, not part of the core deliverable"), smartwatch integration (Fitbit /
+  Garmin / Apple Health / Strava), progress graphs, an exercise video library, an injury-prevention
+  module, and personalized progression recommendations. None of these is a gap. Collaborative
+  filtering is worth naming specifically: it sat in §4 Cold Start in the original proposal, so
+  anyone diffing the two documents will see it move — v2 moved it deliberately, to §14.
+- **`programs` collection (v2 §9) — not built, as a consequence of the approved catalog change.**
+  v2 §6 already told the TA the exercise catalog would be hand-written rather than pulled from a
+  public dataset — the one deviation confirmed directly with him. Once that decision was made, the
+  original reason for routing the catalog through v2 §9's `programs` Mongo collection — ingesting
+  and managing externally-sourced dataset content — no longer applied to data the team was writing
+  by hand anyway. So the 99-exercise catalog lives as code (`ai/exercise_catalog.py`) instead, and
+  a plan is generated fresh on every request rather than stored — `analysis_history` keeps each
+  check-in's assessment, calories and recommendations, never a `plan`. Nothing user-facing is
+  missing; the generator itself is fully built and live. Keeping the catalog as code also versions
+  it with the engine that reads it, and keeps `web`/`db` from ever needing the exercise list —
+  only muscle-group aggregates cross the `web`↔`ai` boundary. Deviation from v2 §9, tracked on
+  #276.
+- **§5 candidate features vs. the shipped model.** v2 §5: *"The features we expect to feed the
+  model are sleep duration, resting heart rate and how it's drifting from baseline, fatigue and
+  soreness, weekly training frequency, training load, calorie balance, and body-weight trend.
+  We'll finalize that list once we've spent real time with the data."* The shipped model trains
+  on four: `sleep_hours` · `fatigue` · `soreness` · `training_load` — selected by evaluation
+  during model development, though only the chosen set is in the committed code; the comparison
+  itself was not kept as a notebook or a separate training run. `resting_hr` and
+  `training_frequency` are still
+  collected and stored (check-in, profile) and shown in history — just not model inputs. The
+  sentence is an explicit hedge, not a commitment, and per the TA's own notes the model's feature
+  composition isn't a graded axis (`docs/TA-Notes.txt:4`).
 
 ---
 
