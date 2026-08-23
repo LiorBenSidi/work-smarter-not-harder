@@ -26,6 +26,9 @@ jobs:
     name: checks
     if: vars.RUN_CI != 'false'
     runs-on: ubuntu-latest
+    # A green run is 3-4 minutes; this bounds a stuck job instead of letting it sit for the 6-hour
+    # default. Fail-closed: a timeout is a red job, so `build` and `deploy` never run off it.
+    timeout-minutes: 15
     services:
       mongo:                              # real MongoDB so the data-layer integration tests RUN in CI (not skip)
         image: mongo:7
