@@ -382,7 +382,7 @@ mutation-checked by disabling the fix.)
 
 | Risk | Impact | Mitigation | Status |
 |---|---|---|---|
-| **Spam / request floods (login, register, forum)** | Resource exhaustion, bulk signup, password guessing | `flask-limiter` on the public write routes; messaging carries its own 20/min anti-spam cap. Under load a **429 is the defence engaging**, not a failure — only a 5xx is | ✅ built & tested (`test_rate_limit.py` for the public write routes; the 20/min messaging cap is proven in `Negative_Tests/test_messages_media_negative.py::test_dm_spam_over_the_window_cap_is_shed_with_429`. `locustfile.py` treats 429 as a pass and 5xx as a failure — on-demand only) |
+| **Spam / request floods (login, register, forum)** | Resource exhaustion, bulk signup, password guessing | `flask-limiter` on the public write routes (keyed by **client IP**, `memory://` **per gunicorn worker** — so the caps are exact at `web`'s single worker, while behind a shared NAT many users pool into one bucket); messaging carries its own 20/min anti-spam cap. Under load a **429 is the defence engaging**, not a failure — only a 5xx is | ✅ built & tested (`test_rate_limit.py` for the public write routes; the 20/min messaging cap is proven in `Negative_Tests/test_messages_media_negative.py::test_dm_spam_over_the_window_cap_is_shed_with_429`. `locustfile.py` treats 429 as a pass and 5xx as a failure — on-demand only) |
 | **Huge-file upload (posts, comments, DMs)** | Disk exhaustion, memory blowup | Per-upload size caps + type checks; `MAX_CONTENT_LENGTH` rejects an oversized body before Flask parses it | ✅ built & tested (`test_media_limits.py`) |
 | **Hostile payload reaching a worker process** | Wasted worker, potential injection | `/predict` validates the body shape and caps the feature count **before** `submit()`, so a rejected request costs a 400, not a pickled round-trip into a child process | ✅ built & tested (`test_ai_queue.py`: injection-shaped keys, feature bombs, oversized bodies) |
 | **Job-id enumeration** | Reading another user's readiness score (`ai` has no auth by design) | Job ids are `uuid4` hex, unguessable and non-sequential; an unknown id is a flat 404 with no detail; a model traceback never reaches the caller | ✅ built & tested (`test_ai_queue.py`) |
@@ -459,6 +459,19 @@ Naming these is part of the assessment; an unlisted risk is an unnoticed one.
   image's user changes — so the switch has to be paired with a one-time `chown` on the VM or the first upload
   after the deploy fails with `EACCES`. Sequencing that against a live deploy days before submission buys less
   than it risks, so it is recorded here rather than shipped quietly.
+
+* **Email uniqueness is enforced on the raw string, so one inbox can hold many accounts.** `validate_email`
+  strips and lower-cases the address but does not canonicalise sub-addresses, so `foo+a@gmail.com`,
+  `foo+b@gmail.com` and `foo@gmail.com` register as three distinct accounts that all deliver to the one
+  Gmail inbox (dots in the local part do the same). Registration still requires *controlling* the inbox —
+  a verification code has to be read back — so this is one person creating many accounts, **not** takeover
+  of someone else's address. It stays this way on purpose: canonicalisation is provider-specific (Gmail
+  ignores `+tag` and dots; many providers treat `user+tag@domain` as a genuinely distinct mailbox), so a
+  blanket normaliser would wrongly merge different real users and lock people out. Residual risk, stated
+  plainly: **a single person can stand up multiple verified accounts** — enough to swing a forum vote or
+  inflate engagement, bounded only by the per-IP signup rate-limit. The safe fix is post-submission and
+  narrow — normalise only the **Gmail/Googlemail** local part (drop `+tag`, remove dots) at the
+  registration uniqueness check, leaving other providers untouched. Detail: #613.
 
 ### 5.6 How the mitigations are kept honest
 
