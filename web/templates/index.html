@@ -188,7 +188,10 @@
     .usermenu-name { white-space:nowrap; font-weight:700; max-width:160px; overflow:hidden; text-overflow:ellipsis; }
     .usermenu-chev { width:16px; height:16px; flex:none; stroke:var(--muted); fill:none; stroke-width:2.4; transition: transform .22s cubic-bezier(.2,.8,.2,1); }
     .usermenu-btn[aria-expanded="true"] .usermenu-chev { transform: rotate(180deg); }
-    .usermenu-panel { position:absolute; top:calc(100% + 8px); right:0; z-index:60; min-width:250px;
+    /* Fixed to the VIEWPORT (top/right set by JS from the button's rect on open), and portaled OUT of
+       <header> (below, at body level) — an absolute panel inside the sticky + backdrop-filter header
+       anchored to the header's scroll-0 position, so scrolled down it opened at the top of the document (#608). */
+    .usermenu-panel { position:fixed; z-index:60; min-width:250px; max-width:calc(100vw - 16px);
       background:var(--card); border:1px solid var(--line); border-radius:18px; padding:8px; box-shadow:var(--shadow);
       /* Same liquid-glass frosting as .tabbar-inner. The -webkit- prefix is REQUIRED — iOS Safari ignores the
          unprefixed backdrop-filter, so without it the dropdown got no blur and the page bled through crisply. */
@@ -976,27 +979,8 @@
         <span id="who-name" class="usermenu-name"></span>
         <svg class="usermenu-chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
       </button>
-      <div id="user-menu-panel" class="usermenu-panel" role="menu" aria-label="Account" hidden>
-        <div class="usermenu-id">
-          <span id="user-menu-av-lg" class="usermenu-av" aria-hidden="true"></span>
-          <span class="usermenu-id-text"><strong id="user-menu-name"></strong><span id="user-menu-handle" class="muted"></span></span>
-        </div>
-        <div class="usermenu-sep"></div>
-        <button type="button" class="usermenu-item" role="menuitem" data-act="profile">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6 8-6s8 2 8 6"/></svg>Profile &amp; account</button>
-        <div class="usermenu-sep"></div>
-        <div class="usermenu-theme" role="group" aria-label="Theme">
-          <span class="usermenu-theme-label">Theme</span>
-          <div class="usermenu-segs">
-            <button type="button" class="um-seg" data-theme="system" aria-pressed="false">System</button>
-            <button type="button" class="um-seg" data-theme="light" aria-pressed="false">Light</button>
-            <button type="button" class="um-seg" data-theme="dark" aria-pressed="false">Dark</button>
-          </div>
-        </div>
-        <div class="usermenu-sep"></div>
-        <button type="button" class="usermenu-item danger" role="menuitem" data-act="logout">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg>Log out</button>
-      </div>
+      <!-- #user-menu-panel is portaled to body level (near #menu-backdrop) so its position:fixed is
+           viewport-relative and not captured by the header's backdrop-filter containing block (#608). -->
     </div>
   </header>
 
@@ -1410,6 +1394,32 @@
   <button id="ctx-back" class="ctx-back" type="button" hidden aria-label="Go to Today"></button>
   <!-- Frosted backdrop behind the open account menu (body-level so its blur covers the whole viewport). -->
   <div id="menu-backdrop" class="menu-backdrop" hidden></div>
+
+  <!-- Account menu — portaled here (body level) rather than inside <header>, so its position:fixed is
+       viewport-relative. Inside the sticky, backdrop-filter header its absolute positioning anchored to the
+       header's scroll-0 spot, opening the menu at the top of the document when scrolled down (#608).
+       openUserMenu() sets top/right from #user-menu-btn's rect so it still opens under the trigger. -->
+  <div id="user-menu-panel" class="usermenu-panel" role="menu" aria-label="Account" hidden>
+    <div class="usermenu-id">
+      <span id="user-menu-av-lg" class="usermenu-av" aria-hidden="true"></span>
+      <span class="usermenu-id-text"><strong id="user-menu-name"></strong><span id="user-menu-handle" class="muted"></span></span>
+    </div>
+    <div class="usermenu-sep"></div>
+    <button type="button" class="usermenu-item" role="menuitem" data-act="profile">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6 8-6s8 2 8 6"/></svg>Profile &amp; account</button>
+    <div class="usermenu-sep"></div>
+    <div class="usermenu-theme" role="group" aria-label="Theme">
+      <span class="usermenu-theme-label">Theme</span>
+      <div class="usermenu-segs">
+        <button type="button" class="um-seg" data-theme="system" aria-pressed="false">System</button>
+        <button type="button" class="um-seg" data-theme="light" aria-pressed="false">Light</button>
+        <button type="button" class="um-seg" data-theme="dark" aria-pressed="false">Dark</button>
+      </div>
+    </div>
+    <div class="usermenu-sep"></div>
+    <button type="button" class="usermenu-item danger" role="menuitem" data-act="logout">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg>Log out</button>
+  </div>
 
   <!-- Enlarged-photo lightbox. BODY-level for the SAME reason as the history dialog below (#424): it used to
        live inside #dm-thread-view, so off the Chat screen its ancestors were display:none and it opened
@@ -4728,8 +4738,13 @@
       if (wasOpen) unlockPageScroll();   // release only on a REAL close, so the ref-count stays balanced
     }
     function openUserMenu() {
-      $("user-menu-panel").hidden = false;
-      $("user-menu-btn").setAttribute("aria-expanded", "true");
+      const panel = $("user-menu-panel"), btn = $("user-menu-btn");
+      // #608: panel is position:fixed at body level, so place it under the trigger in viewport coords.
+      const r = btn.getBoundingClientRect();
+      panel.style.top = (r.bottom + 8) + "px";
+      panel.style.right = Math.max(8, window.innerWidth - r.right) + "px";
+      panel.hidden = false;
+      btn.setAttribute("aria-expanded", "true");
       const bd = $("menu-backdrop"); if (bd) bd.hidden = false;  // frost the content behind the menu
       lockPageScroll();   // it paints a full-screen backdrop, so it reads as modal — the page must not
                           // scroll 200px underneath it (measured), which is what made it feel broken (#430)
