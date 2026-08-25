@@ -51,6 +51,19 @@ jobs:
             if [ -f "$f" ]; then pip install -r "$f"; fi
           done
 
+      - name: Install mongodb-database-tools (mongodump/mongorestore for the backup+restore IT)
+        run: |
+          # backup.sh runs mongodump and the restore test runs mongorestore. These are the separate
+          # mongodb-database-tools — NOT bundled with the mongo:7 SERVER service above. The binary
+          # tarball needs no apt repo and no extra packages; without it test_backup_restore.py skips
+          # instead of actually verifying a restore (#602 item 3).
+          ver=100.10.0
+          base="mongodb-database-tools-ubuntu2204-x86_64-${ver}"
+          curl -fsSL -o /tmp/mdbtools.tgz "https://fastdl.mongodb.org/tools/db/${base}.tgz"
+          tar -xzf /tmp/mdbtools.tgz -C /tmp
+          echo "/tmp/${base}/bin" >> "$GITHUB_PATH"
+          "/tmp/${base}/bin/mongodump" --version | head -1
+
       - name: Lint (ruff)
         run: ruff check .
 
