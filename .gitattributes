@@ -19,3 +19,4 @@
 *.pkl binary
 *.joblib binary
 *.zip binary
+presentation/demo-video/Video.mp4 filter=lfs diff=lfs merge=lfs -text
