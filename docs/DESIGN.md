@@ -75,7 +75,7 @@ dependency on `ai/exercise_catalog.py`).
 
 ## 4. AI decision engine (the heart)
 One pipeline, two capabilities:
-1. **State assessment** — a supervised classifier (**Random Forest** chosen: ML-course-taught, local, fast, explainable; **swappable** behind the `/predict` contract) → a small set of training-state categories (exact set TBD).
+1. **State assessment** — a supervised classifier (**Random Forest** chosen: ML-course-taught, local, fast, explainable; **swappable** behind the `/predict` contract) → one of three training-state categories: **Rest**, **Moderate**, **Ready**.
 2. **Recommendation generation** — combines the assessment + goals + program + recovery → action plan / workout / program adjustments / calories.
 
 - **Baked into the `ai` image** (`joblib.dump` → `COPY` → `joblib.load`; **pin sklearn** so the pickle loads). Never train/download at runtime.
