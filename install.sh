@@ -4,6 +4,10 @@
 # Usage:  ./install.sh            start the stack (foreground, Ctrl-C stops it)
 #         ./install.sh --seed     start it AND fill it with demo data first
 #
+#         BOTH run in the FOREGROUND and Ctrl-C stops the stack. If you'd rather it kept
+#         running while you use the terminal, take the detached route instead:
+#             cp .env.example .env && docker compose up --build -d && ./seed.sh
+#
 # Needs:  Docker Desktop (macOS/Windows) or Docker Engine + Compose v2 (Linux).
 #         Nothing else — Python, the AI model, and MongoDB all run in containers.
 set -euo pipefail
@@ -41,7 +45,8 @@ else
   echo "Want demo content (15 athletes, history, forum, messages)? Re-run as:  ./install.sh --seed"
   echo "                                       or, once it is up, in another terminal:  ./seed.sh"
 fi
-echo "Stop with Ctrl-C, then 'docker compose down'."
+echo "This runs in the FOREGROUND — Ctrl-C stops the stack (then 'docker compose down' to clean up)."
+echo "Prefer it detached?  cp .env.example .env && docker compose up --build -d && ./seed.sh"
 echo
 
 if [ "$SEED" -eq 0 ]; then

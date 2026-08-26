@@ -100,6 +100,8 @@ pip install -r requirements-dev.txt        # in your venv: pinned ruff + bandit 
 ./install.sh --seed             # creates .env, starts the 3 containers, fills them with demo data
 ```
 `./install.sh` without the flag does the same but leaves the database empty.
+Both run in the **foreground**, so Ctrl-C stops the stack. To leave it running and keep your terminal,
+use the manual route below with `-d`.
 Manual equivalent:
 ```sh
 cp .env.example .env            # sets SECRET_KEY (never commit .env)
