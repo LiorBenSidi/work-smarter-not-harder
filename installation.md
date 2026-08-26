@@ -8,7 +8,7 @@ The whole system runs in **three Docker containers** (`web` · `ai` · `db`). On
 
 ## Run
 ```bash
-./install.sh
+./install.sh --seed      # or plain ./install.sh to start with an empty database
 ```
 The script creates a local `.env` on first run (from `.env.example`, gitignored) and then runs
 `docker compose up --build`. Equivalent manual steps:
@@ -22,12 +22,17 @@ When the stack is up, open **http://localhost:8000**.
 - **Register a new account.** With no SMTP configured (the default), one-time codes — login OTP,
   signup verification, password reset — are shown **on screen and in the logs**, so no mailbox is needed.
 
-## Populate demo content (optional)
-A brand-new database starts **empty** (real product behaviour). To see a populated app — a few demo
-clients plus a forum with posts, comments and likes — run this **after the stack is up** (in another terminal):
+## Populate demo content
+A brand-new database starts **empty** (real product behaviour), so do this too — it is what turns the
+app from a login screen into a working demo. Either pass `--seed` to the installer above, or run this
+**after the stack is up** (in another terminal):
 ```bash
 ./seed.sh
 ```
+It creates **15 athletes**, up to **60 days of check-in history each** — scored by the real model, so
+the history agrees with the dashboard — a forum of **25 posts and 28 comments** with votes, Hebrew and
+English direct-message threads, notifications, and image/video attachments on both posts and DMs.
+
 Idempotent — safe to re-run; it does nothing if the forum already has content. Then log in as a seeded
 client (e.g. **`coach_maya`**) with the demo password **`demo-seed-pw`** and browse the forum.
 

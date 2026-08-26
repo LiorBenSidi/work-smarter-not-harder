@@ -18,7 +18,7 @@
 > The 23th of August, 2026"*; the course later granted an extension on Moodle to **30 Aug 2026**
 > (submission box *"Actual Submission - Extention until 30.08"*), which is the date this report uses.
 >
-> **Last updated:** 2026-08-25 · **Suite at this snapshot:** **1474 checks, 1428 passing / 46 environment-gated**
+> **Last updated:** 2026-08-26 · **Suite at this snapshot:** **1482 checks, 1436 passing / 46 environment-gated**
 > (+ 20 browser e2e scenarios)
 > (`python -m pytest tests/ -q`; the env-gated ones run in CI's `compose-e2e` job against the live containers).
 > Since the 07-12 snapshot (783 tests): **Shiri's Random Forest landed** — a real `ai/model/model.pkl` +
@@ -231,7 +231,7 @@ Columns are the test-type dirs under `tests/`. Cells name representative file(s)
 | **AI job-queue +5 (Elad)** | `test_jobqueue` (40) · `test_bench` (18) | `test_ai_queue_contract` (22) | — | `test_ai_queue_live` (10) | `test_ai_queue` (28) | `test_pool_scaling` (2) · `test_queue_backpressure` (6) |
 | **Deploy / scale (Elad)** | — | `test_deploy_contract` (32) · `test_scale_contract` (11) · `test_pin_contract` (4) | — | — | — | — |
 | **Rate-limiting / anti-spam (Elad)** | — | — | — | — | `test_rate_limit` (9) | in `test_load` |
-| **Data layer (`db.py` + Mongo)** | `test_db` (67) · `test_backup_script` (2) · `test_seed` (8) · `test_seed_script` (2, the seeding wrapper's docker invocation — #580) | `test_db_mongo` (22, real Mongo) · `test_real_mongo_guard` (7) | — | — | (injection-safe queries) | — |
+| **Data layer (`db.py` + Mongo)** | `test_db` (67) · `test_backup_script` (2) · `test_seed` (16, incl. the seeded profiles / history / DMs / notifications / attachments) · `test_seed_script` (2, the seeding wrapper's docker invocation — #580) | `test_db_mongo` (22, real Mongo) · `test_real_mongo_guard` (7) | — | — | (injection-safe queries) | — |
 | **Frontend (SPA / CSRF / a11y / mobile)** | `test_frontend_mobile_guards` (16) | `test_frontend` (52) | — | `test_e2e` leg | `test_csrf` (6) · `test_web_hardening` (4) · `test_review_hardening` (3) | — |
 | **Observability (logging)** | `test_logging_config` (21) | — | — | — | (access-log path escaping) | — |
 | **App config / debug flag / secret** | `test_config` (16) · `test_scaffold` (4) | — | — | — | (no `.env` tracked) | — |
@@ -240,19 +240,19 @@ Columns are the test-type dirs under `tests/`. Cells name representative file(s)
 | **Fault tolerance / isolation** | — | `test_live_http_retry` (5) — a bare session dies when the worker closes mid-request, the live session retries onto a fresh connection, a server that never answers still fails, and an HTTP error status is never retried away | — | `test_fault_isolation` (2) · Full-System `test_parts_in_isolation` (12) | — | — |
 | **Whole-system journey** | — | — | — | `test_e2e` (1) · Full-System `test_everything_together_sync` (15) | — | — |
 
-**Totals by type (full suite, `pytest --collect-only`):** Unit **631** · Integration **525** · Negative **177** ·
-System **14** · Full-System **27** · Security **88** · Stress **12** → **1474 automated checks across the seven
+**Totals by type (full suite, `pytest --collect-only`):** Unit **639** · Integration **525** · Negative **177** ·
+System **14** · Full-System **27** · Security **88** · Stress **12** → **1482 automated checks across the seven
 pytest suites**, plus **20 browser end-to-end scenarios** driven separately (`tests/E2E_Tests/`, run in CI as
 the *e2e (browser · desktop + mobile)* job — not counted in the pytest total). This matches the header count.
 
-Read the total as *checks*, not as hand-written test functions: 1474 collected cases come from **1074 test
+Read the total as *checks*, not as hand-written test functions: 1482 collected cases come from **1082 test
 functions** (measured with `grep -c "^def test_"` across `tests/`), the remainder being parametrised cases (one `@parametrize` over 11 malformed payloads is 11
 collected cases, not 11 tests written). The suite is deliberately weighted toward the layers where a
 regression is cheapest to catch — unit and negative input walls — rather than toward volume.
 
-**Pass / skip:** the pre-07-12 snapshot was **747 pass, 36 skip in ~47 s**; the current suite is **1428 pass,
+**Pass / skip:** the pre-07-12 snapshot was **747 pass, 36 skip in ~47 s**; the current suite is **1436 pass,
 46 skip** (`python -m pytest tests/ -q`); in CI, where the `mongo:7` service is present, the same
-suite is **1456 pass, 18 skip**. All **46** local skips are env-gated and *not broken* — they run the
+suite is **1464 pass, 18 skip**. All **46** local skips are env-gated and *not broken* — they run the
 moment their dependency is present:
 
 - `test_db_mongo` (22) — the real-Mongo integration suite; skips without `TEST_MONGO_URI`, and **runs in CI**
@@ -284,7 +284,7 @@ The five canonical types live under `tests/{Unit,Integration,System,Stress,Secur
 `Negative_Tests/` for adversarial-input coverage and `Full_System_Tests/` for whole-stack journeys), run on any
 machine (env vars, no local paths), and are exercised by CI on every PR. A run that collects **0 tests fails** the gate.
 
-- **Unit (631)** — pure functions and single components in isolation: input validators (auth / profile /
+- **Unit (639)** — pure functions and single components in isolation: input validators (auth / profile /
   check-in / forum), the calorie formula, the `db.py` CRUD and Mongo-internals logic (against an in-memory
   fake), the logging configuration, and app config. Heavily parametrized on boundary and adversarial inputs
   (e.g. profile validation rejects injection objects, bools-as-numbers, and out-of-range values across every
@@ -305,7 +305,7 @@ machine (env vars, no local paths), and are exercised by CI on every PR. A run t
   (`test_csrf`), NoSQL-injection-safe queries (`test_profile`, `test_forum`), ownership enforcement on
   forum edit/delete (403), auth-gating of dashboard/history, and response-hardening (`test_web_hardening`).
 
-The two supporting directories complete the 1474: **Negative (177)** — adversarial and malformed input across
+The two supporting directories complete the 1482: **Negative (177)** — adversarial and malformed input across
 auth, profile, check-in, forum and media — and **Full-System (27)** — whole-stack journeys in-process, plus the
 parts-in-isolation suite. The per-type figures here are the same ones tabulated in §3; both are
 `pytest --collect-only` counts, not estimates.
@@ -519,7 +519,7 @@ between planes (§1). Full detail in [`COLLABORATORS.md`](../COLLABORATORS.md) a
 cp .env.example .env
 docker compose up --build          # 3 containers; only web is published
 # → http://localhost:8000/health   → then register, set a profile, check in, see the dashboard
-pytest -q                          # 1428 pass / 46 env-gated skip
+pytest -q                          # 1436 pass / 46 env-gated skip
 ```
 
 CI reproduces the gate on every PR (ruff → bandit → pytest + a `mongo:7` service). `main` is

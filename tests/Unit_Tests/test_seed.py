@@ -8,6 +8,7 @@ The seed is exercised two ways:
   ``tests/Integration_Tests/test_seed_mongo.py`` against a live mongo:7).
 """
 import importlib.util
+import re
 import time
 from pathlib import Path
 from types import SimpleNamespace
@@ -48,11 +49,36 @@ class _Coll:
     def create_index(self, *a, **k):
         pass
 
+    @staticmethod
+    def _value(doc, path):
+        """Read a possibly-dotted key ('entry.timestamp'), the way Mongo addresses a subdocument."""
+        cur = doc
+        for part in path.split("."):
+            if not isinstance(cur, dict):
+                return None
+            cur = cur.get(part)
+        return cur
+
     def _match(self, doc, filt):
-        return all(doc.get(k) == v for k, v in filt.items())
+        for key, expected in filt.items():
+            actual = self._value(doc, key)
+            # add_history dedupes a calendar day with {"entry.timestamp": {"$regex": "^YYYY-MM-DD"}},
+            # so the fake has to understand that one operator to hold a one-row-per-day log.
+            if isinstance(expected, dict) and "$regex" in expected:
+                if not isinstance(actual, str) or not re.search(expected["$regex"], actual):
+                    return False
+            elif actual != expected:
+                return False
+        return True
 
     def find_one(self, filt):
         return next((dict(d) for d in self.docs if self._match(d, filt)), None)
+
+    def delete_many(self, filt):
+        keep = [d for d in self.docs if not self._match(d, filt)]
+        removed = len(self.docs) - len(keep)
+        self.docs[:] = keep
+        return SimpleNamespace(deleted_count=removed)
 
     def insert_one(self, doc):
         self.docs.append(dict(doc))
@@ -210,3 +236,192 @@ def test_apply_seed_is_idempotent(seed_mod, db_mod, db, monkeypatch):
     assert len(db.forum_posts.docs) == posts_after_first
     assert len(db.forum_comments.docs) == comments_after_first
     assert first["posts"] == posts_after_first  # sanity: the first run is what populated it
+
+
+# ---------------------------------------------------------------------------------------------
+# The population the seed grew into: profiles, check-in history, DM threads, notifications, media.
+# `_seed_forum`'s content was always covered above; these cover everything added alongside it.
+# ---------------------------------------------------------------------------------------------
+
+class _FakeMedia:
+    """The media contract the seed uses — mirrors tests/conftest.py's FakeMedia (add + bind)."""
+
+    def __init__(self):
+        self.records = {}
+
+    def add(self, media_id, owner, mime, size):
+        self.records[media_id] = {"id": media_id, "owner": owner, "mime": mime, "size": size,
+                                  "target_type": None, "target_id": None, "peers": None}
+
+    def bind(self, media_id, owner, target_type, target_id, peers=None):
+        rec = self.records.get(media_id)
+        if not rec or rec["owner"] != owner:
+            return False
+        rec.update(target_type=target_type, target_id=target_id, peers=list(peers) if peers else None)
+        return True
+
+
+def _seed_all(seed_mod, db_mod, db, monkeypatch, **kw):
+    _patch_post_vote(monkeypatch, db_mod)
+    return seed_mod.apply_seed(db_mod, db, **kw)
+
+
+def test_profiles_span_every_tier(seed_mod, db_mod, db, monkeypatch):
+    """The seeded population must exercise beginner AND intermediate AND advanced.
+
+    The tier is derived from which optional fields a profile carries (routes/profile.derive_tier), so
+    a seed where everyone filled in the same things would demo only one third of PROPOSAL-v2 §3 —
+    and the Advanced-tier balance analysis would never fire for anyone.
+    """
+    _seed_all(seed_mod, db_mod, db, monkeypatch)
+    saved = {d["username"]: d for d in db.profiles.docs}
+    assert len(saved) == len(seed_mod.CONTENT.PROFILES), "every athlete should get a profile"
+
+    def tier(p):
+        if p.get("training_program"):
+            return "advanced"
+        return "intermediate" if (p.get("equipment") or p.get("split_preference")) else "beginner"
+
+    tiers = {tier(d.get("profile", d)) for d in saved.values()}
+    assert tiers == {"beginner", "intermediate", "advanced"}, f"tiers present: {sorted(tiers)}"
+
+
+def test_history_is_one_row_per_day_and_honours_the_gaps(seed_mod, db_mod, db, monkeypatch):
+    """A heatmap with no holes looks generated, and two rows for one day would break the day key.
+
+    ``add_history`` treats a calendar day as a single reading, so a seeded log must contain each day
+    at most once; the per-athlete ``gaps`` are the days that athlete simply did not log.
+    """
+    _seed_all(seed_mod, db_mod, db, monkeypatch)
+    rows = db.analysis_history.docs
+    for handle, shape in seed_mod.CONTENT.HISTORY.items():
+        mine = [r for r in rows if r["username"] == handle]
+        assert len(mine) == shape["days"] - len(set(shape["gaps"])), f"{handle} wrote the wrong number of days"
+        days = [r["entry"]["timestamp"][:10] for r in mine]
+        assert len(set(days)) == len(days), f"{handle} has two entries on one calendar day"
+
+
+def test_history_is_scored_by_the_real_model_when_one_is_reachable(seed_mod, db_mod, db, monkeypatch):
+    """Every stored assessment must come from the model the dashboard asks, not a local rule.
+
+    The app picks the displayed state with ``_choose_state``'s trained Ready threshold. A history
+    scored by any other rule can read "Ready" in the heatmap while the dashboard reads "Rest" for the
+    same numbers — a contradiction a reviewer sees on one screen. This pins that the seed calls the
+    real scorer and stores exactly what it returns.
+    """
+    calls = []
+
+    class _Client:
+        @staticmethod
+        def build_features(profile, metrics, **extra):
+            return {**profile, **metrics, **extra}
+
+        @staticmethod
+        def predict(url, features):
+            calls.append(url)
+            return {"state": "Moderate", "proba": {"Moderate": 0.9, "Rest": 0.05, "Ready": 0.05},
+                    "recommendations": ["from the model"], "calories": 1234}
+
+    monkeypatch.setattr(seed_mod, "_load_ai_client", lambda: _Client)
+    _seed_all(seed_mod, db_mod, db, monkeypatch, ai_url="http://ai:5000")
+
+    assert calls, "the seed must ask the model rather than scoring locally"
+    stored = db.analysis_history.docs
+    assert {r["entry"]["assessment"] for r in stored} == {"Moderate"}
+    assert stored[0]["entry"]["recommendations"] == ["from the model"]
+    assert stored[0]["entry"]["calories"] == 1234
+
+
+def test_history_falls_back_offline_and_stops_retrying(seed_mod, db_mod, db, monkeypatch):
+    """When ai never answers the seed must still produce a usable history, and must not retry per row.
+
+    Retrying a dead service once per check-in would turn a 500-row seed into 500 timeouts.
+    """
+    attempts = []
+
+    class _DeadClient:
+        @staticmethod
+        def build_features(profile, metrics, **extra):
+            return {**profile, **metrics}
+
+        @staticmethod
+        def predict(url, features):
+            attempts.append(url)
+            return None                      # ai unavailable
+
+    monkeypatch.setattr(seed_mod, "_load_ai_client", lambda: _DeadClient)
+    _seed_all(seed_mod, db_mod, db, monkeypatch, ai_url="http://ai:5000")
+
+    assert len(attempts) == 1, f"a dead ai must be given up on after one try, not {len(attempts)}"
+    assert db.analysis_history.docs, "history must still be written when ai is down"
+    assert all(r["entry"]["assessment"] in {"Ready", "Moderate", "Rest"} for r in db.analysis_history.docs)
+
+
+def test_dm_threads_land_in_order_with_a_real_unread_tail(seed_mod, db_mod, db, monkeypatch):
+    """Conversations should read like conversations, and the unread badge should be neither 0 nor absurd."""
+    _seed_all(seed_mod, db_mod, db, monkeypatch)
+    sent = db.messages.docs
+    expected = sum(len(thread) for _a, _b, thread in seed_mod.CONTENT.DM_THREADS)
+    assert len(sent) == expected
+
+    for a, b, thread in seed_mod.CONTENT.DM_THREADS:
+        mine = [m for m in sent if {m["sender"], m["recipient"]} == {a, b}]
+        assert [m["body"] for m in mine] == [body for _s, body, _age, _media in thread], \
+            f"the {a}/{b} thread is out of order"
+        unread = [m for m in mine if not m.get("read")]
+        assert 0 < len(unread) <= 2, f"the {a}/{b} thread should end unread, not {len(unread)} of {len(mine)}"
+
+
+def test_notifications_are_derived_and_never_self_addressed(seed_mod, db_mod, db, monkeypatch):
+    """Notifications must mirror what the routes would raise — including never notifying you about yourself.
+
+    They are derived from the seeded votes and DMs rather than hand-listed, so this also guards the
+    shape: type "dm" (not "message"), and name-LESS text, which is what forum._notify_vote stores so
+    that a later rename re-resolves instead of freezing a stale name into the row.
+    """
+    _seed_all(seed_mod, db_mod, db, monkeypatch)
+    notes = db.notifications.docs
+    assert notes, "the seeded votes and DMs should have raised notifications"
+    assert not [n for n in notes if n["user"] == n["actor"]], "a user must never be notified about themselves"
+    assert {n["type"] for n in notes} <= {"vote", "dm"}, "only the two types the routes raise"
+    for n in notes:
+        assert n["actor"] not in n["text"], f"notification text must stay name-less: {n['text']!r}"
+
+
+def test_media_is_bound_to_its_target_using_the_stores_own_naming(seed_mod, db_mod, db, monkeypatch, tmp_path):
+    """Attachments must reach BOTH posts and DMs, and the bytes must be findable by the serve route.
+
+    media_store serves `<media_id><ext>`; if the seed wrote any other filename the record would exist
+    and the image would 404 — the failure a reviewer notices first.
+    """
+    media = _FakeMedia()
+    _seed_all(seed_mod, db_mod, db, monkeypatch, media=media, media_root=str(tmp_path))
+
+    assert media.records, "no attachments were bound"
+    targets = {r["target_type"] for r in media.records.values()}
+    assert targets == {"post", "dm"}, f"attachments should cover posts AND DMs, got {targets}"
+
+    for media_id, rec in media.records.items():
+        ext = ".mp4" if rec["mime"] == "video/mp4" else ".jpg"
+        assert (tmp_path / f"{media_id}{ext}").exists(), "bytes must be stored as <media_id><ext>"
+        if rec["target_type"] == "dm":
+            assert rec["peers"] and len(rec["peers"]) == 2, "a DM attachment is served to its two participants"
+
+
+def test_a_second_run_changes_nothing_and_force_is_off_by_default(seed_mod, db_mod, db, monkeypatch):
+    """The seed is safe to re-run, and the one switch that makes it unsafe must be opt-in.
+
+    `force` exists for re-seeding a box that already holds content. Defaulting it on — or letting a
+    later refactor flip it — would duplicate every post on each run, since post ids are random and no
+    unique index dedupes them.
+    """
+    _seed_all(seed_mod, db_mod, db, monkeypatch)
+    before = (len(db.forum_posts.docs), len(db.analysis_history.docs), len(db.messages.docs))
+
+    second = seed_mod.apply_seed(db_mod, db)
+    assert second == {"users": 0, "posts": 0, "comments": 0}
+    assert (len(db.forum_posts.docs), len(db.analysis_history.docs), len(db.messages.docs)) == before
+
+    forced = seed_mod.apply_seed(db_mod, db, force=True)
+    assert forced["posts"] == len(seed_mod.SEED_POSTS), "force=True must actually re-seed"
+    assert len(db.forum_posts.docs) > before[0], "a forced run adds content (which is why it is opt-in)"

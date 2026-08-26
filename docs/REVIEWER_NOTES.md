@@ -36,8 +36,20 @@ Per the TA's notes, the project is graded on the **backend, run locally via Dock
 required. To run and exercise everything, including the full auth flow, **without a mailbox**:
 
 ```bash
+cp .env.example .env                # first run only
 docker compose up --build -d        # web on http://localhost:8000
+./seed.sh                           # THEN: fill the app with demo data (see below)
 ```
+
+Or as a single command: **`./install.sh --seed`** does all three and leaves the stack attached.
+
+**Please run `./seed.sh` (or `--seed`).** A brand-new database is **empty by design** — that is real
+product behaviour, not a missing feature, and the team decided against seeding on every boot so
+nothing mutates data underneath your own testing. Without it you get a login screen and an empty
+dashboard. With it: **15 demo athletes**, up to **60 days of check-in history each** (scored by the
+real model, not stubbed), a forum of **25 posts / 28 comments** with votes, Hebrew and English
+message threads, notifications and image/video attachments. Log in as **`coach_maya`** with the demo
+password **`demo-seed-pw`** — every seeded athlete uses the same one.
 
 With **no SMTP configured** (the default), every OTP / password-reset **code and link is surfaced
 on-screen and in the logs** — see [`AUTH_TESTING.md`](AUTH_TESTING.md). So the email-delivery limitation
