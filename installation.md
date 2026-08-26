@@ -17,6 +17,10 @@ cp .env.example .env
 docker compose up --build
 ```
 
+> **The `cp` step is required, not optional.** Without a `.env` the stack refuses to start and prints
+> `required variable SECRET_KEY is missing a value` — deliberate, since a web app should not run on a
+> default session-signing secret. `.env` is gitignored, so a fresh clone never has one.
+
 When the stack is up, open **http://localhost:8000**.
 - Liveness probe: <http://localhost:8000/health>
 - **Register a new account.** With no SMTP configured (the default), one-time codes — login OTP,
