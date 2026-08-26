@@ -67,6 +67,12 @@ docker compose -f docker-compose.yml -f docker-compose.scale.yml up --build --sc
 > [`docker-compose.scale.yml`](docker-compose.scale.yml).
 
 ## Repo layout
+> **The demo video is tracked with Git LFS.** `presentation/demo-video/Video.mp4` is ~66 MB and needs
+> `git-lfs` installed **before** you clone; without it you get a 133-byte pointer file that looks like a
+> video but isn't. Install it (`brew install git-lfs` / `apt install git-lfs`, then `git lfs install`) and
+> re-clone, or run `git lfs pull` in an existing clone. Nothing else in the repo uses LFS — the app, the
+> tests and the seed all work without it.
+
 ```
 web/      Flask web app + the whole data layer (built)
 ai/       Random Forest + recommendation engine (Shiri — the real model.pkl is baked in),
@@ -97,16 +103,23 @@ pip install -r requirements-dev.txt        # in your venv: pinned ruff + bandit 
 ## Run it
 **One command** (the "just run it" path — full guide in [`installation.md`](installation.md)):
 ```sh
-./install.sh                    # creates .env, builds + starts the 3 containers → http://localhost:8000
+./install.sh --seed             # creates .env, starts the 3 containers, fills them with demo data
 ```
+`./install.sh` without the flag does the same but leaves the database empty.
+Both run in the **foreground**, so Ctrl-C stops the stack. To leave it running and keep your terminal,
+use the manual route below with `-d`.
 Manual equivalent:
 ```sh
 cp .env.example .env            # sets SECRET_KEY (never commit .env)
 docker compose up --build       # 3 containers → open http://localhost:8000/health
 ```
-Then **register an account** — with no SMTP configured (the default), the one-time code is shown **on
-screen** (and logged), so **no mailbox is needed**. Want a **populated** app (a forum with demo posts)?
-Run [`./seed.sh`](seed.sh) once the stack is up.
+Then **run [`./seed.sh`](seed.sh)** (or use `--seed` above). A fresh database is empty by design; the
+seed fills it with **15 athletes**, up to **60 days of model-scored check-in history each**, a
+**25-post** forum with comments and votes, Hebrew/English DM threads, notifications and image/video
+attachments. Log in as **`coach_maya`** / **`demo-seed-pw`**.
+
+Prefer your own account? **Register** — with no SMTP configured (the default), the one-time code is
+shown **on screen** (and logged), so **no mailbox is needed**.
 
 **Dev switches** (both default off; neither affects real users — full guide [`docs/AUTH_TESTING.md`](docs/AUTH_TESTING.md)):
 - **Email mock ⇄ live = `SMTP_HOST`** — unset → login-OTP / signup-verify / reset codes are shown on screen + logged (no mailbox; teammates + grading use this); set `SMTP_*` + `MAIL_FROM` in `.env` → codes are emailed only. Every auth-mode var (`OTP_ENABLED`, `REGISTER_VERIFY_EMAIL`, …) passes through from `.env`; `curl localhost:8000/auth/config` reports `email_mode`.
@@ -241,7 +254,8 @@ on the profile), Week-9 logging, the 3-container build, the CI gate, the cross-c
 **AI job queue (+5)** (bounded + self-healing pool), **measured scaling**, and the CI/CD pipeline
 auto-deploying every green `main` to Azure over HTTPS. The **Random Forest** behind `POST /predict` has landed
 too (`ai/model/model.pkl`, baked into the image). The **forum cold-seed** is built too — a deliberate
-demo/review tool (`db/seed.py`: fake clients + posts + comments + likes); a fresh database is left
+demo/review tool (`db/seed.py`: 15 fake clients with profiles, check-in history, posts, comments,
+likes, DM threads, notifications and attachments); a fresh database is left
 **empty by design** (a real deployment starts empty), so run the seed when you want a populated app to
 show. The test suite is green in CI (real-Mongo IT runs against the `mongo:7` service); its size and
 per-type breakdown are stated once, in [`docs/REPORT.md`](docs/REPORT.md).

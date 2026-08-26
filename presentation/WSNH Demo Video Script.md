@@ -17,12 +17,12 @@ through F9, then the Forum, CI/CD and job-queue extras. Target **4–6 min**.
 > Record at 1080p, browser only (hide bookmarks). Have **two accounts** ready for the DM / notification shots —
 > prod runs with **live email**, so the second account needs a real mailbox to clear the verification code.
 
-### Seed the data first — `./seed.sh` alone is NOT enough
+### Seed the data first — historical
 
-This is the same trap the poster hit. **`db/seed.py` seeds users, posts, comments and likes only — it does
-not seed check-in history and it does not seed DM conversations.** On a freshly seeded clone, **shot 10**
-(History: trend line + heatmap) shows a single cell and no trend, and **shot 16** (Chat) says *"No
-conversations yet"*. Both shots die on camera.
+**The poster and both videos are final. Nothing is being re-recorded.** Kept for the record: the seed
+used to cover users, posts, comments and likes only — which is why `seed-for-screenshots.py` exists, and
+why the final video was recorded against the live VM with the team's real accounts. Since #630 the seed
+covers check-in history and DMs too.
 
 The poster solved this with a second seeder, and the video needs it too:
 

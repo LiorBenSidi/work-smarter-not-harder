@@ -10,7 +10,8 @@ the short, reviewer-facing index plus the handful of behaviours a reviewer is mo
 ## ⚠️ Live site not responding? It's the nightly auto-shutdown — here's how to wake it
 
 **Grading does not need the live site.** The project is graded on the **backend, run locally via Docker**
-(`docker compose up --build` — see the next section); deploying is not required, so a sleeping VM blocks
+(`cp .env.example .env && docker compose up --build` — see the next section); deploying is not
+required, so a sleeping VM blocks
 **no** part of the grade.
 
 The **live URL** (<https://app.worksmarternotharder.dev>) runs on a single Azure VM with an
@@ -36,8 +37,29 @@ Per the TA's notes, the project is graded on the **backend, run locally via Dock
 required. To run and exercise everything, including the full auth flow, **without a mailbox**:
 
 ```bash
+cp .env.example .env                # first run only
 docker compose up --build -d        # web on http://localhost:8000
+./seed.sh                           # THEN: fill the app with demo data (see below)
 ```
+
+Or as a single command: **`./install.sh --seed`** does all three and leaves the stack attached.
+
+**To run the test suite** (all five course types, no credentials needed):
+
+```bash
+python -m pytest tests/     # 1483 checks; ~46 skip without their optional dependency
+```
+
+A handful are environment-gated (real Mongo, a live stack) and skip cleanly — they are not unwritten.
+Full detail in [`README.md`](../README.md) and [`REPORT.md` §4](REPORT.md).
+
+**Please run `./seed.sh` (or `--seed`).** A brand-new database is **empty by design** — that is real
+product behaviour, not a missing feature, and the team decided against seeding on every boot so
+nothing mutates data underneath your own testing. Without it you get a login screen and an empty
+dashboard. With it: **15 demo athletes**, up to **60 days of check-in history each** (scored by the
+real model, not stubbed), a forum of **25 posts / 28 comments** with votes, Hebrew and English
+message threads, notifications and image/video attachments. Log in as **`coach_maya`** with the demo
+password **`demo-seed-pw`** — every seeded athlete uses the same one.
 
 With **no SMTP configured** (the default), every OTP / password-reset **code and link is surfaced
 on-screen and in the logs** — see [`AUTH_TESTING.md`](AUTH_TESTING.md). So the email-delivery limitation
@@ -48,6 +70,8 @@ gated `?debug=1` tools panel are available for debug mode.
 
 | What you might see | Why it happens | Verdict / where |
 |---|---|---|
+| **`presentation/demo-video/Video.mp4` is 133 bytes** and starts `version https://git-lfs.github.com/spec/v1` | The demo video is tracked with **Git LFS**. Cloning without `git-lfs` installed leaves a pointer file, not the ~66 MB video — the file looks present but will not play | ✅ expected — install `git-lfs` and re-clone, or run `git lfs pull`. Nothing else in the repo uses LFS: the app, the tests and the seed all run without it |
+| **`docker compose up` exits immediately** with `required variable SECRET_KEY is missing a value: set SECRET_KEY in .env` | The stack **refuses to start without a session-signing secret** — deliberate, not a missing default. `.env` is gitignored, so a fresh clone has none until you make one | ✅ by design — run **`cp .env.example .env`** once, then re-run. Every run path in [`README.md`](../README.md) and [`installation.md`](../installation.md) includes that step, and the error names its own fix |
 | **429 "you're doing that too fast"** when flooding login / register / forum / check-in | Per-IP rate limits are the **defence engaging**, exactly as stress-testing should trigger. Only a 5xx would be a failure | ✅ by design — `test_rate_limit.py`, [REPORT §5.4](REPORT.md) |
 | **503 "queue full / ai unavailable"** under a prediction flood | The AI job queue is **bounded** and sheds load early; `web` degrades and still renders | ✅ by design — `test_queue_backpressure.py`, [REPORT §5.2](REPORT.md) |
 | **Readiness score "jumps"** between bands for similar inputs | The model is deterministic; the 0–100 score is mapped **within** the predicted band (Rest/Moderate/Ready), so a borderline prediction can flip bands and move the number. Not randomness | ✅ by design — `readinessScore` in the SPA |
