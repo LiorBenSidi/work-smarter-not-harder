@@ -47,7 +47,7 @@ Or as a single command: **`./install.sh --seed`** does all three and leaves the 
 **To run the test suite** (all five course types, no credentials needed):
 
 ```bash
-python -m pytest tests/     # 1482 checks; ~46 skip without their optional dependency
+python -m pytest tests/     # 1483 checks; ~46 skip without their optional dependency
 ```
 
 A handful are environment-gated (real Mongo, a live stack) and skip cleanly — they are not unwritten.
