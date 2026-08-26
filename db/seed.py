@@ -13,9 +13,10 @@ the same shape as a user-created one (same fields, same indexes, same validators
 documents that could drift from the app's contract. Only ``created_at`` is adjusted afterwards, to lay
 the content out over a realistic recent timeline instead of all appearing "just now".
 
-Run against the published dev Mongo:
+Run against any Mongo reachable from wherever you run this:
     MONGO_URI="mongodb://localhost:27017/worksmarter" python db/seed.py
-(For an auth'd / in-network DB, run it on the compose network — see db/README.md.)
+The project's own ``db`` service is ``expose``-only (no host port), so that form cannot reach the compose
+stack — use ``./seed.sh``, which runs this on the compose network. See db/README.md.
 """
 import importlib.util
 import logging
@@ -360,7 +361,14 @@ def _seed_media(media, media_root, post_ids, dm_ids):
         return 0
 
     root = Path(media_root)
-    root.mkdir(parents=True, exist_ok=True)
+    try:
+        root.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        # MEDIA_ROOT defaults to the CONTAINER's volume path (/app/media). db/README documents running
+        # this seed straight from a host too, where that path is neither present nor creatable — and an
+        # unwritable media directory must cost the attachments only, never the whole seed.
+        logger.info("media root %s is not writable (%s) — skipping attachments", root, exc)
+        return 0
     bound = 0
 
     def _attach(key, owner, target_type, target_id, peers=None):

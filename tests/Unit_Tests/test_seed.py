@@ -425,3 +425,19 @@ def test_a_second_run_changes_nothing_and_force_is_off_by_default(seed_mod, db_m
     forced = seed_mod.apply_seed(db_mod, db, force=True)
     assert forced["posts"] == len(seed_mod.SEED_POSTS), "force=True must actually re-seed"
     assert len(db.forum_posts.docs) > before[0], "a forced run adds content (which is why it is opt-in)"
+
+
+def test_an_unwritable_media_root_costs_the_attachments_not_the_whole_seed(seed_mod, db_mod, db, monkeypatch):
+    """`MEDIA_ROOT` defaults to the CONTAINER's path (`/app/media`), but db/README documents running
+    this seed straight from a host — where that path is neither present nor creatable.
+
+    Before this guard the `mkdir` raised and took the entire run with it: no users, no forum, no
+    history, from a command the docs tell you to use. Attachments are the only thing that can
+    reasonably fail there, so they are the only thing that may be lost.
+    """
+    result = _seed_all(seed_mod, db_mod, db, monkeypatch,
+                       media=_FakeMedia(), media_root="/app/media")   # unwritable on any host
+
+    assert result["posts"] == len(seed_mod.SEED_POSTS), "the forum must still be seeded"
+    assert db.users.docs, "users must still be created"
+    assert db.analysis_history.docs, "history must still be written"

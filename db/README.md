@@ -46,8 +46,11 @@ and says so in its log.
 **It is a deliberate tool, not an auto-run:** a brand-new database is left **empty by design** (a real
 deployment starts empty and fills with real users), so run this when you want a populated app — for the
 demo, for local testing, or to give the TA a populated instance to review. Everything is written through
-the real `web/services/db.py` CRUD, so seeded rows match user-created ones exactly. Against the published
-dev Mongo:
+the real `web/services/db.py` CRUD, so seeded rows match user-created ones exactly.
+
+Against **any Mongo you can reach from the host** (e.g. your own `docker run -p 27017:27017 mongo:7`) —
+note the project's own `db` service is `expose`-only and publishes **no** host port, so this cannot reach
+the compose stack; use `./seed.sh` for that, which runs the seed *on* the compose network:
 
 ```
 MONGO_URI="mongodb://localhost:27017/worksmarter" python db/seed.py
