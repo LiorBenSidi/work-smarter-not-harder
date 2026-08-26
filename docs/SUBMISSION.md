@@ -58,8 +58,11 @@ Rubric (`docs/GUIDELINES.md`, the TA's `WSNH_Guidelines`, 8 Jul): **75** proposa
 - [ ] **Submit the GitHub repo link** in the *"Actual Submission - Extention until 30.08"* box (format settled
       above: repo link + video + report, **no zip**). The box is identified; make the repo **private** and add
       `EladKal6` and `cnoam` as collaborators **last**, since that hides it from everyone else.
-- [ ] **Seed prod once** before the TA review (`db/README.md` command) and confirm the **Azure VM is up**
-      (instructor auto-shutdown ~23:50 UTC).
+- [ ] **Seed prod once** before the TA review (`db/README.md` command) and confirm the **Azure VM is up**.
+      It auto-shuts-down nightly (~23:50 UTC) and does **not** auto-start, so start it manually, well ahead:
+      `az vm start -n sweng-group_02 -g SWENG-GROUP_02` (Lior has portal access), then allow **~3 min** for the
+      URL to answer `200`. The grader has **no** Azure access, so this is a **team** step — not something they
+      can self-serve.
 - [ ] **Record the demo video** end-to-end on the real model.
 - [ ] **Joint sign-off** — all three review `main` and agree it *is* the submission.
 
