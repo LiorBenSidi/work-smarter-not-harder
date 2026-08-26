@@ -383,6 +383,17 @@ def test_notifications_are_derived_and_never_self_addressed(seed_mod, db_mod, db
     notes = db.notifications.docs
     assert notes, "the seeded votes and DMs should have raised notifications"
     assert not [n for n in notes if n["user"] == n["actor"]], "a user must never be notified about themselves"
+
+    # The line above passes vacuously on the shipped data — it contains no self-vote, so the guard is
+    # never reached and the assertion would hold even with the guard deleted (caught by mutation
+    # testing). Force the case the guard exists for: a voter voting on their OWN post.
+    own = next(i for i, (author, *_rest) in enumerate(seed_mod.SEED_POSTS) if author)
+    author = seed_mod.SEED_POSTS[own][0]
+    monkeypatch.setattr(seed_mod, "SEED_POST_VOTES", [(own, author)])
+    fresh = _DB()
+    _seed_all(seed_mod, db_mod, fresh, monkeypatch)
+    assert not [n for n in fresh.notifications.docs if n["user"] == n["actor"]], \
+        "a self-vote must raise no notification — routes/forum._notify_vote returns early on it"
     assert {n["type"] for n in notes} <= {"vote", "dm"}, "only the two types the routes raise"
     for n in notes:
         assert n["actor"] not in n["text"], f"notification text must stay name-less: {n['text']!r}"
