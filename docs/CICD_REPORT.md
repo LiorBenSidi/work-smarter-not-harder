@@ -5,10 +5,12 @@ Pipeline: [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) · Prod stac
 [`docker-compose.prod.yml`](../docker-compose.prod.yml) · TLS: [`Caddyfile`](../Caddyfile) · Demo run-sheet + UptimeRobot
 setup + grader Q&A: [`DEPLOY_DEMO.md`](DEPLOY_DEMO.md).
 
-**The app & its health endpoint.** *Work Smarter, Not Harder* is a 3-container Flask app (web + internal `ai`
-inference + MongoDB). Only `web` is public. It exposes `GET /health` ([`web/app.py`](../web/app.py)) returning
-`200 {"status":"ok","service":"web"}`, used by the container healthcheck, the pipeline's post-deploy check (R7), and the external
-monitor (R9).
+**The app & its health endpoints.** *Work Smarter, Not Harder* is a 3-container Flask app (web + internal `ai`
+inference + MongoDB). Only `web` is public. It exposes two probes ([`web/app.py`](../web/app.py)): `GET /health`,
+which returns `200 {"status":"ok","service":"web"}` **without touching Mongo** and drives the *container*
+healthcheck; and `GET /ready`, which additionally pings Mongo (`503` when the DB is down). The pipeline's
+post-deploy check (R7) **and** the external uptime monitor (R9) target `/ready`, so a green result proves the
+whole stack serves — not just that `web` answers.
 
 ## Requirement mapping
 
