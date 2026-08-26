@@ -264,11 +264,12 @@ moment their dependency is present:
   `AI_BASE_URL` points at the running `ai` container, as CI's `compose-e2e` job does.
 - `test_load` (4) — the live-stack stress burst; runs when `E2E_BASE_URL` points at a live stack.
 - `test_e2e` + `test_elad_lane_live` (1) — full-stack system journeys; run against a live stack (`E2E_BASE_URL`).
-- `test_fault_isolation` (2) — destructive container-stop resilience checks; run with `FAULT_TEST=1`.
+- `test_fault_isolation` (2) — destructive container-stop resilience checks; run with `FAULT_TEST=1`,
+  which the `compose-e2e` job now sets on **every PR** (they still skip in the fast `checks` suite and locally).
 
 With the live stack up (`TEST_MONGO_URI` + `AI_BASE_URL` + `E2E_BASE_URL` set), the real-Mongo, live-AI-queue,
 stress and system-journey suites all execute against the running containers — exactly what CI's `compose-e2e`
-job runs green on every PR; only the destructive `FAULT_TEST` cases stay gated.
+job runs green on every PR — and the destructive `FAULT_TEST` cases now run there too, as its final stage.
 
 No test is commented-out or `assert True` (course rule: a broken test is deleted or fixed, never muted).
 The suite's one former deviation — the unconditionally-skipped `test_ai` TDD scaffold — was disclosed here
@@ -343,8 +344,8 @@ dropped.
 
 | Risk | Impact | Mitigation | Status |
 |---|---|---|---|
-| **`ai` container down / slow** | No readiness or recommendations | `ai_client` wraps the call in try/except + timeout; the dashboard returns `ai_status: unavailable` and still renders; `web` boots even if `ai` is down (compose `service_started`, not `service_healthy`) | ✅ built & tested (`test_ai_client`, `test_web_ai` degrade case; **`test_fault_isolation.py` stops the real container**) |
-| **`db` (Mongo) down** | History can't be read/written | Store calls are try/except-guarded; forum/list routes return 503, not 500; `/health` stays 200 (Mongo-independent), so a Mongo outage does not mark `web` **unhealthy** — which would otherwise block every `depends_on: service_healthy` gate (the CI test-runner waits on exactly that, `docker-compose.test.yml:27-29`); `/ready` degrades to 503 | 🟡 built & tested — the per-PR proof is `test_ready.py::test_health_and_ready_are_distinct` (DB patched to raise → `/health` 200, `/ready` 503); `test_fault_isolation.py` stops the real `db` container and re-probes over HTTP, but is gated behind `FAULT_TEST=1` and runs on demand only. The "forum routes 503, not 500" half is covered per-PR by `Security_Tests/test_forum.py::test_forum_degrades_to_503_when_store_fails`. |
+| **`ai` container down / slow** | No readiness or recommendations | `ai_client` wraps the call in try/except + timeout; the dashboard returns `ai_status: unavailable` and still renders; `web` boots even if `ai` is down (compose `service_started`, not `service_healthy`) | ✅ built & tested (`test_ai_client`, `test_web_ai` degrade case; **`test_fault_isolation.py` stops the real container**, run per-PR in `compose-e2e`) |
+| **`db` (Mongo) down** | History can't be read/written | Store calls are try/except-guarded; forum/list routes return 503, not 500; `/health` stays 200 (Mongo-independent), so a Mongo outage does not mark `web` **unhealthy** — which would otherwise block every `depends_on: service_healthy` gate (the CI test-runner waits on exactly that, `docker-compose.test.yml:27-29`); `/ready` degrades to 503 | ✅ built & tested — the per-PR proof is `test_ready.py::test_health_and_ready_are_distinct` (DB patched to raise → `/health` 200, `/ready` 503); `test_fault_isolation.py` stops the real `db` container and re-probes over HTTP, gated behind `FAULT_TEST=1`, which the `compose-e2e` job now sets to run it **per-PR** (option B, #602). The "forum routes 503, not 500" half is covered per-PR by `Security_Tests/test_forum.py::test_forum_degrades_to_503_when_store_fails`. |
 | **A restart storm under load** | Cascading outage | `/health` is liveness only — un-rate-limited and Mongo-independent, so load or a dependency outage can never flip it. If it could, a busy container would be marked **unhealthy**, which stalls `depends_on: service_healthy` startup gates and fails the CI test-runner's start gate; the external monitor would also alert on a live site that is merely busy. *(Note: plain Docker Engine does **not** restart an unhealthy container — `restart: unless-stopped` acts on exit. There is no autoheal sidecar and no Swarm `deploy:` block, so the cost here is stalled startups and false alarms, not a restart loop.)* | ✅ built & tested — **`web`**: `test_ready.py::test_health_and_ready_are_distinct` patches the DB to raise and asserts `/health` stays **200** while `/ready` drops to 503 (the Mongo-independent half); **`ai`**: `test_ai_queue_live.py::test_the_live_queue_sheds_load_instead_of_dying_under_a_burst` fires a **4×-the-bound burst across 32 threads** at the real container, then asserts `/health` is still 200. Both run on **every PR** (the live one via `compose-e2e`, which sets `AI_BASE_URL`). `locustfile.py` re-checks `web` under real load, but the `stress` job is **`workflow_dispatch`-only**, so it is not part of the merge gate |
 | **Email relay (Brevo) down / slow / rate-limited** | OTP + password-reset emails delayed or undelivered | `send_email` wraps SMTP in try/except with a 10 s timeout and **never raises** — a down/slow relay is logged and the flow continues; the code/link stays valid server-side, so login/reset still completes once mail arrives. Free-tier bursts can *delay* delivery (documented: [`EMAIL_DELIVERABILITY.md`](EMAIL_DELIVERABILITY.md)); a rapid re-login now **reuses one valid code** instead of minting many. **The graded path runs locally with no SMTP → codes are surfaced on-screen ([`AUTH_TESTING.md`](AUTH_TESTING.md)), so mail delivery is not on the graded critical path.** | ✅ built & tested (`test_email_smtp_delivery.py`, `test_login_otp_reuse.py`; degrade path in `send_email`) |
 | **Wearable / smartwatch data missing** | Advanced metrics absent | Fall back to manually entered values | ✅ by design (no wearable dependency in the core path) |
@@ -493,8 +494,8 @@ Two habits, both visible in the test suite:
 
 The queue's failure modes and the web tier's security surface are covered by tests that run on **every PR**.
 The `ai`/`db` fault-isolation checks are **destructive** (they stop containers), so they are gated behind
-`FAULT_TEST=1` + `E2E_BASE_URL` and run on demand — what gates every PR instead is the `compose-e2e` job,
-which brings the real three-container stack up and exercises it end to end. The remaining open rows belong to the AI model
+`FAULT_TEST=1` + `E2E_BASE_URL`; the `compose-e2e` job sets both and **runs them on every PR** as its final
+stage, bringing the real three-container stack up and exercising it end to end. The remaining open rows belong to the AI model
 (Shiri) and are tracked in [`ROADMAP.md`](ROADMAP.md).
 
 ---

@@ -78,15 +78,21 @@ deploy **auto-rolls-back** to the last-good image (see the run-sheet). Re-runnin
 1. Create a **free** account at uptimerobot.com (free tier = **5-minute** interval, which satisfies R9.1's "≤ 5 min").
 2. **+ Add New Monitor:**
    - Monitor Type: **HTTP(s)**
-   - Friendly Name: **Work Smarter — /ready**
+   - Friendly Name: **WSNH prod** (the live monitor uses this name)
    - URL: **`https://<SITE>/ready`**
    - Monitoring Interval: **5 minutes**
 3. **Alert Contacts:** add your **email** so DOWN and UP both notify you (R9.3).
 4. Save. It's a third-party service, independent of the VM (R9.2), polling the public HTTPS endpoint (R9.1).
 
-Why `/ready` and not `/health`: `/ready` pings Mongo, so the monitor also catches a DB outage, not just the box
-being down. If you'd prefer a pure "is the site up" monitor with fewer false alarms on a DB blip, point it at
-`/health` instead — either satisfies R9.
+Why `/ready`, not `/health`: `/ready` pings Mongo, so the monitor catches a **DB outage**, not just the box
+being down — the exact case `/health` (deliberately Mongo-independent) cannot see. `/health` would satisfy R9's
+mechanics, but it would leave a live box with a dead database showing green, so this monitor targets `/ready`.
+(The trade-off is accepted on purpose: a transient DB blip can flip `/ready` for one poll, and that is a state
+we *want* alerted, not hidden.)
+
+Live state: the R9 monitor is **"WSNH prod"** → `/ready` (already up, and has been all along). A separate
+monitor (`803532626`) watches `/health`; it's redundant — a pure "is the box up" liveness signal, not the R9
+reference. Don't add a second `/ready` monitor: UptimeRobot rejects a duplicate URL.
 
 ---
 

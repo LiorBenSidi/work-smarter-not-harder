@@ -37,7 +37,7 @@ never commit it. (The GitHub-side secrets for the deploy are in [`SECRETS.md`](S
 - [x] **Azure deploy + CI/CD (go live)** — **done end-to-end**: the deploy is live and auto-deploying on green
   `main` (`https://app.worksmarternotharder.dev`; `SSH_HOST` + `SSH_PRIVATE_KEY` + `DEPLOY_ENABLED=true` set, the
   `app` CNAME + `SITE_ADDRESS` wired, Caddy HTTPS issued); the **graded demo was presented 16 Jul**; the
-  **UptimeRobot monitor is live** (R9, monitor `803532626`, 17 Jul). Background below.
+  **UptimeRobot monitor is live** (R9, monitor **"WSNH prod"** on `/ready`; `803532626` is a redundant `/health` monitor, 17 Jul). Background below.
   The pipeline *code* is written + hardened (Lior, PRs #91/#92:
   build→GHCR→SSH-deploy→Caddy HTTPS + `docker-compose.prod.yml`, auto-rollback, `/ready`), **the GHCR packages are
   already public, and `APP_SECRET_KEY`/`SMTP_*` are already set**. Your part: get the VM from the instructor, set

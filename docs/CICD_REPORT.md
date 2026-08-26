@@ -5,10 +5,12 @@ Pipeline: [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) · Prod stac
 [`docker-compose.prod.yml`](../docker-compose.prod.yml) · TLS: [`Caddyfile`](../Caddyfile) · Demo run-sheet + UptimeRobot
 setup + grader Q&A: [`DEPLOY_DEMO.md`](DEPLOY_DEMO.md).
 
-**The app & its health endpoint.** *Work Smarter, Not Harder* is a 3-container Flask app (web + internal `ai`
-inference + MongoDB). Only `web` is public. It exposes `GET /health` ([`web/app.py`](../web/app.py)) returning
-`200 {"status":"ok","service":"web"}`, used by the container healthcheck, the pipeline's post-deploy check (R7), and the external
-monitor (R9).
+**The app & its health endpoints.** *Work Smarter, Not Harder* is a 3-container Flask app (web + internal `ai`
+inference + MongoDB). Only `web` is public. It exposes two probes ([`web/app.py`](../web/app.py)): `GET /health`,
+which returns `200 {"status":"ok","service":"web"}` **without touching Mongo** and drives the *container*
+healthcheck; and `GET /ready`, which additionally pings Mongo (`503` when the DB is down). The pipeline's
+post-deploy check (R7) **and** the external uptime monitor (R9, **"WSNH prod"**) target `/ready`, so a green result proves the
+whole stack serves — not just that `web` answers.
 
 ## Requirement mapping
 
@@ -33,7 +35,7 @@ monitor (R9).
 | **R7.1/7.2** post-deploy health check on the deployed server | `curl --fail --retry 15 --retry-all-errors https://$SSH_HOST/ready` — `/ready` pings Mongo, so a pass proves the whole stack (not just that web answers); retries through the cold-boot TLS issuance | `deploy` job |
 | **R8.1** any stage failing fails the whole run | `needs:` chain + default fail-fast | `ci.yml` |
 | **R8.2** *(optional)* rollback on failed health check | **implemented** — the deploy records the last-good SHA on the VM; a failed `/ready` check re-deploys it (the run still ends red) | `deploy` job |
-| **R9** external uptime monitor, ≤5 min, alert, down→up | **live** — UptimeRobot monitor `803532626` on the prod FQDN (since 17 Jul) | dashboard / live |
+| **R9** external uptime monitor, ≤5 min, alert, down→up | **live** — UptimeRobot monitor **"WSNH prod"** on `https://app.worksmarternotharder.dev/ready` (5-min, email alerts), so it catches a DB outage, not just a dead box. A second monitor (`803532626`) watches `/health` (liveness only) and is redundant | dashboard / live |
 | **R10.1–10.5** valid auto-renewing Let's Encrypt HTTPS; HTTP→HTTPS | `caddy` service + `Caddyfile` (`reverse_proxy web:5000`) issues the cert for `SITE_ADDRESS` — the Azure FQDN by default, or a custom domain CNAME'd to it (wiring steps in the README); gunicorn stays internal | `docker-compose.prod.yml`, `Caddyfile` |
 
 ## What is live now vs. what activates with the VM
@@ -119,11 +121,14 @@ not against losing the VM. Off-box copies would need somewhere to put them, whic
 
 ## Beyond the rubric
 
-- **Real transactional email (enhancement, not graded).** The app sends OTP + password-reset mail via Brevo from the
-  authenticated `worksmarternotharder.dev` domain (SPF/DKIM/DMARC verified; Gmail inbox delivery confirmed). It is
+- **Real transactional email (enhancement, not graded).** The app sends login OTP, password-reset,
+  email-verification and duplicate-account-notice mail via Brevo from the authenticated
+  `worksmarternotharder.dev` domain (SPF/DKIM/DMARC verified; Gmail inbox delivery confirmed). It is
   self-gating in the deploy: with the `SMTP_*` secrets unset the app falls back to the log backend (login still works);
-  set them and real inbox delivery turns on. The app is *served* at the Azure FQDN (R10) — the domain is used only as
-  the email FROM, so the two concerns stay cleanly separate.
+  set them and real inbox delivery turns on. The same domain does both jobs: it is the authenticated sender here, and
+  it is also the address the app is *served* at. R10.1 accepts either the Azure-provided FQDN or your own domain; we
+  use ours, so Caddy holds the Let's Encrypt certificate for `app.worksmarternotharder.dev` (R10.1–10.4) and every
+  server-facing requirement points at it (R10.5).
 
 ## Evidence (from the live pipeline)
 
