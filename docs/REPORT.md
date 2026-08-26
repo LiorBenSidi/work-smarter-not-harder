@@ -343,7 +343,7 @@ dropped.
 **Reading the Status column.** **✅** means built *and* covered by a test that would go red if the
 mitigation were removed. **🟡** means a **deliberate, bounded** decision — an accepted risk or a
 documented caveat — **not** unfinished work: every 🟡 row names what the limit is and why it was
-accepted. Two of the rows below are 🟡; the rest are ✅.
+accepted. Most rows below are ✅; the few 🟡 ones are accepted risks, not open work.
 
 ### 5.1 Dependency failure (the mandatory fault-isolation requirement)
 
