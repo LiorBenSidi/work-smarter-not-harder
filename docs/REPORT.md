@@ -340,6 +340,11 @@ watch a guard fire) or a failure mode the architecture makes reachable and we ch
 Where a mitigation is deliberately *not* built, the reasoning is given rather than the row being quietly
 dropped.
 
+**Reading the Status column.** **✅** means built *and* covered by a test that would go red if the
+mitigation were removed. **🟡** means a **deliberate, bounded** decision — an accepted risk or a
+documented caveat — **not** unfinished work: every 🟡 row names what the limit is and why it was
+accepted. Two of the rows below are 🟡; the rest are ✅.
+
 ### 5.1 Dependency failure (the mandatory fault-isolation requirement)
 
 | Risk | Impact | Mitigation | Status |
