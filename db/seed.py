@@ -346,7 +346,7 @@ def _seed_notifications(db_mod, db, post_ids, comment_refs, dm_ids):
     return written
 
 
-def _seed_media(media, media_root, post_ids, dm_ids):
+def _seed_media(media, media_root, post_ids):
     """Copy the attachment bytes onto the media volume and bind each blob to its target.
 
     OWNERSHIP: the media index is Elad's store (``web/services/media_store.py``), deliberately
@@ -393,11 +393,16 @@ def _seed_media(media, media_root, post_ids, dm_ids):
         if pid:
             _attach(key, SEED_POSTS[post_index][0], "post", pid)
 
+    # A DM attachment is addressed by CONVERSATION, not by message. routes/media.py's `_dm_key` is
+    # `":".join(sorted([a, b]))`, and GET /messages/<peer>/attachments reads it back with that key.
+    # Binding to a message id instead leaves the blob bound but UNREACHABLE — the media record exists,
+    # the bytes serve, and the thread renders nothing. Shipped that way in #630; found on prod 27 Aug
+    # by calling the endpoint rather than counting what was written.
     for a, b, thread in CONTENT.DM_THREADS:
-        thread_ids = dm_ids.get((a, b), [])
-        for position, (sender, _body, _age, key) in enumerate(thread):
-            if key and position < len(thread_ids):
-                _attach(key, sender, "dm", thread_ids[position], peers=[a, b])
+        dm_key = ":".join(sorted([a, b]))
+        for sender, _body, _age, key in thread:
+            if key:
+                _attach(key, sender, "dm", dm_key, peers=[a, b])
 
     return bound
 
@@ -425,7 +430,7 @@ def apply_seed(db_mod, db, media=None, media_root=None, force=False, ai_url=None
     history, scored_live = _seed_history(db_mod, db, ai_url=ai_url)
     messages, dm_ids = _seed_messages(db_mod, db)
     notifications = _seed_notifications(db_mod, db, post_ids, comment_refs, dm_ids)
-    attachments = _seed_media(media, media_root, post_ids, dm_ids)
+    attachments = _seed_media(media, media_root, post_ids)
     logger.info("seeded %d profiles, %d check-ins (%d model-scored), %d messages, %d notifications, %d attachments",
                 profiles, history, scored_live, messages, notifications, attachments)
 

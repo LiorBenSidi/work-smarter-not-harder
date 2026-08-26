@@ -417,6 +417,14 @@ def test_media_is_bound_to_its_target_using_the_stores_own_naming(seed_mod, db_m
         assert (tmp_path / f"{media_id}{ext}").exists(), "bytes must be stored as <media_id><ext>"
         if rec["target_type"] == "dm":
             assert rec["peers"] and len(rec["peers"]) == 2, "a DM attachment is served to its two participants"
+            # routes/media.py serves DM attachments by CONVERSATION key (`_dm_key` = ":".join(sorted(pair))),
+            # never by message id. A message id binds fine and is then UNREACHABLE: the record exists, the
+            # bytes serve, and the thread renders nothing. That shipped in #630 and was only caught by
+            # calling the endpoint on prod — the write-side asserts above all passed. Pin both directions.
+            assert rec["target_id"] == ":".join(sorted(rec["peers"])), \
+                "target_id must equal routes/media.py._dm_key(peers)"
+            assert rec["target_id"] not in {m["id"] for m in db.messages.docs}, \
+                "a DM attachment must never be keyed by a message id"
 
 
 def test_a_second_run_changes_nothing_and_force_is_off_by_default(seed_mod, db_mod, db, monkeypatch):
