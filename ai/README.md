@@ -23,6 +23,15 @@ The training dataset is built by merging daily wellness data with sRPE training 
 - `soreness`
 - `training_load`
 
+## Feature selection
+
+The initial proposal's candidate feature list also included resting heart rate, HR drift from
+baseline, and body-weight trend. These were evaluated during development, and the final
+four-feature set — `sleep_hours`, `fatigue`, `soreness`, `training_load` — was selected based on
+that evaluation. The comparison itself wasn't saved as a notebook or reproducible run; only the
+final chosen set is reflected in the committed code. The proposal explicitly left this list open
+pending real experimentation with the data, and this is the outcome of that process.
+
 The PMData readiness score is converted into three classes: `Rest`, `Moderate`, and `Ready`.
 
 Participant IDs are preserved during preprocessing so validation can be grouped by participant. This avoids placing records from the same person in both training and validation data.
