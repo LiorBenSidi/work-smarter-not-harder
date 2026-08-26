@@ -107,6 +107,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: actions/setup-python@v5           # host-side pytest + requests drive the fault-isolation stage below
+        with:
+          python-version: "3.12"
+
+      - name: Install host test deps for the fault-isolation stage
+        run: pip install pytest requests
+
       - name: Render a throwaway .env (compose requires SECRET_KEY; never a real secret here)
         run: echo "SECRET_KEY=ci-only-not-a-real-secret-$RANDOM" > .env
 
@@ -115,13 +122,33 @@ jobs:
         # --abort-on-container-exit, so web/ai/db are torn down as soon as the suite finishes).
         run: docker compose -f docker-compose.yml -f docker-compose.test.yml up --build --exit-code-from tests
 
+      - name: Fault-isolation (final stage) — stop ai/db on a live stack, assert web isolates the outage (#602 item 1)
+        # The mandatory fault-tolerance requirement, now verified per-PR (it used to be FAULT_TEST-gated and
+        # on-demand only). The test-runner stack tore down on `tests` exit, so boot the base stack the fault
+        # suite is designed for (web published on 8000) and let web become READY before the destructive probes.
+        # The 90 s readiness wait here + the suite's own settle retries are the flakiness guard on a shared runner.
+        env:
+          FAULT_TEST: "1"
+          E2E_BASE_URL: http://localhost:8000
+          COMPOSE_FILES: docker-compose.yml
+        run: |
+          docker compose -f docker-compose.yml -f docker-compose.test.yml down -v --remove-orphans || true
+          docker compose -f docker-compose.yml up -d --build
+          for i in $(seq 1 45); do curl -fsS http://localhost:8000/ready >/dev/null 2>&1 && break; sleep 2; done
+          curl -fsS http://localhost:8000/ready >/dev/null   # fail loudly if web never became ready
+          python -m pytest tests/System_Tests/test_fault_isolation.py -q
+
       - name: Dump container logs on failure (so a red run is debuggable without a local repro)
         if: failure()
-        run: docker compose -f docker-compose.yml -f docker-compose.test.yml logs --no-color --tail 200
+        run: |
+          docker compose -f docker-compose.yml -f docker-compose.test.yml logs --no-color --tail 200 || true
+          docker compose -f docker-compose.yml logs --no-color --tail 200 || true
 
       - name: Tear down (volumes too — the throwaway DB must not leak into a rerun)
         if: always()
-        run: docker compose -f docker-compose.yml -f docker-compose.test.yml down -v --remove-orphans
+        run: |
+          docker compose -f docker-compose.yml -f docker-compose.test.yml down -v --remove-orphans || true
+          docker compose -f docker-compose.yml down -v --remove-orphans || true
 
   # ---------------------------------------------------------------------------
   # Browser E2E (interaction) gate. `compose-e2e` proves the HTTP wire path; THIS job drives the real UI in

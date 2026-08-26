@@ -121,11 +121,14 @@ not against losing the VM. Off-box copies would need somewhere to put them, whic
 
 ## Beyond the rubric
 
-- **Real transactional email (enhancement, not graded).** The app sends OTP + password-reset mail via Brevo from the
-  authenticated `worksmarternotharder.dev` domain (SPF/DKIM/DMARC verified; Gmail inbox delivery confirmed). It is
+- **Real transactional email (enhancement, not graded).** The app sends login OTP, password-reset,
+  email-verification and duplicate-account-notice mail via Brevo from the authenticated
+  `worksmarternotharder.dev` domain (SPF/DKIM/DMARC verified; Gmail inbox delivery confirmed). It is
   self-gating in the deploy: with the `SMTP_*` secrets unset the app falls back to the log backend (login still works);
-  set them and real inbox delivery turns on. The app is *served* at the Azure FQDN (R10) — the domain is used only as
-  the email FROM, so the two concerns stay cleanly separate.
+  set them and real inbox delivery turns on. The same domain does both jobs: it is the authenticated sender here, and
+  it is also the address the app is *served* at. R10.1 accepts either the Azure-provided FQDN or your own domain; we
+  use ours, so Caddy holds the Let's Encrypt certificate for `app.worksmarternotharder.dev` (R10.1–10.4) and every
+  server-facing requirement points at it (R10.5).
 
 ## Evidence (from the live pipeline)
 
