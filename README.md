@@ -254,7 +254,8 @@ on the profile), Week-9 logging, the 3-container build, the CI gate, the cross-c
 **AI job queue (+5)** (bounded + self-healing pool), **measured scaling**, and the CI/CD pipeline
 auto-deploying every green `main` to Azure over HTTPS. The **Random Forest** behind `POST /predict` has landed
 too (`ai/model/model.pkl`, baked into the image). The **forum cold-seed** is built too — a deliberate
-demo/review tool (`db/seed.py`: fake clients + posts + comments + likes); a fresh database is left
+demo/review tool (`db/seed.py`: 15 fake clients with profiles, check-in history, posts, comments,
+likes, DM threads, notifications and attachments); a fresh database is left
 **empty by design** (a real deployment starts empty), so run the seed when you want a populated app to
 show. The test suite is green in CI (real-Mongo IT runs against the `mongo:7` service); its size and
 per-type breakdown are stated once, in [`docs/REPORT.md`](docs/REPORT.md).

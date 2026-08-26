@@ -17,12 +17,16 @@ through F9, then the Forum, CI/CD and job-queue extras. Target **4–6 min**.
 > Record at 1080p, browser only (hide bookmarks). Have **two accounts** ready for the DM / notification shots —
 > prod runs with **live email**, so the second account needs a real mailbox to clear the verification code.
 
-### Seed the data first — `./seed.sh` alone is NOT enough
+### Seed the data first — `./seed.sh` is now enough
 
-This is the same trap the poster hit. **`db/seed.py` seeds users, posts, comments and likes only — it does
-not seed check-in history and it does not seed DM conversations.** On a freshly seeded clone, **shot 10**
-(History: trend line + heatmap) shows a single cell and no trend, and **shot 16** (Chat) says *"No
-conversations yet"*. Both shots die on camera.
+**Historical note (superseded by #630).** This used to warn that `db/seed.py` seeded users, posts,
+comments and likes *only*, so on a freshly seeded clone **shot 10** (History: trend line + heatmap)
+showed a single cell and no trend, and **shot 16** (Chat) said *"No conversations yet"* — both shots died
+on camera. `presentation/showoff/seed-for-screenshots.py` exists because of exactly that gap.
+
+The seed now covers both: 15 athletes with up to 60 days of model-scored check-in history, 7 DM threads,
+plus notifications and image/video attachments. **`./seed.sh` alone now gives every shot real data.**
+`seed-for-screenshots.py` still runs and is harmless, but is no longer required for shots 10 and 16.
 
 The poster solved this with a second seeder, and the video needs it too:
 

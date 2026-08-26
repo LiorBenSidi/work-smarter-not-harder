@@ -28,7 +28,8 @@
       the merged F7 pipeline).)*
 - [x] **AI Job Queue (+5)** — `ai/jobqueue.py` (bounded queue + process pool). ✅ built.
 - [x] **Online Forum (+10)** — all 7 sub-features + real-time + anonymity bonus + **cold-seeding** ✅
-      (`db/seed.py`: fake clients + posts + comments + likes — a deliberate demo/review tool; see below).
+      (`db/seed.py`: 15 fake clients with profiles, history, posts, comments, likes, DMs,
+      notifications and attachments — a deliberate demo/review tool; see below).
 - [x] **Azure deploy + CI/CD (+10)** — live over HTTPS, auto-deploy + rollback. ✅ built & live.
 - [x] **Report** — `docs/REPORT.md` (app overview · features×tests matrix · risk assessment). ✅ current.
       Submitted as the in-repo `.md` — the guidelines take a repo link, not a PDF.
@@ -43,7 +44,8 @@
       wired into `/predict`** (catalog, split resolution, exercise selection). Still open: F6's `program`
       input (#276 P7, the generated plan isn't fed into `_program_recommendations` yet) and the dashboard
       relaying/rendering `plan` (#410, web tier).
-- [x] **Forum cold-seed content** — ✅ **built** (Lior): `db/seed.py` seeds fake clients + posts + comments
+- [x] **Forum cold-seed content** — ✅ **built** (Lior): `db/seed.py` seeds 15 fake clients with profiles,
+      check-in history, posts, comments
       + likes over a back-dated timeline. It's a **deliberate demo/review tool**, run by hand — a fresh
       database stays **empty by design**. **Before the review: run it once against the live prod DB** so the
       TA sees a populated app at `app.worksmarternotharder.dev` (see `db/README.md` for the exact command).
