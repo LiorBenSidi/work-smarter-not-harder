@@ -25,8 +25,8 @@ keep `main` green (PR-only), and **don't re-do or "polish" the built parts**.
   `POST /predict` (`ai/model/model.pkl` + `ai/inference.py`, with the calorie value wired in). ⏳ Still open on
   her lane: the **F5 workout-generator / F6 program-balance** scope, the redundant `test_ai.py` TDD scaffold
   (#358), and the model backlog (#276). See [`PERSON1.md`](PERSON1.md).
-- ✅ **Elad — lane complete** (17 Jul): the **UptimeRobot monitor is live** (R9, monitor `803532626` on the
-  prod FQDN — the last open item). *Also done:* the live-deploy **demo** (presented **16 Jul**, #340); the
+- ✅ **Elad — lane complete** (17 Jul): the **UptimeRobot monitor is live** (R9, monitor **"WSNH prod"** on
+  `/ready`; a redundant `803532626` watches `/health` — the last open item). *Also done:* the live-deploy **demo** (presented **16 Jul**, #340); the
   **risk assessment** ([`docs/REPORT.md`](docs/REPORT.md) §5); the Azure deploy is **live**
   (`https://app.worksmarternotharder.dev`, auto-deploy on green `main`);
   the **AI job queue** (`ai/jobqueue.py` — bounded queue + `ProcessPoolExecutor` in front of
