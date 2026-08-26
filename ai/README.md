@@ -54,6 +54,13 @@ into a validation fold. It performed worse — overall Macro-F1 dropped from `0.
 and Ready-class F1 dropped from `0.2802` to `0.2222` — so the final model keeps
 `class_weight="balanced"` instead.
 
+### Performance and calibration
+
+The model is trained and shipped as described above. Its measured performance (overall accuracy
+~0.55, Ready-class precision/recall ~0.31/0.30) and probability calibration were not pushed
+further — the proposal never committed to a specific accuracy or calibration target, and the team
+chose to treat the current model as final rather than continue tuning it.
+
 The model uses sleep hours, fatigue, soreness, and training load as input features. User inputs are converted when needed to match the scales used during model training.
 
 The trained model is stored in `ai/model/model.pkl`, and the training results are stored in `ai/model/training_report.json`.
