@@ -7,6 +7,29 @@ item below is cross-linked to where it's built, tested, or discussed in detail.
 The full **"what can go wrong"** analysis is [`REPORT.md` §5 — Risk assessment](REPORT.md); this page is
 the short, reviewer-facing index plus the handful of behaviours a reviewer is most likely to *hit*.
 
+## ⚠️ Live site not responding? It's the nightly auto-shutdown — here's how to wake it
+
+**Grading does not need the live site.** The project is graded on the **backend, run locally via Docker**
+(`docker compose up --build` — see the next section); deploying is not required, so a sleeping VM blocks
+**no** part of the grade.
+
+The **live URL** (<https://app.worksmarternotharder.dev>) runs on a single Azure VM with an
+**instructor-configured nightly auto-shutdown (~23:50 UTC, cost control)**. It does **not** auto-start. So if
+you open the live site outside working hours and it times out, that is **expected, not a bug** — the VM is
+simply deallocated.
+
+**Bringing it up is one command, then a short wait** (the whole stack self-starts — no per-container steps):
+
+```bash
+az vm start -n sweng-group_02 -g SWENG-GROUP_02          # or: Azure portal → the VM → Start
+# then wait ~3 minutes; the public URL answers 200 with a valid Let's Encrypt cert (no -k):
+curl -s -o /dev/null -w '%{http_code}\n' https://app.worksmarternotharder.dev/ready    # → 200
+```
+
+**Who can run it:** starting the VM needs Azure access to **our** subscription ("DDS - 095219 (EA)"), which
+the **grader does not have**. A team member does — **Lior** (portal access). **If you find the live site down
+and want it running, contact the team**; otherwise grade locally, which needs nothing external.
+
 ## How grading runs (so the email caveat doesn't apply)
 
 Per the TA's notes, the project is graded on the **backend, run locally via Docker** — deploying is not
@@ -30,7 +53,7 @@ gated `?debug=1` tools panel are available for debug mode.
 | **Readiness score "jumps"** between bands for similar inputs | The model is deterministic; the 0–100 score is mapped **within** the predicted band (Rest/Moderate/Ready), so a borderline prediction can flip bands and move the number. Not randomness | ✅ by design — `readinessScore` in the SPA |
 | **OTP email arrives minutes late / not at all under a burst** (live deploy only) | The live deploy uses a **free-tier SMTP relay (Brevo)** that can queue bursts and has a daily quota. The app degrades gracefully (the code stays valid); a rapid re-login now reuses one code | ⚠️ deploy-only, documented — [`EMAIL_DELIVERABILITY.md`](EMAIL_DELIVERABILITY.md), [REPORT §5.1](REPORT.md). **N/A when grading locally** (codes on-screen) |
 | **Flooding media uploads** → 429, or 507 once storage is full | Per-file size + MIME caps, **plus** a 20/min upload rate-limit and a volume-wide disk cap (`MEDIA_MAX_TOTAL_BYTES`, 507 when full) | ✅ by design — [#313](https://github.com/LiorBenSidi/work-smarter-not-harder/issues/313) fixed in #321; `test_media`, `test_rate_limit` |
-| **The live site is unreachable at night** | The Azure VM has a **nightly auto-shutdown** (cost control); it's started before it's needed | ⚠️ deploy-only, expected |
+| **The live site is unreachable at night** | The Azure VM has a **nightly auto-shutdown** (~23:50 UTC, cost control) and does **not** auto-start; a team member starts it manually. See the wake-it note at the top for the one command + the ~3-min wait; grading is local, so this blocks nothing | ⚠️ deploy-only, expected |
 | **After a deploy, the old page shows until you reload** | The PWA service worker serves a cached shell, then updates on the next load | ⚠️ deploy-only, cosmetic |
 | **A single-VM outage takes the whole live site down** | One VM, no redundancy — the course supplies one; containers are stateless so a second host is config, not a rewrite | 🟡 accepted risk — [REPORT §5.3](REPORT.md), [`DESIGN.md`](DESIGN.md) |
 
