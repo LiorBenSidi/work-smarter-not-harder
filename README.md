@@ -67,6 +67,12 @@ docker compose -f docker-compose.yml -f docker-compose.scale.yml up --build --sc
 > [`docker-compose.scale.yml`](docker-compose.scale.yml).
 
 ## Repo layout
+> **The demo video is tracked with Git LFS.** `presentation/demo-video/Video.mp4` is ~66 MB and needs
+> `git-lfs` installed **before** you clone; without it you get a 133-byte pointer file that looks like a
+> video but isn't. Install it (`brew install git-lfs` / `apt install git-lfs`, then `git lfs install`) and
+> re-clone, or run `git lfs pull` in an existing clone. Nothing else in the repo uses LFS — the app, the
+> tests and the seed all work without it.
+
 ```
 web/      Flask web app + the whole data layer (built)
 ai/       Random Forest + recommendation engine (Shiri — the real model.pkl is baked in),
