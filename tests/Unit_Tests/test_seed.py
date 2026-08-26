@@ -412,6 +412,24 @@ def test_media_is_bound_to_its_target_using_the_stores_own_naming(seed_mod, db_m
     targets = {r["target_type"] for r in media.records.values()}
     assert targets == {"post", "dm"}, f"attachments should cover posts AND DMs, got {targets}"
 
+    # The seed writes through media_store directly and never passes POST /media, so the upload
+    # route's allowlist and size cap never see these bytes. Assert them here instead: an
+    # unsupported or oversize file in db/seed_media must fail the BUILD, so it can never reach a
+    # deployment. Limits are read from web/config.py, never restated, so they cannot drift.
+    # Assert the DECLARED set, not only what got bound: the runtime guard SKIPS a bad file, so a
+    # records-only check would silently pass while the file sat in the repo (verified by mutation —
+    # an unsupported mime slipped through until this loop was added).
+    allowed_mime, max_bytes = seed_mod._media_limits()
+    for key, (filename, mime) in seed_mod.CONTENT.MEDIA.items():
+        source = seed_mod.ROOT / "db" / "seed_media" / filename
+        assert source.exists(), f"declared seed media {filename} ({key}) is missing from db/seed_media"
+        assert mime in allowed_mime, \
+            f"seed media {filename} is declared {mime}, outside MEDIA_ALLOWED_MIME"
+        assert source.stat().st_size <= max_bytes, \
+            f"seed media {filename} is {source.stat().st_size} bytes, over the {max_bytes}-byte cap"
+    for rec in media.records.values():           # and nothing unexpected reached the store
+        assert rec["mime"] in allowed_mime and rec["size"] <= max_bytes
+
     for media_id, rec in media.records.items():
         ext = ".mp4" if rec["mime"] == "video/mp4" else ".jpg"
         assert (tmp_path / f"{media_id}{ext}").exists(), "bytes must be stored as <media_id><ext>"

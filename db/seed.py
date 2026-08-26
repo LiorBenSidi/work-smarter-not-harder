@@ -94,6 +94,28 @@ def _load_ai_client():
         return None
 
 
+def _media_limits():
+    """The upload route's OWN constraints, read from ``web/config.py`` so they cannot drift.
+
+    The seed writes through media_store directly and never passes ``POST /media``, so nothing else
+    applies the allowlist or the size cap to seeded bytes. Without this, dropping an unsupported or
+    oversize file into ``db/seed_media`` would put a blob on prod that a real upload would have
+    rejected with 400/413, and only a human looking at the forum would ever notice.
+    """
+    fallback = ({"image/png", "image/jpeg", "image/webp", "image/gif", "video/mp4"}, 10 * 1024 * 1024)
+    try:
+        _ensure_web_importable()
+        spec = importlib.util.spec_from_file_location("wsnh_config", str(ROOT / "web" / "config.py"))
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        cfg = mod.Config
+        allowed = {m.strip() for m in str(cfg.MEDIA_ALLOWED_MIME).split(",") if m.strip()}
+        return (allowed or fallback[0]), int(cfg.MEDIA_MAX_BYTES)
+    except Exception as exc:                       # noqa: BLE001 - any import problem -> documented defaults
+        logger.info("could not read media limits from web/config.py (%s) - using the documented defaults", exc)
+        return fallback
+
+
 def _load_db():
     spec = importlib.util.spec_from_file_location("db", str(DB_PY))
     mod = importlib.util.module_from_spec(spec)
@@ -371,12 +393,24 @@ def _seed_media(media, media_root, post_ids):
         return 0
     bound = 0
 
+    allowed_mime, max_bytes = _media_limits()
+
     def _attach(key, owner, target_type, target_id, peers=None):
         nonlocal bound
         filename, mime = CONTENT.MEDIA[key]
         source = ROOT / "db" / "seed_media" / filename
         if not source.exists():
             logger.warning("seed media %s is missing — skipping", source)
+            return
+        # Mirror what POST /media would have enforced. Skipping (not raising) matches the unwritable
+        # media-root path above: one bad file costs its attachment, never the whole seed.
+        if mime not in allowed_mime:
+            logger.warning("seed media %s is %s, which MEDIA_ALLOWED_MIME rejects — skipping", filename, mime)
+            return
+        size = source.stat().st_size
+        if size > max_bytes:
+            logger.warning("seed media %s is %d bytes, over the %d-byte MEDIA_MAX_BYTES cap — skipping",
+                           filename, size, max_bytes)
             return
         media_id = uuid.uuid4().hex
         # `<media_id><ext>` is media_store's own naming convention (stored_name), mirrored here so
