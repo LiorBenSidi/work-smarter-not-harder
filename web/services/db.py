@@ -100,7 +100,8 @@ _NAMESPACE_NOT_FOUND = 26      # MongoDB OperationFailure code: the collection d
 _SCHEMAS = {
     "users": {"bsonType": "object", "required": ["username", "password_hash"],
               "properties": {"username": {"bsonType": "string"}, "password_hash": {"bsonType": "string"},
-                             "email": {"bsonType": "string"}, "display_name": {"bsonType": "string"}}},
+                             "email": {"bsonType": "string"}, "display_name": {"bsonType": "string"},
+                             "active_sids": {"bsonType": "array", "items": {"bsonType": "string"}}}},
     "profiles": {"bsonType": "object", "required": ["username", "profile"],
                  "properties": {"username": {"bsonType": "string"}, "profile": {"bsonType": "object"}}},
     "analysis_history": {"bsonType": "object", "required": ["username", "entry"],
@@ -259,6 +260,34 @@ def search_users(db, query, limit=8, exclude=None):
 def update_password(db, username, password_hash):
     """Set a new password hash for `username`. Returns True if a user matched (else name unknown)."""
     return db.users.update_one({"username": username}, {"$set": {"password_hash": password_hash}}).matched_count > 0
+
+
+# ---- server-side session ids (#637: logout must actually revoke) --------------------------------
+SESSION_SID_CAP = 10   # live sessions kept per user; an 11th login evicts the oldest device
+
+
+def add_session_sid(db, username, sid):
+    """Record a live session id at login. Capped FIFO, so the doc can never grow unbounded."""
+    res = db.users.update_one({"username": username},
+                              {"$push": {"active_sids": {"$each": [sid], "$slice": -SESSION_SID_CAP}}})
+    return res.matched_count == 1
+
+
+def remove_session_sid(db, username, sid):
+    """Forget one session id at logout — the revocation that makes a captured cookie die."""
+    res = db.users.update_one({"username": username}, {"$pull": {"active_sids": sid}})
+    return res.matched_count == 1
+
+
+def has_session_sid(db, username, sid):
+    """One indexed lookup: is this sid still live for this user? A missing field = no live sessions."""
+    return db.users.find_one({"username": username, "active_sids": sid}, {"_id": 1}) is not None
+
+
+def replace_session_sids(db, username, sids):
+    """Keep ONLY the given sids — a password change revokes every other device's session."""
+    res = db.users.update_one({"username": username}, {"$set": {"active_sids": list(sids)}})
+    return res.matched_count == 1
 
 
 def update_display_name(db, username, display_name):

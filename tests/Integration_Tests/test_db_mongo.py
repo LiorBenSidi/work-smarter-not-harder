@@ -43,6 +43,22 @@ def test_users_roundtrip_and_dedupe(db_mod, real_db):
     assert db_mod.create_user(real_db, "alice", "h1") is True
     assert db_mod.create_user(real_db, "alice", "h2") is False           # upsert dup -> False
     assert db_mod.get_user(real_db, "alice") == {"username": "alice", "password_hash": "h1", "email": None, "display_name": "alice"}  # no _id
+    # server-side session ids (#637): the real store honors the exact contract the fakes mirror
+    assert db_mod.has_session_sid(real_db, "alice", "sid-1") is False     # missing field = no live sessions
+    assert db_mod.add_session_sid(real_db, "alice", "sid-1") is True
+    assert db_mod.add_session_sid(real_db, "ghost", "sid-x") is False     # unknown user records nothing
+    assert db_mod.has_session_sid(real_db, "alice", "sid-1") is True
+    assert db_mod.has_session_sid(real_db, "alice", "sid-2") is False
+    for i in range(2, 13):                                                # 11 more logins overflow the cap of 10
+        assert db_mod.add_session_sid(real_db, "alice", f"sid-{i}") is True
+    assert db_mod.has_session_sid(real_db, "alice", "sid-1") is False     # the oldest device was evicted
+    assert db_mod.has_session_sid(real_db, "alice", "sid-12") is True
+    assert db_mod.remove_session_sid(real_db, "alice", "sid-12") is True
+    assert db_mod.has_session_sid(real_db, "alice", "sid-12") is False    # logout kills exactly that sid
+    assert db_mod.replace_session_sids(real_db, "alice", ["sid-only"]) is True
+    assert db_mod.has_session_sid(real_db, "alice", "sid-11") is False    # a password change revoked the rest
+    assert db_mod.has_session_sid(real_db, "alice", "sid-only") is True
+    assert db_mod.get_user(real_db, "alice") == {"username": "alice", "password_hash": "h1", "email": None, "display_name": "alice"}  # sids never ride along on the record
 
 
 def test_email_is_unique_across_handles(db_mod, real_db):

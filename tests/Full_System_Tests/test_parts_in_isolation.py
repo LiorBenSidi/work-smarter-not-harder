@@ -46,8 +46,15 @@ def test_auth_works_with_only_the_user_store(make_client, fake_users):
     _signup(c)
     me = c.get("/me")
     assert me.status_code == 200 and me.get_json()["username"] == "solo"
+    captured = c.raw.get_cookie("session").value       # a copy an attacker might have taken (#637)
+    control = c.raw.application.test_client()          # control: prove the replay harness transmits it
+    control.set_cookie("session", captured)
+    assert control.get("/me").status_code == 200, "control: the captured cookie must work BEFORE logout"
     assert c.post("/logout").status_code == 200
     assert c.get("/me").status_code == 401
+    replay = c.raw.application.test_client()           # fresh client = a different machine
+    replay.set_cookie("session", captured)
+    assert replay.get("/me").status_code == 401, "logout must revoke server-side — a captured cookie must die (#637)"
 
 
 def test_profile_roundtrip_needs_only_users_and_profiles(make_client, fake_users, fake_profiles):
