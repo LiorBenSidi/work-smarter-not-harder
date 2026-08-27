@@ -14,7 +14,7 @@ against a single source of truth and fix what they think is missing. Two indepen
   the campus address), so that command lists **three** contributors, not four.
 
 **⬜ Still open** — *no build work remains; every item below is a hand-in step.*
-- **Demo video** of the app — not recorded yet (team; script at `presentation/WSNH Demo Video Script.md`)
+- **Upload the graded package to Moodle** — the repo link + the report + the demo video (`presentation/demo-video/Video.mp4`, the normalized ~66 MB cut, LFS). The video is **recorded** (script at `presentation/WSNH Demo Video Script.md`); the remaining step is the Moodle upload — Lior
 - **Paste the repo link** into the Moodle final-project box — Lior
 - **Upload the poster zip** to its own Moodle box (Track B, target **25 Aug**) — the 29 Jul upload was built to
   rules that were reversed on 18 Aug and has been **deleted**; the box is empty until the rebuilt zip goes up
@@ -39,7 +39,7 @@ Rubric (`docs/GUIDELINES.md`, the TA's `WSNH_Guidelines`, 8 Jul): **75** proposa
 | **Report** | [`docs/REPORT.md`](REPORT.md) | all (Lior drafted) | ✅ current — it states the suite size and the per-type breakdown, and CI enforces both. The single source is the live `.md`; the stale 2026-07-11 `REPORT.pdf` was removed — regenerate a fresh PDF from this only if the TA wants a file. |
 | Rubric / guidelines | [`docs/GUIDELINES.md`](GUIDELINES.md) | — | ✅ |
 | Roadmap | [`docs/ROADMAP.md`](ROADMAP.md) | — | ✅ |
-| Presentation + demo video | `presentation/` (see the checklist) | all | 🟡 deck ✅ (presented 16 Jul); **demo video ⬜ to record** → `VID_<ids>.mp4` |
+| Presentation + demo video | `presentation/` (see the checklist) | all | ✅ deck (presented 16 Jul) + **demo video recorded** (`presentation/demo-video/Video.mp4` — the normalized ~66 MB cut, LFS). Hand-in = upload it to Moodle alongside the report + repo link. |
 | Submission checklist | [`presentation/WSNH Submission Checklist.md`](../presentation/WSNH%20Submission%20Checklist.md) | — | ✅ |
 
 **Hand-in format** (per [`docs/Proj_Guidelines.pdf`](Proj_Guidelines.pdf) p11–12 — text+visual dual-read verified): submit **(1) the GitHub repo link — "no more zips"**, **(2) a video** of the app in use, and **(3) the report** (`docs/REPORT.md` — app · features · *tests per feature* · risk assessment). `README.md` must exist with run + test instructions; **−5 each time the code doesn't run**. So the report lives in the repo (no PDF required) and there is **no submission zip** for the graded project — only the Show Off gallery (Track B) uses a zip.
@@ -68,7 +68,7 @@ Rubric (`docs/GUIDELINES.md`, the TA's `WSNH_Guidelines`, 8 Jul): **75** proposa
 
 ---
 
-## Track B — "Show Off Your Project" poster package (**not graded, but required**) · target **25 Aug** — ⬜ **NOT SUBMITTED**
+## Track B — "Show Off Your Project" poster package (**not graded, but required**) · target **25 Aug** — ✅ **UPLOADED** (2026-08-27)
 
 Its own Moodle box ([`id=266452`](https://moodle25.technion.ac.il/mod/assign/view.php?id=266452)), separate
 from Track A. **Two dates, and they differ:** the announcement asks for *"August 25th (i.e. a couple days
