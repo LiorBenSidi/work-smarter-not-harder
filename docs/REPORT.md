@@ -301,7 +301,7 @@ machine (env vars, no local paths), and are exercised by CI on every PR. A run t
 - **Stress (12)** — `test_load` is the locust flood scenario (flood posts/votes → expect 429, not a crash;
   live-gated, on demand), plus `test_pool_scaling` and `test_queue_backpressure`, which run per-commit to
   prove the process-pool parallelism and the bounded-queue backpressure hold.
-- **Security (88)** — password hashing and session/auth-gating (`test_auth`), CSRF double-submit
+- **Security (88)** — password hashing, session/auth-gating and **server-side session revocation** (logout / password-change / reset invalidate a captured session cookie — `test_auth`), CSRF double-submit
   (`test_csrf`), NoSQL-injection-safe queries (`test_profile`, `test_forum`), ownership enforcement on
   forum edit/delete (403), auth-gating of dashboard/history, and response-hardening (`test_web_hardening`).
 
