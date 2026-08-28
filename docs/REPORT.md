@@ -202,6 +202,18 @@ hardening. The proposal commitments we did *not* build are disclosed in §8 rath
 
 ---
 
+## 2.1 Above the minimum — value built beyond the brief
+
+Not required by the rubric, built anyway:
+
+- **Custom domain over HTTPS** — a **free `.dev` domain from the [GitHub Student Developer Pack](https://education.github.com/pack)**, registered at **Name.com** (expires 2 Jul 2027); served at **[app.worksmarternotharder.dev](https://app.worksmarternotharder.dev)** (`CNAME` → Caddy → auto-renewing Let's Encrypt) — used for the cert, health check, monitor and email links, not just the raw Azure FQDN.
+- **Installable PWA, responsive on phone + desktop** — `manifest.webmanifest` (`display: standalone`) + a root-scope service worker; layouts tuned across mobile and desktop (18 media queries). *(The axis the competitive class vote rewards.)*
+- **Real transactional email (Brevo), domain-authenticated** — live **SPF + DKIM + DMARC** on the `worksmarternotharder.dev` sending domain (verified in Brevo); self-gates to the safe log backend when unconfigured.
+- **Session revocation + auth hardening** — server-side invalidation on logout / password-change / reset / delete, OTP 2-step login, and per-IP rate-limiting — beyond "hash the passwords."
+- **Deploy safety + observability** — **auto-rollback** on a failed health check (the *optional* R8.2), an **external UptimeRobot monitor** on `/ready` (R9, live), and structured logging (the Week-9 lab, folded into the app).
+
+*Required capabilities built robustly (not extras, but done well): the five test types include **real browser E2E** driving the SPA across desktop + mobile viewports on every merge.*
+
 ## 3. Feature × tests matrix (from the real suite)
 
 Every cell names the **actual test file(s)** and count. This supersedes the aspirational Yes/No matrix in
@@ -414,6 +426,7 @@ Naming these is part of the assessment; an unlisted risk is an unnoticed one.
   that actually matters. It was resized mid-project to a **Standard E4ads v5 (4 vCPU / 32 GiB)**, which
   bought throughput, not availability. Recovery is `restart: unless-stopped` plus an UptimeRobot alert,
   not redundancy.
+* **Free/student-tier resources have limits we accept, each with a fallback.** (a) The custom domain is a **1-year free `.dev` from the GitHub Student Pack** with **no auto-renew payment profile**, so it **expires 2 Jul 2027** (well past submission) — if it lapses, unsetting `SITE_ADDRESS` falls the app back to the **Azure FQDN**, so the site stays up (only the vanity hostname is lost; the Brevo SMTP key expires the same day, same fallback). (b) **Brevo free tier** caps transactional email at **~300/day** and can briefly hold a burst ([`EMAIL_DELIVERABILITY.md`](EMAIL_DELIVERABILITY.md)); email **self-gates to the log backend** when SMTP is unset and grading uses on-screen mock codes, so a cap or outage never blocks the app. (c) The **Azure VM auto-stops nightly (~23:50 UTC)** and does not auto-start; a teammate wakes it (~3 min) and grading runs locally, so it blocks nothing ([`REVIEWER_NOTES.md`](REVIEWER_NOTES.md)).
 * **`web` is not replicated.** Sessions are cookie-signed, so it would scale horizontally, and since the VM
   resize there is RAM to spare for it. We still don't: `web` is I/O-bound (it waits on Mongo and `ai`), so a
   wider **thread** pool inside one gthread worker serves the same concurrency more cheaply than a second
