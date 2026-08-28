@@ -426,6 +426,7 @@ Naming these is part of the assessment; an unlisted risk is an unnoticed one.
   that actually matters. It was resized mid-project to a **Standard E4ads v5 (4 vCPU / 32 GiB)**, which
   bought throughput, not availability. Recovery is `restart: unless-stopped` plus an UptimeRobot alert,
   not redundancy.
+* **Free/student-tier resources have limits we accept, each with a fallback.** (a) The custom domain is a **1-year free `.dev` from the GitHub Student Pack** with **no auto-renew payment profile**, so it **expires 2 Jul 2027** (well past submission) — if it lapses, unsetting `SITE_ADDRESS` falls the app back to the **Azure FQDN**, so the site stays up (only the vanity hostname is lost; the Brevo SMTP key expires the same day, same fallback). (b) **Brevo free tier** caps transactional email at **~300/day** and can briefly hold a burst ([`EMAIL_DELIVERABILITY.md`](EMAIL_DELIVERABILITY.md)); email **self-gates to the log backend** when SMTP is unset and grading uses on-screen mock codes, so a cap or outage never blocks the app. (c) The **Azure VM auto-stops nightly (~23:50 UTC)** and does not auto-start; a teammate wakes it (~3 min) and grading runs locally, so it blocks nothing ([`REVIEWER_NOTES.md`](REVIEWER_NOTES.md)).
 * **`web` is not replicated.** Sessions are cookie-signed, so it would scale horizontally, and since the VM
   resize there is RAM to spare for it. We still don't: `web` is I/O-bound (it waits on Mongo and `ai`), so a
   wider **thread** pool inside one gthread worker serves the same concurrency more cheaply than a second
