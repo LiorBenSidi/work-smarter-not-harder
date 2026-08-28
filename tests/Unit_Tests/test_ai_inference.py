@@ -215,14 +215,15 @@ def test_result_is_pickle_and_json_serializable(inference_module):
 
 
 def test_ready_threshold_is_enforced(inference_module, monkeypatch):
-    """Ready must not be selected below the configured threshold."""
+    """Ready must not be selected below the configured threshold.
+
+    Built from the real `_CLASS_LABELS` order rather than a hand-typed position (#643: the bundle's
+    stored order and the fitted classifier's `classes_` order aren't guaranteed to match, so a
+    literal [Rest, Moderate, Ready] list silently tests the wrong thing if that order ever shifts)."""
     monkeypatch.setattr(inference_module, "_READY_THRESHOLD", 0.70)
 
-    probabilities = [
-        0.10,  # Rest
-        0.25,  # Moderate
-        0.65,  # Ready
-    ]
+    probability_by_class = {"Rest": 0.10, "Moderate": 0.25, "Ready": 0.65}
+    probabilities = [probability_by_class[label] for label in inference_module._CLASS_LABELS]
 
     state = inference_module._choose_state(probabilities)
 
@@ -237,15 +238,37 @@ def test_ready_is_selected_when_it_reaches_threshold(
 
     The threshold is set to exactly match Ready's probability (0.65), not a value it clears with
     room to spare -- 0.58 left this test never touching the boundary its own name claims to test
-    (mutation-verified: flipping `>=` to `>` in `_choose_state` left the whole suite green)."""
+    (mutation-verified: flipping `>=` to `>` in `_choose_state` left the whole suite green).
+
+    Built from the real `_CLASS_LABELS` order rather than a hand-typed position -- see #643."""
     monkeypatch.setattr(inference_module, "_READY_THRESHOLD", 0.65)
 
-    probabilities = [
-        0.10,  # Rest
-        0.25,  # Moderate
-        0.65,  # Ready
-    ]
+    probability_by_class = {"Rest": 0.10, "Moderate": 0.25, "Ready": 0.65}
+    probabilities = [probability_by_class[label] for label in inference_module._CLASS_LABELS]
 
     state = inference_module._choose_state(probabilities)
 
     assert state == "Ready"
+
+
+def test_predict_one_labels_match_the_fitted_classifiers_own_order(inference_module):
+    """Regression for #643: inference.py's label<->probability mapping must reflect the fitted
+    classifier's REAL `classes_` order, not an assumed one.
+
+    `_choose_state`'s own unit tests above pass a raw probability list straight in, so they are
+    blind to a label/column mismatch by construction -- this is the test that actually exercises
+    `predict_one`'s real `predict_proba` call and checks its output against ground truth computed
+    independently from the fitted pipeline, the way #643 was found to be wrong in production."""
+    features = {"sleep_hours": 6.58, "fatigue": 8, "soreness": 10, "training_load": 216}
+
+    feature_vector = inference_module._build_feature_vector(features)
+    raw_probabilities = inference_module._PIPELINE.predict_proba(feature_vector)[0]
+    truth = {
+        label: float(probability)
+        for label, probability in zip(inference_module._PIPELINE.classes_, raw_probabilities)
+    }
+
+    result = inference_module.predict_one(features)
+
+    assert result["proba"] == pytest.approx(truth)
+    assert result["state"] == max(truth, key=truth.get)
