@@ -18,7 +18,7 @@
 > The 23th of August, 2026"*; the course later granted an extension on Moodle to **30 Aug 2026**
 > (submission box *"Actual Submission - Extention until 30.08"*), which is the date this report uses.
 >
-> **Last updated:** 2026-08-26 · **Suite at this snapshot:** **1483 checks, 1437 passing / 46 environment-gated**
+> **Last updated:** 2026-08-28 · **Suite at this snapshot:** **1486 checks, 1440 passing / 46 environment-gated**
 > (+ 20 browser e2e scenarios)
 > (`python -m pytest tests/ -q`; the env-gated ones run in CI's `compose-e2e` job against the live containers).
 > Since the 07-12 snapshot (783 tests): **Shiri's Random Forest landed** — a real `ai/model/model.pkl` +
@@ -241,18 +241,18 @@ Columns are the test-type dirs under `tests/`. Cells name representative file(s)
 | **Whole-system journey** | — | — | — | `test_e2e` (1) · Full-System `test_everything_together_sync` (15) | — | — |
 
 **Totals by type (full suite, `pytest --collect-only`):** Unit **640** · Integration **525** · Negative **177** ·
-System **14** · Full-System **27** · Security **88** · Stress **12** → **1483 automated checks across the seven
+System **14** · Full-System **27** · Security **91** · Stress **12** → **1486 automated checks across the seven
 pytest suites**, plus **20 browser end-to-end scenarios** driven separately (`tests/E2E_Tests/`, run in CI as
 the *e2e (browser · desktop + mobile)* job — not counted in the pytest total). This matches the header count.
 
-Read the total as *checks*, not as hand-written test functions: 1483 collected cases come from **1083 test
+Read the total as *checks*, not as hand-written test functions: 1486 collected cases come from **1086 test
 functions** (measured with `grep -c "^def test_"` across `tests/`), the remainder being parametrised cases (one `@parametrize` over 11 malformed payloads is 11
 collected cases, not 11 tests written). The suite is deliberately weighted toward the layers where a
 regression is cheapest to catch — unit and negative input walls — rather than toward volume.
 
-**Pass / skip:** the pre-07-12 snapshot was **747 pass, 36 skip in ~47 s**; the current suite is **1437 pass,
+**Pass / skip:** the pre-07-12 snapshot was **747 pass, 36 skip in ~47 s**; the current suite is **1440 pass,
 46 skip** (`python -m pytest tests/ -q`); in CI, where the `mongo:7` service is present, the same
-suite is **1465 pass, 18 skip**. All **46** local skips are env-gated and *not broken* — they run the
+suite is **1468 pass, 18 skip**. All **46** local skips are env-gated and *not broken* — they run the
 moment their dependency is present:
 
 - `test_db_mongo` (22) — the real-Mongo integration suite; skips without `TEST_MONGO_URI`, and **runs in CI**
@@ -301,11 +301,11 @@ machine (env vars, no local paths), and are exercised by CI on every PR. A run t
 - **Stress (12)** — `test_load` is the locust flood scenario (flood posts/votes → expect 429, not a crash;
   live-gated, on demand), plus `test_pool_scaling` and `test_queue_backpressure`, which run per-commit to
   prove the process-pool parallelism and the bounded-queue backpressure hold.
-- **Security (88)** — password hashing, session/auth-gating and **server-side session revocation** (logout / password-change / reset invalidate a captured session cookie — `test_auth`), CSRF double-submit
+- **Security (91)** — password hashing, session/auth-gating and **server-side session revocation** (logout / password-change / reset invalidate a captured session cookie — `test_auth`), CSRF double-submit
   (`test_csrf`), NoSQL-injection-safe queries (`test_profile`, `test_forum`), ownership enforcement on
   forum edit/delete (403), auth-gating of dashboard/history, and response-hardening (`test_web_hardening`).
 
-The two supporting directories complete the 1483: **Negative (177)** — adversarial and malformed input across
+The two supporting directories complete the 1486: **Negative (177)** — adversarial and malformed input across
 auth, profile, check-in, forum and media — and **Full-System (27)** — whole-stack journeys in-process, plus the
 parts-in-isolation suite. The per-type figures here are the same ones tabulated in §3; both are
 `pytest --collect-only` counts, not estimates.

@@ -54,6 +54,35 @@ def stored_name(media_id, mime):
     return media_id + EXT.get(mime, "")
 
 
+# Bytes of a file's header that ``sniff_mime`` needs to recognise any of the five allowlisted types.
+# WEBP needs 12 (``RIFF`` + 4 size bytes + ``WEBP``); everything else fits in 8. Read a little extra so a
+# future signature has room without another disk read.
+SNIFF_BYTES = 16
+
+
+def sniff_mime(header):
+    """The MIME type ``header``'s BYTES actually are — one of ``EXT``'s five, or None if unrecognised.
+
+    The upload route trusted the client-declared ``Content-Type`` (``file.mimetype``), so a file whose
+    bytes were a GIF — or not an image at all — was accepted and later SERVED with whatever type the
+    caller claimed (#636; the same class the MiniProj lost points on). This reads the magic bytes so the
+    route can reject a declared type the content does not back. Signature-based, no decode and no new
+    dependency: enough to catch a disguised or non-image payload, which is the gap, not to validate that
+    an image is fully well-formed.
+    """
+    if header.startswith(b"\x89PNG\r\n\x1a\n"):
+        return "image/png"
+    if header.startswith(b"\xff\xd8\xff"):
+        return "image/jpeg"
+    if header.startswith((b"GIF87a", b"GIF89a")):
+        return "image/gif"
+    if header[:4] == b"RIFF" and header[8:12] == b"WEBP":
+        return "image/webp"
+    if header[4:8] == b"ftyp":                       # MP4: a `ftyp` box directly after its 4-byte size
+        return "video/mp4"
+    return None
+
+
 def purge_owner(store, media_root, owner):
     """Erase every blob ``owner`` uploaded: the index documents AND the files under ``media_root``.
 

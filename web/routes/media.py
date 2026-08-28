@@ -25,7 +25,7 @@ from werkzeug.exceptions import NotFound
 
 from ratelimit import limiter
 from routes.auth import login_required
-from services.media_store import purge_unbound, stored_name
+from services.media_store import SNIFF_BYTES, purge_unbound, sniff_mime, stored_name
 
 logger = logging.getLogger(__name__)
 
@@ -136,6 +136,22 @@ def upload():
         return jsonify(error="no file part named 'file'"), 400
     if file.mimetype not in _allowed_mimes():
         return jsonify(error="unsupported media type"), 400
+    # #636: the allowlist check above trusts the client-declared Content-Type — a real GIF (or a file
+    # that is not an image at all) declared as image/png passed it and was then SERVED as image/png. Sniff
+    # the magic bytes and reject any declared type the content does not actually back. `stored_name` and
+    # the serve Content-Type below then use the DETECTED type, never the caller's claim. The peek is cheap
+    # and bounded (MEDIA_MAX_BYTES caps the whole body); rewind so `file.save()` still writes every byte.
+    header = file.stream.read(SNIFF_BYTES)
+    try:
+        file.stream.seek(0)
+    except (OSError, ValueError):
+        logger.warning("could not rewind upload stream after sniff")
+        return jsonify(error="could not read the uploaded file"), 400
+    detected = sniff_mime(header)
+    if detected != file.mimetype:
+        # detected is None (unrecognised bytes) or a real type that contradicts the declared one. Either
+        # way the file is not what it claims — refuse it rather than store a mislabelled blob.
+        return jsonify(error="file content does not match its declared type"), 400
     # Issue #313: bound the volume's TOTAL bytes, not just the per-file cap, so uploads can't fill the
     # VM's disk 10 MB at a time (a full disk wedges Mongo writes + logging). Checked before the write;
     # worst-case overshoot is one file (<= MEDIA_MAX_BYTES) — negligible against the volume-wide cap.
@@ -148,10 +164,10 @@ def upload():
             logger.warning("media upload rejected: MEDIA_ROOT is at/over MEDIA_MAX_TOTAL_BYTES")
             return jsonify(error="media storage is full"), 507
     media_id = uuid.uuid4().hex
-    stored = stored_name(media_id, file.mimetype)
+    stored = stored_name(media_id, detected)          # #636: the detected type, never the declared one
     file.save(os.path.join(_media_root(), stored))
     size = os.path.getsize(os.path.join(_media_root(), stored))
-    _media().add(media_id, session["username"], file.mimetype, size)
+    _media().add(media_id, session["username"], detected, size)
     return jsonify(id=media_id, url=f"/media/{media_id}"), 201
 
 

@@ -41,6 +41,47 @@ def test_every_non_allowlisted_mime_is_rejected_400(media_client, mime):
     assert "unsupported" in r.get_json()["error"]
 
 
+# --- #636: the declared Content-Type must be backed by the file's actual bytes ---------------------
+# The allowlist above only checks what the client DECLARES. Before this, a real GIF — or a file that is
+# not an image at all — declared as image/png was accepted and then SERVED as image/png. These pin the
+# three cases the MiniProj lost points on: a disguised type, a non-decodable payload, and (the guard
+# against over-rejection) a genuine image still going through and being served as its REAL type.
+_REAL_GIF = b"GIF89a\x01\x00\x01\x00\x00\xff\x00,"      # a genuine GIF header
+_REAL_PNG = b"\x89PNG\r\n\x1a\n" + b"real-png-body"      # a genuine PNG header
+
+
+def test_a_gif_disguised_as_png_is_rejected_and_nothing_is_stored(media_client):
+    c = media_client
+    _login(c)
+    app = c.raw.application
+    r = c.post("/media", data={"file": (io.BytesIO(_REAL_GIF), "photo.png", "image/png")})
+    assert r.status_code == 400
+    assert "content does not match" in r.get_json()["error"]
+    root = app.config["MEDIA_ROOT"]
+    assert (os.listdir(root) if os.path.isdir(root) else []) == [], "a mislabelled file must not be stored"
+
+
+def test_a_non_image_payload_declared_as_png_is_rejected(media_client):
+    c = media_client
+    _login(c)
+    r = c.post("/media", data={"file": (io.BytesIO(b"not an image at all"), "photo.png", "image/png")})
+    assert r.status_code == 400
+    assert "content does not match" in r.get_json()["error"]
+
+
+def test_a_genuine_image_is_accepted_and_served_as_its_detected_type(media_client):
+    # The over-rejection guard: a real GIF whose declared type matches its bytes must go through, and be
+    # served with the DETECTED type — so the fix rejects liars, not honest uploads.
+    c = media_client
+    _login(c)
+    up = c.post("/media", data={"file": (io.BytesIO(_REAL_GIF), "real.gif", "image/gif")})
+    assert up.status_code == 201
+    mid = up.get_json()["id"]
+    served = c.get(f"/media/{mid}")
+    assert served.status_code == 200
+    assert served.headers["Content-Type"].startswith("image/gif")
+
+
 def test_unauthenticated_upload_is_401(media_client):
     r = media_client.post("/media", data={"file": (io.BytesIO(b"x"), "p.png", "image/png")})
     assert r.status_code == 401
@@ -65,7 +106,7 @@ def test_dm_media_is_private_to_participants(make_client, fake_users, fake_forum
         c.post("/login", json={"username": name, "password": "s3cretpw!"})
 
     mid = clients["alice"].post("/media",
-                                data={"file": (io.BytesIO(b"\x89PNGdm"), "d.png", "image/png")}).get_json()["id"]
+                                data={"file": (io.BytesIO(b"\x89PNG\r\n\x1a\ndm"), "d.png", "image/png")}).get_json()["id"]
     clients["alice"].post("/messages/bob/attachments", json={"attachment_ids": [mid]})
 
     assert clients["bob"].get(f"/media/{mid}").status_code == 200      # participant

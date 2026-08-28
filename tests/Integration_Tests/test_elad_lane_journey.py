@@ -74,7 +74,7 @@ def test_upload_caps_hold_mid_journey_without_breaking_the_json_routes(media_cli
     bad_type = c.post("/media", data={"file": (io.BytesIO(b"#!/bin/sh"), "x.sh", "text/x-sh")})
     assert bad_type.status_code == 400                               # MIME allowlist
 
-    mid = _upload_png(c, b"ok" * 100).get_json()["id"]               # a legal upload still works
+    mid = _upload_png(c, b"\x89PNG\r\n\x1a\n" + b"ok" * 100).get_json()["id"]   # a legal (real-PNG) upload still works
     assert c.post(f"/forum/posts/{pid}/attachments",
                   json={"attachment_ids": [mid]}).get_json()["bound"] == [mid]
     # the JSON routes' 64 KB guard survived the raised-then-restored upload cap
