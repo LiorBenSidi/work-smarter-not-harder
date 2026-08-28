@@ -303,6 +303,8 @@ def events():
     capacity, return immediately with a longer reconnect delay (holding NO thread) so ordinary requests
     always keep a free thread. The client's poll backstop covers real-time while it waits to reconnect."""
     me = session["username"]
+    sid = session.get("sid")               # captured now: the generator runs without a request context
+    users = _users()
     notifications = _notifications()
     forum = _forum()
 
@@ -343,7 +345,19 @@ def events():
             cursor = time.time()                           # only ping on notifications created after the stream opened
             forum_rev = read_rev()                         # baseline: only ping on forum changes AFTER the stream opened
             deadline = time.time() + EVENTS_MAX_SECONDS
+            sid_broken = False                             # log a gate-read outage once, like read_rev
             while time.time() < deadline:
+                try:                                       # stop streaming the moment this session is revoked
+                    live = users.has_sid(me, sid)          # (#637: logout / password-change / deletion mid-stream)
+                except Exception:
+                    if not sid_broken:
+                        logger.warning("session-liveness read failed during SSE stream — retrying every tick", exc_info=True)
+                        sid_broken = True
+                    live = True                            # a store blip must not tear down every open stream
+                else:
+                    sid_broken = False
+                if not live:
+                    break                                  # revoked -> end the stream; the client's reconnect will 401
                 try:
                     fresh = notifications.list(me, since=cursor)
                 except Exception:

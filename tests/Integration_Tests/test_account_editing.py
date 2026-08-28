@@ -72,8 +72,16 @@ def test_change_password_rejects_wrong_current(client):
 def test_change_password_success_swaps_the_credential(client):
     """A successful change genuinely swaps the credential: the old password stops working and the new one starts."""
     _register_and_login(client, password="password123")
+    other = client.raw.application.test_client()       # the same account signed in on a second device
+    other.get("/health")                               # seed its csrf cookie
+    tok = other.get_cookie("csrf_token").value
+    assert other.post("/login", json={"username": "alice", "password": "password123"},
+                      headers={"X-CSRF-Token": tok}).status_code == 200
+    assert other.get("/me").status_code == 200
     r = client.post("/account/password", json={"current_password": "password123", "new_password": "newpassword1"})
     assert r.status_code == 200
+    assert other.get("/me").status_code == 401, "a password change must revoke every other device's session"
+    assert client.get("/me").status_code == 200, "while the session that just re-proved the password survives"
     client.post("/logout")
     assert client.post("/login", json={"username": "alice", "password": "password123"}).status_code == 401  # old dead
     assert client.post("/login", json={"username": "alice", "password": "newpassword1"}).status_code == 200  # new live

@@ -80,6 +80,16 @@ def test_me_degrades_to_503_when_store_fails(client, fake_users, monkeypatch):
         raise RuntimeError("store down")
     monkeypatch.setattr(fake_users, "get_email_consent", boom)                    # now the store hiccups
     assert client.get("/me").status_code == 503
+    monkeypatch.setattr(fake_users, "has_sid", boom)                              # the auth GATE itself hiccups
+    assert client.get("/me").status_code == 503, "a store outage in the gate is 503, never a forced 401 logout"
+    monkeypatch.undo()                                                            # the store recovers
+    assert client.get("/me").status_code == 200, "and the outage must not have cleared the session"
+    monkeypatch.setattr(fake_users, "remove_sid", boom)                           # outage exactly at logout
+    assert client.post("/logout").status_code == 503, "a logout that could not revoke must say so, not pretend"
+    monkeypatch.undo()
+    assert client.get("/me").status_code == 200, "a failed logout must not have half-cleared the session"
+    assert client.post("/logout").status_code == 200                              # store back -> logout completes
+    assert client.get("/me").status_code == 401
 
 
 def test_same_password_yields_different_hashes(client, fake_users):

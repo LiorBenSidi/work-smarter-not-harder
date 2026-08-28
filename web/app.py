@@ -76,6 +76,23 @@ class _DbUsers(_DbStore):
         db_module, handle = self._resolve()
         return db_module.delete_user(handle, username)
 
+    # ---- server-side session ids (#637) ----
+    def add_sid(self, username, sid):
+        db_module, handle = self._resolve()
+        return db_module.add_session_sid(handle, username, sid)
+
+    def remove_sid(self, username, sid):
+        db_module, handle = self._resolve()
+        return db_module.remove_session_sid(handle, username, sid)
+
+    def has_sid(self, username, sid):
+        db_module, handle = self._resolve()
+        return db_module.has_session_sid(handle, username, sid)
+
+    def replace_sids(self, username, sids):
+        db_module, handle = self._resolve()
+        return db_module.replace_session_sids(handle, username, sids)
+
     def get_email_consent(self, username):
         db_module, handle = self._resolve()
         return db_module.get_email_consent(handle, username)

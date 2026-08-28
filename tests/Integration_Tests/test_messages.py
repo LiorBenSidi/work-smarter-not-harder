@@ -238,7 +238,7 @@ def test_events_caps_concurrent_streams_and_reserves_a_thread(messages_client):
                 messages._sse_slots.release()
 
 
-def test_events_stream_releases_its_slot_when_it_ends(messages_client, monkeypatch):
+def test_events_stream_releases_its_slot_when_it_ends(messages_client, monkeypatch, fake_users):
     """The slot is freed when the stream ends or the client disconnects, otherwise the cap leaks and the worker slowly strangles itself one abandoned tab at a time."""
     from routes import messages
     monkeypatch.setattr(messages, "EVENTS_MAX_SECONDS", 0)
@@ -252,6 +252,20 @@ def test_events_stream_releases_its_slot_when_it_ends(messages_client, monkeypat
         if ok:
             messages._sse_slots.release()
     assert all(regained)                                            # all slots re-acquirable -> nothing leaked
+
+    # #637: a revoked session must not keep streaming. The auth GATE refuses one already revoked at open;
+    # the in-loop re-check (proven on the live stack) covers revocation DURING an open 90s stream, which a
+    # synchronous test client cannot trigger mid-drain. A stub forum keeps the control off real Mongo.
+    import types
+    monkeypatch.setattr(messages, "EVENTS_MAX_SECONDS", 0.3)
+    monkeypatch.setattr(messages, "EVENTS_TICK_SECONDS", 0.05)
+    monkeypatch.setattr(messages, "_forum", lambda: types.SimpleNamespace(get_rev=lambda: 0))
+    _login(c, "alice")                                             # a fresh live session (mints a sid)
+    live_body = c.get("/events").get_data(as_text=True)           # control: a still-live session opens and keepalives
+    assert ": keepalive" in live_body, "control: a still-live session keeps the stream open past the first tick"
+    fake_users.replace_sids("alice", [])                          # revoke it (logout / password-change / deletion elsewhere)
+    refused = c.get("/events")
+    assert refused.status_code == 401, "a revoked session is refused at /events, never allowed to stream (#637)"
 
 
 def test_sse_cap_is_clamped_below_thread_count_so_streams_cant_starve_the_worker():

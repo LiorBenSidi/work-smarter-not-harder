@@ -91,15 +91,46 @@ def validate_display_name(value):
 
 
 def login_required(view):
-    """Auth-gate: respond 401 unless a user is logged in. Reusable by /profile, /dashboard, ..."""
+    """Auth-gate: 401 unless a user is logged in AND their session id is still live server-side.
+
+    The cookie alone is not proof (#637): it carries only the username plus a random sid, and the sid
+    must still be in the user's ``active_sids`` — which is what lets logout, a password change, or
+    account deletion truly revoke a captured copy. A store outage answers 503, never 401: a Mongo
+    blip must not log everyone out (the session is left intact for the retry).
+    """
 
     @wraps(view)
     def wrapped(*args, **kwargs):
-        if "username" not in session:
+        username, sid = session.get("username"), session.get("sid")
+        if not username or not sid:
+            return jsonify(error="authentication required"), 401
+        try:
+            live = current_app.config["USERS"].has_sid(username, sid)
+        except Exception:
+            logger.exception("user store unavailable during auth check")
+            return jsonify(error="user store unavailable"), 503
+        if not live:
+            session.clear()                     # dead cookie -> replace it with an empty one
             return jsonify(error="authentication required"), 401
         return view(*args, **kwargs)
 
     return wrapped
+
+
+def _mint_session(username):
+    """Promote a verified identity to a logged-in session.
+
+    The cookie carries only random ids (a 256-bit sid); validity lives server-side in the user's
+    ``active_sids``. The sid is recorded in the store BEFORE the cookie exists, so a failed write can
+    never issue a cookie the gate would then reject. ``session.clear()`` keeps the session-fixation
+    defense: nothing planted pre-login survives. Raises on store failure — callers answer 503.
+    """
+    sid = secrets.token_urlsafe(32)
+    if not current_app.config["USERS"].add_sid(username, sid):
+        raise RuntimeError("user disappeared while logging in")
+    session.clear()
+    session["username"] = username
+    session["sid"] = sid
 
 
 def _users():
@@ -218,8 +249,11 @@ def register_verify():
         return jsonify(error="user store unavailable"), 503
     if handle is None:
         return jsonify(error="could not create the account — please try again"), 503
-    session.clear()
-    session["username"] = handle                           # verified email == proof of ownership -> sign in
+    try:
+        _mint_session(handle)                              # verified email == proof of ownership -> sign in
+    except Exception:
+        logger.exception("user store unavailable promoting the verified signup")
+        return jsonify(error="user store unavailable"), 503
     return jsonify(status="registered", username=handle, display_name=pending["display"]), 201
 
 
@@ -281,8 +315,11 @@ def login():
             body["dev_otp"] = dev_code
         return jsonify(body), 200
 
-    session.clear()
-    session["username"] = username
+    try:
+        _mint_session(username)
+    except Exception:
+        logger.exception("user store unavailable during login")
+        return jsonify(error="user store unavailable"), 503
     return jsonify(status="logged in", username=username, display_name=display_name(username)), 200
 
 
@@ -339,8 +376,11 @@ def verify_otp():
         stored_hash = (_users().get(username) or {}).get("password_hash") or ""
     except Exception:
         stored_hash = ""
-    session.clear()
-    session["username"] = username
+    try:
+        _mint_session(username)
+    except Exception:
+        logger.exception("user store unavailable promoting the verified login")
+        return jsonify(error="user store unavailable"), 503
     resp = jsonify(status="logged in", username=username, display_name=display_name(username))
     if data.get("remember"):
         _set_remember_cookie(resp, username, stored_hash)
@@ -370,6 +410,16 @@ def resend_otp():
 
 @auth_bp.post("/logout")
 def logout():
+    """Revoke the session server-side, then clear the cookie. Revocation comes FIRST, and a store
+    outage answers 503 — a logout that could not revoke must not pretend it did (#637). Logging out
+    while not signed in stays a quiet 200 (a stale tab clicking log-out is not an error)."""
+    username, sid = session.get("username"), session.get("sid")
+    if username and sid:
+        try:
+            _users().remove_sid(username, sid)
+        except Exception:
+            logger.exception("user store unavailable during logout")
+            return jsonify(error="user store unavailable"), 503
     session.clear()
     resp = jsonify(status="logged out")
     resp.delete_cookie(REMEMBER_COOKIE)   # drop trust in this browser -> next login re-verifies via OTP
@@ -415,7 +465,8 @@ def change_password():
     """Change the caller's password. Requires the CURRENT password, so an attacker on a hijacked session
     can't silently take the account over. Re-hashing invalidates every 'remember this browser' cookie
     (they embed the old hash tail) -> OTP is required again on the next login everywhere; this browser's
-    remember cookie is also dropped now. The current session stays logged in (the user just re-proved it)."""
+    remember cookie is also dropped now. The current session stays logged in (the user just re-proved
+    it); every OTHER device's live session is revoked."""
     data = request.get_json(silent=True)
     if not isinstance(data, dict):
         return jsonify(error="expected a JSON object"), 400
@@ -438,6 +489,10 @@ def change_password():
     except Exception:
         logger.exception("user store unavailable during password change")
         return jsonify(error="user store unavailable"), 503
+    try:                                  # credential change revokes every OTHER device's session
+        _users().replace_sids(username, [session.get("sid")])
+    except Exception:                     # best-effort: the password DID change; a failure here only
+        logger.exception("could not revoke other sessions after password change")   # leaves other devices live
     resp = jsonify(status="password updated")
     resp.delete_cookie(REMEMBER_COOKIE)   # this browser must re-verify via OTP on its next login too
     return resp, 200
@@ -619,6 +674,10 @@ def reset_password():
     except Exception:
         logger.exception("user store unavailable during reset")
         return jsonify(error="user store unavailable"), 503
+    try:                                  # a reset is the compromise-recovery path: kill EVERY session,
+        _users().replace_sids(username, [])   # including any an attacker holds. No current session to keep
+    except Exception:                     # (this path is unauthenticated). Best-effort: the password DID
+        logger.exception("could not revoke sessions after password reset")   # change; a failure only leaves old sessions live, and the changed hash already voids remember cookies
     return jsonify(status="password updated — you can log in now"), 200
 
 

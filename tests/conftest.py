@@ -120,6 +120,37 @@ class FakeUsers:
     def delete(self, username):
         return self._by_name.pop(username, None) is not None
 
+    # ---- server-side session ids (mirrors db.py add/remove/has/replace_session_sid — #637) ----
+    def add_sid(self, username, sid):
+        rec = self._by_name.get(username)
+        if rec is None:
+            return False
+        sids = rec.setdefault("active_sids", [])
+        sids.append(sid)
+        del sids[:-10]                     # same cap as db.SESSION_SID_CAP
+        return True
+
+    def remove_sid(self, username, sid):
+        rec = self._by_name.get(username)
+        if rec is None:
+            return False
+        try:
+            rec.get("active_sids", []).remove(sid)
+        except ValueError:
+            pass                           # revoking an already-dead sid is not an error
+        return True
+
+    def has_sid(self, username, sid):
+        rec = self._by_name.get(username)
+        return bool(rec) and sid in rec.get("active_sids", [])
+
+    def replace_sids(self, username, sids):
+        rec = self._by_name.get(username)
+        if rec is None:
+            return False
+        rec["active_sids"] = [s for s in sids if s]
+        return True
+
     def get_email_consent(self, username):
         rec = self._by_name.get(username)
         return bool(rec.get("email_consent")) if rec else False

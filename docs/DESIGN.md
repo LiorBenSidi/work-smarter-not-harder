@@ -98,7 +98,7 @@ One pipeline, two capabilities:
   **Lior (web backend + thin data CRUD)** — password hashing (werkzeug), auth-gate, input validation, NoSQL-**injection-safe queries** in the thin `db.py` CRUD (inputs type-validated at the route layer), the auth/login **Security_Tests**.
   **Lior (data layer)** — the Mongo **indexes + `$jsonSchema` validators + auth config + backups + seed** (`ensure_indexes`/`ensure_schema`/`db/seed.py`).
   **Elad (abuse defense + scale)** — **rate-limiting** / anti-spam (flask-limiter), stress / abuse defense.
-- **Auth stays stateless / shared-store** (signed token, or a DB/Redis-backed session — not in-process), so `web` can scale to N replicas for the deploy +10 (the big-HW used Bearer tokens). *(web owner's implementation; the scale constraint is shared.)*
+- **Auth stays stateless / shared-store** (signed token, or a DB/Redis-backed session — not in-process), so `web` can scale to N replicas for the deploy +10 (the big-HW used Bearer tokens). *(web owner's implementation; the scale constraint is shared.)* **Shipped:** a signed session cookie carries a random id whose validity lives in the shared Mongo store (`active_sids`) — the DB-backed option, so logout/password-change/reset revoke server-side and `web` still scales horizontally ([#637](https://github.com/LiorBenSidi/work-smarter-not-harder/issues/637)).
 - `ai` down → `web` returns "assessment unavailable" (no crash); `db` down → reduced functionality; wearable data missing → manual entry.
 - **Fault isolation is *tested*** — system tests **stop the `ai` container** (web still serves, degraded) and **stop `db`** (web still serves, no crash), proving one container going down doesn't take the system down (TA requirement). External calls are wrapped in try/except.
 

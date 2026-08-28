@@ -70,10 +70,18 @@ def test_forgot_password_dev_surfaces_the_link_without_smtp(client):
 def test_reset_with_a_valid_token_changes_the_password(client, auth_module, monkeypatch):
     """The whole point of the flow: a valid link genuinely changes the password, the old one stops working, and the new one does."""
     _register(client)
+    assert client.post("/login", json={"username": "alice", "password": "s3cretpw!"}).status_code == 200
+    captured = client.raw.get_cookie("session").value              # a session that exists BEFORE the reset (#637)
+    control = client.raw.application.test_client()
+    control.set_cookie("session", captured)
+    assert control.get("/me").status_code == 200, "control: the captured session works before the reset"
     box = _capture_reset(client, auth_module, monkeypatch)
     assert box["to"] == "alice@example.com"
     token = re.search(r"reset_token=([\w.\-]+)", box["body"]).group(1)
     assert client.post("/reset-password", json={"token": token, "password": "newpass123"}).status_code == 200
+    replay = client.raw.application.test_client()
+    replay.set_cookie("session", captured)
+    assert replay.get("/me").status_code == 401, "a password reset (the compromise-recovery path) must revoke every pre-existing session (#637)"
     assert client.post("/login", json={"username": "alice", "password": "s3cretpw!"}).status_code == 401   # old pw dead
     assert client.post("/login", json={"username": "alice", "password": "newpass123"}).status_code == 200  # new pw works
 
