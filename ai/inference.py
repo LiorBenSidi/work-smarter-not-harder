@@ -65,7 +65,16 @@ def _safe_float(value):
 
 
 def _web_wellness_to_model_scale(value):
-    """Map the web's 1-10 wellness scale to the model's 1-5 scale."""
+    """Map the web's 1-10 wellness scale to the model's 1-5 scale, inverted.
+
+    The web collects fatigue/soreness as a symptom-severity scale (1 = none, 10 = worst -- see
+    web/templates/index.html's own field hints). PMData's native 1-5 scale for these same fields
+    runs the opposite direction (grid-search evidence: the fitted model's Ready probability peaked
+    at maximal fatigue/soreness and was near-zero at minimal -- the reverse of what a real
+    readiness signal should do). A same-direction rescale therefore fed the model backwards data
+    on every real request. This inverts it so web 1 (best) lands on model 5, and web 10 (worst)
+    lands on model 1.
+    """
     numeric_value = _safe_float(value)
 
     if np.isnan(numeric_value):
@@ -74,7 +83,7 @@ def _web_wellness_to_model_scale(value):
     if not 1.0 <= numeric_value <= 10.0:
         return np.nan
 
-    return 1.0 + (numeric_value - 1.0) * 4.0 / 9.0
+    return 5.0 - (numeric_value - 1.0) * 4.0 / 9.0
 
 
 def _build_feature_vector(features):

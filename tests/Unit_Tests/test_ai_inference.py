@@ -34,6 +34,12 @@ def test_predict_one_returns_required_contract(inference_module):
     assert isinstance(result["recommendations"], list)
     assert isinstance(result["plan"], dict)
 
+    # Scale-direction regression: web 1 (best, per the web UI's own "1 none, 10 worst" labelling)
+    # must land on the model's 5 (its native "good" end), and web 10 (worst) on the model's 1 --
+    # the inverse of a same-direction rescale, which fed the model backwards data on every request.
+    assert inference_module._web_wellness_to_model_scale(1) == pytest.approx(5.0)
+    assert inference_module._web_wellness_to_model_scale(10) == pytest.approx(1.0)
+
 
 def test_predict_one_returns_valid_readiness_state(inference_module):
     """The predicted state must be one of the three trained readiness classes."""
