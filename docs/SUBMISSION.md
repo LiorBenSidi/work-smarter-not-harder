@@ -63,7 +63,7 @@ Rubric (`docs/GUIDELINES.md`, the TA's `WSNH_Guidelines`, 8 Jul): **75** proposa
       `az vm start -n sweng-group_02 -g SWENG-GROUP_02` (Lior has portal access), then allow **~3 min** for the
       URL to answer `200`. The grader has **no** Azure access, so this is a **team** step — not something they
       can self-serve.
-- [ ] **Record the demo video** end-to-end on the real model.
+- [x] **Record the demo video** end-to-end on the real model — done (`presentation/demo-video/Video.mp4`, normalized ~66 MB cut).
 - [ ] **Joint sign-off** — all three review `main` and agree it *is* the submission.
 
 ---

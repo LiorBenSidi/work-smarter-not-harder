@@ -21,10 +21,11 @@ keep `main` green (PR-only), and **don't re-do or "polish" the built parts**.
   (GHCR build/push → SSH-deploy to the Azure VM → Caddy HTTPS, `docker-compose.prod.yml`, auto-rollback, `/ready`
   gate). Full test suite green on `main`. Deploy detail: [`docs/CICD_REPORT.md`](docs/CICD_REPORT.md) · demo run-sheet:
   [`docs/DEPLOY_DEMO.md`](docs/DEPLOY_DEMO.md).
-- ✅ **Shiri (`ai/`) — the model has landed:** the real **Random Forest** + recommendation engine now serve
-  `POST /predict` (`ai/model/model.pkl` + `ai/inference.py`, with the calorie value wired in). ⏳ Still open on
-  her lane: the **F5 workout-generator / F6 program-balance** scope, the redundant `test_ai.py` TDD scaffold
-  (#358), and the model backlog (#276). See [`PERSON1.md`](PERSON1.md).
+- ✅ **Shiri (`ai/`) — lane complete:** the real **Random Forest** + recommendation engine serve
+  `POST /predict` (`ai/model/model.pkl` + `ai/inference.py`, calorie value wired in); the **F5 workout
+  generator** and **F6 program-balance** are built and wired into `/predict` (#566). The one disclosed
+  deviation is the proposal's `programs` storage collection (v2 §9), covered in
+  [`docs/REPORT.md`](docs/REPORT.md) §8. See [`PERSON1.md`](PERSON1.md).
 - ✅ **Elad — lane complete** (17 Jul): the **UptimeRobot monitor is live** (R9, monitor **"WSNH prod"** on
   `/ready`; a redundant `803532626` watches `/health` — the last open item). *Also done:* the live-deploy **demo** (presented **16 Jul**, #340); the
   **risk assessment** ([`docs/REPORT.md`](docs/REPORT.md) §5); the Azure deploy is **live**
