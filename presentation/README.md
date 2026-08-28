@@ -35,8 +35,7 @@ Everything for the **final-project presentation**, in one place all three of us 
 Handoffs: end of slide 3 → Lior, end of slide 6 → Elad.
 
 ## Left to do
-- **AI (Shiri):** **F5 workout generator** + forum cold-seed content. *(The Random Forest classifier is built and live behind a real `/predict` — the "reads Moderate" placeholder era is over; F5 is the remaining AI feature.)* **Spec:** [`../ai/For Shiri - predict contract.md`](../ai/For%20Shiri%20-%20predict%20contract.md).
-- **Team:** add the **"See It Live"** demo slide (as slide 5 in Canva, after Architecture) + record the 30–45s clip; do one **timed rehearsal**.
+*Done — the deck was presented **16 Jul** and everything below shipped:* the Random Forest is live behind a real `/predict`, **F5** (workout generator) is built and wired, forum cold-seeding is in (**15 users / 25 posts / 28 comments**), and the demo video is recorded (`demo-video/Video.mp4`). Spec kept for reference: [`../ai/For Shiri - predict contract.md`](../ai/For%20Shiri%20-%20predict%20contract.md).
 
 ## Editing the deck (Shiri & Elad)
 Open the **Canva master** link above — it's a team edit link, so you can edit directly (no invite needed). Edit in Canva (source of truth), then re-download the PPTX/PDF to refresh the deck. Presenter notes live in Canva **and** in the exported PPTX — re-exporting overwrites the PPTX, so re-paste from `WSNH Canva Notes (paste per slide).md` if needed.
