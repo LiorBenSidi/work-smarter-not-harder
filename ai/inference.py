@@ -39,7 +39,12 @@ _MODEL_BUNDLE = joblib.load(_MODEL_PATH)
 
 _PIPELINE = _MODEL_BUNDLE["pipeline"]
 _FEATURE_ORDER = list(_MODEL_BUNDLE["feature_order"])
-_CLASS_LABELS = list(_MODEL_BUNDLE["class_labels"])
+# Read straight off the fitted classifier, not the bundle's `class_labels` -- sklearn sorts
+# `classes_` alphabetically at fit time (Moderate/Ready/Rest), which does not match the
+# human-written training order (Rest/Moderate/Ready) the bundle stores that under the same name.
+# `predict_proba`'s columns follow `classes_`, so zipping against anything else mislabels every
+# probability (#643).
+_CLASS_LABELS = list(_PIPELINE.classes_)
 _READY_THRESHOLD = float(_MODEL_BUNDLE["ready_threshold"])
 
 
