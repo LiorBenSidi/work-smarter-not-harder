@@ -180,7 +180,7 @@ The AI tests cover:
 - calorie calculation
 - queue and API compatibility
 
-The recommendation-engine test suite currently passes all 19 tests. The full AI prediction path was also tested successfully both locally and inside the Docker container.
+The recommendation-engine test suite currently passes all 33 tests. The full AI prediction path was also tested successfully both locally and inside the Docker container.
 
 ## Performance and parallel programming
 

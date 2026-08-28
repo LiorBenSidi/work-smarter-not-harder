@@ -202,6 +202,18 @@ hardening. The proposal commitments we did *not* build are disclosed in §8 rath
 
 ---
 
+## 2.1 Above the minimum — value built beyond the brief
+
+Not required by the rubric, built anyway:
+
+- **Custom domain over HTTPS** — served at **[app.worksmarternotharder.dev](https://app.worksmarternotharder.dev)** (Name.com `CNAME` → Caddy → auto-renewing Let's Encrypt), used for the cert, health check, monitor and email links — not just the raw Azure FQDN.
+- **Installable PWA, responsive on phone + desktop** — `manifest.webmanifest` (`display: standalone`) + a root-scope service worker; layouts tuned across mobile and desktop (18 media queries). *(The axis the competitive class vote rewards.)*
+- **Real transactional email (Brevo), domain-authenticated** — live **SPF + DKIM + DMARC** on the `worksmarternotharder.dev` sending domain (verified in Brevo); self-gates to the safe log backend when unconfigured.
+- **Session revocation + auth hardening** — server-side invalidation on logout / password-change / reset / delete, OTP 2-step login, and per-IP rate-limiting — beyond "hash the passwords."
+- **Deploy safety + observability** — **auto-rollback** on a failed health check (the *optional* R8.2), an **external UptimeRobot monitor** on `/ready` (R9, live), and structured logging (the Week-9 lab, folded into the app).
+
+*Required capabilities built robustly (not extras, but done well): the five test types include **real browser E2E** driving the SPA across desktop + mobile viewports on every merge.*
+
 ## 3. Feature × tests matrix (from the real suite)
 
 Every cell names the **actual test file(s)** and count. This supersedes the aspirational Yes/No matrix in
