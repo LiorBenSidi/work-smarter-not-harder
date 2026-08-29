@@ -3,6 +3,8 @@
 Live-demo run-of-show for the class presentation (16 July 2026). Covers the pre-flight checklist,
 the flow to show, fallbacks if something misbehaves, and the engineering talking points.
 
+> **⚠️ Historical run-of-show (16 Jul 2026).** The accounts and steps below were for that presentation. For **current** grading — the live seed logins (`coach_maya` + personas, password `demo-seed-pw`) and how grading runs locally — see [`REVIEWER_NOTES.md`](REVIEWER_NOTES.md).
+
 App: <https://app.worksmarternotharder.dev> · Accounts seeded for the demo: **liorbs1998** and **ELAD**.
 
 ---
