@@ -120,7 +120,7 @@ is implemented independently.
 | `/forum/posts/<id>/comments` | POST | Forum: comment |
 | `/forum/posts/<id>/vote` | POST | Forum: post vote (strict `+1` / `-1`) |
 | `/forum/posts/<id>/comments/<cid>/vote` | POST | Forum: comment vote (strict `+1` / `-1`) |
-| `/me/engagement` | GET | Forum: the caller's received-vote totals (§3.3 "personal area" metric; counts only, never voter identities) — **Elad's lane** |
+| `/me/engagement` | GET | Forum: the caller's received-vote totals (GUIDELINES §3 "personal area" metric; counts only, never voter identities) — **Elad's lane** |
 | `/register/verify` · `/register/resend` · `/verify-otp` · `/resend-otp` | POST | F1 two-step auth: email-verify at signup + the login OTP challenge (resend caps + attempt lockout) |
 | `/forgot-password` · `/reset-password` | POST | F1 self-service password reset (token emailed; 10-min expiry; §5.1's tested reset surface) |
 | `/account/display-name` · `/account/password` · `/account/email-consent` · `/account/export` · `/account` | POST · GET · DELETE | Account management: rename / change password / consent toggle / **GDPR export** / **two-step account deletion** (cascades: profile, history, forum content, DMs, notifications — identity record removed last). Uploaded media are excluded from both the cascade and the export ([#507](https://github.com/LiorBenSidi/work-smarter-not-harder/issues/507)) |
@@ -177,7 +177,7 @@ not a per-line credit — see §6.
 | F9 — History tracking | ✅ | web |
 | Online Forum — CRUD/UI (posts, comments, votes, anonymity, edit/delete-own) | ✅ | web |
 | Online Forum — real-time layer (SSE push, DM, vote + DM notifications, media attachments) | ✅ | web (DM/SSE/notifications) · deploy (media, size caps) |
-| Online Forum — received-engagement metric (§3.3 per-user vote total: `/me/engagement` + a Profile-screen card) | ✅ | deploy (Elad) |
+| Online Forum — received-engagement metric (GUIDELINES §3 per-user vote total: `/me/engagement` + a Profile-screen card) | ✅ | deploy (Elad) |
 | Online Forum — cold-seed content | ✅ `db/seed.py` — 15 fake clients with profiles, check-in history, posts, comments, likes, DM threads, notifications and image/video attachments (a deliberate demo/review tool run by `./seed.sh`; a fresh DB is empty by design). Content lives in `db/seed_content.py`; history is scored by the real model, not stubbed. Shiri's AI generator can optionally augment the copy. | web |
 | Data layer — `db.py` CRUD + indexes + `$jsonSchema` validators + auth config + seed + backup | ✅ | web (data) |
 | Week-9 observability — named loggers, console + rotating-file handlers, per-request access log | ✅ | web |
