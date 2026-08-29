@@ -592,12 +592,12 @@ TA, and §5 explicitly left its feature list open.
   | Core | 7 |
   | Calves | 6 |
   | **Total** | **99** |
-- **Not owed — v2 §14 Future Work and Stretch Goals.** Collaborative-filtering personalization
+- **Not owed — v2 §15 Future Work and Stretch Goals.** Collaborative-filtering personalization
   ("planned as future work, not part of the core deliverable"), smartwatch integration (Fitbit /
   Garmin / Apple Health / Strava), progress graphs, an exercise video library, an injury-prevention
   module, and personalized progression recommendations. None of these is a gap. Collaborative
   filtering is worth naming specifically: it sat in §4 Cold Start in the original proposal, so
-  anyone diffing the two documents will see it move — v2 moved it deliberately, to §14.
+  anyone diffing the two documents will see it move — v2 moved it deliberately, to §15.
 - **`programs` collection (v2 §9) — not built, as a consequence of the approved catalog change.**
   v2 §6 already told the TA the exercise catalog would be hand-written rather than pulled from a
   public dataset — the one deviation confirmed directly with him. Once that decision was made, the
