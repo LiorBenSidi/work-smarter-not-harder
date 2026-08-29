@@ -188,7 +188,7 @@ not a per-line credit — see §6.
 | Stress / load (locust + a dependency-free burst) | ✅ | deploy/scale |
 | Cross-container test-runner (`docker-compose.test.yml`, CI job `compose-e2e`) | ✅ | deploy |
 | Fault isolation — stop `ai` / stop `db`, `web` survives | ✅ | deploy |
-| **AI job queue (§2, +5)** — bounded queue + `ProcessPoolExecutor` in front of the model | ✅ | ai (queue) |
+| **AI job queue (GUIDELINES §2, +5)** — bounded queue + `ProcessPoolExecutor` in front of the model | ✅ | ai (queue) |
 | Azure VM deploy + CI/CD auto-deploy | ✅ **live** (`app.worksmarternotharder.dev`; auto-deploy on green `main`, `/ready` gate, auto-rollback) | web (pipeline) · deploy (live) |
 | Parallel programming — measured CPU-bound path + horizontal `ai` scaling | ✅ measured: pool 1→4 = **2.86×**, `--scale ai=2` = **1.60×** ([`SCALING_REPORT.md`](SCALING_REPORT.md)) | ai · deploy |
 
@@ -394,7 +394,7 @@ mutation-checked by disabling the fix.)
 | **The CPU-burning benchmark ships as the production model** | Every prediction slow and meaningless | `inference:predict_one` is the default target; a guard asserts none of the dev/prod/test compose files selects `bench:cpu_burn` (`docker-compose.scale.yml` is outside its parametrize — flagged to its owner) | ✅ built & tested (`test_scale_contract.py`) |
 | **A scaled `ai` gets published to the host** | Port collision on replica 2, **and** an unauthenticated `/jobs` reachable from outside | Only `web` publishes a port, in dev, test, prod and the scale override. `ai` has no auth because nothing but `web` can reach it — that assumption is load-bearing, so it is asserted | ✅ built & tested (`test_deploy_contract.py`, `test_ai_queue_contract.py`, `test_scale_contract.py`) |
 | **A bad deploy takes the public site down** | Public app down | CI gates the image build; the build gates the deploy; post-deploy `/ready` is probed over HTTPS and a failure **auto-rolls back** to the previous image while still failing the run. `restart: unless-stopped` survives a VM reboot | ✅ built & tested (`test_deploy_contract.py` locks the pipeline shape; **live** at `app.worksmarternotharder.dev`) |
-| **Single Azure VM (no redundancy)** | Total outage if the VM dies | Accepted. The course supplies one VM; the containers are stateless, so a Swarm overlay or a second host is a configuration change, not a rewrite. UptimeRobot alerts on the outage rather than preventing it | 🟡 accepted risk, mitigation documented ([`DESIGN.md`](DESIGN.md) §L7) |
+| **Single Azure VM (no redundancy)** | Total outage if the VM dies | Accepted. The course supplies one VM; the containers are stateless, so a Swarm overlay or a second host is a configuration change, not a rewrite. UptimeRobot alerts on the outage rather than preventing it | 🟡 accepted risk, mitigation documented ([`DESIGN.md`](DESIGN.md) §4, the L7 bullet) |
 | **Two gunicorn workers on `ai`** | `GET /jobs/<id>` 404s ~half the time — each worker owns a separate in-memory job store, and the read lands on whichever one the OS picked | `ai` runs exactly one worker with threads; parallelism comes from the pool. This is **architectural, not a memory budget** — the 32 GiB VM would host a second worker comfortably, and the job store would still split in two | ✅ built & tested (`test_ai_runs_exactly_one_gunicorn_worker`) |
 | **`ai`'s gunicorn worker outlives its own predict deadline** | A `/predict` that runs to `AI_PREDICT_TIMEOUT_SECONDS` races a worker SIGKILL: `web` sees a dropped connection, the in-flight job dies with the process, and the clean 504 degrade is unreachable | gunicorn's `--timeout` (60s) is pinned **above** the queue deadline (30s) in both the image and prod. gunicorn's own default is 30 — equal to the deadline — so leaving it unset was the bug | ✅ built & tested (`test_ai_gunicorn_timeout_exceeds_the_queue_timeout`; guard is mutation-tested against absent *and* too-low values) |
 
@@ -550,7 +550,7 @@ branch-protected and merges only on green CI.
 Every feature in v2 §7 is built and live (§2). What follows is the complete list of places where the
 implementation differs from the proposal's wording — five differences and one clarification, none of
 them a missing capability. Two were settled in advance: the hand-curated catalog was approved by the
-TA, and §5 explicitly left its feature list open.
+TA, and v2 §5 explicitly left its feature list open.
 
 - **§3's beginner input list is one field short of what the profile requires.** v2 §3 says
   beginners *"give us the basics — age, gender, height, weight, and their goal"*. The build also
