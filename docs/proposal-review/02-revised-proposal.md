@@ -1,6 +1,6 @@
 # Work Smarter, Not Harder — Project Requirements
 
-> **Main changes vs. the original proposal** — *internal review aid; remove this block before sending to Noam.*
+> **Changes from the original proposal**
 >
 > - **§5 — AI unified.** The separate Random Forest classifier and recommendation engine are now one "AI Decision Engine" with two stages (assess → recommend).
 > - **§5 — Output classes generalized.** The fixed five classes (Ready / Moderate / Recovery Needed / Deload / Injury Risk) are gone; the output is now a small, flexible set we'll define after exploring the data.
