@@ -599,8 +599,8 @@ TA, and §5 explicitly left its feature list open.
   filtering is worth naming specifically: it sat in §4 Cold Start in the original proposal, so
   anyone diffing the two documents will see it move — v2 moved it deliberately, to §15.
 - **`programs` collection (v2 §9) — not built, as a consequence of the approved catalog change.**
-  v2 §6 already told the TA the exercise catalog would be hand-written rather than pulled from a
-  public dataset — the one deviation confirmed directly with him. Once that decision was made, the
+  The hand-written exercise catalog was a deviation from v2 §6 (which listed public fitness and
+  sports-science datasets among its sources) — the one deviation confirmed directly with the TA. Once that decision was made, the
   original reason for routing the catalog through v2 §9's `programs` Mongo collection — ingesting
   and managing externally-sourced dataset content — no longer applied to data the team was writing
   by hand anyway. So the 99-exercise catalog lives as code (`ai/exercise_catalog.py`) instead, and
