@@ -513,8 +513,8 @@ Two habits, both visible in the test suite:
 The queue's failure modes and the web tier's security surface are covered by tests that run on **every PR**.
 The `ai`/`db` fault-isolation checks are **destructive** (they stop containers), so they are gated behind
 `FAULT_TEST=1` + `E2E_BASE_URL`; the `compose-e2e` job sets both and **runs them on every PR** as its final
-stage, bringing the real three-container stack up and exercising it end to end. The remaining open rows belong to the AI model
-(Shiri) and are tracked in [`ROADMAP.md`](ROADMAP.md).
+stage, bringing the real three-container stack up and exercising it end to end. The AI-model rows (Shiri) have since landed — the Random Forest behind
+`/predict` is built and merged (see §2).
 
 ---
 
