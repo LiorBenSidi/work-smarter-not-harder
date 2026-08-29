@@ -18,20 +18,20 @@ Separately, one proposal-scope item — **cutting the 5 readiness classes to ~3 
 ## What's sound (keep it)
 - **Container split & exposure** — only `web` publishes a host port (`8000:5000`); `ai`+`db` are `expose`-only, and
   `Integration_Tests/test_skeleton_contract.py` enforces it. Meets "≥3 communicating containers, only `web` exposed"
-  and dodges the macOS-AirPlay-on-5000 trap. (`docker-compose.yml:5-44`)
+  and dodges the macOS-AirPlay-on-5000 trap. (`docker-compose.yml`)
 - **Startup ordering** — healthchecks on all 3 + `depends_on: service_healthy`; `web` won't serve before `ai`/`db`
-  are ready. (`docker-compose.yml:15-44`)
-- **Production server** — `gunicorn` in both app containers (not the Flask dev server). (`web/Dockerfile:11`, `ai/Dockerfile:14`)
+  are ready. (`docker-compose.yml`)
+- **Production server** — `gunicorn` in both app containers (not the Flask dev server). (`web/Dockerfile`, `ai/Dockerfile`)
 - **Model-bake discipline** — `ai/Dockerfile` documents joblib-bake + pin-sklearn (the Mini-HW2 lesson); no runtime
-  train/download. (`ai/Dockerfile:8-14`, `ai/requirements.txt:4-6`)
+  train/download. (`ai/Dockerfile`, `ai/requirements.txt`)
 - **Fault tolerance is wired, not just promised** — `ai_client.predict()` catches `RequestException` → logs → returns
-  `None`, so the caller degrades and the app can't crash on an AI outage. (`web/services/ai_client.py:19-21`)
-- **No hardcoded secrets** — env-driven config; compose makes `SECRET_KEY` mandatory (`${SECRET_KEY:?…}`). (`web/config.py`, `docker-compose.yml:10`)
+  `None`, so the caller degrades and the app can't crash on an AI outage. (`web/services/ai_client.py`)
+- **No hardcoded secrets** — env-driven config; compose makes `SECRET_KEY` mandatory (`${SECRET_KEY:?…}`). (`web/config.py`, `docker-compose.yml`)
 - **Security deps present up front** — `werkzeug` (hashing) + `flask-limiter` (rate-limit) + `pymongo`. (`web/requirements.txt`)
 - **Contract-based ownership** — fixed seams + implementation freedom; matches L5.1 interfaces + L8.1 "don't polish
-  teammates' code". (`docs/DESIGN.md:7-8`)
+  teammates' code". (`docs/DESIGN.md`)
 - **The test gate is load-bearing** — 5 type-dirs; real contract tests enforce the seams now; CI **fails on 0 collected
-  tests** (no false-green). (`tests/README.md`, `.github/workflows/ci.yml:37`)
+  tests** (no false-green). (`tests/README.md`, `.github/workflows/ci.yml`)
 
 ## Findings
 
