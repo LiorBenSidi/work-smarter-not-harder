@@ -21,34 +21,7 @@
 > **Last updated:** 2026-08-28 · **Suite at this snapshot:** **1487 checks, 1441 passing / 46 environment-gated**
 > (+ 20 browser e2e scenarios)
 > (`python -m pytest tests/ -q`; the env-gated ones run in CI's `compose-e2e` job against the live containers).
-> Since the 07-12 snapshot (783 tests): **Shiri's Random Forest landed** — a real `ai/model/model.pkl` +
-> `inference.py` (exercised by `test_ai_queue_api`), with the readiness recommendation engine and the
-> calorie integration + their unit tests — and the suite grew from 783 to 1066 checks, then settled at
-> **1053** after a **team-wide redundancy pass** in which each owner validated their own lane: Lior's
-> consolidated 51 template-shape tests into 7 grouped ones and removed 11 verified duplicates (#384–#386),
-> and Elad's removed 16 duplicated/vacuous checks and replaced 2 prose assertions with executable guards —
-> then rose to **1063** as the Forum cold-seed, its test-validation pass, and the dashboard read-cap landed (#391–#398),
-> and to **1072** as the like/dislike counts and a round of SPA rendering, bidi, a11y and supersede-guard
-> fixes landed (#417–#433), then to **1111** with the F5 training preferences on the profile (#410), and to **1113** with the
-> route-level round-trip proving those preferences actually reach the store (#434), then **1117** with the
-> offline-boot and reset-honesty guards (#440), to **1118** with the guard pinning the service worker's
-> navigation handler to cache-first (#444), and to **1119** with the dashboard reporting which check-in it
-> scored so the readiness card stops calling every score today's (#450), and to **1126** with the guards on
-> the real-Mongo fixtures themselves (#451).
->
-> It then fell to **1111**, and rose to **1121** after the guards on the app's failure surfaces and on
-> these counts themselves (#502), then to **1132** with the F5 exercise-catalog seed data and its
-> structural guard tests (#276), then to **1180** with the F5 split-day resolution rule (updated to
-> the agreed plan-contract shape) and its tests (#276, #410), then to **1183** with the "eat more"
-> recommendation trigger for a gain goal and its tests (#411), then fell to **1181** after the
-> redundant `test_ai` TDD scaffold was removed (#358), then to **1184** with `plan` wired into
-> `/predict` and its tests (#276, #410), then to **1243** with `generate_workout_days` (the
-> exercise-selection stage of F5) and its tests (#276, #410), then to **1244** wiring
-> `generate_workout_days` into `predict_one` itself, so a resolved `plan["days"]` is populated
-> end to end on a live `/predict` call, not just available as a standalone function (#276, #410), and to **1254** as the dashboard
-> began relaying that plan to the client, validated against the two shapes the contract allows (#410),
-> and to **1329** with the plan card and its split picker — including the guard that stops the
-> optimistic paint from suppressing the plan entirely (#410).
+> Since the 07-12 snapshot (783 tests), the suite grew to its current size as **Shiri's Random Forest** landed (`ai/model/model.pkl` + `inference.py`) with the recommendation + calorie engines, **F5** shipped stage by stage (catalog → split resolution → `generate_workout_days` wired into `/predict` → the dashboard plan card), and Forum/dashboard hardening plus two **team-wide redundancy passes** (each owner mutation-tested their own lane, consolidating duplicates) shaped the count — the full per-step history with issue numbers is in the git log.
 > A pre-submission review took every file in the web/data lane and asked, per
 > test, whether it earns its place — by mutating the code it guards and checking that the test actually
 > goes red (#479–#492). That removed 8 tests whose behaviour a *named* other test already caught and
