@@ -16,9 +16,9 @@ against a single source of truth and fix what they think is missing. Two indepen
 **⬜ Still open** — *no build work remains; every item below is a hand-in step.*
 - **Upload the graded package to Moodle** — the repo link + the report + the demo video (`presentation/demo-video/Video.mp4`, the normalized ~66 MB cut, LFS). The video is **recorded** (script at `presentation/WSNH Demo Video Script.md`); the remaining step is the Moodle upload — Lior
 - **Paste the repo link** into the Moodle final-project box — Lior
-- **Poster zip** — ✅ **uploaded 27 Aug** to its own Moodle box (Track B). (The 29 Jul upload was built to
-  rules reversed on 18 Aug and was deleted; the rebuilt zip is now up — see Track B below.)
 - **Seed prod · VM up · joint sign-off** before the TA review
+
+*(Poster zip — ✅ done: uploaded 27 Aug to its Track B box; see Track B below.)*
 
 Naming: demo **video** = `VID_<id1>_<id2>_<id3>.mp4`; the Show Off **zip** = one member's ID (`207490913.zip`).
 The graded project has **no zip** — it's a repo link.
