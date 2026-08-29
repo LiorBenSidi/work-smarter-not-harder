@@ -60,5 +60,3 @@ Implement an integrated online forum resembling a social network or microbloggin
 ### 3. Website Deployment & CI/CD (10 Points)
 * **Website Deployment:** Deploy your website to an azure cloud server (we will supply you with a server and a domain if you choose to do implement this feature, but you have to implement the deployment yourself). The website should be accessible to the public and be able to scale easily (use parallelization in your code).
 * **CI/CD Pipeline:** Implement a CI/CD pipeline for your project’s private GitHub repository - the pipeline should include a test set that will run on each commit and check that all the tests pass - if they do, the pipeline should automatically deploy the new version of the website to the server. Only implementing the CI/CD pipeline without website deployment (only checking that the tests pass on each commit) will award you partial credit of 5 points.
-Project_Guidelines_Roadmap_Raven.md
-Displaying Project_Guidelines_Roadmap_Raven.md.
