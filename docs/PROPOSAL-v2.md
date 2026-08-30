@@ -1,5 +1,5 @@
 > _**Status:** the team's **revised** spec — a cleaner rewrite addressing Noam's "plan in phases / don't AI-dump"
-> feedback (authored in Elad's Claude Code) — and the **current** feature spec the team builds to. It was sent to
+> feedback — and the **current** feature spec the team builds to. It was sent to
 > the TA on 28 Jun; the TA responded (8 Jul) with the graded rubric [`GUIDELINES.md`](GUIDELINES.md)
 > (`WSNH_Guidelines.pdf`), **now the source of truth** (it supersedes Noam's feedback). Those guidelines permit
 > notified feature changes, so the main scope change (**F6+F7 merged → 8 features**) stands — **nothing is
