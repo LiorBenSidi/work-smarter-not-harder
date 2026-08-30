@@ -2,8 +2,10 @@
 
 **Course:** Writing Software for Machine Learning (00950219), Technion — Spring 2026
 **Team:** Shiri Haboob · Lior Ben Sidi · Elad Nachalieli
-**Repository:** `LiorBenSidi/work-smarter-not-harder` · **Live site:** <https://app.worksmarternotharder.dev>
+**Repository:** <https://github.com/LiorBenSidi/work-smarter-not-harder> · **Live site:** <https://app.worksmarternotharder.dev>
 · **Due:** 30 Aug 2026, 23:59
+
+**Reading this outside the repository?** The links below to sibling docs (`DESIGN.md`, `EMAIL_DELIVERABILITY.md`, …) are **repo-relative** — they resolve on GitHub or inside the repo (link above), not in a downloaded copy. The live-site link and external run-links work anywhere.
 
 > This is the living project report — the 30.08 deliverable required by the guidelines: an explanation of
 > the app, a **feature × tests matrix drawn from the real suite**, and a **risk assessment**. It is kept
