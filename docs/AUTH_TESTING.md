@@ -1,7 +1,7 @@
 # Testing the auth (register · 2-step login · remember-this-browser · password reset)
 
 A short, copy-paste guide for anyone — a teammate, the TA, or Noam — to exercise the full auth flow **in
-dev / test, without a real mailbox**. We're not in production yet, so email delivery is optional: when no
+dev / test, without a real mailbox**. In this dev/test mode email delivery is optional: when no
 SMTP server is configured, every code and reset link is **surfaced on screen and written to the logs**.
 
 > **Why it's safe to show the code in dev:** the surface is gated on `SMTP_HOST` being unset. The moment a

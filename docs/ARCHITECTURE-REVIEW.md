@@ -1,6 +1,6 @@
 # Architecture Review — Work Smarter, Not Harder
 
-**Type:** design validation (pre-build) · **Date:** 2026-06-27 *(refreshed 2026-07-04 — owner tags corrected + deploy status updated)* · **Status:** advisory — changes **no** contract.
+**Type:** design validation (pre-build) · **Date:** 2026-06-27 *(with inline resolutions added through 2026-08-28)* · **Status:** advisory — changes **no** contract.
 **Lenses:** system-design · architecture (ADR) · code-review · testing-strategy.
 **Validated against:** [`PROPOSAL-v2.md`](PROPOSAL-v2.md) — the 28 Jun revision the TA responded to (**the contract**) · [`PROPOSAL.md`](PROPOSAL.md) (graded 100/100, 17 Jun — superseded, kept for history) ·
 the rubric [`GUIDELINES.md`](GUIDELINES.md) (75 + 5 (Job Queue) + 10 + 10; supersedes [`FEEDBACK.md`](FEEDBACK.md)) · the WSML course rules · the live skeleton (`docker-compose.yml`, `web/`, `ai/`, `tests/`).
@@ -18,20 +18,20 @@ Separately, one proposal-scope item — **cutting the 5 readiness classes to ~3 
 ## What's sound (keep it)
 - **Container split & exposure** — only `web` publishes a host port (`8000:5000`); `ai`+`db` are `expose`-only, and
   `Integration_Tests/test_skeleton_contract.py` enforces it. Meets "≥3 communicating containers, only `web` exposed"
-  and dodges the macOS-AirPlay-on-5000 trap. (`docker-compose.yml:5-44`)
+  and dodges the macOS-AirPlay-on-5000 trap. (`docker-compose.yml`)
 - **Startup ordering** — healthchecks on all 3 + `depends_on: service_healthy`; `web` won't serve before `ai`/`db`
-  are ready. (`docker-compose.yml:15-44`)
-- **Production server** — `gunicorn` in both app containers (not the Flask dev server). (`web/Dockerfile:11`, `ai/Dockerfile:14`)
+  are ready. (`docker-compose.yml`)
+- **Production server** — `gunicorn` in both app containers (not the Flask dev server). (`web/Dockerfile`, `ai/Dockerfile`)
 - **Model-bake discipline** — `ai/Dockerfile` documents joblib-bake + pin-sklearn (the Mini-HW2 lesson); no runtime
-  train/download. (`ai/Dockerfile:8-14`, `ai/requirements.txt:4-6`)
+  train/download. (`ai/Dockerfile`, `ai/requirements.txt`)
 - **Fault tolerance is wired, not just promised** — `ai_client.predict()` catches `RequestException` → logs → returns
-  `None`, so the caller degrades and the app can't crash on an AI outage. (`web/services/ai_client.py:19-21`)
-- **No hardcoded secrets** — env-driven config; compose makes `SECRET_KEY` mandatory (`${SECRET_KEY:?…}`). (`web/config.py`, `docker-compose.yml:10`)
+  `None`, so the caller degrades and the app can't crash on an AI outage. (`web/services/ai_client.py`)
+- **No hardcoded secrets** — env-driven config; compose makes `SECRET_KEY` mandatory (`${SECRET_KEY:?…}`). (`web/config.py`, `docker-compose.yml`)
 - **Security deps present up front** — `werkzeug` (hashing) + `flask-limiter` (rate-limit) + `pymongo`. (`web/requirements.txt`)
 - **Contract-based ownership** — fixed seams + implementation freedom; matches L5.1 interfaces + L8.1 "don't polish
-  teammates' code". (`docs/DESIGN.md:7-8`)
+  teammates' code". (`docs/DESIGN.md`)
 - **The test gate is load-bearing** — 5 type-dirs; real contract tests enforce the seams now; CI **fails on 0 collected
-  tests** (no false-green). (`tests/README.md`, `.github/workflows/ci.yml:37`)
+  tests** (no false-green). (`tests/README.md`, `.github/workflows/ci.yml`)
 
 ## Findings
 
@@ -43,17 +43,18 @@ Separately, one proposal-scope item — **cutting the 5 readiness classes to ~3 
 | 4 | ✅ | Auth × scale | `DESIGN.md:29` says "session/token" undifferentiated. In-memory Flask sessions break when `web` scales to N replicas (rubric: "scale easily"); the same multi-replica problem hits a Forum WebSocket/SSE layer. | Pick **stateless auth** (signed token, or a DB/Redis-backed session) so `web` scales horizontally — like the big-HW PictureServer's Bearer tokens. **Resolved 2026-08-27:** shipped as a **DB-backed session** — a signed cookie + a random id validated against `active_sids` in the shared Mongo — so it is revocable AND horizontally scalable ([#637](https://github.com/LiorBenSidi/work-smarter-not-harder/issues/637)). |
 | 5 | ✅ | Contract drift | `recommendations` is an **object** in the doc (`DESIGN.md:33`) but a **list** `[]` in the code (`ai/app.py:33`). The contract test only checks the *key name*, so the drift passed CI. **Resolved:** `DESIGN.md:52` states `recommendations` is a **list**, matching `ai/app.py`. | Pin **one** shape in `DESIGN §3` + the placeholder. (AI owner's call — it's Shiri's contract.) |
 | 6 | ✅ | Test quality | `test_ai_predict_returns_the_contract_keys` greps `ai/app.py` **source** for `state=` etc. — that's *mechanism, not behaviour* (the anti-pattern the repo's own `CLAUDE.md` forbids). A valid `jsonify({"state":…})` would fail it. **Resolved:** source-grep test removed; `/predict` keys asserted behaviourally (`test_ai_queue_contract.py:106`). | Rewrite as a **behavioural** test: `create_app().test_client().post("/predict", json=…)` → assert the JSON has the keys. Stronger and non-brittle. |
-| 7 | 🟢 | Deploy (+10) | CI gate + the **deploy job now exist** in `ci.yml` (GHCR build/push → SSH-deploy-to-Azure → Caddy HTTPS + auto-rollback), gated on `vars.SSH_HOST != '' && vars.DEPLOY_ENABLED == 'true'`; the remaining steps are the **live VM go-live** (Elad) + wiring the stress tests (they need a running stack). | Built (was "next phase"). The only-`web`-exposed + env-config architecture supported the clean deploy job on green `main`, as designed. |
+| 7 | 🟢 | Deploy (+10) | CI gate + the **deploy job now exist** in `ci.yml` (GHCR build/push → SSH-deploy-to-Azure → Caddy HTTPS + auto-rollback), gated on `vars.SSH_HOST != '' && vars.DEPLOY_ENABLED == 'true'`; the deploy is **live** (since 8 Jul, Elad) and the stress tests are wired. | Built (was "next phase"). The only-`web`-exposed + env-config architecture supported the clean deploy job on green `main`, as designed. |
 | 8 | 🟡 | `/predict` errors | No error/timeout/version semantics; `ai_client` treats any non-2xx as "down → `None`", so a malformed-feature bug looks like an outage (silent-failure smell). | When the model lands, give `/predict` a **400 vs 5xx** distinction so bad input ≠ AI-down. Low priority. |
 
 ## Rubric coverage — does the architecture reach 100?
 | Item | Pts | Supported? | Gap |
 |---|---|---|---|
 | Whole app F1–F9 on Docker | 75 | **Yes** — containers, contracts, data model map to every feature | Finding 2 (Injury-Risk) + the F6+F7 merge — **resolved** (settled by the TA's guidelines + the v2 spec; not pending) |
-| Online Forum (real-time, 8 sub-features) | 10 | **Not yet** | Finding 1 — decide transport + blob storage before Phase 3 |
-| Azure deploy + CI/CD auto-deploy | 10 | **Pipeline built** (CI + deploy job + auto-rollback) | Live VM go-live (Elad) — Finding 4 (auth statefulness) resolved: DB-backed session revocation shipped |
+| Online Forum (real-time, 8 sub-features) | 10 | **✅ built** | Finding 1 resolved — shipped as SSE + a web-mounted media volume (see the Findings table) |
+| Azure deploy + CI/CD auto-deploy | 10 | **✅ live** (CI + deploy job + auto-rollback; VM live since 8 Jul) | Finding 4 (auth statefulness) resolved: DB-backed session revocation shipped |
 
-## Decisions needing a team / Noam call
+## Decisions that were needed pre-build — all since settled
+*(Resolved during the build; kept for the pre-build record: 1 — Injury-Risk dropped per the v2 spec; 2 — shipped SSE; 3 — a web-mounted media volume; 4 — DB-backed session ✅; 5 — `recommendations` is a list.)*
 1. **Noam email** — keep "Injury Risk" rule-based (no permission needed) **or** bundle "5 → ~3 classes / drop Injury-Risk" into the F6+F7 email. *(team → Noam)*
 2. **Forum real-time transport** — SSE vs Flask-SocketIO (changes the `web` worker class). *(team)*
 3. **Forum media storage** — GridFS vs volume vs object store (16 MB BSON limit). *(Elad)*

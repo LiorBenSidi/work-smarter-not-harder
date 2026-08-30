@@ -21,34 +21,7 @@
 > **Last updated:** 2026-08-28 · **Suite at this snapshot:** **1487 checks, 1441 passing / 46 environment-gated**
 > (+ 20 browser e2e scenarios)
 > (`python -m pytest tests/ -q`; the env-gated ones run in CI's `compose-e2e` job against the live containers).
-> Since the 07-12 snapshot (783 tests): **Shiri's Random Forest landed** — a real `ai/model/model.pkl` +
-> `inference.py` (exercised by `test_ai_queue_api`), with the readiness recommendation engine and the
-> calorie integration + their unit tests — and the suite grew from 783 to 1066 checks, then settled at
-> **1053** after a **team-wide redundancy pass** in which each owner validated their own lane: Lior's
-> consolidated 51 template-shape tests into 7 grouped ones and removed 11 verified duplicates (#384–#386),
-> and Elad's removed 16 duplicated/vacuous checks and replaced 2 prose assertions with executable guards —
-> then rose to **1063** as the Forum cold-seed, its test-validation pass, and the dashboard read-cap landed (#391–#398),
-> and to **1072** as the like/dislike counts and a round of SPA rendering, bidi, a11y and supersede-guard
-> fixes landed (#417–#433), then to **1111** with the F5 training preferences on the profile (#410), and to **1113** with the
-> route-level round-trip proving those preferences actually reach the store (#434), then **1117** with the
-> offline-boot and reset-honesty guards (#440), to **1118** with the guard pinning the service worker's
-> navigation handler to cache-first (#444), and to **1119** with the dashboard reporting which check-in it
-> scored so the readiness card stops calling every score today's (#450), and to **1126** with the guards on
-> the real-Mongo fixtures themselves (#451).
->
-> It then fell to **1111**, and rose to **1121** after the guards on the app's failure surfaces and on
-> these counts themselves (#502), then to **1132** with the F5 exercise-catalog seed data and its
-> structural guard tests (#276), then to **1180** with the F5 split-day resolution rule (updated to
-> the agreed plan-contract shape) and its tests (#276, #410), then to **1183** with the "eat more"
-> recommendation trigger for a gain goal and its tests (#411), then fell to **1181** after the
-> redundant `test_ai` TDD scaffold was removed (#358), then to **1184** with `plan` wired into
-> `/predict` and its tests (#276, #410), then to **1243** with `generate_workout_days` (the
-> exercise-selection stage of F5) and its tests (#276, #410), then to **1244** wiring
-> `generate_workout_days` into `predict_one` itself, so a resolved `plan["days"]` is populated
-> end to end on a live `/predict` call, not just available as a standalone function (#276, #410), and to **1254** as the dashboard
-> began relaying that plan to the client, validated against the two shapes the contract allows (#410),
-> and to **1329** with the plan card and its split picker — including the guard that stops the
-> optimistic paint from suppressing the plan entirely (#410).
+> Since the 07-12 snapshot (783 tests), the suite grew to its current size as **Shiri's Random Forest** landed (`ai/model/model.pkl` + `inference.py`) with the recommendation + calorie engines, **F5** shipped stage by stage (catalog → split resolution → `generate_workout_days` wired into `/predict` → the dashboard plan card), and Forum/dashboard hardening plus two **team-wide redundancy passes** (each owner mutation-tested their own lane, consolidating duplicates) shaped the count — the full per-step history with issue numbers is in the git log.
 > A pre-submission review took every file in the web/data lane and asked, per
 > test, whether it earns its place — by mutating the code it guards and checking that the test actually
 > goes red (#479–#492). That removed 8 tests whose behaviour a *named* other test already caught and
@@ -120,7 +93,7 @@ is implemented independently.
 | `/forum/posts/<id>/comments` | POST | Forum: comment |
 | `/forum/posts/<id>/vote` | POST | Forum: post vote (strict `+1` / `-1`) |
 | `/forum/posts/<id>/comments/<cid>/vote` | POST | Forum: comment vote (strict `+1` / `-1`) |
-| `/me/engagement` | GET | Forum: the caller's received-vote totals (§3.3 "personal area" metric; counts only, never voter identities) — **Elad's lane** |
+| `/me/engagement` | GET | Forum: the caller's received-vote totals (GUIDELINES §3 "personal area" metric; counts only, never voter identities) — **Elad's lane** |
 | `/register/verify` · `/register/resend` · `/verify-otp` · `/resend-otp` | POST | F1 two-step auth: email-verify at signup + the login OTP challenge (resend caps + attempt lockout) |
 | `/forgot-password` · `/reset-password` | POST | F1 self-service password reset (token emailed; 10-min expiry; §5.1's tested reset surface) |
 | `/account/display-name` · `/account/password` · `/account/email-consent` · `/account/export` · `/account` | POST · GET · DELETE | Account management: rename / change password / consent toggle / **GDPR export** / **two-step account deletion** (cascades: profile, history, forum content, DMs, notifications — identity record removed last). Uploaded media are excluded from both the cascade and the export ([#507](https://github.com/LiorBenSidi/work-smarter-not-harder/issues/507)) |
@@ -177,7 +150,7 @@ not a per-line credit — see §6.
 | F9 — History tracking | ✅ | web |
 | Online Forum — CRUD/UI (posts, comments, votes, anonymity, edit/delete-own) | ✅ | web |
 | Online Forum — real-time layer (SSE push, DM, vote + DM notifications, media attachments) | ✅ | web (DM/SSE/notifications) · deploy (media, size caps) |
-| Online Forum — received-engagement metric (§3.3 per-user vote total: `/me/engagement` + a Profile-screen card) | ✅ | deploy (Elad) |
+| Online Forum — received-engagement metric (GUIDELINES §3 per-user vote total: `/me/engagement` + a Profile-screen card) | ✅ | deploy (Elad) |
 | Online Forum — cold-seed content | ✅ `db/seed.py` — 15 fake clients with profiles, check-in history, posts, comments, likes, DM threads, notifications and image/video attachments (a deliberate demo/review tool run by `./seed.sh`; a fresh DB is empty by design). Content lives in `db/seed_content.py`; history is scored by the real model, not stubbed. Shiri's AI generator can optionally augment the copy. | web |
 | Data layer — `db.py` CRUD + indexes + `$jsonSchema` validators + auth config + seed + backup | ✅ | web (data) |
 | Week-9 observability — named loggers, console + rotating-file handlers, per-request access log | ✅ | web |
@@ -188,7 +161,7 @@ not a per-line credit — see §6.
 | Stress / load (locust + a dependency-free burst) | ✅ | deploy/scale |
 | Cross-container test-runner (`docker-compose.test.yml`, CI job `compose-e2e`) | ✅ | deploy |
 | Fault isolation — stop `ai` / stop `db`, `web` survives | ✅ | deploy |
-| **AI job queue (§2, +5)** — bounded queue + `ProcessPoolExecutor` in front of the model | ✅ | ai (queue) |
+| **AI job queue (GUIDELINES §2, +5)** — bounded queue + `ProcessPoolExecutor` in front of the model | ✅ | ai (queue) |
 | Azure VM deploy + CI/CD auto-deploy | ✅ **live** (`app.worksmarternotharder.dev`; auto-deploy on green `main`, `/ready` gate, auto-rollback) | web (pipeline) · deploy (live) |
 | Parallel programming — measured CPU-bound path + horizontal `ai` scaling | ✅ measured: pool 1→4 = **2.86×**, `--scale ai=2` = **1.60×** ([`SCALING_REPORT.md`](SCALING_REPORT.md)) | ai · deploy |
 
@@ -394,7 +367,7 @@ mutation-checked by disabling the fix.)
 | **The CPU-burning benchmark ships as the production model** | Every prediction slow and meaningless | `inference:predict_one` is the default target; a guard asserts none of the dev/prod/test compose files selects `bench:cpu_burn` (`docker-compose.scale.yml` is outside its parametrize — flagged to its owner) | ✅ built & tested (`test_scale_contract.py`) |
 | **A scaled `ai` gets published to the host** | Port collision on replica 2, **and** an unauthenticated `/jobs` reachable from outside | Only `web` publishes a port, in dev, test, prod and the scale override. `ai` has no auth because nothing but `web` can reach it — that assumption is load-bearing, so it is asserted | ✅ built & tested (`test_deploy_contract.py`, `test_ai_queue_contract.py`, `test_scale_contract.py`) |
 | **A bad deploy takes the public site down** | Public app down | CI gates the image build; the build gates the deploy; post-deploy `/ready` is probed over HTTPS and a failure **auto-rolls back** to the previous image while still failing the run. `restart: unless-stopped` survives a VM reboot | ✅ built & tested (`test_deploy_contract.py` locks the pipeline shape; **live** at `app.worksmarternotharder.dev`) |
-| **Single Azure VM (no redundancy)** | Total outage if the VM dies | Accepted. The course supplies one VM; the containers are stateless, so a Swarm overlay or a second host is a configuration change, not a rewrite. UptimeRobot alerts on the outage rather than preventing it | 🟡 accepted risk, mitigation documented ([`DESIGN.md`](DESIGN.md) §L7) |
+| **Single Azure VM (no redundancy)** | Total outage if the VM dies | Accepted. The course supplies one VM; the containers are stateless, so a Swarm overlay or a second host is a configuration change, not a rewrite. UptimeRobot alerts on the outage rather than preventing it | 🟡 accepted risk, mitigation documented ([`DESIGN.md`](DESIGN.md) §4, the L7 bullet) |
 | **Two gunicorn workers on `ai`** | `GET /jobs/<id>` 404s ~half the time — each worker owns a separate in-memory job store, and the read lands on whichever one the OS picked | `ai` runs exactly one worker with threads; parallelism comes from the pool. This is **architectural, not a memory budget** — the 32 GiB VM would host a second worker comfortably, and the job store would still split in two | ✅ built & tested (`test_ai_runs_exactly_one_gunicorn_worker`) |
 | **`ai`'s gunicorn worker outlives its own predict deadline** | A `/predict` that runs to `AI_PREDICT_TIMEOUT_SECONDS` races a worker SIGKILL: `web` sees a dropped connection, the in-flight job dies with the process, and the clean 504 degrade is unreachable | gunicorn's `--timeout` (60s) is pinned **above** the queue deadline (30s) in both the image and prod. gunicorn's own default is 30 — equal to the deadline — so leaving it unset was the bug | ✅ built & tested (`test_ai_gunicorn_timeout_exceeds_the_queue_timeout`; guard is mutation-tested against absent *and* too-low values) |
 
@@ -513,8 +486,8 @@ Two habits, both visible in the test suite:
 The queue's failure modes and the web tier's security surface are covered by tests that run on **every PR**.
 The `ai`/`db` fault-isolation checks are **destructive** (they stop containers), so they are gated behind
 `FAULT_TEST=1` + `E2E_BASE_URL`; the `compose-e2e` job sets both and **runs them on every PR** as its final
-stage, bringing the real three-container stack up and exercising it end to end. The remaining open rows belong to the AI model
-(Shiri) and are tracked in [`ROADMAP.md`](ROADMAP.md).
+stage, bringing the real three-container stack up and exercising it end to end. The AI-model rows (Shiri) have since landed — the Random Forest behind
+`/predict` is built and merged (see §2).
 
 ---
 
@@ -537,7 +510,7 @@ between planes (§1). Full detail in [`COLLABORATORS.md`](../COLLABORATORS.md) a
 cp .env.example .env
 docker compose up --build          # 3 containers; only web is published
 # → http://localhost:8000/health   → then register, set a profile, check in, see the dashboard
-pytest -q                          # 1440 pass / 46 env-gated skip
+pytest -q                          # 1441 pass / 46 env-gated skip
 ```
 
 CI reproduces the gate on every PR (ruff → bandit → pytest + a `mongo:7` service). `main` is
@@ -550,7 +523,7 @@ branch-protected and merges only on green CI.
 Every feature in v2 §7 is built and live (§2). What follows is the complete list of places where the
 implementation differs from the proposal's wording — five differences and one clarification, none of
 them a missing capability. Two were settled in advance: the hand-curated catalog was approved by the
-TA, and §5 explicitly left its feature list open.
+TA, and v2 §5 explicitly left its feature list open.
 
 - **§3's beginner input list is one field short of what the profile requires.** v2 §3 says
   beginners *"give us the basics — age, gender, height, weight, and their goal"*. The build also
@@ -592,15 +565,15 @@ TA, and §5 explicitly left its feature list open.
   | Core | 7 |
   | Calves | 6 |
   | **Total** | **99** |
-- **Not owed — v2 §14 Future Work and Stretch Goals.** Collaborative-filtering personalization
+- **Not owed — v2 §15 Future Work and Stretch Goals.** Collaborative-filtering personalization
   ("planned as future work, not part of the core deliverable"), smartwatch integration (Fitbit /
   Garmin / Apple Health / Strava), progress graphs, an exercise video library, an injury-prevention
   module, and personalized progression recommendations. None of these is a gap. Collaborative
   filtering is worth naming specifically: it sat in §4 Cold Start in the original proposal, so
-  anyone diffing the two documents will see it move — v2 moved it deliberately, to §14.
+  anyone diffing the two documents will see it move — v2 moved it deliberately, to §15.
 - **`programs` collection (v2 §9) — not built, as a consequence of the approved catalog change.**
-  v2 §6 already told the TA the exercise catalog would be hand-written rather than pulled from a
-  public dataset — the one deviation confirmed directly with him. Once that decision was made, the
+  The hand-written exercise catalog was a deviation from v2 §6 (which listed public fitness and
+  sports-science datasets among its sources) — the one deviation confirmed directly with the TA. Once that decision was made, the
   original reason for routing the catalog through v2 §9's `programs` Mongo collection — ingesting
   and managing externally-sourced dataset content — no longer applied to data the team was writing
   by hand anyway. So the 99-exercise catalog lives as code (`ai/exercise_catalog.py`) instead, and

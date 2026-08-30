@@ -1,5 +1,7 @@
 # Build Roadmap — Work Smarter, Not Harder
 
+> **⚠️ Planning doc — a historical snapshot.** The status markers below (✅ / 🟡 / ⬜) reflect the plan as of the dates stamped in each section (the build tracker further down is dated **2026-07-01**). The **current, authoritative status is [`REPORT.md`](REPORT.md) §2**. Where a row here still shows ⬜ / 🟡 for the **AI model, the F5 workout generator, the test suite, the demo video, or the Forum**, those are **built and shipped** — see REPORT §2 and §3.
+
 Phased so we always have a viable product (per Noam's feedback). **Every phase is independently shippable:**
 tested, Dockerized, and — once the deploy milestone lands — auto-deployed to Azure on green CI.
 

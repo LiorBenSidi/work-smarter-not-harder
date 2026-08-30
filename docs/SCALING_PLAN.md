@@ -1,5 +1,7 @@
 # PLAN — Scaling + the locust before/after · OWNER: Elad
 
+> **✅ Executed — historical plan.** This was the pre-build plan; it has since run and the real Random Forest landed. The measured results (re-baselined on the real model) are in [`SCALING_REPORT.md`](SCALING_REPORT.md). The "placeholder model" framing below describes the plan-time state, not the current build.
+
 > Rubric: [`GUIDELINES.md`](GUIDELINES.md) §4 — the deployed site must be *"public and **scalable via
 > parallelization**"*. Design contract: [`DESIGN.md`](DESIGN.md) §L7 — *"a locust run before/after
 > `--scale ai=2` shows throughput rising."*
