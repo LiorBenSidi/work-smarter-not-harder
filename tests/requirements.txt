@@ -4,4 +4,4 @@
 # pytest is pinned to the same version as requirements-dev.txt so local, CI and the container agree.
 pytest==9.0.3
 requests==2.33.0
-pymongo==4.10.1
+pymongo==4.18.2
